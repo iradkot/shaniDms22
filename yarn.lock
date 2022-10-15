@@ -1404,6 +1404,11 @@
   resolved "https://registry.yarnpkg.com/@react-native-firebase/auth/-/auth-15.6.0.tgz#2939266453150e5ea84c6925ae64d67790f7a40d"
   integrity sha512-sw+GleRtlwsJmaQari1l6xAnoaXbfNDPWwn3FioniJe5csGLRihYcK+kvkzkQYjayN7k57x9RQP4EBhcNwLuJA==
 
+"@react-native-firebase/firestore@^15.7.0":
+  version "15.7.0"
+  resolved "https://registry.yarnpkg.com/@react-native-firebase/firestore/-/firestore-15.7.0.tgz#9396d3cfcdf54aec3c10bb5c45d08d292a990abb"
+  integrity sha512-lcMApKFIo4k9GqOUuK03WBDs3JP0pa94jTmy+hZQLAqyeA78GYC57CzGGKCkR0qtwCzMtE8HXqICY9FKv4rxpg==
+
 "@react-native-google-signin/google-signin@^8.0.0":
   version "8.0.0"
   resolved "https://registry.yarnpkg.com/@react-native-google-signin/google-signin/-/google-signin-8.0.0.tgz#f8202c121b4df185eb165dc58b35544c643af25f"
@@ -1436,6 +1441,19 @@
     react-is "^16.13.0"
     use-latest-callback "^0.1.5"
 
+"@react-navigation/elements@^1.3.6":
+  version "1.3.6"
+  resolved "https://registry.yarnpkg.com/@react-navigation/elements/-/elements-1.3.6.tgz#fa700318528db93f05144b1be4b691b9c1dd1abe"
+  integrity sha512-pNJ8R9JMga6SXOw6wGVN0tjmE6vegwPmJBL45SEMX2fqTfAk2ykDnlJHodRpHpAgsv0DaI8qX76z3A+aqKSU0w==
+
+"@react-navigation/native-stack@^6.9.1":
+  version "6.9.1"
+  resolved "https://registry.yarnpkg.com/@react-navigation/native-stack/-/native-stack-6.9.1.tgz#6013300e4cd0b33e242aa18593e4dff7db2ab3d1"
+  integrity sha512-aOuJP97ge6NRz8wH6sDKfLTfdygGmraYh0apKrrVbGvMnflbPX4kpjQiAQcUPUpMeas0betH/Su8QubNL8HEkg==
+  dependencies:
+    "@react-navigation/elements" "^1.3.6"
+    warn-once "^0.1.0"
+
 "@react-navigation/native@^6.0.13":
   version "6.0.13"
   resolved "https://registry.yarnpkg.com/@react-navigation/native/-/native-6.0.13.tgz#ec504120e193ea6a7f24ffa765a1338be5a3160a"
@@ -1452,6 +1470,16 @@
   integrity sha512-idJotMEzHc3haWsCh7EvnnZMKxvaS4YF/x2UyFBkNFiEFUaEo/1ioQU6qqmVLspdEv4bI/dLm97hQo7qD8Yl7Q==
   dependencies:
     nanoid "^3.1.23"
+
+"@react-query-firebase/auth@^1.0.0-dev.2":
+  version "1.0.0-dev.2"
+  resolved "https://registry.yarnpkg.com/@react-query-firebase/auth/-/auth-1.0.0-dev.2.tgz#459572fe331e178e9e61bd3a0f3db215c31c2b8c"
+  integrity sha512-qfr2fV3N/fvtcX0xPTTLRB0gyxh5iPPXnEVnV8Q4fGaKsfp2ASJayMoOW6uxhCL3dIYuWD6u/ud3fgtuZGTdQA==
+
+"@react-query-firebase/firestore@^1.0.0-dev.7":
+  version "1.0.0-dev.7"
+  resolved "https://registry.yarnpkg.com/@react-query-firebase/firestore/-/firestore-1.0.0-dev.7.tgz#6f5747164e03f66f34c5924e6fc51a7f03031c3d"
+  integrity sha512-DF6t4hPDZlEBKgf0XFurJpS+SmbVoMhgjQrxdPhlr3zhddcUv54hmPuSIN8htzmNCDMXFUdZWNy4fI/tJVRkgg==
 
 "@sideway/address@^4.1.3":
   version "4.1.4"

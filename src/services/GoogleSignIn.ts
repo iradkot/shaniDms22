@@ -4,28 +4,42 @@ import {
 } from '@react-native-google-signin/google-signin';
 import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
 
-GoogleSignin.configure();
-
 /** types */
-type GoogleSignInResult = {
+export type GoogleSignInResult = {
   user: FirebaseAuthTypes.UserCredential | null;
   error: Error | null;
 };
 
 class GoogleSignIn {
   constructor() {
-    GoogleSignin.configure();
+    GoogleSignin.configure({
+      webClientId:
+        '77401553924-f22oqdv7gosp4infh5nflrdo7dmn5rho.apps.googleusercontent.com',
+    });
+
     this.isSignedIn = false;
   }
 
   isSignedIn: boolean;
 
+  getIsSignedIn: () => Promise<boolean> = async () => {
+    const isSignedIn = await GoogleSignin.isSignedIn();
+    this.isSignedIn = isSignedIn;
+    return isSignedIn;
+  };
   signIn = async (): Promise<GoogleSignInResult> => {
     try {
       await GoogleSignin.hasPlayServices();
-      const {idToken} = await GoogleSignin.signIn();
+      console.log('hasPlayServices');
+      const response = await GoogleSignin.signIn();
+      console.log('signIn', response);
+      const {idToken} = response;
+      console.log('idToken', idToken);
       const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+      console.log('googleCredential', googleCredential);
+      // setup web client id
       const user = await auth().signInWithCredential(googleCredential);
+      console.log('user', user);
       this.isSignedIn = true;
       return {user, error: null};
     } catch (error: any) {

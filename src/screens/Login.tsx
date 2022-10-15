@@ -1,31 +1,27 @@
 import * as React from 'react';
 import {View, Text, ScrollView} from 'react-native';
 import {
-  GoogleSignin,
   GoogleSigninButton,
-  statusCodes,
 } from '@react-native-google-signin/google-signin';
-import {useEffect, useMemo, useState} from 'react';
-import GoogleSignIn from '../services/GoogleSignIn';
+import {NavigationProp} from '@react-navigation/native';
+import {useMemo, useState} from 'react';
+import GoogleSignIn, {GoogleSignInResult} from '../services/GoogleSignIn';
 
-GoogleSignin.configure();
-
-const Login = () => {
-  const [userInfo, setUserInfo] = useState();
+const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
+  const [userInfo, setUserInfo] = useState<GoogleSignInResult | null>(null);
   const googleSignIn = useMemo(() => {
     return new GoogleSignIn();
   }, []);
-  const getUserInfo = async () => {
-    try {
-      const gUserInfo = googleSignIn.signIn();
+  const getUserInfo: () => void = async () => {
+    const gUserInfo = await googleSignIn.signIn();
+    if (gUserInfo.error) {
+      console.log(gUserInfo.error);
+    } else {
       setUserInfo(gUserInfo);
-    } catch (e) {
-      console.log('error in Login component', e);
+      console.log('navigate to home screen');
+      navigation.navigate('Home');
     }
   };
-  useEffect(() => {
-    // getUserInfo();
-  }, []);
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic">
       <View>
@@ -37,6 +33,7 @@ const Login = () => {
           onPress={getUserInfo}
           disabled={false}
         />
+        <Text>{userInfo?.user?.user.email}</Text>
       </View>
     </ScrollView>
   );

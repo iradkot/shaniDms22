@@ -12,8 +12,12 @@
   "dependencies": {
     "@react-native-firebase/app": "^15.6.0",
     "@react-native-firebase/auth": "^15.6.0",
+    "@react-native-firebase/firestore": "^15.7.0",
     "@react-native-google-signin/google-signin": "^8.0.0",
     "@react-navigation/native": "^6.0.13",
+    "@react-navigation/native-stack": "^6.9.1",
+    "@react-query-firebase/auth": "^1.0.0-dev.2",
+    "@react-query-firebase/firestore": "^1.0.0-dev.7",
     "react": "18.1.0",
     "react-native": "0.70.1",
     "react-native-health": "^1.13.0",
