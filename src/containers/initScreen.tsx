@@ -3,6 +3,7 @@ import React, {useEffect} from 'react';
 import {NavigationProp} from '@react-navigation/native';
 
 import {Text, View} from 'react-native';
+import {MAIN_TAB_NAVIGATOR, LOGIN_SCREEN} from '../constants/SCREEN_NAMES';
 
 const AppInitScreen: React.FC<{navigation: NavigationProp<any>}> = ({
   navigation,
@@ -14,9 +15,15 @@ const AppInitScreen: React.FC<{navigation: NavigationProp<any>}> = ({
     const googleSignIn = new GoogleSignIn();
     const isLoggedIn = await googleSignIn.getIsSignedIn();
     if (isLoggedIn) {
-      navigation.navigate('Home');
+      navigation.reset({
+        index: 0,
+        routes: [{name: MAIN_TAB_NAVIGATOR}],
+      });
     } else {
-      navigation.navigate('Login');
+      navigation.reset({
+        index: 0,
+        routes: [{name: LOGIN_SCREEN}],
+      });
     }
   };
   useEffect(() => {

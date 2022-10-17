@@ -6,13 +6,16 @@
  * @flow strict-local
  */
 
-import React, {useEffect} from 'react';
+import React from 'react';
 // import type {Node} from 'react';
-import Login from './screens/Login';
-import Home from './screens/Home';
+import Login from './containers/Login';
+import Home from './containers/MainTabsNavigator/Containers/Home/Home';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import AppInitScreen from './screens/initScreen';
+import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import AppInitScreen from './containers/initScreen';
+import {MAIN_TAB_NAVIGATOR, LOGIN_SCREEN} from './constants/SCREEN_NAMES';
+import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 
 const Stack = createNativeStackNavigator();
 
@@ -20,10 +23,10 @@ const App: () => JSX.Element = () => {
   // if user is not logged in, show login screen else show home screen
   return (
     <NavigationContainer>
-      <Stack.Navigator>
+      <Stack.Navigator screenOptions={{headerShown: false}}>
         <Stack.Screen name="initScreen" component={AppInitScreen} />
-        <Stack.Screen name="Login" component={Login} />
-        <Stack.Screen name="Home" component={Home} />
+        <Stack.Screen name={LOGIN_SCREEN} component={Login} />
+        <Stack.Screen name={MAIN_TAB_NAVIGATOR} component={MainTabsNavigator} />
       </Stack.Navigator>
     </NavigationContainer>
   );

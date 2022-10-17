@@ -1,4 +1,5 @@
 import firestore from '@react-native-firebase/firestore';
+import {BgSample} from '../types/day_bgs';
 
 // FirestoreManager class is responsible for all the interactions with the FirestoreManager database
 export class FirestoreManager {
@@ -9,6 +10,9 @@ export class FirestoreManager {
       .limit(2)
       .get();
     const dayBgs = snapshot.docs.map(doc => doc.data());
+    // log snapshot ids
+    snapshot.docs.forEach(doc => console.log(doc.id));
+    // log keys
     const bgParsedData = dayBgs.reduce<BgSample[]>((acc, dayBg) => {
       return [...acc, ...JSON.parse(dayBg.data)];
     }, []);

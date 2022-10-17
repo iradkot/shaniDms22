@@ -1,4 +1,16 @@
+// interface for bg data
+export interface BgSample {
+  sgv: number;
+  date: number;
+  dateString: string;
+  trend: number;
+  direction: string;
+  device: string;
+  type: string;
+}
 
+/*
+example of bg data
 // {
 //   sgv: 91,
 //     date: 1665321153000,
@@ -8,6 +20,8 @@
 //   device: 'share2',
 //   type: 'sgv'
 // }
+*/
+
 /**
  * @typedef BgSample
  * @property {number} sgv

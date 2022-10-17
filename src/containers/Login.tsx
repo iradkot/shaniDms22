@@ -1,11 +1,10 @@
 import * as React from 'react';
-import {View, Text, ScrollView} from 'react-native';
-import {
-  GoogleSigninButton,
-} from '@react-native-google-signin/google-signin';
-import {NavigationProp} from '@react-navigation/native';
 import {useMemo, useState} from 'react';
+import {ScrollView, Text, View} from 'react-native';
+import {GoogleSigninButton} from '@react-native-google-signin/google-signin';
+import {NavigationProp} from '@react-navigation/native';
 import GoogleSignIn, {GoogleSignInResult} from '../services/GoogleSignIn';
+import {MAIN_TAB_NAVIGATOR} from '../constants/SCREEN_NAMES';
 
 const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
   const [userInfo, setUserInfo] = useState<GoogleSignInResult | null>(null);
@@ -19,7 +18,10 @@ const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
     } else {
       setUserInfo(gUserInfo);
       console.log('navigate to home screen');
-      navigation.navigate('Home');
+      navigation.reset({
+        index: 0,
+        routes: [{name: MAIN_TAB_NAVIGATOR}],
+      });
     }
   };
   return (
