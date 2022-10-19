@@ -12,6 +12,8 @@ target 'shaniDms22' do
   use_modular_headers!
 
   pod 'glog', :podspec => '../node_modules/react-native/third-party-podspecs/glog.podspec', :modular_headers => false
+  pod 'BoringSSL-GRPC', '= 0.0.24', :modular_headers => false
+  pod 'gRPC-Core', '= 1.44.0', :modular_headers => false
 
 
   pod 'GoogleSignIn', '~> 6.2.2'

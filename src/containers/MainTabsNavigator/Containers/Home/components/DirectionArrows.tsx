@@ -1,4 +1,4 @@
-// a tsx component that gets a bg direction and returns an arrow
+// a tsx component that gets a bg trendDirection and returns an arrow
 //
 // Language: typescript
 // Path: src/containers/MainTabsNavigator/Containers/Home/components/DirectionArrows.tsx
@@ -6,8 +6,8 @@ import React from 'react';
 import {View} from 'react-native';
 import styled from 'styled-components';
 
-// styled sharp arrow component (get a size and direction props)
-// it gets a direction and rotates the arrow accordingly
+// styled sharp arrow component (get a size and trendDirection props)
+// it gets a trendDirection and rotates the arrow accordingly
 // if flat - arrow should be straight to the right
 // if doubleUp - arrow should be straight up and duplicated
 // if singleUp - arrow should be straight up
@@ -32,8 +32,8 @@ const Arrow = styled.View`
   border-bottom-width: ${(props: {size: number}) =>
     props.size || defaultArrowSize}px;
   border-bottom-color: black;
-  transform: ${(props: {direction: string}) => {
-    switch (props.direction) {
+  transform: ${(props: {trendDirection: string}) => {
+    switch (props.trendDirection) {
       case 'DoubleUp':
       case 'SingleUp':
         return 'rotate(0deg)';
@@ -61,19 +61,19 @@ const ArrowContainer = styled.View`
   align-items: center;
 `;
 
-const DirectionArrows = ({direction}: {direction: string}) => {
-  // if direction is doubleUp or doubleDown - duplicate the arrow
-  if (direction === 'DoubleUp' || direction === 'DoubleDown') {
+const DirectionArrows = ({trendDirection}: {trendDirection: string}) => {
+  // if trendDirection is doubleUp or doubleDown - duplicate the arrow
+  if (trendDirection === 'DoubleUp' || trendDirection === 'DoubleDown') {
     return (
       <ArrowContainer>
-        <Arrow direction={direction} />
-        <Arrow direction={direction} />
+        <Arrow trendDirection={trendDirection} />
+        <Arrow trendDirection={trendDirection} />
       </ArrowContainer>
     );
   }
   return (
     <ArrowContainer>
-      <Arrow direction={direction} />
+      <Arrow trendDirection={trendDirection} />
     </ArrowContainer>
   );
 };

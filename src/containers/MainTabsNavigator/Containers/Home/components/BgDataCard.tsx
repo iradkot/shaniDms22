@@ -7,8 +7,8 @@ export const BgDataCard = ({bgData}: {bgData: BgSample}) => {
   return (
     <DataRowContainer bgValue={bgData.sgv}>
       <DataRowText>{bgData.sgv}</DataRowText>
-      {/*<DataRowText>{bgData.direction}</DataRowText>*/}
-      <DirectionArrows direction={bgData.direction} />
+      {/*<DataRowText>{bgData.trendDirection}</DataRowText>*/}
+      <DirectionArrows trendDirection={bgData.direction} />
       <DataRowText>{new Date(bgData.date).toLocaleString()}</DataRowText>
     </DataRowContainer>
   );

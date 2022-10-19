@@ -16,7 +16,7 @@ example of bg data
 //     date: 1665321153000,
 //   dateString: '2022-10-09T13:12:33.000Z',
 //   trend: 5,
-//   direction: 'FortyFiveDown',
+//   trendDirection: 'FortyFiveDown',
 //   device: 'share2',
 //   type: 'sgv'
 // }

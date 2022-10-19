@@ -14,7 +14,12 @@ const Tab = createBottomTabNavigator();
 const MainTabsNavigator: React.FC = () => {
   return (
     <Tab.Navigator>
-      <Tab.Screen name={HOME_TAB_SCREEN} component={Home} />
+      <Tab.Screen
+        name={HOME_TAB_SCREEN}
+        component={Home}
+        // remove header from the screen
+        options={{headerShown: false}}
+      />
       <Tab.Screen
         name={NOTIFICATION_TAB_SCREEN}
         component={NotificationsManager}
