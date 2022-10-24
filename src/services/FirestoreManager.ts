@@ -17,7 +17,6 @@ export class FirestoreManager {
       return [...acc, ...JSON.parse(dayBg.data)];
     }, []);
     return bgParsedData;
-
     // Todo once we wimplement users collections use the following:
     // const user = await auth().currentUser;
     // if (user) {
@@ -33,4 +32,6 @@ export class FirestoreManager {
     //   return data[0];
     // }
   };
+
+  getNotifications() {}
 }
