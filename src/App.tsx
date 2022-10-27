@@ -14,8 +14,13 @@ import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import AppInitScreen from './containers/initScreen';
-import {MAIN_TAB_NAVIGATOR, LOGIN_SCREEN} from './constants/SCREEN_NAMES';
+import {
+  MAIN_TAB_NAVIGATOR,
+  LOGIN_SCREEN,
+  ADD_NOTIFICATION_SCREEN,
+} from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
+import AddNotificationScreen from './containers/AddNotificationScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -27,6 +32,11 @@ const App: () => JSX.Element = () => {
         <Stack.Screen name="initScreen" component={AppInitScreen} />
         <Stack.Screen name={LOGIN_SCREEN} component={Login} />
         <Stack.Screen name={MAIN_TAB_NAVIGATOR} component={MainTabsNavigator} />
+        <Stack.Screen
+          options={{headerShown: true, headerTitle: ''}}
+          name={ADD_NOTIFICATION_SCREEN}
+          component={AddNotificationScreen}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
