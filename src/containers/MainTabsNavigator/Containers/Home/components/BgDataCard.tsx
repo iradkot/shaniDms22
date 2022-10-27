@@ -2,6 +2,10 @@ import {BgSample} from '../../../../../types/day_bgs';
 import React from 'react';
 import styled from 'styled-components';
 import DirectionArrows from './DirectionArrows';
+import {interpolateRgb} from 'd3';
+
+const greenRgba = 'rgba(0, 255, 0, 0.5)';
+const yellowRgba = 'rgba(255, 255, 0, 0.5)';
 
 export const BgDataCard = ({bgData}: {bgData: BgSample}) => {
   return (
@@ -14,6 +18,23 @@ export const BgDataCard = ({bgData}: {bgData: BgSample}) => {
   );
 };
 
+const SEVERE_HYPO_THRESHOLD = 55; // dark red
+const HYPO_THRESHOLD = 70; // bright orange-red
+const TARGET_FROM = 90; // green
+const TARGET_TO = 110; // green
+const TARGET_MIDDLE = (TARGET_TO + TARGET_FROM) / 2;
+const HYPER_THRESHOLD = 180; // yellowish green
+const SEVERE_HYPER_THRESHOLD = 250; // red
+
+// colors for bg thresholds
+const SEVERE_HYPO_COLOR = 'rgb(255,0,0)';
+const HYPO_COLOR = 'rgba(255,10,0,0.71)';
+const TARGET_FROM_COLOR = 'rgb(255,209,94)';
+const TARGET_MIDDLE_COLOR = 'rgba(0, 255, 0, 1)';
+const TARGET_TO_COLOR = 'rgb(106,255,2)';
+const HYPER_COLOR = 'rgb(247,255,27)';
+const SEVERE_HYPER_COLOR = 'rgb(255,0,0)';
+
 const DataRowContainer = styled.View`
   flex-direction: row;
   justify-content: space-between;
@@ -21,30 +42,41 @@ const DataRowContainer = styled.View`
   padding: 10px;
   border-bottom-width: 1px;
   border-bottom-color: #ccc;
-  background-color: ${(props: {bgValue: number}) => {
-    if (props.bgValue > 300) {
-      // it goes from green to red the lower bg value is
-      const scale = 1 - (props.bgValue - 300) / 300;
-      return `rgba(255, 0, 0, ${scale})`;
-      // return `rgb(255, ${Math.round(255 - (props.bgValue - 300) / 2)}, 1)`;
-    } else if (props.bgValue > 180) {
-      // it goes from green to yellow the higher bg value is
-      const scale = 1 - (props.bgValue - 200) / 120;
-      return `rgba(255, ${Math.round(255 * scale)}, 0, 1)`;
-    } else if (props.bgValue > 70) {
-      const scale = 1 - (props.bgValue - 70) / 130;
-      return `rgba(0, 255, 0, ${scale})`;
-      // the green is brighter the more it get close to the middle
-      return `rgb(0, ${Math.round(255 - (props.bgValue - 70) / 2)}, 1)`;
+  background-color: ${({bgValue}: {bgValue: number}) => {
+    if (bgValue > SEVERE_HYPER_THRESHOLD) {
+      return SEVERE_HYPER_COLOR;
+    } else if (bgValue > HYPER_THRESHOLD) {
+      // gradient from yellow to red as bgValue increases
+      // const interpolate = interpolateRgb(HYPER_COLOR, SEVERE_HYPER_COLOR);
+      const fraction =
+        (bgValue - HYPER_THRESHOLD) /
+        (SEVERE_HYPER_THRESHOLD - HYPER_THRESHOLD);
+      // return interpolate(fraction);
+      return interpolateRgb(HYPER_COLOR, SEVERE_HYPER_COLOR)(fraction);
+    } else if (bgValue > TARGET_TO) {
+      // gradient from green to yellow as bgValue increases
+      const fraction = (bgValue - TARGET_TO) / (HYPER_THRESHOLD - TARGET_TO);
+      return interpolateRgb(TARGET_TO_COLOR, HYPER_COLOR)(fraction);
+    } else if (bgValue > TARGET_MIDDLE) {
+      const fraction = (bgValue - TARGET_MIDDLE) / (TARGET_TO - TARGET_MIDDLE);
+      return interpolateRgb(TARGET_MIDDLE_COLOR, TARGET_TO_COLOR)(fraction);
+    } else if (bgValue > TARGET_FROM) {
+      const fraction = (bgValue - TARGET_FROM) / (TARGET_MIDDLE - TARGET_FROM);
+      return interpolateRgb(TARGET_FROM_COLOR, TARGET_MIDDLE_COLOR)(fraction);
+    } else if (bgValue > HYPO_THRESHOLD) {
+      // gradient from red to green as bgValue decreases
+      const fraction =
+        (bgValue - HYPO_THRESHOLD) / (TARGET_FROM - HYPO_THRESHOLD);
+      return interpolateRgb(HYPO_COLOR, TARGET_FROM_COLOR)(fraction);
+    } else if (bgValue > SEVERE_HYPO_THRESHOLD) {
+      // gradient from red to green as bgValue decreases
+      const fraction =
+        (bgValue - SEVERE_HYPO_THRESHOLD) /
+        (HYPO_THRESHOLD - SEVERE_HYPO_THRESHOLD);
+      return interpolateRgb(SEVERE_HYPO_COLOR, HYPO_COLOR)(fraction);
     } else {
-      const scale = 1 - (props.bgValue - 40) / 30;
-      return `rgba(0, 255, 0, ${scale})`;
+      return SEVERE_HYPO_COLOR;
     }
-    // give different background color based on bg value
-    // for ranges 0 - 70 - red the more bg value is the more red it is
-    // for ranges 70 - 180 - green
-    // for ranges 180 - 300 - yellow
-    // for ranges 300 - 500 - red
   }};
 `;
 
