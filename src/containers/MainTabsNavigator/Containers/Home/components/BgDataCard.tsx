@@ -1,6 +1,6 @@
 import {BgSample} from '../../../../../types/day_bgs';
 import React from 'react';
-import styled from 'styled-components';
+import styled from 'styled-components/native';
 import DirectionArrows from './DirectionArrows';
 import {interpolateRgb} from 'd3';
 
