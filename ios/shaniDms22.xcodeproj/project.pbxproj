@@ -423,6 +423,7 @@
 			baseConfigurationReference = 5B7EB9410499542E8C5724F5 /* Pods-shaniDms22-shaniDms22Tests.debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = 8KHU9V3DTQ;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",

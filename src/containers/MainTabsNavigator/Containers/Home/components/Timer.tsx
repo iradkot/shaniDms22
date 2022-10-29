@@ -41,7 +41,6 @@ export const Timer: React.FC<{bgData: BgSample; callback: () => void}> = ({
       setCallbackRuns(0);
     } else {
       const expectedCallbackRuns = Math.floor(timeLeft / 60 / 1000) * -1;
-      console.log({expectedCallbackRuns});
       if (expectedCallbackRuns > callbackRuns) {
         setCallbackRuns(expectedCallbackRuns);
         console.log('callback runs', callbackRuns, expectedCallbackRuns);
