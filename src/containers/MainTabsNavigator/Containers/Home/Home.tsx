@@ -44,7 +44,9 @@ const Home: React.FC = () => {
         keyExtractor={bgDataKeyExtractor}
         // get last 100 bg data
         data={bgData}
-        renderItem={({item}) => <BgDataCard bgData={item} />}
+        renderItem={({item, index}) => (
+          <BgDataCard bgData={item} prevBgData={bgData[index + 1]} />
+        )}
       />
       <ActionButton
         onPress={getBgData}

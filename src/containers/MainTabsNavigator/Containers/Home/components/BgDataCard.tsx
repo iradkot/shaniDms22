@@ -7,12 +7,19 @@ import {interpolateRgb} from 'd3';
 const greenRgba = 'rgba(0, 255, 0, 0.5)';
 const yellowRgba = 'rgba(255, 255, 0, 0.5)';
 
-export const BgDataCard = ({bgData}: {bgData: BgSample}) => {
+export const BgDataCard = ({
+  bgData,
+  prevBgData,
+}: {
+  bgData: BgSample;
+  prevBgData: BgSample;
+}) => {
   return (
     <DataRowContainer bgValue={bgData.sgv}>
       <DataRowText>{bgData.sgv}</DataRowText>
       {/*<DataRowText>{bgData.trendDirection}</DataRowText>*/}
       <DirectionArrows trendDirection={bgData.direction} />
+      <DataRowText> {prevBgData && bgData.sgv - prevBgData.sgv} </DataRowText>
       <DataRowText>{new Date(bgData.date).toLocaleString()}</DataRowText>
     </DataRowContainer>
   );
