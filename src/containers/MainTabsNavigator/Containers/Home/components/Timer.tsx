@@ -22,7 +22,7 @@ export const Timer: React.FC<{bgData: BgSample; callback: () => void}> = ({
         return;
       }
       const commonTimeDiffBetweenBgReading = 5 * 60 * 1000;
-      const delay = 20 * 1000;
+      const delay = 40 * 1000;
       const timeLeft =
         bgData.date +
         commonTimeDiffBetweenBgReading +
