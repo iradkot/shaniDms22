@@ -7,12 +7,10 @@
  */
 
 import React from 'react';
-// import type {Node} from 'react';
+import {SafeAreaView} from 'react-native';
 import Login from './containers/Login';
-import Home from './containers/MainTabsNavigator/Containers/Home/Home';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import AppInitScreen from './containers/initScreen';
 import {
   MAIN_TAB_NAVIGATOR,
@@ -27,18 +25,23 @@ const Stack = createNativeStackNavigator();
 const App: () => JSX.Element = () => {
   // if user is not logged in, show login screen else show home screen
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{headerShown: false}}>
-        <Stack.Screen name="initScreen" component={AppInitScreen} />
-        <Stack.Screen name={LOGIN_SCREEN} component={Login} />
-        <Stack.Screen name={MAIN_TAB_NAVIGATOR} component={MainTabsNavigator} />
-        <Stack.Screen
-          options={{headerShown: true, headerTitle: ''}}
-          name={ADD_NOTIFICATION_SCREEN}
-          component={AddNotificationScreen}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SafeAreaView style={{flex: 1}}>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{headerShown: false}}>
+          <Stack.Screen name="initScreen" component={AppInitScreen} />
+          <Stack.Screen name={LOGIN_SCREEN} component={Login} />
+          <Stack.Screen
+            name={MAIN_TAB_NAVIGATOR}
+            component={MainTabsNavigator}
+          />
+          <Stack.Screen
+            options={{headerShown: true, headerTitle: ''}}
+            name={ADD_NOTIFICATION_SCREEN}
+            component={AddNotificationScreen}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaView>
   );
 };
 
