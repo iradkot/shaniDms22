@@ -1032,6 +1032,8 @@ PODS:
     - React-perflogger (= 0.70.1)
   - RNAppleHealthKit (1.7.0):
     - React
+  - RNDateTimePicker (6.5.3):
+    - React-Core
   - RNFBApp (15.7.0):
     - Firebase/CoreOnly (= 9.6.0)
     - React-Core
@@ -1093,6 +1095,7 @@ DEPENDENCIES:
   - React-runtimeexecutor (from `../node_modules/react-native/ReactCommon/runtimeexecutor`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - RNAppleHealthKit (from `../node_modules/react-native-health`)
+  - "RNDateTimePicker (from `../node_modules/@react-native-community/datetimepicker`)"
   - "RNFBApp (from `../node_modules/@react-native-firebase/app`)"
   - "RNFBAuth (from `../node_modules/@react-native-firebase/auth`)"
   - "RNFBFirestore (from `../node_modules/@react-native-firebase/firestore`)"
@@ -1192,6 +1195,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   RNAppleHealthKit:
     :path: "../node_modules/react-native-health"
+  RNDateTimePicker:
+    :path: "../node_modules/@react-native-community/datetimepicker"
   RNFBApp:
     :path: "../node_modules/@react-native-firebase/app"
   RNFBAuth:
@@ -1262,6 +1267,7 @@ SPEC CHECKSUMS:
   React-runtimeexecutor: a11d0c2e14140baf1e449264ca9168ae9ae6bbd0
   ReactCommon: 7f86326b92009925c6dcf93f8e825060171c379f
   RNAppleHealthKit: 60a6beefdd89a75811e9a8873a5e24f351dee681
+  RNDateTimePicker: 400fc87d26052d1ac76d05935e0f8d0fd4c78f13
   RNFBApp: c3c9e694e9d34c14250a069916eb05785c5f3c32
   RNFBAuth: ef1a543a1a3cda42cd84c0784631c1edfcab3e4f
   RNFBFirestore: c5e3014a05a5779237523350ab75c8ef29fe0b41

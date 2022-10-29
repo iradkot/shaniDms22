@@ -43,6 +43,7 @@ const DataRowContainer = styled.View`
   border-bottom-width: 1px;
   border-bottom-color: #ccc;
   background-color: ${({bgValue}: {bgValue: number}) => {
+    // todo  - refactor this to a separate function
     if (bgValue > SEVERE_HYPER_THRESHOLD) {
       return SEVERE_HYPER_COLOR;
     } else if (bgValue > HYPER_THRESHOLD) {

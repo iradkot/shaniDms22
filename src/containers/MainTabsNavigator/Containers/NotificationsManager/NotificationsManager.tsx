@@ -8,55 +8,15 @@ import {Animated, Text} from 'react-native';
 // @ts-ignore
 import styled from 'styled-components/native';
 import {useGetNotifications} from '../../../../hooks/useGetNotifications';
-import {Notification} from '../../../../types/notifications';
-import FlatList = Animated.FlatList;
 import {NavigationProp} from '@react-navigation/native';
 import {ADD_NOTIFICATION_SCREEN} from '../../../../constants/SCREEN_NAMES';
+import {NotificationsCard} from './components/NotificationCard';
+import FlatList = Animated.FlatList;
 
 const NotificationsManagerContainer = styled.View`
   flex: 1;
   background-color: #fff;
 `;
-
-const NotificationCardContainer = styled.View`
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px;
-  border-bottom-width: 1px;
-  border-bottom-color: #ccc;
-`;
-const NotificationCardText = styled.Text`
-  font-size: 18px;
-`;
-
-const formatMinutesToLocaleTimeString = (minutes: number) => {
-  const hours = Math.floor(minutes / 60);
-  const minutesLeft = minutes % 60;
-  return `${hours}:${minutesLeft}`;
-};
-
-export const NotificationsCard: FC<{notification: Notification}> = ({
-  notification,
-}) => {
-  return (
-    <NotificationCardContainer>
-      <NotificationCardText>{notification.name}</NotificationCardText>
-      <NotificationCardText>
-        {notification.enabled ? 'On' : 'Off'}
-      </NotificationCardText>
-      {/*  Display the hour_from_in_minutes and hour_to_in_minutes in a more readable format*/}
-      <NotificationCardText>
-        {formatMinutesToLocaleTimeString(notification.hour_from_in_minutes)} -{' '}
-        {formatMinutesToLocaleTimeString(notification.hour_to_in_minutes)}
-      </NotificationCardText>
-      <NotificationCardText>
-        {notification.range_start} - {notification.range_end}
-      </NotificationCardText>
-      <NotificationCardText>{notification.trend}</NotificationCardText>
-    </NotificationCardContainer>
-  );
-};
 
 // create dummy home component with typescript
 // TODO: rename component to NotificationsSettings
