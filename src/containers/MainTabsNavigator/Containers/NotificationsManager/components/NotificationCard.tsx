@@ -43,7 +43,6 @@ export const NotificationsCard: FC<{notification: Notification}> = ({
         {/*  {formatMinutesToLocaleTimeString(notification.hour_from_in_minutes)} -{' '}*/}
         {/*  {formatMinutesToLocaleTimeString(notification.hour_to_in_minutes)}*/}
         {/*</NotificationCardText>*/}
-        <DateTimePicker value={new Date()} mode="time" />
         <NotificationCardText>
           {notification.range_start} - {notification.range_end}
         </NotificationCardText>
