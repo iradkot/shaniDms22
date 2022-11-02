@@ -3,15 +3,18 @@
  */
 import {useCallback} from 'react';
 import firestore from '@react-native-firebase/firestore';
-import {Notification} from '../types/notifications';
+import {NotificationResponse} from '../types/notifications';
 
 export const useDeleteNotification = () => {
-  const deleteNotification = useCallback(async (notification: Notification) => {
-    await firestore()
-      .collection('notifications')
-      .doc(notification._id)
-      .delete();
-  }, []);
+  const deleteNotification = useCallback(
+    async (notification: NotificationResponse) => {
+      await firestore()
+        .collection('notifications')
+        .doc(notification.id)
+        .delete();
+    },
+    [],
+  );
 
   return {
     deleteNotification,

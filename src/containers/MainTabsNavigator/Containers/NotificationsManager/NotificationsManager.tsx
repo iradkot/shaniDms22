@@ -12,6 +12,7 @@ import {NavigationProp} from '@react-navigation/native';
 import {ADD_NOTIFICATION_SCREEN} from '../../../../constants/SCREEN_NAMES';
 import {NotificationsCard} from './components/NotificationCard';
 import FlatList = Animated.FlatList;
+import {NotificationResponse} from '../../../../types/notifications';
 
 const NotificationsManagerContainer = styled.View`
   flex: 1;
@@ -25,6 +26,9 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
 }) => {
   const {data, isLoading} = useGetNotifications();
 
+  const getKeyExtractor = (notification: NotificationResponse) =>
+    notification.id;
+
   const renderNotifications = () => {
     if (isLoading) {
       return <Text>Loading...</Text>;
@@ -33,7 +37,7 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
       <FlatList
         data={data}
         renderItem={({item}) => <NotificationsCard notification={item} />}
-        keyExtractor={item => item._id}
+        keyExtractor={getKeyExtractor}
       />
     );
   };
@@ -60,8 +64,7 @@ const AddNotificationButtonText = styled.Text`
   font-size: 18px;
 `;
 
-// @ts-ignore
-const AddNotificationButton: FC = ({callback}) => {
+const AddNotificationButton: FC<{callback: () => void}> = ({callback}) => {
   return (
     <AddNotificationButtonContainer onPress={callback}>
       <AddNotificationButtonText>Add Notification</AddNotificationButtonText>

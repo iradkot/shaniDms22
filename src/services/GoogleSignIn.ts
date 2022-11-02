@@ -30,16 +30,11 @@ class GoogleSignIn {
   signIn = async (): Promise<GoogleSignInResult> => {
     try {
       await GoogleSignin.hasPlayServices();
-      console.log('hasPlayServices');
       const response = await GoogleSignin.signIn();
-      console.log('signIn', response);
       const {idToken} = response;
-      console.log('idToken', idToken);
       const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-      console.log('googleCredential', googleCredential);
       // setup web client id
       const user = await auth().signInWithCredential(googleCredential);
-      console.log('user', user);
       this.isSignedIn = true;
       return {user, error: null};
     } catch (error: any) {
@@ -59,8 +54,7 @@ class GoogleSignIn {
   };
   getTokens: () => any = async () => {
     try {
-      const tokens = await GoogleSignin.getTokens();
-      console.log('got tokens:', tokens);
+      await GoogleSignin.getTokens();
     } catch (e) {
       console.log('error getting token', e);
     }

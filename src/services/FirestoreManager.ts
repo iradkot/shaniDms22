@@ -10,8 +10,6 @@ export class FirestoreManager {
       .limit(2)
       .get();
     const dayBgs = snapshot.docs.map(doc => doc.data());
-    // log snapshot ids
-    snapshot.docs.forEach(doc => console.log(doc.id));
     // log keys
     const bgParsedData = dayBgs.reduce<BgSample[]>((acc, dayBg) => {
       return [...acc, ...JSON.parse(dayBg.data)];
