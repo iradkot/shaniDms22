@@ -18,13 +18,14 @@ import {
   ADD_NOTIFICATION_SCREEN,
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
-import AddNotificationScreen from './containers/AddNotificationScreen';
+import AddNotificationScreen from './containers/addNotificationScreen/AddNotificationScreen';
 
 const Stack = createNativeStackNavigator();
 
 const App: () => JSX.Element = () => {
   // if user is not logged in, show login screen else show home screen
   return (
+    // TODO - move SafeAreaView style outside
     <SafeAreaView style={{flex: 1}}>
       <NavigationContainer>
         <Stack.Navigator screenOptions={{headerShown: false}}>
