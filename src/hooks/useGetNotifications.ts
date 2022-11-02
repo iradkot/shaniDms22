@@ -7,7 +7,7 @@ export const useGetNotifications = () => {
   const [data, setData] = useState<NotificationResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleNotificationsData = async () => {
+  const getNotificationsData = async () => {
     setIsLoading(true);
     const snapshot = await firestore().collection('notifications').get();
     const notifications = snapshot.docs.map(docDTOConvert);
@@ -15,11 +15,12 @@ export const useGetNotifications = () => {
     setIsLoading(false);
   };
   useEffect(() => {
-    handleNotificationsData();
+    getNotificationsData();
   }, []);
 
   return {
     data,
     isLoading,
+    getNotificationsData,
   };
 };

@@ -9,6 +9,7 @@ import {
   NotificationRequest,
   NotificationResponse,
 } from '../../types/notifications';
+import {NavigationProp, useNavigation} from '@react-navigation/native';
 import {useAddNotification} from '../../hooks/useAddNotification';
 import {useUpdateNotification} from '../../hooks/useUpdateNotification';
 import {useDeleteNotification} from '../../hooks/useDeleteNotification';
@@ -25,8 +26,13 @@ import {
   AddNotificationScreenText,
   AddNotificationScreenTitle,
 } from './AddNotificationScreen.style';
+import {
+  HOME_TAB_SCREEN,
+  NOTIFICATION_TAB_SCREEN,
+} from '../../constants/SCREEN_NAMES';
 
 const AddNotificationScreen: FC = () => {
+  const navigation = useNavigation<NavigationProp<any>>();
   const [name, setName] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [hour_from_in_minutes, setHourFromInMinutes] = useState(0);
@@ -42,8 +48,16 @@ const AddNotificationScreen: FC = () => {
   const {updateNotification} = useUpdateNotification();
   const {deleteNotification} = useDeleteNotification();
 
-  const handleAddNotification = () => {
-    addNotification({
+  const goBack = () => {
+    navigation.reset({
+      index: 1,
+      routes: [{name: HOME_TAB_SCREEN}, {name: NOTIFICATION_TAB_SCREEN}],
+    });
+    navigation.goBack();
+  };
+
+  const handleAddNotification = async () => {
+    await addNotification({
       name,
       enabled,
       hour_from_in_minutes,
@@ -52,6 +66,7 @@ const AddNotificationScreen: FC = () => {
       range_end,
       trend,
     } as NotificationRequest);
+    goBack();
   };
 
   const handleUpdateNotification = (notification: NotificationResponse) => {
@@ -69,6 +84,10 @@ const AddNotificationScreen: FC = () => {
 
   const handleDeleteNotification = (notification: NotificationResponse) => {
     deleteNotification(notification);
+  };
+
+  const getTimeInMinutes = (date: Date) => {
+    return date.getHours() * 60 + date.getMinutes();
   };
 
   return (
@@ -109,7 +128,7 @@ const AddNotificationScreen: FC = () => {
           display="default"
           onChange={(event, date) => {
             if (date) {
-              setHourFromInMinutes(date.getMinutes());
+              setHourFromInMinutes(getTimeInMinutes(date));
               setIsHourFromPickerVisible(false);
             }
           }}
@@ -136,7 +155,7 @@ const AddNotificationScreen: FC = () => {
           display="default"
           onChange={(event, date) => {
             if (date) {
-              setHourToInMinutes(date.getHours() * 60 + date.getMinutes());
+              setHourToInMinutes(getTimeInMinutes(date));
               setIsHourToPickerVisible(false);
             }
           }}

@@ -4,7 +4,7 @@
 // Path: src/containers/MainTabsNavigator/Containers/NotificationsManager/NotificationsManager.tsx
 
 import React, {FC} from 'react';
-import {Animated, Text} from 'react-native';
+import {ActivityIndicator, Animated, Text, View} from 'react-native';
 // @ts-ignore
 import styled from 'styled-components/native';
 import {useGetNotifications} from '../../../../hooks/useGetNotifications';
@@ -24,20 +24,26 @@ const NotificationsManagerContainer = styled.View`
 const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
   navigation,
 }) => {
-  const {data, isLoading} = useGetNotifications();
+  const {data, isLoading, getNotificationsData} = useGetNotifications();
 
   const getKeyExtractor = (notification: NotificationResponse) =>
     notification.id;
 
   const renderNotifications = () => {
     if (isLoading) {
-      return <Text>Loading...</Text>;
+      return (
+        <View style={{padding: 40}}>
+          <ActivityIndicator size={'large'} />
+        </View>
+      );
     }
     return (
       <FlatList
         data={data}
         renderItem={({item}) => <NotificationsCard notification={item} />}
         keyExtractor={getKeyExtractor}
+        refreshing={isLoading}
+        onRefresh={getNotificationsData}
       />
     );
   };
