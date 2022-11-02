@@ -1,6 +1,6 @@
 import React, {FC} from 'react';
 import {useToggleNotification} from '../../../../../hooks/useToggleNotification';
-import {Notification} from '../../../../../types/notifications';
+import {NotificationResponse} from '../../../../../types/notifications';
 import {formatMinutesToLocaleTimeString} from '../../../../../utils/datetime.utils';
 import {
   NotificationEnableSwitch,
@@ -14,7 +14,7 @@ import {
 
 const BUTTON_OPACITY_LEVEL = 0.6;
 
-export const NotificationsCard: FC<{notification: Notification}> = ({
+export const NotificationsCard: FC<{notification: NotificationResponse}> = ({
   notification,
 }) => {
   const {toggleNotification, isEnabled} = useToggleNotification(
@@ -24,8 +24,8 @@ export const NotificationsCard: FC<{notification: Notification}> = ({
     console.log('Pressed');
   };
 
-  const handleToggleNotification = () => {
-    console.log('toggle');
+  const handleToggle = () => {
+    toggleNotification(notification);
   };
 
   return (
@@ -54,7 +54,7 @@ export const NotificationsCard: FC<{notification: Notification}> = ({
       <NotificationSwitchContainer>
         <NotificationEnableSwitch
           value={isEnabled}
-          onChange={handleToggleNotification}
+          onValueChange={handleToggle}
         />
       </NotificationSwitchContainer>
     </NotificationCardContainer>

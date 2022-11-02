@@ -1,18 +1,19 @@
 import {useState} from 'react';
-import {Notification} from '../types/notifications';
+import {NotificationResponse} from '../types/notifications';
 import {useUpdateNotification} from './useUpdateNotification';
 
-export const useToggleNotification = (enabled = false) => {
+export const useToggleNotification = (enabled: boolean) => {
   const [isEnabled, setIsEnabled] = useState(enabled);
   const {updateNotification} = useUpdateNotification();
 
-  const toggleNotification = (notification: Notification) => {
+  const toggleNotification = (notification: NotificationResponse): void => {
     setIsEnabled(!notification.enabled);
-    const newNotification: Notification = {
+    const newNotification: NotificationResponse = {
       ...notification,
       enabled: !notification.enabled,
     };
-    updateNotification(newNotification).catch(() => {
+    updateNotification(newNotification).catch(error => {
+      console.log(error);
       setIsEnabled(notification.enabled);
     });
   };

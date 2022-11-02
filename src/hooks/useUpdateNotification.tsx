@@ -3,18 +3,18 @@
  */
 import {useState} from 'react';
 import firestore from '@react-native-firebase/firestore';
-import {Notification} from '../types/notifications';
+import {NotificationResponse} from '../types/notifications';
 
 export const useUpdateNotification = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<any>(null);
 
-  const updateNotification = async (notification: Notification) => {
+  const updateNotification = async (notification: NotificationResponse) => {
     setIsLoading(true);
     try {
       await firestore()
         .collection('notifications')
-        .doc(notification._id)
+        .doc(notification.id)
         .update(notification);
       setIsLoading(false);
     } catch (err) {

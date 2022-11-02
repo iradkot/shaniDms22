@@ -33,6 +33,7 @@ export const Timer: React.FC<{bgData: BgSample; callback: () => void}> = ({
   };
   useEffect(() => {
     getTimeLeft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bgData, timeLeft]);
 
   useEffect(() => {
@@ -43,10 +44,10 @@ export const Timer: React.FC<{bgData: BgSample; callback: () => void}> = ({
       const expectedCallbackRuns = Math.floor(timeLeft / 60 / 1000) * -1;
       if (expectedCallbackRuns > callbackRuns) {
         setCallbackRuns(expectedCallbackRuns);
-        console.log('callback runs', callbackRuns, expectedCallbackRuns);
         callback();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft, callbackRuns]);
 
   return (

@@ -1,6 +1,6 @@
 import styled from 'styled-components/native';
 
-export const AddNotificationScreenContainer = styled.View`
+export const AddNotificationScreenContainer = styled.ScrollView`
   flex: 1;
   background-color: #fff;
 `;
@@ -11,7 +11,9 @@ export const AddNotificationScreenTitle = styled.Text`
   margin: 10px;
 `;
 
-export const AddNotificationScreenInput = styled.TextInput`
+export const AddNotificationScreenInput = styled.TextInput.attrs({
+  selectTextOnFocus: true,
+})`
   border: 1px solid #ccc;
   border-radius: 5px;
   padding: 10px;

@@ -23,18 +23,12 @@ const Home: React.FC = () => {
       return b.date - a.date;
     };
     const sortedBgData = bgData.sort(sortFunction);
-    console.log(
-      sortedBgData.slice(sortedBgData.length - 10, sortedBgData.length),
-    );
     setBgData(sortedBgData.slice(0, 100));
     setIsLoading(false);
   };
   useEffect(() => {
     getBgData();
   }, []);
-  // console.log({bgData});
-  console.log('////////////////');
-  // console.log(bgData);
   const bgDataKeyExtractor = (item: BgSample) => item.date.toString();
   return (
     <HomeContainer>

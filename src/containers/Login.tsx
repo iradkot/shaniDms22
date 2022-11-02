@@ -17,7 +17,6 @@ const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
       console.log(gUserInfo.error);
     } else {
       setUserInfo(gUserInfo);
-      console.log('navigate to home screen');
       navigation.reset({
         index: 0,
         routes: [{name: MAIN_TAB_NAVIGATOR}],
