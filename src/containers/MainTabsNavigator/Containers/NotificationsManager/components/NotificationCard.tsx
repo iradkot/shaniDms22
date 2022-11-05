@@ -1,7 +1,7 @@
 import React, {FC} from 'react';
-import {useToggleNotification} from '../../../../../hooks/useToggleNotification';
-import {NotificationResponse} from '../../../../../types/notifications';
-import {formatMinutesToLocaleTimeString} from '../../../../../utils/datetime.utils';
+import {useToggleNotification} from 'app/hooks/useToggleNotification';
+import {NotificationResponse} from 'app/types/notifications';
+import {formatMinutesToLocaleTimeString} from 'app/utils/datetime.utils';
 import {
   NotificationEnableSwitch,
   NotificationCardContainer,

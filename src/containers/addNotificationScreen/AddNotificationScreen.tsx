@@ -5,17 +5,22 @@
  * language: typescript
  */
 import React, {FC, useState} from 'react';
+import {NavigationProp, useNavigation} from '@react-navigation/native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import {Keyboard} from 'react-native';
 import {
   NotificationRequest,
   NotificationResponse,
-} from '../../types/notifications';
-import {NavigationProp, useNavigation} from '@react-navigation/native';
-import {useAddNotification} from '../../hooks/useAddNotification';
-import {useUpdateNotification} from '../../hooks/useUpdateNotification';
-import {useDeleteNotification} from '../../hooks/useDeleteNotification';
-import {Trend} from '../../types/notifications';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import {Keyboard} from 'react-native';
+} from 'app/types/notifications';
+import {useAddNotification} from 'app/hooks/useAddNotification';
+import {useUpdateNotification} from 'app/hooks/useUpdateNotification';
+import {useDeleteNotification} from 'app/hooks/useDeleteNotification';
+import {Trend} from 'app/types/notifications';
+import {
+  HOME_TAB_SCREEN,
+  NOTIFICATION_TAB_SCREEN,
+} from 'app/constants/SCREEN_NAMES';
+import {formatMinutesToLocaleTimeString} from 'app/utils/datetime.utils';
 import {
   AddNotificationScreenButton,
   AddNotificationScreenButtonText,
@@ -26,10 +31,6 @@ import {
   AddNotificationScreenText,
   AddNotificationScreenTitle,
 } from './AddNotificationScreen.style';
-import {
-  HOME_TAB_SCREEN,
-  NOTIFICATION_TAB_SCREEN,
-} from '../../constants/SCREEN_NAMES';
 
 const AddNotificationScreen: FC = () => {
   const navigation = useNavigation<NavigationProp<any>>();
@@ -113,11 +114,7 @@ const AddNotificationScreen: FC = () => {
         }}>
         <AddNotificationScreenText>
           {/*The time from which the notification will be sent in hh:mm format*/}
-          {`From: ${Math.floor(hour_from_in_minutes / 60)}:${(
-            hour_from_in_minutes % 60
-          )
-            .toString()
-            .padStart(2, '0')}`}
+          {`From: ${formatMinutesToLocaleTimeString(hour_from_in_minutes)}`}
         </AddNotificationScreenText>
       </AddNotificationScreenButton>
       {is_hour_from_picker_visible && (
@@ -140,11 +137,7 @@ const AddNotificationScreen: FC = () => {
         }}>
         <AddNotificationScreenText>
           {/*The time until which the notification will be sent in hh:mm format*/}
-          {`To: ${Math.floor(hour_to_in_minutes / 60)}:${(
-            hour_to_in_minutes % 60
-          )
-            .toString()
-            .padStart(2, '0')}`}
+          {`To: ${formatMinutesToLocaleTimeString(hour_to_in_minutes)}`}
         </AddNotificationScreenText>
       </AddNotificationScreenButton>
       {is_hour_to_picker_visible && (
