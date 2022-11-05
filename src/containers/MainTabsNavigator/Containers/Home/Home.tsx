@@ -1,12 +1,11 @@
 import React, {useEffect} from 'react';
-import {FlatList, Text} from 'react-native';
-import {FirestoreManager} from '../../../../services/FirestoreManager';
+import {Text} from 'react-native';
 import styled from 'styled-components/native';
-import {BgSample} from '../../../../types/day_bgs';
+import {FirestoreManager} from 'app/services/FirestoreManager';
+import {BgSample} from 'app/types/day_bgs';
+import CgmCardListDisplay from 'app/components/CgmCardListDisplay/CgmCardListDisplay';
 import {Timer} from './components/Timer';
 import {ActionButton} from './components/ActionButton';
-import {BgDataCard} from '../../../../components/CgmCardListDisplay/BgDataCard';
-import CgmCardListDisplay from '../../../../components/CgmCardListDisplay/CgmCardListDisplay';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -30,12 +29,16 @@ const Home: React.FC = () => {
   useEffect(() => {
     getBgData();
   }, []);
-  const bgDataKeyExtractor = (item: BgSample) => item.date.toString();
+
   return (
     <HomeContainer>
       <Text>Home</Text>
       <Timer bgData={bgData[0]} callback={getBgData} />
-      <CgmCardListDisplay bgData={bgData} />
+      <CgmCardListDisplay
+        onPullToRefreshRefresh={getBgData}
+        isLoading={isLoading}
+        bgData={bgData}
+      />
       <ActionButton
         onPress={getBgData}
         text={'Refresh'}

@@ -4,15 +4,13 @@
 // Path: src/containers/MainTabsNavigator/Containers/NotificationsManager/NotificationsManager.tsx
 
 import React, {FC} from 'react';
-import {ActivityIndicator, Animated, Text, View} from 'react-native';
-// @ts-ignore
-import styled from 'styled-components/native';
-import {useGetNotifications} from '../../../../hooks/useGetNotifications';
+import {ActivityIndicator, FlatList, View} from 'react-native';
 import {NavigationProp} from '@react-navigation/native';
-import {ADD_NOTIFICATION_SCREEN} from '../../../../constants/SCREEN_NAMES';
+import styled from 'styled-components/native';
+import {useGetNotifications} from 'app/hooks/useGetNotifications';
+import {ADD_NOTIFICATION_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {NotificationResponse} from 'app/types/notifications';
 import {NotificationsCard} from './components/NotificationCard';
-import FlatList = Animated.FlatList;
-import {NotificationResponse} from '../../../../types/notifications';
 
 const NotificationsManagerContainer = styled.View`
   flex: 1;

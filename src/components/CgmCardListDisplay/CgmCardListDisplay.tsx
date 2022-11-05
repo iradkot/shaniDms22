@@ -1,10 +1,21 @@
-import {BgDataCard} from '../../components/CgmCardListDisplay/BgDataCard';
-import {BgSample} from '../../types/day_bgs';
+import {BgDataCard} from 'app/components/CgmCardListDisplay/BgDataCard';
+import {BgSample} from 'app/types/day_bgs';
 import {FlatList} from 'react-native';
-import React from 'react';
+import React, {FC} from 'react';
 
-const CgmCardListDisplay = ({bgData}: {bgData: BgSample[]}) => {
+interface CgmCardListDisplayProps {
+  bgData: BgSample[];
+  onPullToRefreshRefresh: () => void;
+  isLoading: boolean;
+}
+
+const CgmCardListDisplay: FC<CgmCardListDisplayProps> = ({
+  bgData,
+  onPullToRefreshRefresh,
+  isLoading,
+}) => {
   const bgDataKeyExtractor = (item: BgSample) => item.date.toString();
+
   return (
     <FlatList
       keyExtractor={bgDataKeyExtractor}
@@ -13,6 +24,8 @@ const CgmCardListDisplay = ({bgData}: {bgData: BgSample[]}) => {
       renderItem={({item, index}) => (
         <BgDataCard bgData={item} prevBgData={bgData[index + 1]} />
       )}
+      refreshing={isLoading}
+      onRefresh={onPullToRefreshRefresh}
     />
   );
 };
