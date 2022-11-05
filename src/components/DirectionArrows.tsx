@@ -3,8 +3,7 @@
 // Language: typescript
 // Path: src/containers/MainTabsNavigator/Containers/Home/components/DirectionArrows.tsx
 import React from 'react';
-import {View} from 'react-native';
-import styled from 'styled-components';
+import styled from 'styled-components/native';
 
 // styled sharp arrow component (get a size and trendDirection props)
 // it gets a trendDirection and rotates the arrow accordingly
@@ -20,6 +19,7 @@ import styled from 'styled-components';
 // if rateOutOfRange - arrow should be straight to the right
 // if null - arrow should be straight to the right
 const defaultArrowSize = 20;
+// @ts-ignore
 const Arrow = styled.View`
   width: 0;
   height: 0;

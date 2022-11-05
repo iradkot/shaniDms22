@@ -5,7 +5,8 @@ import styled from 'styled-components/native';
 import {BgSample} from '../../../../types/day_bgs';
 import {Timer} from './components/Timer';
 import {ActionButton} from './components/ActionButton';
-import {BgDataCard} from './components/BgDataCard';
+import {BgDataCard} from '../../../../components/CgmCardListDisplay/BgDataCard';
+import CgmCardListDisplay from '../../../../components/CgmCardListDisplay/CgmCardListDisplay';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -34,14 +35,7 @@ const Home: React.FC = () => {
     <HomeContainer>
       <Text>Home</Text>
       <Timer bgData={bgData[0]} callback={getBgData} />
-      <FlatList
-        keyExtractor={bgDataKeyExtractor}
-        // get last 100 bg data
-        data={bgData}
-        renderItem={({item, index}) => (
-          <BgDataCard bgData={item} prevBgData={bgData[index + 1]} />
-        )}
-      />
+      <CgmCardListDisplay bgData={bgData} />
       <ActionButton
         onPress={getBgData}
         text={'Refresh'}

@@ -1,11 +1,11 @@
-import {BgSample} from '../../../../../types/day_bgs';
+import {BgSample} from '../../types/day_bgs';
 import React from 'react';
 import styled from 'styled-components/native';
-import DirectionArrows from './DirectionArrows';
+import DirectionArrows from '../../components/DirectionArrows';
 import {interpolateRgb} from 'd3';
 
-const greenRgba = 'rgba(0, 255, 0, 0.5)';
-const yellowRgba = 'rgba(255, 255, 0, 0.5)';
+// const greenRgba = 'rgba(0, 255, 0, 0.5)';
+// const yellowRgba = 'rgba(255, 255, 0, 0.5)';
 
 export const BgDataCard = ({
   bgData,
