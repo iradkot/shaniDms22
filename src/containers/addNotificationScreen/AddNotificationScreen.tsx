@@ -6,7 +6,7 @@
  */
 import React, {FC, useState} from 'react';
 import {NavigationProp, useNavigation} from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import {Keyboard} from 'react-native';
 import {
   NotificationRequest,
@@ -117,20 +117,19 @@ const AddNotificationScreen: FC = () => {
           {`From: ${formatMinutesToLocaleTimeString(hour_from_in_minutes)}`}
         </AddNotificationScreenText>
       </AddNotificationScreenButton>
-      {is_hour_from_picker_visible && (
-        <DateTimePicker
-          value={new Date(0, 0, 0, 0, hour_from_in_minutes)}
-          mode="time"
-          is24Hour={true}
-          display="default"
-          onChange={(event, date) => {
-            if (date) {
-              setHourFromInMinutes(getTimeInMinutes(date));
-              setIsHourFromPickerVisible(false);
-            }
-          }}
-        />
-      )}
+      <DateTimePickerModal
+        date={new Date(0, 0, 0, 0, hour_from_in_minutes)}
+        isVisible={is_hour_from_picker_visible}
+        mode="time"
+        is24Hour={true}
+        onConfirm={date => {
+          setHourFromInMinutes(getTimeInMinutes(date));
+          setIsHourFromPickerVisible(false);
+        }}
+        onCancel={() => {
+          setIsHourFromPickerVisible(false);
+        }}
+      />
       <AddNotificationScreenButton
         onPress={() => {
           setIsHourToPickerVisible(prev => !prev);
@@ -140,20 +139,19 @@ const AddNotificationScreen: FC = () => {
           {`To: ${formatMinutesToLocaleTimeString(hour_to_in_minutes)}`}
         </AddNotificationScreenText>
       </AddNotificationScreenButton>
-      {is_hour_to_picker_visible && (
-        <DateTimePicker
-          value={new Date(0, 0, 0, 0, hour_to_in_minutes)}
-          mode="time"
-          is24Hour={true}
-          display="default"
-          onChange={(event, date) => {
-            if (date) {
-              setHourToInMinutes(getTimeInMinutes(date));
-              setIsHourToPickerVisible(false);
-            }
-          }}
-        />
-      )}
+      <DateTimePickerModal
+        date={new Date(0, 0, 0, 0, hour_from_in_minutes)}
+        isVisible={is_hour_to_picker_visible}
+        mode="time"
+        is24Hour={true}
+        onConfirm={date => {
+          setHourToInMinutes(getTimeInMinutes(date));
+          setIsHourToPickerVisible(false);
+        }}
+        onCancel={() => {
+          setIsHourToPickerVisible(false);
+        }}
+      />
       <AddNotificationScreenInputLabel>
         Range start
       </AddNotificationScreenInputLabel>
