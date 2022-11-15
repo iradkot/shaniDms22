@@ -5,18 +5,13 @@ import Animated, {
   useAnimatedStyle,
   useAnimatedGestureHandler,
   withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import {useToggleNotification} from 'app/hooks/useToggleNotification';
 import {NotificationResponse} from 'app/types/notifications';
 import {formatMinutesToLocaleTimeString} from 'app/utils/datetime.utils';
 import {
-  GestureEvent,
-  LongPressGestureHandler,
-  LongPressGestureHandlerEventPayload,
   PanGestureHandler,
   PanGestureHandlerGestureEvent,
-  State,
 } from 'react-native-gesture-handler';
 import {
   NotificationEnableSwitch,
@@ -43,7 +38,6 @@ export const NotificationsCard: FC<{notification: NotificationResponse}> = ({
   notification,
 }) => {
   const swipeAnimationValue = useSharedValue(0);
-  const isScrolling = useSharedValue(false);
   const {toggleNotification, isEnabled} = useToggleNotification(
     notification.enabled,
   );
@@ -62,14 +56,6 @@ export const NotificationsCard: FC<{notification: NotificationResponse}> = ({
         </DeleteButton>
       </DeleteButtonContainer>
     );
-  };
-
-  const longGestureHandler = (
-    event: GestureEvent<LongPressGestureHandlerEventPayload>,
-  ) => {
-    if (event.nativeEvent.state === State.ACTIVE) {
-      isScrolling.value = true;
-    }
   };
 
   const onNotificationPress = () => {
@@ -100,7 +86,6 @@ export const NotificationsCard: FC<{notification: NotificationResponse}> = ({
   });
 
   return (
-    // <LongPressGestureHandler onGestureEvent={longGestureHandler}>
     <View>
       {renderLeftActions()}
       <PanGestureHandler minDist={20} onGestureEvent={panGestureEvent}>
@@ -142,6 +127,5 @@ export const NotificationsCard: FC<{notification: NotificationResponse}> = ({
         </Animated.View>
       </PanGestureHandler>
     </View>
-    // </LongPressGestureHandler>
   );
 };
