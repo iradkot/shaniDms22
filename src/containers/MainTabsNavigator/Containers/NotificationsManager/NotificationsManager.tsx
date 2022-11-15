@@ -8,6 +8,7 @@ import {ActivityIndicator, FlatList, View} from 'react-native';
 import {NavigationProp} from '@react-navigation/native';
 import styled from 'styled-components/native';
 import {useGetNotifications} from 'app/hooks/useGetNotifications';
+import {useDeleteNotification} from 'app/hooks/useDeleteNotification';
 import {ADD_NOTIFICATION_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {NotificationResponse} from 'app/types/notifications';
 import {NotificationsCard} from './components/NotificationCard';
@@ -23,9 +24,15 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
   navigation,
 }) => {
   const {data, isLoading, getNotificationsData} = useGetNotifications();
+  const {deleteNotification} = useDeleteNotification();
 
   const getKeyExtractor = (notification: NotificationResponse) =>
     notification.id;
+
+  const handleDeleteNotification = async (notificationId: string) => {
+    await deleteNotification(notificationId);
+    getNotificationsData();
+  };
 
   const renderNotifications = () => {
     if (isLoading) {
@@ -38,7 +45,12 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
     return (
       <FlatList
         data={data}
-        renderItem={({item}) => <NotificationsCard notification={item} />}
+        renderItem={({item}) => (
+          <NotificationsCard
+            onDeleteNotification={handleDeleteNotification}
+            notification={item}
+          />
+        )}
         keyExtractor={getKeyExtractor}
         refreshing={isLoading}
         onRefresh={getNotificationsData}
