@@ -1,5 +1,5 @@
 import React, {FC} from 'react';
-import {View} from 'react-native';
+import {Alert, View} from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -34,8 +34,14 @@ type ContextType = {
   translateY: number;
 };
 
-export const NotificationsCard: FC<{notification: NotificationResponse}> = ({
+interface NotificationCardProp {
+  notification: NotificationResponse;
+  onDeleteNotification: (notificationId: string) => void;
+}
+
+export const NotificationsCard: FC<NotificationCardProp> = ({
   notification,
+  onDeleteNotification,
 }) => {
   const swipeAnimationValue = useSharedValue(0);
   const {toggleNotification, isEnabled} = useToggleNotification(
@@ -48,10 +54,31 @@ export const NotificationsCard: FC<{notification: NotificationResponse}> = ({
     };
   });
 
+  const handleDeleteNotification = () => {
+    onDeleteNotification(notification.id);
+  };
+
+  const openDeleteAlert = () => {
+    Alert.alert(
+      'Delete this notification?',
+      'Are you sure you want to delete?',
+      [
+        {
+          text: 'Cancel',
+          onPress: () => {},
+        },
+        {
+          text: 'Delete',
+          onPress: handleDeleteNotification,
+        },
+      ],
+    );
+  };
+
   const renderLeftActions = () => {
     return (
       <DeleteButtonContainer>
-        <DeleteButton onPress={() => {}}>
+        <DeleteButton onPress={openDeleteAlert}>
           <DeleteButtonText>Archive</DeleteButtonText>
         </DeleteButton>
       </DeleteButtonContainer>

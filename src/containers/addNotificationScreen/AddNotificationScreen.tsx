@@ -14,7 +14,6 @@ import {
 } from 'app/types/notifications';
 import {useAddNotification} from 'app/hooks/useAddNotification';
 import {useUpdateNotification} from 'app/hooks/useUpdateNotification';
-import {useDeleteNotification} from 'app/hooks/useDeleteNotification';
 import {Trend} from 'app/types/notifications';
 import {
   HOME_TAB_SCREEN,
@@ -47,7 +46,6 @@ const AddNotificationScreen: FC = () => {
 
   const {addNotification} = useAddNotification();
   const {updateNotification} = useUpdateNotification();
-  const {deleteNotification} = useDeleteNotification();
 
   const goBack = () => {
     navigation.reset({
@@ -81,10 +79,6 @@ const AddNotificationScreen: FC = () => {
       range_end,
       trend,
     });
-  };
-
-  const handleDeleteNotification = (notification: NotificationResponse) => {
-    deleteNotification(notification);
   };
 
   const getTimeInMinutes = (date: Date) => {
