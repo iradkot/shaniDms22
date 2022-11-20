@@ -9,3 +9,6 @@ export const formatMinutesToLocaleTimeString = (minutes: number) => {
   }
   return `${hours}:${minutesLeft}`;
 };
+export const getTimeInMinutes = (date: Date) => {
+  return date.getHours() * 60 + date.getMinutes();
+};

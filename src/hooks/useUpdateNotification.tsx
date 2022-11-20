@@ -9,7 +9,9 @@ export const useUpdateNotification = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<any>(null);
 
-  const updateNotification = async (notification: NotificationResponse) => {
+  const updateNotification = async (
+    notification: NotificationResponse,
+  ): Promise<void> => {
     setIsLoading(true);
     try {
       await firestore()
