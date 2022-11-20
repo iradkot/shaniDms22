@@ -18,7 +18,7 @@ import {
   ADD_NOTIFICATION_SCREEN,
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
-import AddNotificationScreen from './containers/addNotificationScreen/AddNotificationScreen';
+import AddNotificationScreen from './containers/AddNotificationScreen/AddNotificationScreen';
 
 const Stack = createNativeStackNavigator();
 
