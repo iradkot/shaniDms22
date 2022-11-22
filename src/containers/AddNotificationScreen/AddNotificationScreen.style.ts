@@ -11,19 +11,6 @@ export const AddNotificationScreenTitle = styled.Text`
   margin: 10px;
 `;
 
-export const AddNotificationScreenInput = styled.TextInput.attrs({
-  selectTextOnFocus: true,
-})`
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  padding: 10px;
-  margin: 10px;
-`;
-
-export const AddNotificationScreenSwitch = styled.Switch`
-  margin: 10px;
-`;
-
 export const AddNotificationScreenButton = styled.TouchableOpacity`
   background-color: #ccc;
   padding: 10px;
@@ -38,9 +25,4 @@ export const AddNotificationScreenButtonText = styled(
   AddNotificationScreenText,
 )`
   text-align: center;
-`;
-export const AddNotificationScreenInputLabel = styled(
-  AddNotificationScreenText,
-)`
-  margin-left: 10px;
 `;

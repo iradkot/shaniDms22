@@ -62,9 +62,8 @@ const NotificationForm = ({
     },
   });
 
-  const [is_hour_from_picker_visible, setIsHourFromPickerVisible] =
-    useState(false);
-  const [is_hour_to_picker_visible, setIsHourToPickerVisible] = useState(false);
+  const [isHourFromPickerVisible, setIsHourFromPickerVisible] = useState(false);
+  const [isHourToPickerVisible, setIsHourToPickerVisible] = useState(false);
 
   useEffect(() => {
     const onSubmitForm = (data: NotificationRequest) => {
@@ -77,83 +76,87 @@ const NotificationForm = ({
 
   // define refs to access the form values
   // ref type is MutableRefObject<any>
-  const nameRef = React.useRef<React.RefObject<typeof S.TextInput>>(null);
+  const nameRef = React.useRef<TextInput>(null);
   const range_start_ref = React.useRef<TextInput>(null);
   const range_end_ref = React.useRef<TextInput>(null);
-
+  interface InputControllerProps {
+    ref: React.RefObject<TextInput>;
+    name: 'name' | 'range_start' | 'range_end';
+    placeholder: string;
+    keyboardType: string;
+    returnKeyType: string;
+    onSubmitEditing: () => void;
+    rules: any;
+  }
+  const InputComponents: InputControllerProps[] = [
+    {
+      ref: nameRef,
+      name: 'name',
+      placeholder: 'Name',
+      keyboardType: 'default',
+      returnKeyType: 'next',
+      onSubmitEditing: () => range_start_ref.current?.focus(),
+      rules: rules.name,
+    },
+    {
+      ref: range_start_ref,
+      name: 'range_start',
+      placeholder: 'Range start',
+      keyboardType: 'number-pad',
+      returnKeyType: 'next',
+      onSubmitEditing: () => range_end_ref.current?.focus(),
+      rules: rules.range,
+    },
+    {
+      ref: range_end_ref,
+      name: 'range_end',
+      placeholder: 'Range end',
+      keyboardType: 'number-pad',
+      returnKeyType: 'done',
+      onSubmitEditing: () => range_end_ref?.current?.blur(),
+      rules: rules.range,
+    },
+  ];
   return (
     <S.Container>
-      <Controller
-        control={control}
-        render={({
-          field: {onChange, onBlur, value},
-          fieldState: {invalid, isTouched, isDirty, error},
-        }) => (
-          <S.TextInput
-            ref={nameRef}
-            onSubmitEditing={() => {
-              return range_start_ref?.current?.focus();
-            }}
-            returnKeyType="next"
-            onBlur={onBlur}
-            onChangeText={onChange}
-            value={value}
-            placeholder="Name"
+      {InputComponents.map(input => (
+        <>
+          <Controller
+            key={input.name}
+            control={control}
+            name={input.name}
+            rules={input.rules}
+            render={({field: {onChange, onBlur, value}}) => (
+              <S.TextInput
+                ref={input.ref}
+                placeholder={input.placeholder}
+                keyboardType={input.keyboardType}
+                returnKeyType={input.returnKeyType}
+                onSubmitEditing={input.onSubmitEditing}
+                onBlur={onBlur}
+                onChangeText={onChange}
+                value={value}
+              />
+            )}
           />
-        )}
-        name="name"
-        rules={rules.name}
-        defaultValue=""
-      />
-      {errors.name && <S.ErrorText>Name is required.</S.ErrorText>}
-      <Controller
-        control={control}
-        render={({
-          field: {onChange, onBlur, value},
-          fieldState: {invalid, isTouched, isDirty, error},
-        }) => (
-          <S.TextInput
-            ref={range_start_ref}
-            onSubmitEditing={() => {
-              return range_end_ref?.current?.focus();
-            }}
-            returnKeyType="next"
-            onBlur={onBlur}
-            onChangeText={onChange}
-            value={value}
-            placeholder="Range Start"
-          />
-        )}
-        name="range_start"
-        rules={rules.range}
-        defaultValue={0}
-      />
-      {errors.range_start && (
-        <S.ErrorText>Range Start is required.</S.ErrorText>
-      )}
-      <Controller
-        control={control}
-        render={({
-          field: {onChange, onBlur, value},
-          fieldState: {invalid, isTouched, isDirty, error},
-        }) => (
-          <S.TextInput
-            ref={range_end_ref}
-            onSubmitEditing={() => {
-              return range_end_ref?.current?.blur();
-            }}
-            returnKeyType="next"
-            onBlur={onBlur}
-            onChangeText={onChange}
-            value={value}
-            placeholder="Range End"
-          />
-        )}
-        name="range_end"
-        rules={rules.range}
-        defaultValue={0}
-      />
-      {errors.range_end && <S.ErrorText>Range End is required.</S.ErrorText>}
+          {errors?.[input.name] && (
+            <S.ErrorText>
+              {errors?.[input.name]?.type === 'required' &&
+                `${input.name} is required`}
+              {errors?.[input.name]?.type === 'minLength' &&
+                `${input.name} must be at least 3 characters`}
+              {errors?.[input.name]?.type === 'maxLength' &&
+                `${input.name} must be at most 50 characters`}
+              {errors?.[input.name]?.type === 'min' &&
+                `${input.name} must be at least 1`}
+              {errors?.[input.name]?.type === 'max' &&
+                `${input.name} must be at most 1000`}
+              {errors?.[input.name]?.type === 'pattern' &&
+                `${input.name} must be a number`}
+            </S.ErrorText>
+          )}
+        </>
+      ))}
       {errors.hour_from_in_minutes && (
         <S.ErrorText>Hour From is required.</S.ErrorText>
       )}
@@ -172,7 +175,7 @@ const NotificationForm = ({
             </S.TimePickerButton>
             <DateTimePickerModal
               date={new Date(0, 0, 0, 0, value)}
-              isVisible={is_hour_from_picker_visible}
+              isVisible={isHourFromPickerVisible}
               mode="time"
               is24Hour={true}
               onConfirm={date => {
@@ -204,7 +207,7 @@ const NotificationForm = ({
             </S.TimePickerButton>
             <DateTimePickerModal
               date={new Date(0, 0, 0, 0, value)}
-              isVisible={is_hour_to_picker_visible}
+              isVisible={isHourToPickerVisible}
               mode="time"
               is24Hour={true}
               onConfirm={date => {
