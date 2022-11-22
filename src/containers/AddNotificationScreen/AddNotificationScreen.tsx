@@ -13,14 +13,13 @@ import {
   HOME_TAB_SCREEN,
   NOTIFICATION_TAB_SCREEN,
 } from 'app/constants/SCREEN_NAMES';
-
+import NotificationForm from 'app/components/NotificationForm/NotificationForm';
 import {
   AddNotificationScreenButton,
   AddNotificationScreenButtonText,
   AddNotificationScreenContainer,
   AddNotificationScreenTitle,
 } from './AddNotificationScreen.style';
-import NotificationForm from 'app/components/NotificationForm/NotificationForm';
 
 const AddNotificationScreen: FC = () => {
   const navigation = useNavigation<NavigationProp<any>>();

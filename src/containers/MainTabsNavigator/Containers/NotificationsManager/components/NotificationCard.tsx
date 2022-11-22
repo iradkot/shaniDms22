@@ -99,7 +99,9 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
       context.translateX = swipeAnimationValue.value;
     },
     onActive: (event, context) => {
-      swipeAnimationValue.value = event.translationX + context.translateX;
+      if (event.translationX >= 0 || context.translateX >= DISTANCE_FROM_END) {
+        swipeAnimationValue.value = event.translationX + context.translateX;
+      }
     },
     onEnd: () => {
       if (swipeAnimationValue.value > DISTANCE_FROM_END) {
