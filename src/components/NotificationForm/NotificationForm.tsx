@@ -141,7 +141,18 @@ const NotificationForm = ({
           />
           {errors?.[input.name] && (
             <S.ErrorText>
-              Error in {input.name} field, of type {errors?.[input.name]?.type}
+              {errors?.[input.name]?.type === 'required' &&
+                `${input.name} is required`}
+              {errors?.[input.name]?.type === 'minLength' &&
+                `${input.name} must be at least 3 characters`}
+              {errors?.[input.name]?.type === 'maxLength' &&
+                `${input.name} must be at most 50 characters`}
+              {errors?.[input.name]?.type === 'min' &&
+                `${input.name} must be at least 1`}
+              {errors?.[input.name]?.type === 'max' &&
+                `${input.name} must be at most 1000`}
+              {errors?.[input.name]?.type === 'pattern' &&
+                `${input.name} must be a number`}
             </S.ErrorText>
           )}
         </>
