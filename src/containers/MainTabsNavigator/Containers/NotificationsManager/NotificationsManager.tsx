@@ -9,7 +9,10 @@ import {NavigationProp} from '@react-navigation/native';
 import styled from 'styled-components/native';
 import {useGetNotifications} from 'app/hooks/useGetNotifications';
 import {useDeleteNotification} from 'app/hooks/useDeleteNotification';
-import {ADD_NOTIFICATION_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {
+  ADD_NOTIFICATION_SCREEN,
+  EDIT_NOTIFICATION_SCREEN,
+} from 'app/constants/SCREEN_NAMES';
 import {NotificationResponse} from 'app/types/notifications';
 import {NotificationsCard} from './components/NotificationCard';
 
@@ -47,6 +50,7 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
         data={data}
         renderItem={({item}) => (
           <NotificationsCard
+            onPress={() => navigation.navigate(EDIT_NOTIFICATION_SCREEN, item)}
             onDeleteNotification={handleDeleteNotification}
             notification={item}
           />

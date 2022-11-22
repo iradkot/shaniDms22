@@ -9,10 +9,11 @@ import {
   formatMinutesToLocaleTimeString,
   getTimeInMinutes,
 } from 'app/utils/datetime.utils';
+import {TextInput} from 'react-native';
 
 type Props = {
   notification: NotificationRequest | null;
-  onSubmit: (notification: NotificationRequest) => void;
+  onSubmit: (notification: NotificationRequest) => Promise<void>;
   submitHandlerRef: MutableRefObject<null | (() => void)>;
 };
 
@@ -77,14 +78,8 @@ const NotificationForm = ({
   // define refs to access the form values
   // ref type is MutableRefObject<any>
   const nameRef = React.useRef<React.RefObject<typeof S.TextInput>>(null);
-  const range_start_ref =
-    React.useRef<React.RefObject<typeof S.TextInput>>(null);
-  const range_end_ref = React.useRef<React.RefObject<typeof S.TextInput>>(null);
-  const hour_from_in_minutes_ref =
-    React.useRef<React.RefObject<typeof S.TextInput>>(null);
-  const hour_to_in_minutes_ref =
-    React.useRef<React.RefObject<typeof S.TextInput>>(null);
-  const trend_ref = React.useRef<React.RefObject<typeof S.TextInput>>(null);
+  const range_start_ref = React.useRef<TextInput>(null);
+  const range_end_ref = React.useRef<TextInput>(null);
 
   return (
     <S.Container>
@@ -97,7 +92,6 @@ const NotificationForm = ({
           <S.TextInput
             ref={nameRef}
             onSubmitEditing={() => {
-              // @ts-ignore
               return range_start_ref?.current?.focus();
             }}
             returnKeyType="next"
@@ -121,7 +115,6 @@ const NotificationForm = ({
           <S.TextInput
             ref={range_start_ref}
             onSubmitEditing={() => {
-              // @ts-ignore
               return range_end_ref?.current?.focus();
             }}
             returnKeyType="next"
@@ -147,8 +140,7 @@ const NotificationForm = ({
           <S.TextInput
             ref={range_end_ref}
             onSubmitEditing={() => {
-              // @ts-ignore
-              return hour_from_in_minutes_ref?.current?.focus();
+              return range_end_ref?.current?.blur();
             }}
             returnKeyType="next"
             onBlur={onBlur}
