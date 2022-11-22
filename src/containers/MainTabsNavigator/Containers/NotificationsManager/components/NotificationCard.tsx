@@ -80,7 +80,7 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
   const renderLeftActions = () => {
     return (
       <DeleteButtonContainer>
-        <DeleteButton onPress={openDeleteAlert}>
+        <DeleteButton disallowInterruption={true} onPress={openDeleteAlert}>
           <DeleteButtonText>Archive</DeleteButtonText>
         </DeleteButton>
       </DeleteButtonContainer>
