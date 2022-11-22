@@ -1,0 +1,62 @@
+/**
+ * This screen displays a form to add a new notification
+ * all styles are used with styled-components
+ * Store management is done with firebase
+ * language: typescript
+ */
+import React, {FC} from 'react';
+import {NavigationProp, useNavigation} from '@react-navigation/native';
+import {Keyboard} from 'react-native';
+import {NotificationRequest} from 'app/types/notifications';
+import {useAddNotification} from 'app/hooks/useAddNotification';
+import {
+  HOME_TAB_SCREEN,
+  NOTIFICATION_TAB_SCREEN,
+} from 'app/constants/SCREEN_NAMES';
+
+import {
+  AddNotificationScreenButton,
+  AddNotificationScreenButtonText,
+  AddNotificationScreenContainer,
+  AddNotificationScreenTitle,
+} from './AddNotificationScreen.style';
+import NotificationForm from 'app/components/NotificationForm/NotificationForm';
+
+const AddNotificationScreen: FC = () => {
+  const navigation = useNavigation<NavigationProp<any>>();
+  const {addNotification} = useAddNotification();
+  const goBack = () => {
+    navigation.reset({
+      index: 1,
+      routes: [{name: HOME_TAB_SCREEN}, {name: NOTIFICATION_TAB_SCREEN}],
+    });
+    navigation.goBack();
+  };
+
+  const onSubmit = async (notification: NotificationRequest) => {
+    Keyboard.dismiss();
+
+    await addNotification(notification);
+    goBack();
+  };
+
+  const submitHandlerRef = React.useRef<null | (() => void)>(null);
+
+  return (
+    <AddNotificationScreenContainer>
+      <AddNotificationScreenTitle>Add Notification</AddNotificationScreenTitle>
+
+      <NotificationForm
+        onSubmit={onSubmit}
+        notification={null}
+        submitHandlerRef={submitHandlerRef}
+      />
+      <AddNotificationScreenButton
+        onPress={() => submitHandlerRef?.current?.()}>
+        <AddNotificationScreenButtonText>Add</AddNotificationScreenButtonText>
+      </AddNotificationScreenButton>
+    </AddNotificationScreenContainer>
+  );
+};
+
+export default AddNotificationScreen;

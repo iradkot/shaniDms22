@@ -5,9 +5,7 @@ export type Trend =
   | 'SingleUp'
   | 'DoubleDown'
   | 'DoubleUp'
-  | 'Flat'
-  | 'NOT COMPUTABLE'
-  | 'RATE OUT OF RANGE';
+  | 'Flat';
 
 export interface NotificationRequest {
   name: string;

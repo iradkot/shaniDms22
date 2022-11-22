@@ -1,5 +1,5 @@
 import React, {FC} from 'react';
-import {Alert, View} from 'react-native';
+import {Alert, Pressable, View} from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -35,11 +35,13 @@ type ContextType = {
 };
 
 interface NotificationCardProp {
+  onPress: () => void;
   notification: NotificationResponse;
   onDeleteNotification: (notificationId: string) => void;
 }
 
 export const NotificationsCard: FC<NotificationCardProp> = ({
+  onPress,
   notification,
   onDeleteNotification,
 }) => {
@@ -85,10 +87,6 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
     );
   };
 
-  const onNotificationPress = () => {
-    console.log('Pressed');
-  };
-
   const handleToggle = () => {
     toggleNotification(notification);
   };
@@ -113,46 +111,48 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
   });
 
   return (
-    <View>
-      {renderLeftActions()}
-      <PanGestureHandler minDist={20} onGestureEvent={panGestureEvent}>
-        <Animated.View style={swipeAnimation}>
-          <NotificationCardContainer
-            onPress={onNotificationPress}
-            activeOpacity={1}>
-            <NotificationCardDetails>
-              <NotificationCardRow>
-                <NotificationTitle>{notification.name}</NotificationTitle>
-              </NotificationCardRow>
-              <NotificationCardRow>
-                {/*  Display the hour_from_in_minutes and hour_to_in_minutes in a more readable format*/}
-                <NotificationCardText>Notification hour:</NotificationCardText>
-                <NotificationCardText>
-                  {formatMinutesToLocaleTimeString(
-                    notification.hour_from_in_minutes,
-                  )}{' '}
-                  -{' '}
-                  {formatMinutesToLocaleTimeString(
-                    notification.hour_to_in_minutes,
-                  )}
-                </NotificationCardText>
-              </NotificationCardRow>
-              <NotificationCardRow>
-                <NotificationCardText>Range:</NotificationCardText>
-                <NotificationCardText>
-                  {notification.range_start} - {notification.range_end}
-                </NotificationCardText>
-              </NotificationCardRow>
-            </NotificationCardDetails>
-            <NotificationSwitchContainer>
-              <NotificationEnableSwitch
-                value={isEnabled}
-                onValueChange={handleToggle}
-              />
-            </NotificationSwitchContainer>
-          </NotificationCardContainer>
-        </Animated.View>
-      </PanGestureHandler>
-    </View>
+    <Pressable onPress={onPress}>
+      <View>
+        {renderLeftActions()}
+        <PanGestureHandler minDist={20} onGestureEvent={panGestureEvent}>
+          <Animated.View style={swipeAnimation}>
+            <NotificationCardContainer onPress={onPress} activeOpacity={1}>
+              <NotificationCardDetails>
+                <NotificationCardRow>
+                  <NotificationTitle>{notification.name}</NotificationTitle>
+                </NotificationCardRow>
+                <NotificationCardRow>
+                  {/*  Display the hour_from_in_minutes and hour_to_in_minutes in a more readable format*/}
+                  <NotificationCardText>
+                    Notification hour:
+                  </NotificationCardText>
+                  <NotificationCardText>
+                    {formatMinutesToLocaleTimeString(
+                      notification.hour_from_in_minutes,
+                    )}{' '}
+                    -{' '}
+                    {formatMinutesToLocaleTimeString(
+                      notification.hour_to_in_minutes,
+                    )}
+                  </NotificationCardText>
+                </NotificationCardRow>
+                <NotificationCardRow>
+                  <NotificationCardText>Range:</NotificationCardText>
+                  <NotificationCardText>
+                    {notification.range_start} - {notification.range_end}
+                  </NotificationCardText>
+                </NotificationCardRow>
+              </NotificationCardDetails>
+              <NotificationSwitchContainer>
+                <NotificationEnableSwitch
+                  value={isEnabled}
+                  onValueChange={handleToggle}
+                />
+              </NotificationSwitchContainer>
+            </NotificationCardContainer>
+          </Animated.View>
+        </PanGestureHandler>
+      </View>
+    </Pressable>
   );
 };

@@ -16,9 +16,11 @@ import {
   MAIN_TAB_NAVIGATOR,
   LOGIN_SCREEN,
   ADD_NOTIFICATION_SCREEN,
+  EDIT_NOTIFICATION_SCREEN,
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
-import AddNotificationScreen from './containers/addNotificationScreen/AddNotificationScreen';
+import AddNotificationScreen from './containers/AddNotificationScreen/AddNotificationScreen';
+import EditNotificationScreen from 'app/containers/EditNotificationScreen/EditNotificationScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -39,6 +41,11 @@ const App: () => JSX.Element = () => {
             options={{headerShown: true, headerTitle: ''}}
             name={ADD_NOTIFICATION_SCREEN}
             component={AddNotificationScreen}
+          />
+          <Stack.Screen
+            options={{headerShown: true, headerTitle: ''}}
+            name={EDIT_NOTIFICATION_SCREEN}
+            component={EditNotificationScreen}
           />
         </Stack.Navigator>
       </NavigationContainer>
