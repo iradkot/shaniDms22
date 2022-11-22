@@ -6,6 +6,7 @@ import Animated, {
   useAnimatedGestureHandler,
   withSpring,
 } from 'react-native-reanimated';
+import Icon from 'react-native-vector-icons/FontAwesome';
 import {useToggleNotification} from 'app/hooks/useToggleNotification';
 import {NotificationResponse} from 'app/types/notifications';
 import {formatMinutesToLocaleTimeString} from 'app/utils/datetime.utils';
@@ -81,7 +82,9 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
     return (
       <DeleteButtonContainer>
         <DeleteButton disallowInterruption={true} onPress={openDeleteAlert}>
-          <DeleteButtonText>Archive</DeleteButtonText>
+          <DeleteButtonText>
+            <Icon name="trash" size={40} color="#fff" />
+          </DeleteButtonText>
         </DeleteButton>
       </DeleteButtonContainer>
     );
