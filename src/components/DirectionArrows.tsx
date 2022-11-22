@@ -4,6 +4,7 @@
 // Path: src/containers/MainTabsNavigator/Containers/Home/components/DirectionArrows.tsx
 import React from 'react';
 import styled from 'styled-components/native';
+import {Trend} from 'app/types/notifications';
 
 // styled sharp arrow component (get a size and trendDirection props)
 // it gets a trendDirection and rotates the arrow accordingly
@@ -19,21 +20,18 @@ import styled from 'styled-components/native';
 // if rateOutOfRange - arrow should be straight to the right
 // if null - arrow should be straight to the right
 const defaultArrowSize = 20;
-// @ts-ignore
-const Arrow = styled.View`
+
+const Arrow = styled.View<{size: number; trendDirection: Trend}>`
   width: 0;
   height: 0;
-  border-left-width: ${(props: {size: number}) =>
-    props.size || defaultArrowSize}px;
+  border-left-width: ${({size}) => size || defaultArrowSize}px;
   border-left-color: transparent;
-  border-right-width: ${(props: {size: number}) =>
-    props.size || defaultArrowSize}px;
+  border-right-width: ${({size}) => size || defaultArrowSize}px;
   border-right-color: transparent;
-  border-bottom-width: ${(props: {size: number}) =>
-    props.size || defaultArrowSize}px;
+  border-bottom-width: ${({size}) => size || defaultArrowSize}px;
   border-bottom-color: black;
-  transform: ${(props: {trendDirection: string}) => {
-    switch (props.trendDirection) {
+  transform: ${({trendDirection}) => {
+    switch (trendDirection) {
       case 'DoubleUp':
       case 'SingleUp':
         return 'rotate(0deg)';
@@ -46,9 +44,6 @@ const Arrow = styled.View`
       case 'SingleDown':
       case 'DoubleDown':
         return 'rotate(180deg)';
-      case 'NotComputable':
-      case 'RateOutOfRange':
-        return 'rotate(90deg)';
       default:
         return 'rotate(90deg)';
     }
