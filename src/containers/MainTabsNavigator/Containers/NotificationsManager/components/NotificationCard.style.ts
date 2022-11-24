@@ -11,6 +11,8 @@ export const DeleteButtonContainer = styled.View`
 export const DeleteButton = styled(TouchableOpacity)`
   height: 100%;
   width: 100%;
+  align-items: center;
+  justify-content: center;
 `;
 export const DeleteButtonText = styled.Text`
   font-size: 16px;
