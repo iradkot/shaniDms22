@@ -1,13 +1,13 @@
 import React from 'react';
-import {NavigationContainer} from '@react-navigation/native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import Home from './Containers/Home/Home';
-import {Settings} from 'react-native';
 import NotificationsManager from './Containers/NotificationsManager/NotificationsManager';
 import {
   HOME_TAB_SCREEN,
   NOTIFICATION_TAB_SCREEN,
-} from '../../constants/SCREEN_NAMES';
+} from 'app/constants/SCREEN_NAMES';
+import FAIcon from 'react-native-vector-icons/FontAwesome';
+import ADIcon from 'react-native-vector-icons/AntDesign';
 
 const Tab = createBottomTabNavigator();
 
@@ -17,12 +17,23 @@ const MainTabsNavigator: React.FC = () => {
       <Tab.Screen
         name={HOME_TAB_SCREEN}
         component={Home}
-        // remove header from the screen
-        options={{headerShown: false}}
+        options={{
+          headerShown: false,
+          tabBarIcon: ({color, size}) => (
+            <FAIcon name="home" color={color} size={size} />
+          ),
+          tabBarLabel: 'Home',
+        }}
       />
       <Tab.Screen
         name={NOTIFICATION_TAB_SCREEN}
         component={NotificationsManager}
+        options={{
+          tabBarIcon: ({color, size}) => (
+            <ADIcon name="notification" color={color} size={size} />
+          ),
+          tabBarLabel: 'Notifications',
+        }}
       />
     </Tab.Navigator>
   );
