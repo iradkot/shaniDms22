@@ -16,9 +16,8 @@ export const DeleteButton = styled.TouchableOpacity`
   justify-content: center;
   padding-left: 8px;
 `;
-export const DeleteButtonText = styled.Text`
-  /* opacity: 0.7; */
-`;
+
+export const DeleteButtonText = styled.Text``;
 
 export const NotificationCardContainer = styled(TouchableOpacity)`
   height: 150px;

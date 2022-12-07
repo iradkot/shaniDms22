@@ -42,15 +42,6 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
   };
 
   const renderDeleteButton = () => {
-    // return (
-    //   <DeleteButtonContainer>
-    //     <DeleteButton onPress={openDeleteAlert}>
-    //       <DeleteButtonText>
-    //         <Icon name="trash" size={40} color="#fff" />
-    //       </DeleteButtonText>
-    //     </DeleteButton>
-    //   </DeleteButtonContainer>
-    // );
     return (
       <DeleteButtonContainer>
         <DeleteButton onPress={openDeleteAlert}>
