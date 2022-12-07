@@ -9,7 +9,7 @@ import {
   formatMinutesToLocaleTimeString,
   getTimeInMinutes,
 } from 'app/utils/datetime.utils';
-import {TextInput} from 'react-native';
+import {TextInput, KeyboardType, ReturnKeyType} from 'react-native';
 
 type Props = {
   notification: NotificationRequest | null;
@@ -83,8 +83,8 @@ const NotificationForm = ({
     ref: React.RefObject<TextInput>;
     name: 'name' | 'range_start' | 'range_end';
     placeholder: string;
-    keyboardType: string;
-    returnKeyType: string;
+    keyboardType: KeyboardType;
+    returnKeyType: ReturnKeyType;
     onSubmitEditing: () => void;
     rules: any;
   }
@@ -120,7 +120,7 @@ const NotificationForm = ({
   return (
     <S.Container>
       {InputComponents.map(input => (
-        <>
+        <React.Fragment key={input.name}>
           <Controller
             key={input.name}
             control={control}
@@ -155,7 +155,7 @@ const NotificationForm = ({
                 `${input.name} must be a number`}
             </S.ErrorText>
           )}
-        </>
+        </React.Fragment>
       ))}
       {errors.hour_from_in_minutes && (
         <S.ErrorText>Hour From is required.</S.ErrorText>
