@@ -1,3 +1,6 @@
+import {FirebaseFirestoreTypes} from '@react-native-firebase/firestore';
+import DocumentReference = FirebaseFirestoreTypes.DocumentReference;
+
 export type Trend =
   | 'FortyFiveDown'
   | 'FortyFiveUp'
@@ -15,6 +18,7 @@ export interface NotificationRequest {
   hour_from_in_minutes: number;
   hour_to_in_minutes: number;
   trend: Trend;
+  related_user: DocumentReference;
 }
 export interface NotificationResponse extends NotificationRequest {
   id: string;

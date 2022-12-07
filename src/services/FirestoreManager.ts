@@ -1,5 +1,7 @@
 import firestore from '@react-native-firebase/firestore';
 import {BgSample} from '../types/day_bgs';
+import messaging from '@react-native-firebase/messaging';
+import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
 
 // FirestoreManager class is responsible for all the interactions with the FirestoreManager database
 export class FirestoreManager {
@@ -15,21 +17,42 @@ export class FirestoreManager {
       return [...acc, ...JSON.parse(dayBg.data)];
     }, []);
     return bgParsedData;
-    // Todo once we wimplement users collections use the following:
-    // const user = await auth().currentUser;
-    // if (user) {
-    //   const uid = user.uid;
-    //   const snapshot = await firestore()
-    //     .collection('users')
-    //     .doc(uid)
-    //     .collection('bg')
-    //     .orderBy('timestamp', 'desc')
-    //     .limit(1)
-    //     .get();
-    //   const data = snapshot.docs.map(doc => doc.data());
-    //   return data[0];
-    // }
   };
 
-  getNotifications() {}
+  async getCurrentUserFSData() {
+    const firebaseUser = await this.getCurrentUser();
+    const userId = firebaseUser?.uid;
+    const user = await firestore().collection('users').doc(userId).get();
+    if (user.exists) {
+      return user.data();
+    } else {
+      // get phone token
+      const phoneToken = await messaging().getToken();
+      const email = auth().currentUser?.email;
+      // create user
+      console.log('creating user');
+      this.createUserFSData(userId, phoneToken, email);
+
+      const user = await firestore().collection('users').doc(userId).get();
+      return user.data();
+    }
+  }
+
+  createUserFSData(
+    userId: string | undefined,
+    phoneToken: string,
+    email?: string | null | undefined,
+  ) {
+    firestore().collection('users').doc(userId).set({
+      userId,
+      createdAt: firestore.FieldValue.serverTimestamp(),
+      phoneToken,
+      email,
+    });
+  }
+
+  getCurrentUser: () => Promise<FirebaseAuthTypes.User | null> = async () => {
+    const user = await auth().currentUser;
+    return user;
+  };
 }
