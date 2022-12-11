@@ -9,7 +9,6 @@ import {useGetUser} from 'app/hooks/useGetUser';
 
 export const useAddNotification = () => {
   const {userData} = useGetUser();
-  console.log('userData', userData);
   const addNotification = useCallback(
     async (notification: NotificationRequest) => {
       const notificationRequest = {
