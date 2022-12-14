@@ -2,27 +2,27 @@ import styled from 'styled-components/native';
 import {TouchableOpacity} from 'react-native-gesture-handler';
 
 export const DeleteButtonContainer = styled.View`
-  background-color: red;
   position: absolute;
-  top: 0;
-  height: 100%;
-  width: 80px;
+  bottom: 10px;
+  left: 5px;
+  height: 30px;
+  width: 60px;
+  z-index: 1;
 `;
-export const DeleteButton = styled(TouchableOpacity)`
+export const DeleteButton = styled.TouchableOpacity`
   height: 100%;
   width: 100%;
-  align-items: center;
+  display: flex;
   justify-content: center;
+  padding-left: 8px;
 `;
-export const DeleteButtonText = styled.Text`
-  font-size: 16px;
-  color: #fff;
-  opacity: 0.7;
-`;
+
+export const DeleteButtonText = styled.Text``;
 
 export const NotificationCardContainer = styled(TouchableOpacity)`
   height: 150px;
   align-items: center;
+  position: relative;
   z-index: 1;
   flex-direction: row;
   background-color: #fff;
