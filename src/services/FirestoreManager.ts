@@ -30,7 +30,6 @@ export class FirestoreManager {
       const phoneToken = await messaging().getToken();
       const email = auth().currentUser?.email;
       // create user
-      console.log('creating user');
       this.createUserFSData(userId, phoneToken, email);
 
       const user = await firestore().collection('users').doc(userId).get();
