@@ -9,7 +9,7 @@ export class FirestoreManager {
     const snapshot = await firestore()
       .collection('day_bgs')
       .orderBy('timestamp', 'desc')
-      .limit(2)
+      .limit(4)
       .get();
     const dayBgs = snapshot.docs.map(doc => doc.data());
     // log keys

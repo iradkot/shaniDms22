@@ -1,6 +1,6 @@
 import {BgDataCard} from 'app/components/CgmCardListDisplay/BgDataCard';
 import {BgSample} from 'app/types/day_bgs';
-import {FlatList} from 'react-native';
+import {FlatList, Text, View} from 'react-native';
 import React, {FC} from 'react';
 
 interface CgmCardListDisplayProps {
@@ -19,7 +19,6 @@ const CgmCardListDisplay: FC<CgmCardListDisplayProps> = ({
   return (
     <FlatList
       keyExtractor={bgDataKeyExtractor}
-      // get last 100 bg data
       data={bgData}
       renderItem={({item, index}) => (
         <BgDataCard bgData={item} prevBgData={bgData[index + 1]} />

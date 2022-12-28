@@ -23,7 +23,7 @@ const Home: React.FC = () => {
       return b.date - a.date;
     };
     const sortedBgData = bgData.sort(sortFunction);
-    setBgData(sortedBgData.slice(0, 100));
+    setBgData(sortedBgData);
     setIsLoading(false);
   };
   useEffect(() => {
