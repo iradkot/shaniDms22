@@ -4,22 +4,30 @@ import {useUpdateNotification} from './useUpdateNotification';
 
 export const useToggleNotification = (enabled: boolean) => {
   const [isEnabled, setIsEnabled] = useState(enabled);
+  const [isLoading, setIsLoading] = useState(false);
   const {updateNotification} = useUpdateNotification();
 
-  const toggleNotification = (notification: NotificationResponse): void => {
-    setIsEnabled(!notification.enabled);
-    const newNotification: NotificationResponse = {
-      ...notification,
-      enabled: !notification.enabled,
-    };
-    updateNotification(newNotification).catch(error => {
+  const toggleNotification = async (
+    notification: NotificationResponse,
+  ): Promise<void> => {
+    try {
+      setIsLoading(true);
+      const newNotification: NotificationResponse = {
+        ...notification,
+        enabled: !isEnabled,
+      };
+      await updateNotification(newNotification);
+      setIsLoading(false);
+      setIsEnabled(!isEnabled);
+    } catch (error) {
       console.log(error);
-      setIsEnabled(notification.enabled);
-    });
+      setIsEnabled(isEnabled);
+    }
   };
 
   return {
     isEnabled,
+    isLoading,
     toggleNotification,
   };
 };

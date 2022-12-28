@@ -4,7 +4,12 @@
 // Path: src/containers/MainTabsNavigator/Containers/NotificationsManager/NotificationsManager.tsx
 
 import React, {FC} from 'react';
-import {ActivityIndicator, FlatList, View} from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  ListRenderItemInfo,
+  View,
+} from 'react-native';
 import {NavigationProp} from '@react-navigation/native';
 import styled from 'styled-components/native';
 import {useGetNotifications} from 'app/hooks/useGetNotifications';
@@ -37,6 +42,18 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
     getNotificationsData();
   };
 
+  const renderNotification = ({
+    item,
+  }: ListRenderItemInfo<NotificationResponse>) => {
+    return (
+      <NotificationsCard
+        onPress={() => navigation.navigate(EDIT_NOTIFICATION_SCREEN, item)}
+        onDeleteNotification={handleDeleteNotification}
+        notification={item}
+      />
+    );
+  };
+
   const renderNotifications = () => {
     if (isLoading) {
       return (
@@ -48,13 +65,8 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
     return (
       <FlatList
         data={data}
-        renderItem={({item}) => (
-          <NotificationsCard
-            onPress={() => navigation.navigate(EDIT_NOTIFICATION_SCREEN, item)}
-            onDeleteNotification={handleDeleteNotification}
-            notification={item}
-          />
-        )}
+        renderItem={renderNotification}
+        extraData={data}
         keyExtractor={getKeyExtractor}
         refreshing={isLoading}
         onRefresh={getNotificationsData}

@@ -1,5 +1,5 @@
 import React, {FC} from 'react';
-import {Alert, Pressable, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import {useToggleNotification} from 'app/hooks/useToggleNotification';
 import {NotificationResponse} from 'app/types/notifications';
@@ -16,6 +16,7 @@ import {
   DeleteButtonText,
   DeleteButtonContainer,
 } from './NotificationCard.style';
+import Loader from 'app/components/common-ui/Loader/Loader';
 
 type ContextType = {
   translateX: number;
@@ -33,7 +34,7 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
   notification,
   onDeleteNotification,
 }) => {
-  const {toggleNotification, isEnabled} = useToggleNotification(
+  const {toggleNotification, isEnabled, isLoading} = useToggleNotification(
     notification.enabled,
   );
 
@@ -103,10 +104,14 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
             </NotificationCardRow>
           </NotificationCardDetails>
           <NotificationSwitchContainer>
-            <NotificationEnableSwitch
-              value={isEnabled}
-              onValueChange={handleToggle}
-            />
+            {isLoading ? (
+              <Loader />
+            ) : (
+              <NotificationEnableSwitch
+                value={isEnabled}
+                onValueChange={handleToggle}
+              />
+            )}
           </NotificationSwitchContainer>
         </NotificationCardContainer>
       </View>
