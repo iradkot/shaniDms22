@@ -21,8 +21,18 @@ import {
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 import AddNotificationScreen from './containers/AddNotificationScreen/AddNotificationScreen';
 import EditNotificationScreen from 'app/containers/EditNotificationScreen/EditNotificationScreen';
+import {firebase} from '@react-native-firebase/messaging';
 
 const Stack = createNativeStackNavigator();
+
+// handle notification press with the firebase messaging library
+// https://rnfirebase.io/messaging/usage#handling-messages
+firebase.messaging().onNotificationOpenedApp(remoteMessage => {
+  console.log(
+    'Notification caused app to open from background state:',
+    remoteMessage.notification,
+  );
+});
 
 const App: () => JSX.Element = () => {
   // if user is not logged in, show login screen else show home screen

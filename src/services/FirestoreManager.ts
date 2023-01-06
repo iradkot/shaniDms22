@@ -9,15 +9,44 @@ export class FirestoreManager {
     const snapshot = await firestore()
       .collection('day_bgs')
       .orderBy('timestamp', 'desc')
-      .limit(4)
+      .limit(1)
       .get();
     const dayBgs = snapshot.docs.map(doc => doc.data());
-    // log keys
+    const lastDayBgs = dayBgs[0];
+    const todayBgs = JSON.parse(lastDayBgs.data).filter(
+      (bg: BgSample) => bg.date > new Date().setHours(0, 0, 0, 0),
+    );
+    // const bgParsedData = dayBgs.reduce<BgSample[]>((acc, dayBg) => {
+    //   return [...acc, ...JSON.parse(dayBg.data)];
+    // }, []);
+    return todayBgs;
+  };
+
+  async getBgDataByDateFS(date: Date) {
+    // get data for day before and day after
+    const dayBefore = new Date(date);
+    dayBefore.setDate(dayBefore.getDate());
+    const dayAfter = new Date(date);
+    dayAfter.setDate(dayAfter.getDate() + 2);
+
+    // Retrieve documents from the day_bgs collection with timestamps between the start and end of the day in UTC time
+    const snapshot = await firestore()
+      .collection('day_bgs')
+      .where('timestamp', '>=', dayBefore.setHours(0, 0, 0, 0))
+      .where('timestamp', '<=', dayAfter.setHours(0, 0, 0, 0))
+      .get();
+
+    const dayBgs = snapshot.docs.map(doc => doc.data());
     const bgParsedData = dayBgs.reduce<BgSample[]>((acc, dayBg) => {
       return [...acc, ...JSON.parse(dayBg.data)];
     }, []);
-    return bgParsedData;
-  };
+
+    const localDateBgs = bgParsedData.filter((bg: BgSample) => {
+      const bgDate = new Date(bg.date);
+      return bgDate.getDate() === date.getDate();
+    });
+    return localDateBgs;
+  }
 
   async getCurrentUserFSData() {
     const firebaseUser = await this.getCurrentUser();

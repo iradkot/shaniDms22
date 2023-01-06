@@ -1,4 +1,4 @@
-import React, {useEffect} from 'react';
+import React, {useEffect, useMemo} from 'react';
 import {Text} from 'react-native';
 import styled from 'styled-components/native';
 import {FirestoreManager} from 'app/services/FirestoreManager';
@@ -6,41 +6,84 @@ import {BgSample} from 'app/types/day_bgs';
 import CgmCardListDisplay from 'app/components/CgmCardListDisplay/CgmCardListDisplay';
 import {Timer} from './components/Timer';
 import {ActionButton} from './components/ActionButton';
+import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
+import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/DateNavigatorRow';
 
 const HomeContainer = styled.View`
   flex: 1;
   background-color: #fff;
 `;
+
+const sortFunction = (a: BgSample, b: BgSample) => {
+  return b.date - a.date;
+};
+
 // create dummy home component with typescript
 const Home: React.FC = () => {
   const [bgData, setBgData] = React.useState<BgSample[]>([]);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
-  const getBgData: () => void = async () => {
+  const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
+  const isShowingToday = useMemo(() => {
+    const today = new Date();
+    return (
+      today.getFullYear() === currentDate.getFullYear() &&
+      today.getMonth() === currentDate.getMonth() &&
+      today.getDate() === currentDate.getDate()
+    );
+  }, [currentDate]);
+  const getBgDataByDate = async (date: Date) => {
     setIsLoading(true);
-    const firestoreManager = new FirestoreManager();
-    const bgData = await firestoreManager.getLatestDayBgs();
-    const sortFunction = (a: BgSample, b: BgSample) => {
-      return b.date - a.date;
-    };
+    const fsManager = new FirestoreManager();
+    const bgData = await fsManager.getBgDataByDateFS(date ?? new Date());
+    setBgData(bgData);
+    setIsLoading(false);
+  };
+  useEffect(() => {
+    // noinspection JSIgnoredPromiseFromCall
+    getBgDataByDate(currentDate);
+  }, [currentDate]);
+
+  const getUpdatedBgData = async () => {
+    if (!isShowingToday) {
+      return;
+    }
+    setIsLoading(true);
+    const fsManager = new FirestoreManager();
+    const bgData = await fsManager.getLatestDayBgs();
     const sortedBgData = bgData.sort(sortFunction);
     setBgData(sortedBgData);
     setIsLoading(false);
   };
-  useEffect(() => {
-    getBgData();
-  }, []);
+
+  const averageBg = bgData.reduce((acc, bg) => acc + bg.sgv, 0) / bgData.length;
 
   return (
     <HomeContainer>
-      <Text>Home</Text>
-      <Timer bgData={bgData[0]} callback={getBgData} />
+      {isShowingToday && (
+        <Timer bgData={bgData[0]} callback={getUpdatedBgData} />
+      )}
+      <DateNavigatorRow
+        date={currentDate}
+        onGoBack={() =>
+          setCurrentDate(
+            new Date(currentDate.setDate(currentDate.getDate() - 1)),
+          )
+        }
+        onGoForward={() =>
+          setCurrentDate(
+            new Date(currentDate.setDate(currentDate.getDate() + 1)),
+          )
+        }
+      />
+      <Text>Average day BG: {averageBg}</Text>
+      <TimeInRangeRow bgData={bgData} />
       <CgmCardListDisplay
-        onPullToRefreshRefresh={getBgData}
+        onPullToRefreshRefresh={getUpdatedBgData}
         isLoading={isLoading}
         bgData={bgData}
       />
       <ActionButton
-        onPress={getBgData}
+        onPress={getUpdatedBgData}
         text={'Refresh'}
         isLoading={isLoading}
       />

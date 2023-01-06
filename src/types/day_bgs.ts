@@ -1,7 +1,7 @@
 // interface for bg data
 export interface BgSample {
   sgv: number;
-  date: number;
+  date: number; // timestamp in ms
   dateString: string;
   trend: number;
   direction: string;
