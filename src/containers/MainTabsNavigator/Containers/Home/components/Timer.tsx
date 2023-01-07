@@ -57,6 +57,7 @@ export const Timer: React.FC<{
         justifyContent: 'space-around',
         borderWidth: 1,
         borderColor: 'black',
+        backgroundColor: 'white',
         padding: 10,
       }}>
       <Text

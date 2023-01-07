@@ -9,6 +9,7 @@ import {ActionButton} from './components/ActionButton';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
+import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -72,7 +73,9 @@ const Home: React.FC = () => {
         resetToCurrentDate={() => setCurrentDate(new Date())}
       />
       <TimeInRangeRow bgData={bgData} />
-      <StatsRow bgData={bgData} />
+      <Collapsable title="Stats">
+        <StatsRow bgData={bgData} />
+      </Collapsable>
       {isShowingToday && (
         <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />
       )}
