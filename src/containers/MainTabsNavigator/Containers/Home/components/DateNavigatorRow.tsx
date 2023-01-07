@@ -16,17 +16,11 @@ const Container = styled.View`
   elevation: 2;
 `;
 
-const ButtonContainer = styled.TouchableOpacity`
+const ButtonContainer = styled.TouchableOpacity<{disabled: boolean}>`
   flex: 1;
   justify-content: center;
   align-items: center;
-`;
-
-const DateText = styled.Text`
-  text-align: center;
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
+  ${props => props.disabled && 'opacity: 0.5;'}
 `;
 
 const IconContainer = styled.View`
@@ -38,35 +32,47 @@ const IconContainer = styled.View`
   align-items: center;
 `;
 
+const DateText = styled.Text`
+  flex: 4;
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+`;
+
 interface DateNavigatorRowProps {
   date: Date;
   onGoBack: () => void;
   onGoForward: () => void;
+  resetToCurrentDate: () => void;
 }
 
 export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
   date,
   onGoBack,
   onGoForward,
+  resetToCurrentDate,
 }) => {
   const isToday = new Date().toDateString() === date.toDateString();
   return (
     <Container>
+      <ButtonContainer />
       <ButtonContainer onPress={onGoBack}>
         <IconContainer>
           <Icon name="ios-arrow-back" size={20} color="#333" />
         </IconContainer>
       </ButtonContainer>
       <DateText>{date.toDateString()}</DateText>
-      {!isToday ? (
-        <ButtonContainer onPress={onGoForward}>
-          <IconContainer>
-            <Icon name="ios-arrow-forward" size={20} color="#333" />
-          </IconContainer>
-        </ButtonContainer>
-      ) : (
-        <ButtonContainer />
-      )}
+      <ButtonContainer onPress={onGoForward} disabled={isToday}>
+        <IconContainer>
+          <Icon name="ios-arrow-forward" size={20} color="#333" />
+        </IconContainer>
+      </ButtonContainer>
+      <ButtonContainer onPress={resetToCurrentDate} disabled={isToday}>
+        <IconContainer>
+          <Icon name="ios-refresh" size={20} color="#333" />
+        </IconContainer>
+      </ButtonContainer>
     </Container>
   );
 };

@@ -25,7 +25,7 @@ example of bg data
 /**
  * @typedef BgSample
  * @property {number} sgv
- * @property {number} date
+ * @property {number} date - timestamp in ms for exmaple 10:30 to 11:10 is new Date().setHours(10, 30, 0, 0) to new Date().setHours(11, 10, 0, 0)
  * @property {string} dateString
  * @property {number} trend
  * @property {string} direction

@@ -1,7 +1,7 @@
 import React from 'react';
 import styled from 'styled-components/native';
 import {BgSample} from 'app/types/day_bgs';
-import {Text} from 'react-native';
+import {Animated, Text} from 'react-native';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
 
 const Container = styled.View`

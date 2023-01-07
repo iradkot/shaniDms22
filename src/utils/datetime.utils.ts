@@ -12,3 +12,10 @@ export const formatMinutesToLocaleTimeString = (minutes: number) => {
 export const getTimeInMinutes = (date: Date) => {
   return date.getHours() * 60 + date.getMinutes();
 };
+
+export const formatDateToLocaleTimeString = (date: Date | string | number) => {
+  return new Date(date).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};

@@ -5,10 +5,10 @@ import React, {useEffect} from 'react';
 import {BgSample} from '../../../../../types/day_bgs';
 import {Text, View} from 'react-native';
 
-export const Timer: React.FC<{bgData: BgSample; callback: () => void}> = ({
-  bgData,
-  callback,
-}) => {
+export const Timer: React.FC<{
+  latestBgSample: BgSample;
+  callback: () => void;
+}> = ({latestBgSample, callback}) => {
   /**
    * @param {number} time - time in milliseconds
    */
@@ -18,13 +18,13 @@ export const Timer: React.FC<{bgData: BgSample; callback: () => void}> = ({
   // get the time left until next bg reading
   const getTimeLeft: () => void = () => {
     setTimeout(() => {
-      if (!bgData) {
+      if (!latestBgSample) {
         return;
       }
       const commonTimeDiffBetweenBgReading = 5 * 60 * 1000;
       const delay = 40 * 1000;
       const timeLeft =
-        bgData.date +
+        latestBgSample.date +
         commonTimeDiffBetweenBgReading +
         delay -
         new Date().getTime();
@@ -34,7 +34,7 @@ export const Timer: React.FC<{bgData: BgSample; callback: () => void}> = ({
   useEffect(() => {
     getTimeLeft();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bgData, timeLeft]);
+  }, [latestBgSample, timeLeft]);
 
   useEffect(() => {
     // callback shoud run once for every 1 minutes since time has passed

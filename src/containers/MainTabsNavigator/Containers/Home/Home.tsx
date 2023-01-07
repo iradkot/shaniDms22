@@ -8,6 +8,7 @@ import {Timer} from './components/Timer';
 import {ActionButton} from './components/ActionButton';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/DateNavigatorRow';
+import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -35,7 +36,8 @@ const Home: React.FC = () => {
     setIsLoading(true);
     const fsManager = new FirestoreManager();
     const bgData = await fsManager.getBgDataByDateFS(date ?? new Date());
-    setBgData(bgData);
+    const sortedBgData = bgData.sort(sortFunction);
+    setBgData(sortedBgData);
     setIsLoading(false);
   };
   useEffect(() => {
@@ -43,25 +45,18 @@ const Home: React.FC = () => {
     getBgDataByDate(currentDate);
   }, [currentDate]);
 
+  // getUpdatedBgData - get the bg data for today and update the state
   const getUpdatedBgData = async () => {
-    if (!isShowingToday) {
-      return;
-    }
-    setIsLoading(true);
-    const fsManager = new FirestoreManager();
-    const bgData = await fsManager.getLatestDayBgs();
-    const sortedBgData = bgData.sort(sortFunction);
-    setBgData(sortedBgData);
-    setIsLoading(false);
+    // noinspection JSIgnoredPromiseFromCall
+    getBgDataByDate(new Date());
   };
 
-  const averageBg = bgData.reduce((acc, bg) => acc + bg.sgv, 0) / bgData.length;
+  const latestBgSample = useMemo(() => {
+    return bgData[0];
+  }, [bgData]);
 
   return (
     <HomeContainer>
-      {isShowingToday && (
-        <Timer bgData={bgData[0]} callback={getUpdatedBgData} />
-      )}
       <DateNavigatorRow
         date={currentDate}
         onGoBack={() =>
@@ -74,18 +69,17 @@ const Home: React.FC = () => {
             new Date(currentDate.setDate(currentDate.getDate() + 1)),
           )
         }
+        resetToCurrentDate={() => setCurrentDate(new Date())}
       />
-      <Text>Average day BG: {averageBg}</Text>
       <TimeInRangeRow bgData={bgData} />
+      <StatsRow bgData={bgData} />
+      {isShowingToday && (
+        <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />
+      )}
       <CgmCardListDisplay
         onPullToRefreshRefresh={getUpdatedBgData}
         isLoading={isLoading}
         bgData={bgData}
-      />
-      <ActionButton
-        onPress={getUpdatedBgData}
-        text={'Refresh'}
-        isLoading={isLoading}
       />
     </HomeContainer>
   );

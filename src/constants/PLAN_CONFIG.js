@@ -8,8 +8,8 @@ const CGM_STATUS_CODES = {
 
 export const cgmRange = {
   [CGM_STATUS_CODES.TARGET]: {
-    min: 80,
-    max: 120,
+    min: 70,
+    max: 140,
   },
   [CGM_STATUS_CODES.VERY_LOW]: 60,
   [CGM_STATUS_CODES.VERY_HIGH]: 200,
