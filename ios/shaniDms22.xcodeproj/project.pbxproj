@@ -53,6 +53,7 @@
 		E48C3CAD28DE854600C08AA8 /* libGoogleSignIn.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; path = libGoogleSignIn.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		E48C3CAF28DE854600C08AA8 /* libRNGoogleSignin.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; path = libRNGoogleSignin.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		E48C3CB128DE859E00C08AA8 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "shaniDms22/GoogleService-Info.plist"; sourceTree = "<group>"; };
+		E4C299A5296B61CF007B4952 /* Ionicons.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = Ionicons.ttf; path = "../node_modules/react-native-vector-icons/Fonts/Ionicons.ttf"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -130,6 +131,7 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
+				E4C299A5296B61CF007B4952 /* Ionicons.ttf */,
 				431D2B9A29413179003F7C05 /* FontAwesome.ttf */,
 				431D2B982941315E003F7C05 /* AntDesign.ttf */,
 				431D2B87292D75CA003F7C05 /* Fonts */,

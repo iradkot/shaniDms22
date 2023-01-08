@@ -55,6 +55,9 @@ interface StatsRowProps {
 }
 
 export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
+  if (!bgData || bgData.length === 0) {
+    return null;
+  }
   // Calculate the statistics from the bgData array
   const {averageBg, stdDev} = calculateAverageAndStdDev(bgData);
   const {lowestBg, highestBg} = bgData.reduce(

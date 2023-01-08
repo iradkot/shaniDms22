@@ -1,10 +1,12 @@
 // interface for bg data
+import {TrendDirectionString} from 'app/types/notifications';
+
 export interface BgSample {
   sgv: number;
   date: number; // timestamp in ms
   dateString: string;
   trend: number;
-  direction: string;
+  direction: TrendDirectionString;
   device: string;
   type: string;
 }

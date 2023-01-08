@@ -3,7 +3,10 @@ import {Controller, useForm} from 'react-hook-form';
 import * as S from './NotificationForm.styles';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 
-import {NotificationRequest, Trend} from 'app/types/notifications';
+import {
+  NotificationRequest,
+  TrendDirectionString,
+} from 'app/types/notifications';
 import React, {useEffect, useState, MutableRefObject} from 'react';
 import {
   formatMinutesToLocaleTimeString,
@@ -231,7 +234,7 @@ const NotificationForm = ({
           return (
             <S.Select
               onBlur={onBlur}
-              onValueChange={(value: Trend) => onChange(value)}
+              onValueChange={(value: TrendDirectionString) => onChange(value)}
               selectedValue={value}
               placeholder="Trend">
               <S.SelectItem

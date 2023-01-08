@@ -1,75 +1,59 @@
-// a tsx component that gets a bg trendDirection and returns an arrow
-//
-// Language: typescript
-// Path: src/containers/MainTabsNavigator/Containers/Home/components/DirectionArrows.tsx
 import React from 'react';
 import styled from 'styled-components/native';
-import {Trend} from 'app/types/notifications';
+import Icon from 'react-native-vector-icons/Ionicons';
+import {TrendDirectionString} from 'app/types/notifications';
 
-// styled sharp arrow component (get a size and trendDirection props)
-// it gets a trendDirection and rotates the arrow accordingly
-// if flat - arrow should be straight to the right
-// if doubleUp - arrow should be straight up and duplicated
-// if singleUp - arrow should be straight up
-// if fortyFiveUp - arrow should be diagonal up and to the right
-// if flat - arrow should be straight to the right
-// if fortyFiveDown - arrow should be diagonal down and to the right
-// if singleDown - arrow should be straight down
-// if doubleDown - arrow should be straight down and duplicated
-// if notComputable - arrow should be straight to the right
-// if rateOutOfRange - arrow should be straight to the right
-// if null - arrow should be straight to the right
-const defaultArrowSize = 20;
+const trendDirectionToRotation = {
+  DoubleUp: 0,
+  SingleUp: 0,
+  FortyFiveUp: 45,
+  Flat: 90,
+  FortyFiveDown: 135,
+  SingleDown: 180,
+  DoubleDown: 180,
+};
 
-const Arrow = styled.View<{size: number; trendDirection: Trend}>`
-  width: 0;
-  height: 0;
-  border-left-width: ${({size}) => size || defaultArrowSize}px;
-  border-left-color: transparent;
-  border-right-width: ${({size}) => size || defaultArrowSize}px;
-  border-right-color: transparent;
-  border-bottom-width: ${({size}) => size || defaultArrowSize}px;
-  border-bottom-color: black;
+const ArrowIcon = styled(Icon)<{trendDirection: TrendDirectionString}>`
   transform: ${({trendDirection}) => {
-    switch (trendDirection) {
-      case 'DoubleUp':
-      case 'SingleUp':
-        return 'rotate(0deg)';
-      case 'FortyFiveUp':
-        return 'rotate(45deg)';
-      case 'Flat':
-        return 'rotate(90deg)';
-      case 'FortyFiveDown':
-        return 'rotate(135deg)';
-      case 'SingleDown':
-      case 'DoubleDown':
-        return 'rotate(180deg)';
-      default:
-        return 'rotate(90deg)';
-    }
+    const rotation = trendDirectionToRotation[trendDirection] || 20;
+    return `rotate(${rotation}deg)`;
   }};
 `;
 
-const ArrowContainer = styled.View`
-  flex-direction: row;
-  justify-content: center;
-  align-items: center;
-`;
-
-const DirectionArrows = ({trendDirection}: {trendDirection: string}) => {
-  // if trendDirection is doubleUp or doubleDown - duplicate the arrow
-  if (trendDirection === 'DoubleUp' || trendDirection === 'DoubleDown') {
-    return (
-      <ArrowContainer>
-        <Arrow trendDirection={trendDirection} />
-        <Arrow trendDirection={trendDirection} />
-      </ArrowContainer>
-    );
-  }
+const DirectionArrows = ({
+  trendDirection,
+}: {
+  trendDirection: TrendDirectionString;
+}) => {
   return (
-    <ArrowContainer>
-      <Arrow trendDirection={trendDirection} />
-    </ArrowContainer>
+    <>
+      {trendDirection === 'DoubleUp' || trendDirection === 'DoubleDown' ? (
+        <>
+          <ArrowIcon
+            name="arrow-up"
+            size={20}
+            color="black"
+            trendDirection={trendDirection}
+          />
+          <ArrowIcon
+            name="arrow-up"
+            size={20}
+            color="black"
+            trendDirection={trendDirection}
+          />
+        </>
+      ) : trendDirection === 'NOT COMPUTABLE' ||
+        trendDirection === 'RATE OUT OF RANGE' ? (
+        <Icon name="help" size={20} color="black" />
+      ) : (
+        <ArrowIcon
+          name="arrow-up"
+          size={20}
+          color="black"
+          trendDirection={trendDirection}
+        />
+      )}
+    </>
   );
 };
 

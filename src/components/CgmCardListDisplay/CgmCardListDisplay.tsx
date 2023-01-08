@@ -1,4 +1,4 @@
-import React, {FC} from 'react';
+import React, {FC, useMemo} from 'react';
 import {FlatList} from 'react-native';
 import BgDataCard from 'app/components/CgmCardListDisplay/BgDataCard';
 import {BgSample} from 'app/types/day_bgs';
@@ -14,7 +14,9 @@ const CgmCardListDisplay: FC<CgmCardListDisplayProps> = ({
   onPullToRefreshRefresh,
   isLoading,
 }) => {
-  const bgDataKeyExtractor = (item: BgSample) => item.date.toString();
+  const bgDataKeyExtractor = useMemo(() => {
+    return (item: BgSample) => item.date.toString();
+  }, [bgData]);
 
   return (
     <FlatList
