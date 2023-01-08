@@ -1,11 +1,9 @@
 import React, {useEffect, useMemo} from 'react';
-import {Text} from 'react-native';
 import styled from 'styled-components/native';
 import {FirestoreManager} from 'app/services/FirestoreManager';
 import {BgSample} from 'app/types/day_bgs';
 import CgmCardListDisplay from 'app/components/CgmCardListDisplay/CgmCardListDisplay';
 import {Timer} from './components/Timer';
-import {ActionButton} from './components/ActionButton';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';

@@ -1,4 +1,22 @@
 import {BgSample} from 'app/types/day_bgs';
+
+export function calculateAverageAndStdDev(bgSamples: BgSample[]) {
+  // Calculate the average sgv
+  const averageBg = Math.floor(
+    bgSamples.reduce((acc, bg) => acc + bg.sgv, 0) / bgSamples.length,
+  );
+
+  // Calculate the standard deviation of the sgv values
+  const stdDev = Math.floor(
+    Math.sqrt(
+      bgSamples.reduce((acc, bg) => acc + (bg.sgv - averageBg) ** 2, 0) /
+        (bgSamples.length - 1),
+    ),
+  );
+
+  return {averageBg, stdDev};
+}
+
 export function findBiggestChangesInTimeRange(
   bgSamples: BgSample[],
   timeRange: number,

@@ -3,7 +3,10 @@ import styled from 'styled-components/native';
 import {View, Text} from 'react-native';
 import {BgSample} from 'app/types/day_bgs';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
-import {findBiggestChangesInTimeRange} from 'app/utils/bg.utils';
+import {
+  calculateAverageAndStdDev,
+  findBiggestChangesInTimeRange,
+} from 'app/utils/bg.utils';
 
 // Add background colors to the Container component
 const Container = styled.View`
@@ -20,6 +23,7 @@ const Column = styled.View`
   flex-direction: column;
   align-items: center;
   padding: 10px;
+  height: 100%;
 `;
 
 // Increase the font size and weight of the ValueText component
@@ -35,17 +39,36 @@ const LabelText = styled.Text<{color?: string}>`
   color: ${props => (props.color ? props.color : '#333')};
 `;
 
+// noinspection CssNoGenericFontName
+const TimeValueText = styled(ValueText)`
+  font-size: 16px;
+  font-family: Courier New;
+`;
+
+const StDevValueText = styled(ValueText)`
+  font-size: 16px;
+  color: ${props => (props.color ? props.color : '#333')};
+`;
+
 interface StatsRowProps {
   bgData: BgSample[];
 }
 
 export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
   // Calculate the statistics from the bgData array
-  const averageBg = Math.floor(
-    bgData.reduce((acc, bg) => acc + bg.sgv, 0) / bgData.length,
+  const {averageBg, stdDev} = calculateAverageAndStdDev(bgData);
+  const {lowestBg, highestBg} = bgData.reduce(
+    (acc, bg) => {
+      if (bg.sgv <= acc.lowestBg.sgv) {
+        acc.lowestBg = bg;
+      }
+      if (bg.sgv >= acc.highestBg.sgv) {
+        acc.highestBg = bg;
+      }
+      return acc;
+    },
+    {lowestBg: bgData[0], highestBg: bgData[0]},
   );
-  const lowestBg = Math.min(...bgData.map(bg => bg.sgv));
-  const highestBg = Math.max(...bgData.map(bg => bg.sgv));
   const bgChangeTimeRange = 30;
   const {upChange, downChange} = findBiggestChangesInTimeRange(
     bgData,
@@ -59,16 +82,26 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
         <Column style={{flex: 1, backgroundColor: '#90ee90'}}>
           <LabelText>Average BG</LabelText>
           <ValueText>{averageBg}</ValueText>
+          <StDevValueText color={stdDev >= 0 ? '#00b300' : '#e33734'}>
+            {stdDev >= 0 ? '+' : '-'}
+            {stdDev.toFixed(2)}
+          </StDevValueText>
         </Column>
         {/* Add a background color to the column with the lowest blood glucose value */}
         <Column style={{flex: 1, backgroundColor: '#e33734'}}>
           <LabelText color={'#ffffff'}>Lowest BG</LabelText>
-          <ValueText color={'#ffffff'}>{lowestBg}</ValueText>
+          <ValueText color={'#ffffff'}>{lowestBg.sgv}</ValueText>
+          <TimeValueText color={'#ffffff'}>
+            {formatDateToLocaleTimeString(lowestBg.date)}
+          </TimeValueText>
         </Column>
         {/* Add a background color to the column with the highest blood glucose value */}
         <Column style={{flex: 1, backgroundColor: '#faf87f'}}>
           <LabelText>Highest BG</LabelText>
-          <ValueText>{highestBg}</ValueText>
+          <ValueText>{highestBg.sgv}</ValueText>
+          <TimeValueText>
+            {formatDateToLocaleTimeString(highestBg.date)}
+          </TimeValueText>
         </Column>
       </Container>
       <Container>
@@ -80,10 +113,10 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
             <Text style={{fontSize: 24}}>{'\u2191'}</Text>
             <ValueText>{upChange.toValue}</ValueText>
           </View>
-          <Text style={{fontSize: 14, color: '#666'}}>
+          <TimeValueText style={{fontSize: 14, color: '#666'}}>
             {formatDateToLocaleTimeString(upChange.fromTime)} -{' '}
             {formatDateToLocaleTimeString(upChange.toTime)}
-          </Text>
+          </TimeValueText>
         </Column>
         <Column style={{flex: 1}}>
           <LabelText>Biggest fall down</LabelText>
@@ -93,10 +126,10 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
             <Text style={{fontSize: 24}}>{'\u2193'}</Text>
             <ValueText>{downChange.toValue}</ValueText>
           </View>
-          <Text style={{fontSize: 14, color: '#666'}}>
+          <TimeValueText style={{fontSize: 14, color: '#666'}}>
             {formatDateToLocaleTimeString(downChange.fromTime)} -{' '}
             {formatDateToLocaleTimeString(downChange.toTime)}
-          </Text>
+          </TimeValueText>
         </Column>
       </Container>
     </>

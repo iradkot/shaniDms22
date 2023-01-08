@@ -20,9 +20,9 @@ const Container = styled.View`
 `;
 
 const ButtonContainer = styled(TouchableOpacity)<{
-  disabled: boolean;
-  active: boolean;
-  flex: number;
+  disabled?: boolean;
+  active?: boolean;
+  flex?: number;
 }>`
   justify-content: center;
   align-items: center;
