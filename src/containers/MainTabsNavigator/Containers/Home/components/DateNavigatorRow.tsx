@@ -22,10 +22,11 @@ const Container = styled.View`
 const ButtonContainer = styled(TouchableOpacity)<{
   disabled: boolean;
   active: boolean;
+  flex: number;
 }>`
-  flex: 1;
   justify-content: center;
   align-items: center;
+  ${props => (props.flex ? `flex: ${props.flex}` : 'flex: 1')};
   ${props => props.disabled && 'opacity: 0.5;'}
   ${props => props.active && 'border-radius: 10px;'}
   ${props => props.active && 'margin: 5px;'}
@@ -33,8 +34,9 @@ const ButtonContainer = styled(TouchableOpacity)<{
   ${props => props.active && 'box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);'}
   ${props => props.active && 'transition: 0.3s;'}
   ${props => props.active && '&:hover { transform: scale(1.1); }'}
+  ${props => !props.active && 'padding-left: 10px;'}
+  ${props => !props.active && 'padding-right: 10px;'}
 `;
-
 const IconContainer = styled.View`
   width: 30px;
   height: 30px;
@@ -67,7 +69,8 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
   const isToday = new Date().toDateString() === date.toDateString();
   return (
     <Container>
-      <ButtonContainer onPress={onGoBack} active={isToday}>
+      <ButtonContainer flex={0.5} />
+      <ButtonContainer onPress={onGoBack} active={isToday} flex={2}>
         <LinearGradient
           colors={['#333', '#666']}
           start={{x: 0, y: 0}}
@@ -79,7 +82,7 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
         </LinearGradient>
       </ButtonContainer>
       <DateText>{date.toDateString()}</DateText>
-      <ButtonContainer onPress={onGoForward} disabled={isToday}>
+      <ButtonContainer onPress={onGoForward} disabled={isToday} flex={2}>
         <LinearGradient
           colors={['#333', '#666']}
           start={{x: 0, y: 0}}
@@ -90,7 +93,10 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
           </IconContainer>
         </LinearGradient>
       </ButtonContainer>
-      <ButtonContainer onPress={resetToCurrentDate} disabled={isToday}>
+      <ButtonContainer
+        onPress={resetToCurrentDate}
+        disabled={isToday}
+        flex={0.5}>
         <LinearGradient
           colors={['#333', '#666']}
           start={{x: 0, y: 0}}
