@@ -1,14 +1,14 @@
 import React, {useEffect, useMemo} from 'react';
+import {debounce} from 'lodash';
 import styled from 'styled-components/native';
 import {FirestoreManager} from 'app/services/FirestoreManager';
 import {BgSample} from 'app/types/day_bgs';
 import CgmCardListDisplay from 'app/components/CgmCardListDisplay/CgmCardListDisplay';
 import {Timer} from './components/Timer';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
-import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/DateNavigatorRow';
+import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
-import {debounce} from 'lodash';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -46,12 +46,25 @@ const Home: React.FC = () => {
   useEffect(() => {
     // noinspection JSIgnoredPromiseFromCall
     debouncedGetBgDataByDate(currentDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate]);
 
   // getUpdatedBgData - get the bg data for today and update the state
   const getUpdatedBgData = async () => {
     // noinspection JSIgnoredPromiseFromCall
     debouncedGetBgDataByDate(new Date());
+  };
+
+  const pullToRefreshBgData = isShowingToday ? getUpdatedBgData : undefined;
+
+  const setCustomDate = (date: Date) => {
+    setCurrentDate(date);
+  };
+  const getNextDate = () => {
+    setCurrentDate(new Date(currentDate.setDate(currentDate.getDate() + 1)));
+  };
+  const getPreviousDate = () => {
+    setCurrentDate(new Date(currentDate.setDate(currentDate.getDate() - 1)));
   };
 
   const latestBgSample = useMemo(() => {
@@ -68,22 +81,16 @@ const Home: React.FC = () => {
         <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />
       )}
       <CgmCardListDisplay
-        onPullToRefreshRefresh={getUpdatedBgData}
+        onPullToRefreshRefresh={pullToRefreshBgData}
         isLoading={isLoading}
         bgData={bgData}
       />
       <DateNavigatorRow
         date={currentDate}
-        onGoBack={() =>
-          setCurrentDate(
-            new Date(currentDate.setDate(currentDate.getDate() - 1)),
-          )
-        }
-        onGoForward={() =>
-          setCurrentDate(
-            new Date(currentDate.setDate(currentDate.getDate() + 1)),
-          )
-        }
+        isToday={isShowingToday}
+        setCustomDate={setCustomDate}
+        onGoBack={getPreviousDate}
+        onGoForward={getNextDate}
         resetToCurrentDate={() => setCurrentDate(new Date())}
       />
     </HomeContainer>
