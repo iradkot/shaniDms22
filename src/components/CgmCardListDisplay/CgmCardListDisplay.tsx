@@ -1,4 +1,4 @@
-import {BgDataCard} from 'app/components/CgmCardListDisplay/BgDataCard';
+import BgDataCard from 'app/components/CgmCardListDisplay/BgDataCard';
 import {BgSample} from 'app/types/day_bgs';
 import {FlatList, Text, View} from 'react-native';
 import React, {FC} from 'react';

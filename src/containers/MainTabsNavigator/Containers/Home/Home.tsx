@@ -10,6 +10,7 @@ import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/com
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
+import {debounce} from 'lodash';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -41,15 +42,18 @@ const Home: React.FC = () => {
     setBgData(sortedBgData);
     setIsLoading(false);
   };
+
+  const debouncedGetBgDataByDate = debounce(getBgDataByDate, 500);
+
   useEffect(() => {
     // noinspection JSIgnoredPromiseFromCall
-    getBgDataByDate(currentDate);
+    debouncedGetBgDataByDate(currentDate);
   }, [currentDate]);
 
   // getUpdatedBgData - get the bg data for today and update the state
   const getUpdatedBgData = async () => {
     // noinspection JSIgnoredPromiseFromCall
-    getBgDataByDate(new Date());
+    debouncedGetBgDataByDate(new Date());
   };
 
   const latestBgSample = useMemo(() => {
@@ -58,6 +62,18 @@ const Home: React.FC = () => {
 
   return (
     <HomeContainer>
+      <TimeInRangeRow bgData={bgData} />
+      <Collapsable title="Stats">
+        <StatsRow bgData={bgData} />
+      </Collapsable>
+      {isShowingToday && (
+        <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />
+      )}
+      <CgmCardListDisplay
+        onPullToRefreshRefresh={getUpdatedBgData}
+        isLoading={isLoading}
+        bgData={bgData}
+      />
       <DateNavigatorRow
         date={currentDate}
         onGoBack={() =>
@@ -71,18 +87,6 @@ const Home: React.FC = () => {
           )
         }
         resetToCurrentDate={() => setCurrentDate(new Date())}
-      />
-      <TimeInRangeRow bgData={bgData} />
-      <Collapsable title="Stats">
-        <StatsRow bgData={bgData} />
-      </Collapsable>
-      {isShowingToday && (
-        <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />
-      )}
-      <CgmCardListDisplay
-        onPullToRefreshRefresh={getUpdatedBgData}
-        isLoading={isLoading}
-        bgData={bgData}
       />
     </HomeContainer>
   );

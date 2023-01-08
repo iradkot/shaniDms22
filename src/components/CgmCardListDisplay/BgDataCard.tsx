@@ -7,7 +7,7 @@ import {interpolateRgb} from 'd3';
 // const greenRgba = 'rgba(0, 255, 0, 0.5)';
 // const yellowRgba = 'rgba(255, 255, 0, 0.5)';
 
-export const BgDataCard = ({
+const BgDataCard = ({
   bgData,
   prevBgData,
 }: {
@@ -91,3 +91,5 @@ const DataRowContainer = styled.View`
 const DataRowText = styled.Text`
   font-size: 16px;
 `;
+
+export default BgDataCard;
