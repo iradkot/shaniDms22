@@ -3,7 +3,7 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {TrendDirectionString} from 'app/types/notifications';
 
-const trendDirectionToRotation = {
+const trendDirectionToRotation: {[key in TrendDirectionString]: number} = {
   DoubleUp: 0,
   SingleUp: 0,
   FortyFiveUp: 45,
@@ -11,15 +11,18 @@ const trendDirectionToRotation = {
   FortyFiveDown: 135,
   SingleDown: 180,
   DoubleDown: 180,
+  'NOT COMPUTABLE': 270,
+  'RATE OUT OF RANGE': 270,
 };
 
-const ArrowIcon = styled(Icon)<{trendDirection: TrendDirectionString}>`
+const ArrowIcon = styled(Icon)<{
+  trendDirection: keyof typeof trendDirectionToRotation;
+}>`
   transform: ${({trendDirection}) => {
     const rotation = trendDirectionToRotation[trendDirection] || 20;
     return `rotate(${rotation}deg)`;
   }};
 `;
-
 const DirectionArrows = ({
   trendDirection,
 }: {
@@ -44,7 +47,7 @@ const DirectionArrows = ({
         </>
       ) : trendDirection === 'NOT COMPUTABLE' ||
         trendDirection === 'RATE OUT OF RANGE' ? (
-        <Icon name="help" size={20} color="black" />
+        <Icon name="heart" size={20} color="black" />
       ) : (
         <ArrowIcon
           name="arrow-up"
