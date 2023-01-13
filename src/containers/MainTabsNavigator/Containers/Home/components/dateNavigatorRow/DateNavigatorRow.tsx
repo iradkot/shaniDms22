@@ -9,6 +9,7 @@ import {
   DateText,
   IconContainer,
 } from './DateNavigatorRow.style';
+import RollingFlower from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/components/LoadingFlower';
 
 interface DateNavigatorRowProps {
   date: Date;
@@ -17,6 +18,7 @@ interface DateNavigatorRowProps {
   onGoForward: () => void;
   resetToCurrentDate: () => void;
   setCustomDate: (date: Date) => void;
+  isLoading: boolean; // Indicates if the data is loading
 }
 
 export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
@@ -26,6 +28,7 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
   onGoForward,
   resetToCurrentDate,
   setCustomDate,
+  isLoading,
 }) => {
   const [isDateModalVisible, setIsDateModalVisible] = useState(false);
 
@@ -35,8 +38,8 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
   };
   return (
     <Container>
-      <ButtonContainer flex={0.5} />
-      <ButtonContainer onPress={onGoBack} active={isToday} flex={2}>
+      <RollingFlower isLoading={isLoading} />
+      <ButtonContainer onPress={onGoBack} active={isToday} flex={1}>
         <LinearGradient
           colors={['#333', '#666']}
           start={{x: 0, y: 0}}
@@ -59,7 +62,7 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
         onConfirm={onPickerConfirm}
         onCancel={() => setIsDateModalVisible(false)}
       />
-      <ButtonContainer onPress={onGoForward} disabled={isToday} flex={2}>
+      <ButtonContainer onPress={onGoForward} disabled={isToday} flex={1}>
         <LinearGradient
           colors={['#333', '#666']}
           start={{x: 0, y: 0}}
@@ -70,10 +73,7 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
           </IconContainer>
         </LinearGradient>
       </ButtonContainer>
-      <ButtonContainer
-        onPress={resetToCurrentDate}
-        disabled={isToday}
-        flex={0.5}>
+      <ButtonContainer onPress={resetToCurrentDate} disabled={isToday} flex={1}>
         <LinearGradient
           colors={['#333', '#666']}
           start={{x: 0, y: 0}}

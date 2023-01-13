@@ -16,7 +16,9 @@ export const Container = styled.View`
   elevation: 2;
 `;
 
-export const ButtonContainer = styled(TouchableOpacity)<{
+export const ButtonContainer = styled(TouchableOpacity).attrs({
+  activeOpacity: 0.7,
+})<{
   disabled?: boolean;
   active?: boolean;
   flex?: number;
@@ -34,6 +36,7 @@ export const ButtonContainer = styled(TouchableOpacity)<{
   ${props => !props.active && 'padding-left: 10px;'}
   ${props => !props.active && 'padding-right: 10px;'}
 `;
+
 export const IconContainer = styled.View`
   width: 30px;
   height: 30px;

@@ -9,6 +9,7 @@ import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/com
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
+import {useDebouncedState} from 'app/hooks/useDebouncedState';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -41,18 +42,22 @@ const Home: React.FC = () => {
     setIsLoading(false);
   };
 
-  const debouncedGetBgDataByDate = debounce(getBgDataByDate, 500);
-
+  const [debouncedCurrentDate, setDebouncedCurrentDate] = useDebouncedState(
+    currentDate,
+    500,
+  );
   useEffect(() => {
-    // noinspection JSIgnoredPromiseFromCall
-    debouncedGetBgDataByDate(currentDate);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setDebouncedCurrentDate(currentDate);
+    setIsLoading(currentDate !== debouncedCurrentDate);
   }, [currentDate]);
 
+  useEffect(() => {
+    getBgDataByDate(debouncedCurrentDate);
+  }, [debouncedCurrentDate]);
   // getUpdatedBgData - get the bg data for today and update the state
   const getUpdatedBgData = async () => {
     // noinspection JSIgnoredPromiseFromCall
-    debouncedGetBgDataByDate(new Date());
+    getBgDataByDate(new Date());
   };
 
   const pullToRefreshBgData = isShowingToday ? getUpdatedBgData : undefined;
@@ -74,7 +79,7 @@ const Home: React.FC = () => {
   return (
     <HomeContainer>
       <TimeInRangeRow bgData={bgData} />
-      <Collapsable title="Stats">
+      <Collapsable title={'Stats'}>
         <StatsRow bgData={bgData} />
       </Collapsable>
       {isShowingToday && (
@@ -86,6 +91,7 @@ const Home: React.FC = () => {
         bgData={bgData}
       />
       <DateNavigatorRow
+        isLoading={isLoading || currentDate !== debouncedCurrentDate}
         date={currentDate}
         isToday={isShowingToday}
         setCustomDate={setCustomDate}
