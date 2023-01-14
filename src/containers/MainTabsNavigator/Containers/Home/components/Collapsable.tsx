@@ -1,11 +1,9 @@
-import React, {useState, useRef, useEffect} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
   Animated,
-  LayoutAnimation,
   Easing,
+  LayoutAnimation,
+  TouchableOpacity,
 } from 'react-native';
 import styled from 'styled-components/native';
 import AntDesign from 'react-native-vector-icons/AntDesign';
@@ -68,6 +66,7 @@ const Collapsable: React.FC<CollapsableProps> = ({title, children}) => {
     } else {
       contentHeight.setValue(200);
     }
+    // eslint-disable-next-line
   }, [collapsed]);
 
   useEffect(() => {
