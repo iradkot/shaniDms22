@@ -34,6 +34,8 @@
     "react-native-screens": "^3.18.2",
     "react-native-vector-icons": "^9.2.0",
     "react-native-vision-camera": "^2.14.1",
+    "react-spring": "^9.6.1",
+    "@react-spring": "^9.6.1",
     "styled-components": "^5.3.5"
   },
   "devDependencies": {
@@ -53,10 +55,10 @@
     "babel-plugin-module-resolver": "^4.1.0",
     "eslint": "^7.32.0",
     "jest": "^26.6.3",
+    "lodash": "^4.17.21",
     "metro-react-native-babel-preset": "^0.72.1",
     "react-test-renderer": "18.1.0",
-    "typescript": "^4.8.3",
-    "lodash": "^4.17.21"
+    "typescript": "^4.8.3"
   },
   "jest": {
     "preset": "react-native"

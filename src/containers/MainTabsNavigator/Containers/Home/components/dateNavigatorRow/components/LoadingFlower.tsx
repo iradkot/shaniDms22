@@ -1,5 +1,7 @@
 import React, {FC} from 'react';
 import LinearGradient from 'react-native-linear-gradient';
+import {useSpring} from '@react-spring/native';
+
 import {
   ButtonContainer,
   IconContainer,
@@ -18,8 +20,19 @@ interface RollingFlowerProps {
    */
   isLoading: IsLoading;
 }
+import {animated} from '@react-spring/native';
+
+const AnimatedIcon = animated(Icon);
 
 const RollingFlower: FC<RollingFlowerProps> = ({isLoading}) => {
+  console.log('isLoading', isLoading);
+  const {rotate} = useSpring({
+    from: {rotate: 0},
+    to: {rotate: isLoading ? 1 : 0},
+    loop: {reverse: true},
+    config: {duration: 1000},
+  });
+
   return (
     <ButtonContainer>
       <LinearGradient
@@ -28,10 +41,13 @@ const RollingFlower: FC<RollingFlowerProps> = ({isLoading}) => {
         end={{x: 1, y: 0}}
         style={{borderRadius: 10, padding: 5}}>
         <IconContainer>
-          <Icon
-            name={`ios-flower-${isLoading ? 'outline' : 'sharp'}`}
+          <AnimatedIcon
+            name={'ios-flower-outline'}
             size={20}
-            color="#fff"
+            color={isLoading ? '#fff' : '#000'}
+            style={{
+              transform: [{rotate: rotate.to([0, 1], ['0deg', '360deg'])}],
+            }}
           />
         </IconContainer>
       </LinearGradient>
@@ -39,4 +55,6 @@ const RollingFlower: FC<RollingFlowerProps> = ({isLoading}) => {
   );
 };
 
-export default RollingFlower;
+export default React.memo(RollingFlower, (prevProps, nextProps) => {
+  return prevProps.isLoading === nextProps.isLoading;
+});

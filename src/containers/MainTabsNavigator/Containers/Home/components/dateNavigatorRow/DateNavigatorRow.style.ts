@@ -22,6 +22,7 @@ export const ButtonContainer = styled(TouchableOpacity).attrs({
   disabled?: boolean;
   active?: boolean;
   flex?: number;
+  width?: number;
 }>`
   justify-content: center;
   align-items: center;
@@ -38,8 +39,8 @@ export const ButtonContainer = styled(TouchableOpacity).attrs({
 `;
 
 export const IconContainer = styled.View`
-  width: 30px;
-  height: 30px;
+  width: ${props => props.width || '30px'};
+  width: ${props => props.width || '30px'};
   border-radius: 15px;
   justify-content: center;
   align-items: center;
