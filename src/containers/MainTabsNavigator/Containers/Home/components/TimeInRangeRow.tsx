@@ -81,6 +81,8 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
 
   useEffect(() => {
     const runAnimationTimeout = setTimeout(() => {
+      const inputRange = [0, 100];
+      const outputRange = ['0%', '100%'];
       Animated.timing(animatedLowPercentage, {
         toValue: lowPercentage || 0,
         duration: 500,
@@ -96,6 +98,20 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
         duration: 500,
         useNativeDriver: false,
       }).start();
+
+      const lowPercentageAnimation = animatedLowPercentage.interpolate({
+        inputRange,
+        outputRange,
+      });
+      const highPercentageAnimation = animatedHighPercentage.interpolate({
+        inputRange,
+        outputRange,
+      });
+      const inTargetPercentageAnimation =
+        animatedInTargetPercentage.interpolate({
+          inputRange,
+          outputRange,
+        });
 
       setAnimationValues({
         lowPercentageAnimation: lowPercentageAnimation,
