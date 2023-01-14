@@ -83,4 +83,28 @@ export class FirestoreManager {
     const user = await auth().currentUser;
     return user;
   };
+
+  async subscribeToBgDataByDateFS(date: Date) {
+    const dayBefore = new Date(date);
+    dayBefore.setDate(dayBefore.getDate());
+    const dayAfter = new Date(date);
+    dayAfter.setDate(dayAfter.getDate() + 2);
+
+    return firestore()
+      .collection('day_bgs')
+      .where('timestamp', '>=', dayBefore.setHours(0, 0, 0, 0))
+      .where('timestamp', '<=', dayAfter.setHours(0, 0, 0, 0))
+      .onSnapshot(snapshot => {
+        const dayBgs = snapshot.docs.map(doc => doc.data());
+        const bgParsedData = dayBgs.reduce<BgSample[]>((acc, dayBg) => {
+          return [...acc, ...JSON.parse(dayBg.data)];
+        }, []);
+
+        const localDateBgs = bgParsedData.filter((bg: BgSample) => {
+          const bgDate = new Date(bg.date);
+          return bgDate.getDate() === date.getDate();
+        });
+        return localDateBgs;
+      });
+  }
 }

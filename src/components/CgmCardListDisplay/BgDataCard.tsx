@@ -37,4 +37,6 @@ const DataRowText = styled.Text`
   font-size: 16px;
 `;
 
-export default BgDataCard;
+export default React.memo(BgDataCard, (prevProps, nextProps) => {
+  return prevProps.bgData.date === nextProps.bgData.date;
+});

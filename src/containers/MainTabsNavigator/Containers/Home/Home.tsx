@@ -81,20 +81,20 @@ const Home: React.FC = () => {
       setLatestBgSample(bgData[0]);
     }
   }, [bgData]);
-  // const latestBgSample = useMemo(() => {
-  //   return bgData[0];
-  // }, [bgData]);
 
   return (
     <HomeContainer>
-      <BGValueRow bgData={latestBgSample} />
+      <BGValueRow
+        bgData={latestBgSample}
+        getUpdatedBgDataCallback={getUpdatedBgData}
+      />
       <TimeInRangeRow bgData={bgData} />
       <Collapsable title={'Stats'}>
         <StatsRow bgData={bgData} />
       </Collapsable>
-      {isShowingToday && (
-        <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />
-      )}
+      {/*{isShowingToday && (*/}
+      {/*  <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />*/}
+      {/*)}*/}
       <CgmCardListDisplay
         onPullToRefreshRefresh={pullToRefreshBgData}
         isLoading={isLoading}
