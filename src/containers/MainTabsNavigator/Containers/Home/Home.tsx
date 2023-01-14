@@ -1,5 +1,4 @@
-import React, {useEffect, useMemo} from 'react';
-import {debounce} from 'lodash';
+import React, {useEffect, useMemo, useState} from 'react';
 import styled from 'styled-components/native';
 import {FirestoreManager} from 'app/services/FirestoreManager';
 import {BgSample} from 'app/types/day_bgs';
@@ -10,6 +9,7 @@ import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/c
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
+import BGValueRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestBgValueRow';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -22,6 +22,7 @@ const sortFunction = (a: BgSample, b: BgSample) => {
 
 // create dummy home component with typescript
 const Home: React.FC = () => {
+  const [latestBgSample, setLatestBgSample] = useState<BgSample>();
   const [bgData, setBgData] = React.useState<BgSample[]>([]);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
@@ -72,12 +73,21 @@ const Home: React.FC = () => {
     setCurrentDate(new Date(currentDate.setDate(currentDate.getDate() - 1)));
   };
 
-  const latestBgSample = useMemo(() => {
-    return bgData[0];
+  useEffect(() => {
+    if (
+      bgData?.length &&
+      (!latestBgSample || bgData[0].date > latestBgSample?.date)
+    ) {
+      setLatestBgSample(bgData[0]);
+    }
   }, [bgData]);
+  // const latestBgSample = useMemo(() => {
+  //   return bgData[0];
+  // }, [bgData]);
 
   return (
     <HomeContainer>
+      <BGValueRow bgData={latestBgSample} />
       <TimeInRangeRow bgData={bgData} />
       <Collapsable title={'Stats'}>
         <StatsRow bgData={bgData} />
