@@ -1,7 +1,9 @@
+// noinspection CssInvalidPropertyValue
+
 import React, {useEffect, useRef, useState} from 'react';
 import styled from 'styled-components/native';
 import {BgSample} from 'app/types/day_bgs';
-import {Animated, Text} from 'react-native';
+import {Animated} from 'react-native';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
 
 const Container = styled.View`
@@ -18,7 +20,7 @@ const Container = styled.View`
   border: 2px solid #333;
 `;
 
-const Column = styled(Animated.View)<{color: string; width: number}>`
+const Column = styled(Animated.View)<{color?: string; width?: number}>`
   flex-direction: column;
   justify-content: center;
   align-items: center;
@@ -28,7 +30,7 @@ const Column = styled(Animated.View)<{color: string; width: number}>`
   border-radius: 10px;
 `;
 
-const PercentageText = styled.Text<{color: string}>`
+const PercentageText = styled.Text<{color?: string}>`
   font-size: 18px;
   font-weight: bold;
   color: ${props => props.color || 'white'};
@@ -79,9 +81,6 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
 
   useEffect(() => {
     const runAnimationTimeout = setTimeout(() => {
-      const animation = new Animated.Value(0);
-      const inputRange = [0, 100];
-      const outputRange = ['0%', '100%'];
       Animated.timing(animatedLowPercentage, {
         toValue: lowPercentage || 0,
         duration: 500,
@@ -98,20 +97,6 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
         useNativeDriver: false,
       }).start();
 
-      const lowPercentageAnimation = animatedLowPercentage.interpolate({
-        inputRange,
-        outputRange,
-      });
-      const highPercentageAnimation = animatedHighPercentage.interpolate({
-        inputRange,
-        outputRange,
-      });
-      const inTargetPercentageAnimation =
-        animatedInTargetPercentage.interpolate({
-          inputRange,
-          outputRange,
-        });
-
       setAnimationValues({
         lowPercentageAnimation: lowPercentageAnimation,
         highPercentageAnimation: highPercentageAnimation,
@@ -119,6 +104,7 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
       });
     }, 200);
     return () => clearTimeout(runAnimationTimeout);
+    // eslint-disable-next-line
   }, [bgData]);
 
   return (
