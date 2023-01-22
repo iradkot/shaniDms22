@@ -100,10 +100,12 @@ const Home: React.FC = props => {
       <Collapsable title={'Stats'}>
         <StatsRow bgData={bgData} />
       </Collapsable>
+      <Collapsable title={'chart'}>
+      <BgGraph data={bgData} width={400} height={200} />
+      </Collapsable>
       {/*{isShowingToday && (*/}
       {/*  <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />*/}
       {/*)}*/}
-      {/*<BgGraph data={bgData} width={400} height={200} />*/}
       <CgmCardListDisplay
         onPullToRefreshRefresh={pullToRefreshBgData}
         isLoading={isLoading}

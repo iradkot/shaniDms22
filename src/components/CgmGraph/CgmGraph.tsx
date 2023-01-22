@@ -1,18 +1,10 @@
-import React, {useRef, useEffect, useState} from 'react';
-import {View, Text} from 'react-native';
-import * as d3 from 'd3';
-import {Line, G, Svg} from 'react-native-svg';
-import {TrendDirectionString} from 'app/types/notifications';
+import Svg, {G, Path} from 'react-native-svg';
 
-interface BgSample {
-  sgv: number;
-  date: number; // timestamp in ms
-  dateString: string;
-  trend: number;
-  direction: TrendDirectionString;
-  device: string;
-  type: string;
-}
+import React, {useEffect, useRef, useState} from 'react';
+import {View} from 'react-native';
+import * as d3 from 'd3';
+import styled from 'styled-components';
+import {BgSample} from 'app/types/day_bgs';
 
 interface Props {
   data: BgSample[];
@@ -20,7 +12,13 @@ interface Props {
   height: number;
 }
 
-const BgGraph: React.FC<Props> = ({data, width, height}) => {
+const StyledSvg = styled(Svg)`
+  height: 100%;
+  width: 100%;
+  viewbox: '0 0 100 100';
+`;
+
+const CGMGraph: React.FC<Props> = ({data, width, height}) => {
   const containerRef = useRef<View>(null);
   const xAccessor = (d: BgSample) => new Date(d.date);
   const yAccessor = (d: BgSample) => d.sgv;
@@ -36,10 +34,7 @@ const BgGraph: React.FC<Props> = ({data, width, height}) => {
       .domain(d3.extent(data, xAccessor))
       .range([0, width]);
 
-    const yScale = d3
-      .scaleLinear()
-      .domain([0, d3.max(data, yAccessor)])
-      .range([height, 0]);
+    const yScale = d3.scaleLinear().domain([0, 300]).range([height, 0]);
 
     const line = d3
       .line<BgSample>()
@@ -47,7 +42,7 @@ const BgGraph: React.FC<Props> = ({data, width, height}) => {
       .y(d => yScale(yAccessor(d)));
 
     const pathData = line(data);
-    setPath(pathData);
+    pathData && setPath(pathData);
     return () => {
       // cleanup
     };
@@ -55,13 +50,16 @@ const BgGraph: React.FC<Props> = ({data, width, height}) => {
 
   return (
     <View ref={containerRef}>
-      <Svg width={width} height={height}>
+      <StyledSvg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}>
         <G>
-          <Line d={path} stroke="black" strokeWidth={1} fill="none" />
+          <Path d={path} stroke="black" strokeWidth={1} fill="none" />
         </G>
-      </Svg>
+      </StyledSvg>
     </View>
   );
 };
 
-export default BgGraph;
+export default CGMGraph;
