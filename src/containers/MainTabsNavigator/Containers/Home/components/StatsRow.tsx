@@ -7,19 +7,30 @@ import {
   calculateAverageAndStdDev,
   findBiggestChangesInTimeRange,
 } from 'app/utils/bg.utils';
+import {Theme} from 'app/types/theme';
 
 // Add background colors to the Container component
-const Container = styled.View`
+const Container = styled.View<{theme: Theme}>`
   padding: 5px 10px;
   flex-direction: row;
   justify-content: space-around;
   align-items: center;
   flex-wrap: wrap;
-  background-color: #f5f5f5;
+  background-color: ${props => props.theme.backgroundColor};
 `;
 
 // Add some padding to the Column component
-const Column = styled.View`
+const Column = styled.View<{
+  theme: Theme;
+  bgValue?: number;
+}>`
+  background-color: ${({bgValue, theme}) => {
+    if (bgValue) {
+      return theme.determineBgColorByGlucoseValue(bgValue);
+    } else {
+      return theme.backgroundColor;
+    }
+  }};
   flex-direction: column;
   align-items: center;
   padding: 10px;
@@ -27,10 +38,10 @@ const Column = styled.View`
 `;
 
 // Increase the font size and weight of the ValueText component
-const ValueText = styled.Text<{color?: string}>`
+const ValueText = styled.Text<{color?: string; theme: Theme}>`
   font-size: 24px;
   font-weight: bold;
-  color: ${props => (props.color ? props.color : '#333')};
+  color: ${props => (props.color ? props.color : props.theme.textColor)};
 `;
 
 // Increase the font size of the LabelText component
@@ -82,7 +93,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
     <>
       <Container>
         {/* Add a background color to the column with the lowest blood glucose value */}
-        <Column style={{flex: 1, backgroundColor: '#90ee90'}}>
+        <Column style={{flex: 1}} bgValue={averageBg}>
           <LabelText>Average BG</LabelText>
           <ValueText>{averageBg}</ValueText>
           <StDevValueText color={stdDev >= 0 ? '#00b300' : '#e33734'}>
@@ -91,7 +102,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
           </StDevValueText>
         </Column>
         {/* Add a background color to the column with the lowest blood glucose value */}
-        <Column style={{flex: 1, backgroundColor: '#e33734'}}>
+        <Column style={{flex: 1}} bgValue={lowestBg.sgv}>
           <LabelText color={'#ffffff'}>Lowest BG</LabelText>
           <ValueText color={'#ffffff'}>{lowestBg.sgv}</ValueText>
           <TimeValueText color={'#ffffff'}>
@@ -99,7 +110,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
           </TimeValueText>
         </Column>
         {/* Add a background color to the column with the highest blood glucose value */}
-        <Column style={{flex: 1, backgroundColor: '#faf87f'}}>
+        <Column style={{flex: 1}} bgValue={highestBg.sgv}>
           <LabelText>Highest BG</LabelText>
           <ValueText>{highestBg.sgv}</ValueText>
           <TimeValueText>

@@ -5,20 +5,22 @@ import DirectionArrows from 'app/components/DirectionArrows';
 import {BgSample} from 'app/types/day_bgs';
 import {isEmpty} from 'lodash';
 import {View} from 'react-native';
-import {getBackgroundColor} from 'app/utils/styling.utils';
+import {determineBgColorByGlucoseValue} from 'app/utils/styling.utils';
+import {Theme} from 'app/types/theme';
 
 interface BGValueRowProps {
   bgData?: BgSample;
   getUpdatedBgDataCallback: () => void;
 }
 
-const Container = styled.View<{bgValue: number}>`
+const Container = styled.View<{bgValue: number; theme: Theme}>`
   height: 60px;
   flex-direction: row;
   justify-content: space-around;
   align-items: center;
   border-radius: 10px;
-  background-color: ${({bgValue}) => getBackgroundColor(bgValue)};
+  background-color: ${({bgValue, theme}) =>
+    theme.determineBgColorByGlucoseValue(bgValue)};
   padding: 10px;
   shadow-color: #000;
   shadow-offset: 0px 4px;

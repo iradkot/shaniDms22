@@ -22,6 +22,8 @@ import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator'
 import AddNotificationScreen from './containers/AddNotificationScreen/AddNotificationScreen';
 import EditNotificationScreen from 'app/containers/EditNotificationScreen/EditNotificationScreen';
 import {firebase} from '@react-native-firebase/messaging';
+import styled, {ThemeProvider} from 'styled-components/native';
+import {theme} from 'app/style/theme';
 
 const Stack = createNativeStackNavigator();
 
@@ -34,32 +36,42 @@ firebase.messaging().onNotificationOpenedApp(remoteMessage => {
   );
 });
 
+const AppContainer = styled.View`
+  flex: 1;
+  background-color: ${props => props.theme.backgroundColor};
+`;
+
 const App: () => JSX.Element = () => {
+  console.log({theme});
   // if user is not logged in, show login screen else show home screen
   return (
     // TODO - move SafeAreaView style outside
-    <SafeAreaView style={{flex: 1}}>
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={{headerShown: false}}>
-          <Stack.Screen name="initScreen" component={AppInitScreen} />
-          <Stack.Screen name={LOGIN_SCREEN} component={Login} />
-          <Stack.Screen
-            name={MAIN_TAB_NAVIGATOR}
-            component={MainTabsNavigator}
-          />
-          <Stack.Screen
-            options={{headerShown: true, headerTitle: ''}}
-            name={ADD_NOTIFICATION_SCREEN}
-            component={AddNotificationScreen}
-          />
-          <Stack.Screen
-            options={{headerShown: true, headerTitle: ''}}
-            name={EDIT_NOTIFICATION_SCREEN}
-            component={EditNotificationScreen}
-          />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </SafeAreaView>
+    <ThemeProvider theme={theme}>
+      <AppContainer>
+        <SafeAreaView style={{flex: 1}}>
+          <NavigationContainer>
+            <Stack.Navigator screenOptions={{headerShown: false}}>
+              <Stack.Screen name="initScreen" component={AppInitScreen} />
+              <Stack.Screen name={LOGIN_SCREEN} component={Login} />
+              <Stack.Screen
+                name={MAIN_TAB_NAVIGATOR}
+                component={MainTabsNavigator}
+              />
+              <Stack.Screen
+                options={{headerShown: true, headerTitle: ''}}
+                name={ADD_NOTIFICATION_SCREEN}
+                component={AddNotificationScreen}
+              />
+              <Stack.Screen
+                options={{headerShown: true, headerTitle: ''}}
+                name={EDIT_NOTIFICATION_SCREEN}
+                component={EditNotificationScreen}
+              />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </SafeAreaView>
+      </AppContainer>
+    </ThemeProvider>
   );
 };
 

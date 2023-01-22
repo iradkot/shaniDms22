@@ -8,12 +8,23 @@ import {
 } from 'app/constants/SCREEN_NAMES';
 import FAIcon from 'react-native-vector-icons/FontAwesome';
 import ADIcon from 'react-native-vector-icons/AntDesign';
+import {theme} from 'app/style/theme';
 
 const Tab = createBottomTabNavigator();
 
-const MainTabsNavigator: React.FC = () => {
+const MainTabsNavigator: React.FC = props => {
   return (
-    <Tab.Navigator>
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: theme.backgroundColor,
+        },
+        tabBarIconStyle: {
+          color: theme.textColor,
+        },
+        tabBarActiveTintColor: theme.accentColor,
+      }}>
       <Tab.Screen
         name={HOME_TAB_SCREEN}
         component={Home}

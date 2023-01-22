@@ -5,13 +5,14 @@ import styled from 'styled-components/native';
 import {BgSample} from 'app/types/day_bgs';
 import {Animated} from 'react-native';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
+import {Theme} from 'app/types/theme';
 
-const Container = styled.View`
+const Container = styled.View<{theme: Theme}>`
   flex-direction: row;
   justify-content: space-around;
   align-items: center;
   border-radius: 10px;
-  background-color: white;
+  background-color: ${props => props.theme.backgroundColor};
   shadow-color: #000;
   shadow-offset: 0px 4px;
   shadow-opacity: 0.3;
@@ -20,13 +21,29 @@ const Container = styled.View`
   border: 2px solid #333;
 `;
 
-const Column = styled(Animated.View)<{color?: string; width?: number}>`
+const Column = styled(Animated.View)<{
+  belowRange?: boolean;
+  inRange?: boolean;
+  aboveRange?: boolean;
+  width?: number;
+  theme: Theme;
+}>`
   flex-direction: column;
   justify-content: center;
   align-items: center;
   width: ${props => props.width}%;
   height: 50px;
-  background-color: ${props => props.color};
+  background-color: ${props => {
+    if (props.belowRange) {
+      return props.theme.belowRangeColor;
+    } else if (props.inRange) {
+      return props.theme.inRangeColor;
+    } else if (props.aboveRange) {
+      return props.theme.aboveRangeColor;
+    } else {
+      return 'yellow';
+    }
+  }};
   border-radius: 10px;
 `;
 
@@ -114,8 +131,11 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
         });
 
       setAnimationValues({
+        // @ts-ignore
         lowPercentageAnimation: lowPercentageAnimation,
+        // @ts-ignore
         highPercentageAnimation: highPercentageAnimation,
+        // @ts-ignore
         inTargetPercentageAnimation: inTargetPercentageAnimation,
       });
     }, 200);
@@ -125,13 +145,13 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
 
   return (
     <Container>
-      <Column style={{width: lowPercentageAnimation}} color={'red'}>
+      <Column style={{width: lowPercentageAnimation}} belowRange>
         <PercentageText>{lowPercentage || 0}%</PercentageText>
       </Column>
-      <Column style={{width: inTargetPercentageAnimation}} color={'green'}>
+      <Column style={{width: inTargetPercentageAnimation}} inRange>
         <PercentageText>{timeInRangePercentage || 0}%</PercentageText>
       </Column>
-      <Column style={{width: highPercentageAnimation}} color={'yellow'}>
+      <Column style={{width: highPercentageAnimation}} aboveRange>
         <PercentageText color={'black'}>{highPercentage || 0}%</PercentageText>
       </Column>
     </Container>

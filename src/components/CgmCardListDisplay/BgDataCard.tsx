@@ -2,7 +2,7 @@ import {BgSample} from '../../types/day_bgs';
 import React from 'react';
 import styled from 'styled-components/native';
 import DirectionArrows from '../../components/DirectionArrows';
-import {getBackgroundColor} from 'app/utils/styling.utils';
+import {Theme} from 'app/types/theme';
 
 const BgDataCard = ({
   bgData,
@@ -22,15 +22,15 @@ const BgDataCard = ({
   );
 };
 
-const DataRowContainer = styled.View`
+const DataRowContainer = styled.View<{bgValue: number; theme: Theme}>`
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
   padding: 10px;
   border-bottom-width: 1px;
-  border-bottom-color: #ccc;
-  background-color: ${({bgValue}: {bgValue: number}) =>
-    getBackgroundColor(bgValue)};
+  border-bottom-color: ${({theme}) => theme.borderColor};
+  background-color: ${({bgValue, theme}) =>
+    theme.determineBgColorByGlucoseValue(bgValue)};
 `;
 
 const DataRowText = styled.Text`

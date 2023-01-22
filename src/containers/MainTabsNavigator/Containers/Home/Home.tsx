@@ -10,6 +10,7 @@ import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/component
 import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import BGValueRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestBgValueRow';
+import BgGraph from 'app/components/CgmGraph/CgmGraph';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -21,7 +22,7 @@ const sortFunction = (a: BgSample, b: BgSample) => {
 };
 
 // create dummy home component with typescript
-const Home: React.FC = () => {
+const Home: React.FC = props => {
   const [latestBgSample, setLatestBgSample] = useState<BgSample>();
   const [bgData, setBgData] = React.useState<BgSample[]>([]);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
@@ -95,6 +96,7 @@ const Home: React.FC = () => {
       {/*{isShowingToday && (*/}
       {/*  <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />*/}
       {/*)}*/}
+      {/*<BgGraph data={bgData} width={400} height={200} />*/}
       <CgmCardListDisplay
         onPullToRefreshRefresh={pullToRefreshBgData}
         isLoading={isLoading}
