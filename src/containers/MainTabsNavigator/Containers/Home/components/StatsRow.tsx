@@ -58,7 +58,7 @@ const TimeValueText = styled(ValueText)`
 
 const StDevValueText = styled(ValueText)`
   font-size: 16px;
-  color: ${props => (props.color ? props.color : '#333')};
+  color: ${props => props.theme.textColor};
 `;
 
 interface StatsRowProps {
@@ -96,7 +96,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
         <Column style={{flex: 1}} bgValue={averageBg}>
           <LabelText>Average BG</LabelText>
           <ValueText>{averageBg}</ValueText>
-          <StDevValueText color={stdDev >= 0 ? '#00b300' : '#e33734'}>
+          <StDevValueText>
             {stdDev >= 0 ? '+' : '-'}
             {stdDev.toFixed(2)}
           </StDevValueText>

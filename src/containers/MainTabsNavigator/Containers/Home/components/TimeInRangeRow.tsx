@@ -16,7 +16,7 @@ const Container = styled.View<{theme: Theme}>`
   shadow-color: #000;
   shadow-offset: 0px 4px;
   shadow-opacity: 0.3;
-  shadow-radius: 4;
+  shadow-radius: 4px;
   elevation: 2;
   border: 2px solid #333;
 `;

@@ -5,7 +5,6 @@ import DirectionArrows from 'app/components/DirectionArrows';
 import {BgSample} from 'app/types/day_bgs';
 import {isEmpty} from 'lodash';
 import {View} from 'react-native';
-import {determineBgColorByGlucoseValue} from 'app/utils/styling.utils';
 import {Theme} from 'app/types/theme';
 
 interface BGValueRowProps {
@@ -14,25 +13,28 @@ interface BGValueRowProps {
 }
 
 const Container = styled.View<{bgValue: number; theme: Theme}>`
-  height: 60px;
+  height: 80px;
+  width: 90%;
   flex-direction: row;
   justify-content: space-around;
   align-items: center;
-  border-radius: 10px;
+  border-radius: 20px;
   background-color: ${({bgValue, theme}) =>
     theme.determineBgColorByGlucoseValue(bgValue)};
-  padding: 10px;
+  padding: 20px;
   shadow-color: #000;
   shadow-offset: 0px 4px;
   shadow-opacity: 0.3;
-  shadow-radius: 4;
+  shadow-radius: 4px;
   elevation: 2;
+  margin: 20px auto;
 `;
 
 const BGValueText = styled.Text`
-  font-size: 18px;
+  font-size: 24px;
   font-weight: bold;
-  color: #333;
+  color: #fff;
+  text-shadow: 0px 0px 5px #000;
 `;
 
 const TrendDirectionContainer = styled.View`
@@ -43,11 +45,13 @@ const TrendDirectionContainer = styled.View`
 `;
 
 const TimePassedText = styled.Text`
-  font-size: 18px;
+  min-width: 80px;
+  font-size: 16px;
   font-weight: bold;
-  color: #333;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0px 0px 5px #000;
 `;
-
 interface UseTimerReturn {
   timeLeft: number;
 }
@@ -121,7 +125,7 @@ const BGValueRow: React.FC<BGValueRowProps> = ({
           <DirectionArrows trendDirection={direction} size={40} />
         </TrendDirectionContainer>
       </View>
-      <View style={{flex: 1, alignItems: 'center'}}>
+      <View style={{flex: 1.5, alignItems: 'center'}}>
         <TimePassedText>{timePassed} ago</TimePassedText>
       </View>
     </Container>

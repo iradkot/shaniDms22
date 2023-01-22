@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import {SafeAreaView} from 'react-native';
+import {SafeAreaView, StatusBar} from 'react-native';
 import Login from './containers/Login';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
@@ -24,6 +24,7 @@ import EditNotificationScreen from 'app/containers/EditNotificationScreen/EditNo
 import {firebase} from '@react-native-firebase/messaging';
 import styled, {ThemeProvider} from 'styled-components/native';
 import {theme} from 'app/style/theme';
+import {Theme} from 'app/types/theme';
 
 const Stack = createNativeStackNavigator();
 
@@ -36,17 +37,17 @@ firebase.messaging().onNotificationOpenedApp(remoteMessage => {
   );
 });
 
-const AppContainer = styled.View`
+const AppContainer = styled.View<{theme: Theme}>`
   flex: 1;
   background-color: ${props => props.theme.backgroundColor};
 `;
 
 const App: () => JSX.Element = () => {
-  console.log({theme});
   // if user is not logged in, show login screen else show home screen
   return (
     // TODO - move SafeAreaView style outside
     <ThemeProvider theme={theme}>
+      <StatusBar backgroundColor={theme.backgroundColor} />
       <AppContainer>
         <SafeAreaView style={{flex: 1}}>
           <NavigationContainer>

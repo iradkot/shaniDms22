@@ -25,6 +25,7 @@ const sortFunction = (a: BgSample, b: BgSample) => {
 const Home: React.FC = props => {
   const [latestBgSample, setLatestBgSample] = useState<BgSample>();
   const [bgData, setBgData] = React.useState<BgSample[]>([]);
+  const [todayBgData, setTodayBgData] = React.useState<BgSample[]>([]);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
   const isShowingToday = useMemo(() => {
@@ -35,12 +36,19 @@ const Home: React.FC = props => {
       today.getDate() === currentDate.getDate()
     );
   }, [currentDate]);
-  const getBgDataByDate = async (date: Date) => {
+  const getBgDataByDate = async (date?: Date) => {
     setIsLoading(true);
     const fsManager = new FirestoreManager();
     const bgData = await fsManager.getBgDataByDateFS(date ?? new Date());
     const sortedBgData = bgData.sort(sortFunction);
-    setBgData(sortedBgData);
+    if (!date || isShowingToday) {
+      setTodayBgData(sortedBgData);
+      if (isShowingToday) {
+        setBgData(sortedBgData);
+      }
+    } else {
+      setBgData(sortedBgData);
+    }
     setIsLoading(false);
   };
 
@@ -59,9 +67,8 @@ const Home: React.FC = props => {
   // getUpdatedBgData - get the bg data for today and update the state
   const getUpdatedBgData = async () => {
     // noinspection JSIgnoredPromiseFromCall
-    getBgDataByDate(new Date());
+    await getBgDataByDate();
   };
-
   const pullToRefreshBgData = isShowingToday ? getUpdatedBgData : undefined;
 
   const setCustomDate = (date: Date) => {
@@ -76,12 +83,12 @@ const Home: React.FC = props => {
 
   useEffect(() => {
     if (
-      bgData?.length &&
-      (!latestBgSample || bgData[0].date > latestBgSample?.date)
+      todayBgData?.length &&
+      (!latestBgSample || todayBgData[0].date > latestBgSample?.date)
     ) {
-      setLatestBgSample(bgData[0]);
+      setLatestBgSample(todayBgData[0]);
     }
-  }, [bgData]);
+  }, [todayBgData]);
 
   return (
     <HomeContainer>
