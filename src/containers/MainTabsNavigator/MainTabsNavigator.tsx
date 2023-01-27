@@ -6,9 +6,10 @@ import {
   HOME_TAB_SCREEN,
   NOTIFICATION_TAB_SCREEN,
 } from 'app/constants/SCREEN_NAMES';
-import FAIcon from 'react-native-vector-icons/FontAwesome';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import ADIcon from 'react-native-vector-icons/AntDesign';
 import {theme} from 'app/style/theme';
+import FoodTracker from 'app/containers/FoodTracker/FoodTracker';
 
 const Tab = createBottomTabNavigator();
 
@@ -31,9 +32,19 @@ const MainTabsNavigator: React.FC = props => {
         options={{
           headerShown: false,
           tabBarIcon: ({color, size}) => (
-            <FAIcon name="home" color={color} size={size} />
+            <MaterialIcons name="home" color={color} size={size} />
           ),
           tabBarLabel: 'Home',
+        }}
+      />
+      <Tab.Screen
+        name="Food Tracking"
+        component={FoodTracker}
+        options={{
+          tabBarIcon: ({color, size}) => (
+            <MaterialIcons name="fastfood" color={color} size={size} />
+          ),
+          tabBarLabel: 'Food Tracking',
         }}
       />
       <Tab.Screen
