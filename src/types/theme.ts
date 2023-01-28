@@ -21,6 +21,7 @@ export type Theme = {
   backgroundColor: string;
   textColor: string;
   accentColor: string;
+  white: string;
   borderColor: string;
   dimensions: {
     width: number;

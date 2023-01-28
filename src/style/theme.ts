@@ -18,6 +18,7 @@ export const theme: Theme = {
   backgroundColor: colors.gray[200],
   textColor: colors.black,
   accentColor: colors.purple[500],
+  white: '#ffffff',
   dimensions: {
     width,
     height,
