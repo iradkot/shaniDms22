@@ -12,6 +12,7 @@ const CollapsableContainer = styled.View`
   width: 100%;
   border-bottom-width: 1px;
   border-bottom-color: #ddd;
+  background-color: rgba(255, 255, 255, 0.7);
 `;
 
 const TitleContainer = styled.View`
@@ -49,13 +50,18 @@ const ContentOverlay = styled(Animated.View)`
 
 interface CollapsableProps {
   title: string;
+  initialIsCollapsed?: boolean;
   children: React.ReactNode;
 }
 
 const openAnimationDuration = 500;
 const closeAnimationDuration = 200;
-const Collapsable: React.FC<CollapsableProps> = ({title, children}) => {
-  const [collapsed, setCollapsed] = useState(true);
+const Collapsable: React.FC<CollapsableProps> = ({
+  title,
+  children,
+  initialIsCollapsed = true,
+}) => {
+  const [collapsed, setCollapsed] = useState(initialIsCollapsed);
   const contentHeight = useRef(new Animated.Value(0)).current;
   const overlayOpacity = useRef(new Animated.Value(1)).current;
   const arrowRotation = useRef(new Animated.Value(0)).current;
