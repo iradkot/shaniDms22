@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import styled from 'styled-components/native';
-import {FirestoreManager} from 'app/services/FirestoreManager';
+import {FirebaseService} from 'app/services/FirebaseService';
 import {BgSample} from 'app/types/day_bgs';
 import CgmCardListDisplay from 'app/components/CgmCardListDisplay/CgmCardListDisplay';
 import {Timer} from './components/Timer';
@@ -38,8 +38,8 @@ const Home: React.FC = props => {
   }, [currentDate]);
   const getBgDataByDate = async (date?: Date) => {
     setIsLoading(true);
-    const fsManager = new FirestoreManager();
-    const bgData = await fsManager.getBgDataByDateFS(date ?? new Date());
+    const fsManager = new FirebaseService();
+    const bgData = await fsManager.getBgDataByDateFS(date ?? new Date(), 0);
     const sortedBgData = bgData.sort(sortFunction);
     if (!date || isShowingToday) {
       setTodayBgData(sortedBgData);
@@ -101,7 +101,7 @@ const Home: React.FC = props => {
         <StatsRow bgData={bgData} />
       </Collapsable>
       <Collapsable title={'chart'}>
-      <BgGraph data={bgData} width={400} height={200} />
+        <BgGraph data={bgData} width={400} height={200} />
       </Collapsable>
       {/*{isShowingToday && (*/}
       {/*  <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />*/}

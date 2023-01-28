@@ -1,15 +1,43 @@
-import React, {useState} from 'react';
-import {View, Text, TouchableOpacity} from 'react-native';
-import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import React, {useEffect, useState} from 'react';
+import {FlatList, Text} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import styled from 'styled-components/native';
+import FoodCard from 'app/containers/FoodTracker/Components/FoodCard';
+import {FirebaseService} from 'app/services/FirebaseService';
+import {FoodItemDTO} from 'app/types/foodItems';
+import useLocalStorage from 'app/hooks/useLocalStorage';
+import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
+import {BgSample} from 'app/types/day_bgs';
 
-const Tab = createBottomTabNavigator();
+interface formattedItemDTO extends FoodItemDTO {
+  date: string; // formatted date
+  image: string;
+  bgData: BgSample[];
+}
 
 const FoodTracker: React.FC = () => {
+  const [foodItems, setFoodItems] = useState<formattedItemDTO[]>([]);
   const [showLastMeal, setShowLastMeal] = useState(true);
   const [showMealsToday, setShowMealsToday] = useState(true);
   const [showMealsFromBefore, setShowMealsFromBefore] = useState(true);
+
+  const getFoodItems = async (date: Date) => {
+    const fsManager = new FirebaseService();
+    const FSfoodItems = await fsManager.getFoodItems(date);
+    // replace image with the image url from firebase
+    for (const item of FSfoodItems) {
+      item.image = await fsManager.getFoodItemImage(item.image);
+      item.bgData = await fsManager.getFoodItemBgData(item);
+      item.date = formatDateToLocaleTimeString(item.timestamp);
+    }
+    console.log('FSfoodItems', FSfoodItems);
+    setFoodItems(FSfoodItems);
+    return FSfoodItems;
+  };
+
+  useEffect(() => {
+    getFoodItems(new Date()).then(r => setFoodItems(r));
+  }, []);
 
   return (
     <Container>
@@ -23,8 +51,20 @@ const FoodTracker: React.FC = () => {
           />
         </SectionTitle>
         {showLastMeal && (
-          <SectionContent>
-            <Text>Last Meal Content Goes Here</Text>
+          <SectionContent disabled>
+            <FlatList
+              data={foodItems}
+              renderItem={({item}) => (
+                <FoodCard
+                  image={item.image}
+                  name={item.name}
+                  bgData={item.bgData || []}
+                  date={item.date}
+                  notes={item.notes}
+                />
+              )}
+              keyExtractor={item => item.timestamp.toString()}
+            />
           </SectionContent>
         )}
       </Section>
@@ -89,7 +129,6 @@ const TitleText = styled.Text`
 `;
 
 const SectionContent = styled.TouchableOpacity`
-  height: 100px;
   width: 100%;
 `;
 

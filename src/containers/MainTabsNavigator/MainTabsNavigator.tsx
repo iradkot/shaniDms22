@@ -3,6 +3,7 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import Home from './Containers/Home/Home';
 import NotificationsManager from './Containers/NotificationsManager/NotificationsManager';
 import {
+  Food_Tracking_TAB_SCREEN,
   HOME_TAB_SCREEN,
   NOTIFICATION_TAB_SCREEN,
 } from 'app/constants/SCREEN_NAMES';
@@ -16,6 +17,7 @@ const Tab = createBottomTabNavigator();
 const MainTabsNavigator: React.FC = props => {
   return (
     <Tab.Navigator
+      initialRouteName={Food_Tracking_TAB_SCREEN}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -38,7 +40,7 @@ const MainTabsNavigator: React.FC = props => {
         }}
       />
       <Tab.Screen
-        name="Food Tracking"
+        name={Food_Tracking_TAB_SCREEN}
         component={FoodTracker}
         options={{
           tabBarIcon: ({color, size}) => (
