@@ -5,9 +5,9 @@ import styled from 'styled-components/native';
 import FoodCard from 'app/containers/FoodTracker/Components/FoodCard';
 import {FirebaseService} from 'app/services/FirebaseService';
 import {FoodItemDTO} from 'app/types/foodItems';
-import useLocalStorage from 'app/hooks/useLocalStorage';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {BgSample} from 'app/types/day_bgs';
+import {Theme} from 'app/types/theme';
 
 interface formattedItemDTO extends FoodItemDTO {
   date: string; // formatted date
@@ -105,8 +105,9 @@ const FoodTracker: React.FC = () => {
   );
 };
 
-const Container = styled.View`
+const Container = styled.View<{theme: Theme}>`
   flex: 1;
+  max-height: 75%;
   padding: 16px;
 `;
 

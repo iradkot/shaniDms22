@@ -9,6 +9,8 @@ import {determineBgColorByGlucoseValue} from 'app/utils/styling.utils';
 const {width, height} = Dimensions.get('window');
 
 export const theme: Theme = {
+  screenHeight: height,
+  tabBarHeight: 50,
   dark: false,
   inRangeColor: colors.green.main,
   belowRangeColor: colors.red.main,

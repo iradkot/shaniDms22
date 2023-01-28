@@ -14,14 +14,18 @@ import FoodTracker from 'app/containers/FoodTracker/FoodTracker';
 
 const Tab = createBottomTabNavigator();
 
-const MainTabsNavigator: React.FC = props => {
+const MainTabsNavigator: React.FC = () => {
   return (
     <Tab.Navigator
       initialRouteName={Food_Tracking_TAB_SCREEN}
+      sceneContainerStyle={{
+        height: 30,
+      }}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
           backgroundColor: theme.backgroundColor,
+          height: theme.tabBarHeight,
         },
         tabBarIconStyle: {
           color: theme.textColor,

@@ -1,5 +1,5 @@
 import React from 'react';
-
+import {View, Image, Text} from 'react-native';
 import styled from 'styled-components/native';
 import {Theme} from 'app/types/theme';
 import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
@@ -16,60 +16,47 @@ interface FoodCardProps {
 
 const FoodCardContainer = styled.TouchableOpacity<{theme: Theme}>`
   width: 100%;
-
-  min-height: 150px;
+  min-height: 250px;
   border-radius: 10px;
-  background-color: black;
+  background-color: #f9f9f9;
   margin-bottom: 10px;
-  box-shadow: 0px 0px 3px ${props => props.theme.accentColor};
+  box-shadow: 0px 0px 8px #ccc;
   elevation: 2;
-  background-color: black;
   padding: 10px;
-  marginbottom: 10px;
-  shadowcolor: 0px 0px 3px ${props => props.theme.accentColor};
-  shadow-offset: {
-    width: 2px;
-    height: 2px;
-  }
-  shadow-opacity: 0.5;
-  shadow-radius: 2;
 `;
 
 const FoodCardImage = styled.Image`
-  position: absolute;
   width: 100%;
-  height: 100%;
+  height: 150px;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
 `;
 
-const FoodCardTextContainer = styled.View`
+const FoodCardInfoContainer = styled.View`
   width: 100%;
-  min-height: 20%;
   padding: 10px;
-  background-color: rgba(0, 0, 0, 0.4);
+  background-color: #fff;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
 `;
 
 const FoodCardName = styled.Text`
-  font-size: 38px;
-  font-weight: bold;
-  color: white;
-  elevation: 2;
-  text-shadow-color: #ccc;
-  text-shadow-offset: {
-    width: 1px;
-    height: 1px;
-  }
-  text-shadow-radius: 1px;
-  text-transform: capitalize;
-`;
-
-const FoodCardNotes = styled.Text<{theme: Theme}>`
-  font-size: 14px;
-  color: ${props => props.theme.white};
-`;
-
-const FoodCardDate = styled.Text<{theme: Theme}>`
   font-size: 18px;
-  color: ${props => props.theme.white};
+  font-weight: bold;
+  color: #333;
+  text-transform: capitalize;
+  margin-bottom: 5px;
+`;
+
+const FoodCardNotes = styled.Text`
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 10px;
+`;
+
+const FoodCardDate = styled.Text`
+  font-size: 14px;
+  color: #666;
   text-align: right;
 `;
 
@@ -83,11 +70,11 @@ const FoodCard: React.FC<FoodCardProps> = ({
   return (
     <FoodCardContainer>
       <FoodCardImage source={{uri: image}} />
-      <FoodCardTextContainer>
+      <FoodCardInfoContainer>
         <FoodCardName>{name}</FoodCardName>
         <FoodCardNotes>{notes}</FoodCardNotes>
         <FoodCardDate>{date}</FoodCardDate>
-      </FoodCardTextContainer>
+      </FoodCardInfoContainer>
       <Collapsable title={'Blood Glucose Data'} initialIsCollapsed={false}>
         <BgGraph data={bgData} width={400} height={200} />
       </Collapsable>

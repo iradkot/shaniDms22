@@ -3,7 +3,6 @@ import styled from 'styled-components/native';
 import {FirebaseService} from 'app/services/FirebaseService';
 import {BgSample} from 'app/types/day_bgs';
 import CgmCardListDisplay from 'app/components/CgmCardListDisplay/CgmCardListDisplay';
-import {Timer} from './components/Timer';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
@@ -22,7 +21,7 @@ const sortFunction = (a: BgSample, b: BgSample) => {
 };
 
 // create dummy home component with typescript
-const Home: React.FC = props => {
+const Home: React.FC = () => {
   const [latestBgSample, setLatestBgSample] = useState<BgSample>();
   const [bgData, setBgData] = React.useState<BgSample[]>([]);
   const [todayBgData, setTodayBgData] = React.useState<BgSample[]>([]);
@@ -36,10 +35,10 @@ const Home: React.FC = props => {
       today.getDate() === currentDate.getDate()
     );
   }, [currentDate]);
-  const getBgDataByDate = async (date?: Date) => {
+  const getBgDataByDate = async (date?: Date): Promise<void> => {
     setIsLoading(true);
     const fsManager = new FirebaseService();
-    const bgData = await fsManager.getBgDataByDateFS(date ?? new Date(), 0);
+    const bgData = await fsManager.getBgDataByDateFS(date ?? new Date());
     const sortedBgData = bgData.sort(sortFunction);
     if (!date || isShowingToday) {
       setTodayBgData(sortedBgData);
@@ -62,7 +61,9 @@ const Home: React.FC = props => {
   }, [currentDate]);
 
   useEffect(() => {
+    // noinspection JSIgnoredPromiseFromCall
     getBgDataByDate(debouncedCurrentDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedCurrentDate]);
   // getUpdatedBgData - get the bg data for today and update the state
   const getUpdatedBgData = async () => {
@@ -88,6 +89,7 @@ const Home: React.FC = props => {
     ) {
       setLatestBgSample(todayBgData[0]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayBgData]);
 
   return (

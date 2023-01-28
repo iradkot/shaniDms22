@@ -1,9 +1,11 @@
-import firestore from '@react-native-firebase/firestore';
+import firestore, {
+  FirebaseFirestoreTypes,
+} from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import {BgSample} from '../types/day_bgs';
 import messaging from '@react-native-firebase/messaging';
 import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
-import {FoodItemDT} from 'app/types/foodItems';
+import {FoodItemDTO} from 'app/types/foodItems';
 
 // FirestoreManager class is responsible for all the interactions with the FirestoreManager database
 export class FirebaseService {
@@ -97,7 +99,9 @@ export class FirebaseService {
   }
 
   // Define a function that returns a list of food items, and write in ts that it returns a list of food items
-  async getFoodItems(date: Date): Promise<Array<FoodItemDT> | []> {
+  async getFoodItems(
+    date: Date,
+  ): Promise<FirebaseFirestoreTypes.DocumentData[]> {
     const dayBefore = new Date(date);
     dayBefore.setDate(dayBefore.getDate());
     const dayAfter = new Date(date);
@@ -111,11 +115,11 @@ export class FirebaseService {
     return foodItems;
   }
 
-  async getFoodItemBgData(foodItem: FoodItemDT) {
+  async getFoodItemBgData(foodItem: FoodItemDTO) {
     console.log('getFoodItemBgData', {foodItem});
     // get the bg data and pull 12 hours of bg data before the food item timestamp
     const startDate = new Date(foodItem.timestamp);
-    startDate.setHours(startDate.getHours() - 12);
+    startDate.setHours(startDate.getHours() - 4);
     const endDate = new Date(foodItem.timestamp);
     const bgData = await this.getBgDataByDateFS(endDate, startDate);
     return bgData;

@@ -5,5 +5,5 @@ export interface FoodItemDTO {
   image: string;
   notes: string;
   score: number;
-  timestamp: number; // timestamp in milliseconds
+  timestamp: number; // timestamp in millisecondsFoodItemDTO
 }
