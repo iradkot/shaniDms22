@@ -1,5 +1,4 @@
 import Svg, {G, Line, Path, Text} from 'react-native-svg';
-
 import React, {useEffect, useRef, useState} from 'react';
 import {View} from 'react-native';
 import * as d3 from 'd3';
@@ -19,32 +18,45 @@ const StyledSvg = styled(Svg)`
   viewbox: '0 0 100 100';
 `;
 
+// This component displays a graph of continuous glucose monitor data using D3.js
 const CGMGraph: React.FC<Props> = ({data, width, height}) => {
+  // Graph margins
   const graphMargin = 28;
   const graphWidth = width - graphMargin * 2;
   const graphHeight = height - graphMargin * 2;
+
+  // Reference to container view for D3 calculations
   const containerRef = useRef<View>(null);
+
+  // Accessors for D3 calculations
   const xAccessor = (d: BgSample) => new Date(d.date);
   const yAccessor = (d: BgSample) => d.sgv;
   const [path, setPath] = useState<string>('');
 
+  // Maximum value for y-axis
   const highestBgThreshold = 300;
+
+  // D3 calculations for graph rendering
   useEffect(() => {
+    // If the container is not available or there's no data, do nothing
     if (!containerRef.current || !data.length) {
       return;
     }
 
+    // Calculate x-axis scale
     const xScale = d3
       .scaleTime()
       // @ts-ignore
       .domain(d3.extent(data, xAccessor))
       .range([0, graphWidth]);
 
+    // Calculate y-axis scale
     const yScale = d3
       .scaleLinear()
       .domain([0, highestBgThreshold])
       .range([graphHeight, 0]);
 
+    // Calculate path for graph line
     const line = d3
       .line<BgSample>()
       .x(d => xScale(xAccessor(d)))
@@ -52,13 +64,16 @@ const CGMGraph: React.FC<Props> = ({data, width, height}) => {
 
     const pathData = line(data);
     pathData && setPath(pathData);
-    return () => {
-      // cleanup
-    };
+
+    // Return cleanup function (not needed in this case)
+    return () => {};
   }, [containerRef, data, graphWidth, graphHeight]);
 
+  // Start and end dates of data
   const dataStartDateTime = data[0].date;
   const dataEndDateTime = data[data.length - 1].date;
+
+  // X-axis component
   const XAxis = () => {
     const ticksAmount = 6;
     const ticks = Array.from({length: ticksAmount}, (_, i) => i);
