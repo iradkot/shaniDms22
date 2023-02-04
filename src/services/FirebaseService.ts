@@ -1,45 +1,53 @@
-import firestore, {
-  FirebaseFirestoreTypes,
-} from '@react-native-firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import {BgSample} from '../types/day_bgs';
 import messaging from '@react-native-firebase/messaging';
 import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
 import {FoodItemDTO} from 'app/types/foodItems';
+import {
+  getLocalEndOfTheDay,
+  getLocalStartOfTheDay,
+  getUtcEndOfTheDay,
+  getUtcStartOfTheDay,
+} from 'app/utils/datetime.utils';
 
 // FirestoreManager class is responsible for all the interactions with the FirestoreManager database
 export class FirebaseService {
-  async getBgDataByDateFS(endDate: Date, startDate?: Date) {
+  async getBgDataByDateFS(endDate: Date, startDate?: number | Date) {
     if (!startDate) {
-      startDate = new Date(endDate);
-      startDate.setHours(0, 0, 0, 0);
+      startDate = new Date().setDate(endDate.getDate());
+      // localStartDate is the user local date in utc time
     }
-    const utcStartDate = new Date(startDate || endDate);
+    const localStartDateStartOfDay = getLocalStartOfTheDay(startDate);
     // get data for day before and day after
-    const utcEndDate = new Date(endDate);
+    const localEndDateEndOfDay = getLocalEndOfTheDay(endDate);
+
+    const utcStartDateStartOfDay = getUtcStartOfTheDay(
+      localStartDateStartOfDay,
+    );
+    const utcEndDateEndOfDay = getUtcEndOfTheDay(localEndDateEndOfDay);
 
     // Retrieve documents from the day_bgs collection with timestamps between the start and end of the day in UTC time
     const snapshot = await firestore()
       .collection('day_bgs')
-      .where('timestamp', '>=', utcStartDate.setHours(0, 0, 0, 0))
-      .where('timestamp', '<=', utcEndDate.setHours(23, 59, 59, 999))
+      .where('timestamp', '>=', utcStartDateStartOfDay.getTime())
+      .where('timestamp', '<=', utcEndDateEndOfDay.getTime())
       .get();
 
     const dayBgs = snapshot.docs.map(doc => doc.data());
     const bgParsedData = dayBgs.reduce<BgSample[]>((acc, dayBg) => {
       return [...acc, ...JSON.parse(dayBg.data)];
     }, []);
+    console.log({dayBgs});
 
     const localDateBgs = bgParsedData.filter((bg: BgSample) => {
       const bgDate = new Date(bg.date);
       if (
-        bgDate.getTime() < endDate.getTime() &&
-        // @ts-ignore
-        bgDate.getTime() > startDate.getTime()
+        bgDate.getTime() <= localEndDateEndOfDay.getTime() &&
+        bgDate.getTime() >= localStartDateStartOfDay.getTime()
       ) {
         return true;
       }
-      // return bgDate.getDate() === endDate.getDate();
     });
     return localDateBgs;
   }
@@ -99,9 +107,7 @@ export class FirebaseService {
   }
 
   // Define a function that returns a list of food items, and write in ts that it returns a list of food items
-  async getFoodItems(
-    date: Date,
-  ): Promise<FirebaseFirestoreTypes.DocumentData[]> {
+  async getFoodItems(date: Date): Promise<FoodItemDTO[]> {
     const dayBefore = new Date(date);
     dayBefore.setDate(dayBefore.getDate());
     const dayAfter = new Date(date);
@@ -115,7 +121,7 @@ export class FirebaseService {
     return foodItems;
   }
 
-  async getFoodItemBgData(foodItem: FoodItemDTO) {
+  async getFoodItemBgData(foodItem: FoodItemDTO): Promise<BgSample[]> {
     console.log('getFoodItemBgData', {foodItem});
     // get the bg data and pull 12 hours of bg data before the food item timestamp
     const startDate = new Date(foodItem.timestamp);

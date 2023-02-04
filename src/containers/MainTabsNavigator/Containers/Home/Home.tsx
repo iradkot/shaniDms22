@@ -10,15 +10,29 @@ import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/compon
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import BGValueRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestBgValueRow';
 import BgGraph from 'app/components/CgmGraph/CgmGraph';
+import {cloneDeep} from 'lodash';
 
 const HomeContainer = styled.View`
   flex: 1;
   background-color: #fff;
 `;
 
-const sortFunction = (a: BgSample, b: BgSample) => {
-  return b.date - a.date;
-};
+/**
+ * This is a curried function that returns a function that sorts an array of BgSample objects
+ * @param ascending
+ * @returns {(a: BgSample, b: BgSample) => number}
+ * @example
+ * const sortedBgData = bgData.sort(sortFunction(false));
+ **/
+const sortFunction =
+  (ascending = false) =>
+  (a: BgSample, b: BgSample) => {
+    if (ascending) {
+      return a.date - b.date;
+    } else {
+      return b.date - a.date;
+    }
+  };
 
 // create dummy home component with typescript
 const Home: React.FC = () => {
@@ -39,7 +53,7 @@ const Home: React.FC = () => {
     setIsLoading(true);
     const fsManager = new FirebaseService();
     const bgData = await fsManager.getBgDataByDateFS(date ?? new Date());
-    const sortedBgData = bgData.sort(sortFunction);
+    const sortedBgData = bgData.sort(sortFunction(false));
     if (!date || isShowingToday) {
       setTodayBgData(sortedBgData);
       if (isShowingToday) {
@@ -58,6 +72,7 @@ const Home: React.FC = () => {
   useEffect(() => {
     setDebouncedCurrentDate(currentDate);
     setIsLoading(currentDate !== debouncedCurrentDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate]);
 
   useEffect(() => {
@@ -103,7 +118,11 @@ const Home: React.FC = () => {
         <StatsRow bgData={bgData} />
       </Collapsable>
       <Collapsable title={'chart'}>
-        <BgGraph data={bgData} width={400} height={200} />
+        <BgGraph
+          data={cloneDeep(bgData).sort(sortFunction(true))}
+          width={400}
+          height={200}
+        />
       </Collapsable>
       {/*{isShowingToday && (*/}
       {/*  <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />*/}

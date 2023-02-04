@@ -2,11 +2,7 @@ import React from 'react';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import Home from './Containers/Home/Home';
 import NotificationsManager from './Containers/NotificationsManager/NotificationsManager';
-import {
-  Food_Tracking_TAB_SCREEN,
-  HOME_TAB_SCREEN,
-  NOTIFICATION_TAB_SCREEN,
-} from 'app/constants/SCREEN_NAMES';
+import * as SCREEN_NAMES from 'app/constants/SCREEN_NAMES';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import ADIcon from 'react-native-vector-icons/AntDesign';
 import {theme} from 'app/style/theme';
@@ -17,7 +13,7 @@ const Tab = createBottomTabNavigator();
 const MainTabsNavigator: React.FC = () => {
   return (
     <Tab.Navigator
-      initialRouteName={Food_Tracking_TAB_SCREEN}
+      initialRouteName={SCREEN_NAMES.HOME_TAB_SCREEN}
       sceneContainerStyle={{
         height: 30,
       }}
@@ -33,7 +29,7 @@ const MainTabsNavigator: React.FC = () => {
         tabBarActiveTintColor: theme.accentColor,
       }}>
       <Tab.Screen
-        name={HOME_TAB_SCREEN}
+        name={SCREEN_NAMES.HOME_TAB_SCREEN}
         component={Home}
         options={{
           headerShown: false,
@@ -44,7 +40,7 @@ const MainTabsNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen
-        name={Food_Tracking_TAB_SCREEN}
+        name={SCREEN_NAMES.Food_Tracking_TAB_SCREEN}
         component={FoodTracker}
         options={{
           tabBarIcon: ({color, size}) => (
@@ -54,7 +50,7 @@ const MainTabsNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen
-        name={NOTIFICATION_TAB_SCREEN}
+        name={SCREEN_NAMES.NOTIFICATION_TAB_SCREEN}
         component={NotificationsManager}
         options={{
           tabBarIcon: ({color, size}) => (
