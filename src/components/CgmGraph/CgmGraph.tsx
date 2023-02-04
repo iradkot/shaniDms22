@@ -1,10 +1,13 @@
-import Svg, {G, Line, Path, Text} from 'react-native-svg';
-import React, {useEffect, useRef, useState} from 'react';
+import Svg, {G} from 'react-native-svg';
+import React, {useRef} from 'react';
 import {View} from 'react-native';
 import * as d3 from 'd3';
 import styled from 'styled-components';
 import {BgSample} from 'app/types/day_bgs';
-import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
+import XGridAndAxis from 'app/components/CgmGraph/components/XGridAndAxis';
+import YGridAndAxis from 'app/components/CgmGraph/components/YGridAndAxis';
+import {xAccessor} from 'app/components/CgmGraph/utils';
+import CGMSamplesRenderer from 'app/components/CgmGraph/components/CGMSamplesRenderer';
 
 interface Props {
   data: BgSample[];
@@ -28,119 +31,37 @@ const CGMGraph: React.FC<Props> = ({data, width, height}) => {
   // Reference to container view for D3 calculations
   const containerRef = useRef<View>(null);
 
-  // Accessors for D3 calculations
-  const xAccessor = (d: BgSample) => new Date(d.date);
-  const yAccessor = (d: BgSample) => d.sgv;
-  const [path, setPath] = useState<string>('');
-
   // Maximum value for y-axis
   const highestBgThreshold = 300;
 
-  // D3 calculations for graph rendering
-  useEffect(() => {
-    // If the container is not available or there's no data, do nothing
-    if (!containerRef.current || !data.length) {
-      return;
-    }
+  // Calculate x-axis scale
+  // Example:
+  //   domain: [0, 100]
+  //   range: [0, 5]
+  //   xScale(0) = 0
+  //   xScale(50) = 2.5
+  // Just in this case we use scaleTime instead of scaleLinear
+  // because we're dealing with dates
+  // Example:
+  //   domain: [new Date(2020, 1, 1), new Date(2020, 1, 2)]
+  //   range: [0, 5]
+  //   xScale(new Date(2020, 1, 1, 12, 0, 0)) = 2.5
+  //   xScale(new Date(2020, 1, 1, 18, 0, 0)) = 3.75
+  const xScale = d3
+    .scaleTime()
+    // @ts-ignore
+    .domain(d3.extent(data, xAccessor))
+    .range([0, graphWidth]);
 
-    // Calculate x-axis scale
-    const xScale = d3
-      .scaleTime()
-      // @ts-ignore
-      .domain(d3.extent(data, xAccessor))
-      .range([0, graphWidth]);
-
-    // Calculate y-axis scale
-    const yScale = d3
-      .scaleLinear()
-      .domain([0, highestBgThreshold])
-      .range([graphHeight, 0]);
-
-    // Calculate path for graph line
-    const line = d3
-      .line<BgSample>()
-      .x(d => xScale(xAccessor(d)))
-      .y(d => yScale(yAccessor(d)));
-
-    const pathData = line(data);
-    pathData && setPath(pathData);
-
-    // Return cleanup function (not needed in this case)
-    return () => {};
-  }, [containerRef, data, graphWidth, graphHeight]);
+  // Calculate y-axis scale
+  const yScale = d3
+    .scaleLinear()
+    .domain([0, highestBgThreshold])
+    .range([graphHeight, 0]);
 
   // Start and end dates of data
   const dataStartDateTime = data[0].date;
   const dataEndDateTime = data[data.length - 1].date;
-
-  // X-axis component
-  const XAxis = () => {
-    const ticksAmount = 6;
-    const ticks = Array.from({length: ticksAmount}, (_, i) => i);
-    return (
-      <>
-        {ticks.map((tick, index) => (
-          <G>
-            <Line
-              key={index}
-              x1={(graphWidth / ticksAmount) * index}
-              y1={0}
-              x2={(graphWidth / ticksAmount) * index}
-              y2={graphHeight}
-              stroke="black"
-              opacity={0.2}
-              strokeWidth={1}
-            />
-            <Text
-              x={(graphWidth / ticksAmount) * index}
-              y={graphHeight}
-              fontSize={10}
-              fill="black"
-              opacity={0.5}
-              textAnchor="middle">
-              {formatDateToLocaleTimeString(
-                dataStartDateTime +
-                  (dataEndDateTime - dataStartDateTime) * (index / ticksAmount),
-              )}
-            </Text>
-          </G>
-        ))}
-      </>
-    );
-  };
-  const YAxis = () => {
-    const ticksAmount = 6;
-    const ticks = Array.from({length: ticksAmount}, (_, i) => i);
-    return (
-      <>
-        {ticks.map((tick, index) => (
-          <G>
-            <Line
-              key={index}
-              x1={0}
-              y1={(graphHeight / ticksAmount) * index}
-              x2={graphWidth}
-              y2={(graphHeight / ticksAmount) * index}
-              stroke="black"
-              opacity={0.2}
-              strokeWidth={1}
-            />
-            <Text
-              x={0}
-              y={(graphHeight / ticksAmount) * index}
-              fontSize={10}
-              fill="black"
-              opacity={0.5}
-              textAnchor="middle">
-              {Math.round(
-                highestBgThreshold - (highestBgThreshold / ticksAmount) * index,
-              )}
-            </Text>
-          </G>
-        ))}
-      </>
-    );
-  };
 
   return (
     <View ref={containerRef}>
@@ -151,9 +72,26 @@ const CGMGraph: React.FC<Props> = ({data, width, height}) => {
         y={0}
         viewBox={`0 0 ${width} ${height}`}>
         <G x={graphMargin} y={graphMargin}>
-          <Path d={path} stroke="black" strokeWidth={1} fill="none" />
-          <XAxis />
-          <YAxis />
+          <CGMSamplesRenderer
+            containerRef={containerRef}
+            data={data}
+            graphWidth={graphWidth}
+            graphHeight={graphHeight}
+            xScale={xScale}
+            yScale={yScale}
+          />
+          <XGridAndAxis
+            graphWidth={graphWidth}
+            graphHeight={graphHeight}
+            dataEndDateTime={dataEndDateTime}
+            dataStartDateTime={dataStartDateTime}
+            xScale={xScale}
+          />
+          <YGridAndAxis
+            graphWidth={graphWidth}
+            graphHeight={graphHeight}
+            highestBgThreshold={highestBgThreshold}
+          />
         </G>
       </StyledSvg>
     </View>
