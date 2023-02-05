@@ -10,6 +10,7 @@ const {width, height} = Dimensions.get('window');
 
 export const theme: Theme = {
   screenHeight: height,
+  screenWidth: width,
   tabBarHeight: 50,
   dark: false,
   inRangeColor: colors.green.main,

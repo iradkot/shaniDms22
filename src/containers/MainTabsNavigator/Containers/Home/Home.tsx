@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import styled from 'styled-components/native';
-import {FirebaseService} from 'app/services/FirebaseService';
+import {FirebaseService} from 'app/services/firebase/FirebaseService';
 import {BgSample} from 'app/types/day_bgs';
 import CgmCardListDisplay from 'app/components/CgmCardListDisplay/CgmCardListDisplay';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
@@ -11,10 +11,12 @@ import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import BGValueRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestBgValueRow';
 import BgGraph from 'app/components/CgmGraph/CgmGraph';
 import {cloneDeep} from 'lodash';
+import {Theme} from 'app/types/theme';
+import {Dimensions} from 'react-native';
 
-const HomeContainer = styled.View`
+const HomeContainer = styled.View<{theme: Theme}>`
   flex: 1;
-  background-color: #fff;
+  background-color: ${({theme}) => theme.backgroundColor};
 `;
 
 /**
@@ -120,7 +122,7 @@ const Home: React.FC = () => {
       <Collapsable title={'chart'}>
         <BgGraph
           data={cloneDeep(bgData).sort(sortFunction(true))}
-          width={400}
+          width={Dimensions.get('window').width}
           height={200}
         />
       </Collapsable>

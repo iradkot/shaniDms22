@@ -14,6 +14,7 @@ export interface DetermineBgColorByGlucoseValue {
 export type Theme = {
   tabBarHeight: number;
   screenHeight: number;
+  screenWidth: number;
   dark: boolean;
   inRangeColor: string;
   belowRangeColor: string;

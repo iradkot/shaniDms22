@@ -2,31 +2,26 @@ import {G, Line, Text} from 'react-native-svg';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import React from 'react';
 import subMinutes from 'date-fns/subMinutes';
+import useIsLandscape from 'app/hooks/useIsLandscape';
 
 interface Props {
-  graphWidth: number;
   graphHeight: number;
-  dataStartDateTime: number;
-  dataEndDateTime: number;
   xScale: any;
 }
 
-const XGridAndAxis = ({
-  graphWidth,
-  graphHeight,
-  dataStartDateTime,
-  dataEndDateTime,
-  xScale,
-}: Props) => {
-  const ticksAmount = 4;
+const XGridAndAxis = ({graphHeight, xScale}: Props) => {
+  const isLandscape = useIsLandscape();
+
+  const ticksAmount = isLandscape
+    ? (xScale.range()[1] - xScale.range()[0]) / 100
+    : 5;
   const ticks = Array.from({length: ticksAmount}, (_, i) => i);
-  console.log('firstScale', xScale(dataStartDateTime));
-  console.log('lastScale', xScale(dataEndDateTime));
-  console.log('0', xScale(0));
   return (
     <>
       {ticks.map((tick, index) => {
-        const tickX = (graphWidth / ticksAmount) * index;
+        const tickX =
+          xScale.range()[0] +
+          ((xScale.range()[1] - xScale.range()[0]) / (ticksAmount - 1)) * tick;
         const dateTick = xScale.invert(tickX);
         const roundHourOffset = new Date(dateTick).getMinutes() % 30;
         const roundHourDate = new Date(subMinutes(dateTick, roundHourOffset));

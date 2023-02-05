@@ -61,52 +61,52 @@ const Collapsable: React.FC<CollapsableProps> = ({
   children,
   initialIsCollapsed = true,
 }) => {
-  const [collapsed, setCollapsed] = useState(initialIsCollapsed);
+  const [isCollapsed, setIsCollapsed] = useState(initialIsCollapsed);
   const contentHeight = useRef(new Animated.Value(0)).current;
   const overlayOpacity = useRef(new Animated.Value(1)).current;
   const arrowRotation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (collapsed) {
+    if (isCollapsed) {
       contentHeight.setValue(0);
     } else {
       contentHeight.setValue(200);
     }
     // eslint-disable-next-line
-  }, [collapsed]);
+  }, [isCollapsed]);
 
   useEffect(() => {
     LayoutAnimation.configureNext({
-      duration: collapsed ? closeAnimationDuration : openAnimationDuration,
+      duration: isCollapsed ? closeAnimationDuration : openAnimationDuration,
       update: {
         type: LayoutAnimation.Types.easeOut,
       },
     });
-  }, [collapsed]);
+  }, [isCollapsed]);
 
   useEffect(() => {
     Animated.timing(arrowRotation, {
-      toValue: collapsed ? 1 : 0,
-      duration: collapsed ? closeAnimationDuration : openAnimationDuration,
+      toValue: isCollapsed ? 1 : 0,
+      duration: isCollapsed ? closeAnimationDuration : openAnimationDuration,
       useNativeDriver: true,
       easing: Easing.out(Easing.ease),
     }).start();
-  }, [collapsed, arrowRotation]);
+  }, [isCollapsed, arrowRotation]);
 
   useEffect(() => {
     Animated.timing(overlayOpacity, {
-      toValue: collapsed ? 1 : 0,
-      duration: collapsed ? closeAnimationDuration : openAnimationDuration,
+      toValue: isCollapsed ? 1 : 0,
+      duration: isCollapsed ? closeAnimationDuration : openAnimationDuration,
       useNativeDriver: true,
       easing: Easing.out(Easing.ease),
     }).start();
-  }, [collapsed, overlayOpacity]);
+  }, [isCollapsed, overlayOpacity]);
 
   return (
     <CollapsableContainer>
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={() => setCollapsed(prevCollapsed => !prevCollapsed)}>
+        onPress={() => setIsCollapsed(prevCollapsed => !prevCollapsed)}>
         <TitleContainer>
           <TitleText>{title}</TitleText>
           <IconContainer>
@@ -126,13 +126,14 @@ const Collapsable: React.FC<CollapsableProps> = ({
           </IconContainer>
         </TitleContainer>
       </TouchableOpacity>
-      {!collapsed && (
-        <ContentContainer style={{height: contentHeight}}>
+      {!isCollapsed && (
+        <ContentContainer style={{height: contentHeight}} pointerEvents="auto">
           {children}
           <ContentOverlay
             style={{
               opacity: overlayOpacity,
             }}
+            pointerEvents={isCollapsed ? 'auto' : 'none'}
           />
         </ContentContainer>
       )}
