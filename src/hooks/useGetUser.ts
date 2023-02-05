@@ -1,4 +1,4 @@
-import {FirebaseService} from 'app/services/FirebaseService';
+import {FirebaseService} from 'app/services/firebase/FirebaseService';
 import {useEffect, useState} from 'react';
 
 export const useGetUser = () => {
