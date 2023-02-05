@@ -32,7 +32,7 @@ const XGridAndAxis = ({
         const roundHourDate = new Date(subMinutes(dateTick, roundHourOffset));
         const roundTickX = xScale(roundHourDate);
         return (
-          <G>
+          <G key={index}>
             <Line
               key={index}
               x1={roundTickX}

@@ -16,7 +16,7 @@ const YGridAndAxis = ({
   return (
     <>
       {ticks.map((tick, index) => (
-        <G>
+        <G key={index}>
           <Line
             key={index}
             x1={0}
