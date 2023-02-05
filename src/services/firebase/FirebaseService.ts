@@ -1,8 +1,10 @@
-import firestore from '@react-native-firebase/firestore';
+import firestore, {
+  FirebaseFirestoreTypes,
+} from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
-import {BgSample} from '../types/day_bgs';
+import {BgSample} from 'src/types/day_bgs';
 import messaging from '@react-native-firebase/messaging';
-import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
+import auth from '@react-native-firebase/auth';
 import {FoodItemDTO} from 'app/types/foodItems';
 import {
   getLocalEndOfTheDay,
@@ -10,13 +12,25 @@ import {
   getUtcEndOfTheDay,
   getUtcStartOfTheDay,
 } from 'app/utils/datetime.utils';
+import setDate from 'date-fns/setDate';
+import subMilliseconds from 'date-fns/subMilliseconds';
+import {AuthService} from './services/AuthService';
 
 // FirestoreManager class is responsible for all the interactions with the FirestoreManager database
 export class FirebaseService {
+  private authService: AuthService;
+
+  constructor() {
+    // inject the firebase service
+    // this is the firebase service
+    this.authService = new AuthService();
+  }
+
   async getBgDataByDateFS(endDate: Date, startDate?: number | Date) {
     if (!startDate) {
-      startDate = new Date().setDate(endDate.getDate());
-      // localStartDate is the user local date in utc time
+      // set utc start date to the local start of the endDate day
+      const localStartDate = setDate(endDate, endDate.getDate());
+      startDate = subMilliseconds(localStartDate, 1);
     }
     const localStartDateStartOfDay = getLocalStartOfTheDay(startDate);
     // get data for day before and day after
@@ -53,7 +67,7 @@ export class FirebaseService {
   }
 
   async getCurrentUserFSData() {
-    const firebaseUser = await this.getCurrentUser();
+    const firebaseUser = await this.authService.getCurrentUser();
     const userId = firebaseUser?.uid;
     const user = await firestore().collection('users').doc(userId).get();
     if (user.exists) {
@@ -83,11 +97,6 @@ export class FirebaseService {
     });
   }
 
-  getCurrentUser: () => Promise<FirebaseAuthTypes.User | null> = async () => {
-    const user = await auth().currentUser;
-    return user;
-  };
-
   // make a private js function that returns an image from the google storage bucket
   // It should get an id and return the image from google cloud storage
 
@@ -107,7 +116,10 @@ export class FirebaseService {
   }
 
   // Define a function that returns a list of food items, and write in ts that it returns a list of food items
-  async getFoodItems(date: Date): Promise<FoodItemDTO[]> {
+  async getFoodItems(
+    date: Date,
+  ): Promise<FirebaseFirestoreTypes.DocumentData[]> {
+    // FoodItemDTO[]
     const dayBefore = new Date(date);
     dayBefore.setDate(dayBefore.getDate());
     const dayAfter = new Date(date);
@@ -122,7 +134,6 @@ export class FirebaseService {
   }
 
   async getFoodItemBgData(foodItem: FoodItemDTO): Promise<BgSample[]> {
-    console.log('getFoodItemBgData', {foodItem});
     // get the bg data and pull 12 hours of bg data before the food item timestamp
     const startDate = new Date(foodItem.timestamp);
     startDate.setHours(startDate.getHours() - 4);
