@@ -1,49 +1,47 @@
-import React, {useEffect, useState} from 'react';
+import React from 'react';
 import * as d3 from 'd3';
 import {BgSample} from 'app/types/day_bgs';
-import {Path} from 'react-native-svg';
+import {Circle, G} from 'react-native-svg';
 import {xAccessor, yAccessor} from 'app/components/CgmGraph/utils';
-import {View} from 'react-native';
+import {cgmRange} from 'app/constants/PLAN_CONFIG';
+import {theme} from 'app/style/theme';
 
 interface CGMComponentProps {
-  containerRef: React.RefObject<View>;
   data: BgSample[];
-  graphWidth: number;
-  graphHeight: number;
   xScale: d3.ScaleTime<number, number>;
   yScale: d3.ScaleLinear<number, number>;
 }
 
-const CGMSamplesRenderer = ({
-  containerRef,
-  data,
-  graphWidth,
-  graphHeight,
-  xScale,
-  yScale,
-}: CGMComponentProps) => {
-  const [path, setPath] = useState<string>('');
-
-  useEffect(() => {
-    // If the container is not available or there's no data, do nothing
-    if (!containerRef.current || !data.length) {
-      return;
-    }
-
-    // Calculate path for graph line
-    const line = d3
-      .line<BgSample>()
-      .x(d => xScale(xAccessor(d)))
-      .y(d => yScale(yAccessor(d)));
-
-    const pathData = line(data);
-    pathData && setPath(pathData);
-
-    // Return cleanup function (not needed in this case)
-    return () => {};
-  }, [containerRef, data, graphWidth, graphHeight, xScale, yScale]);
-
-  return <Path d={path} stroke="black" strokeWidth={1} fill="none" />;
+const CGMSamplesRenderer = ({data, xScale, yScale}: CGMComponentProps) => {
+  return data.length ? (
+    <>
+      {data.map(d => {
+        const x = xScale(xAccessor(d));
+        const y = yScale(yAccessor(d));
+        const radius = 2;
+        const color =
+          yAccessor(d) < cgmRange.TARGET.min
+            ? theme.belowRangeColor
+            : yAccessor(d) > cgmRange.TARGET.max
+            ? theme.aboveRangeColor
+            : theme.inRangeColor;
+        return (
+          <G key={d.dateString}>
+            <Circle
+              cx={x}
+              cy={y}
+              r={radius}
+              stroke={color}
+              strokeWidth={1}
+              fill={color}
+            />
+          </G>
+        );
+      })}
+    </>
+  ) : (
+    <></>
+  );
 };
 
 export default CGMSamplesRenderer;

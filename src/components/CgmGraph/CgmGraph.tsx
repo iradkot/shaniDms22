@@ -59,12 +59,17 @@ const CGMGraph: React.FC<Props> = ({data, width, height}) => {
     .domain([0, highestBgThreshold])
     .range([graphHeight, 0]);
 
-  // Start and end dates of data
-  const dataStartDateTime = data[0].date;
-  const dataEndDateTime = data[data.length - 1].date;
+  if (!data?.length) {
+    return null;
+  }
 
   return (
-    <View ref={containerRef}>
+    <View
+      ref={containerRef}
+      style={{
+        width,
+        height,
+      }}>
       <StyledSvg
         width={width}
         height={height}
@@ -72,21 +77,8 @@ const CGMGraph: React.FC<Props> = ({data, width, height}) => {
         y={0}
         viewBox={`0 0 ${width} ${height}`}>
         <G x={graphMargin} y={graphMargin}>
-          <CGMSamplesRenderer
-            containerRef={containerRef}
-            data={data}
-            graphWidth={graphWidth}
-            graphHeight={graphHeight}
-            xScale={xScale}
-            yScale={yScale}
-          />
-          <XGridAndAxis
-            graphWidth={graphWidth}
-            graphHeight={graphHeight}
-            dataEndDateTime={dataEndDateTime}
-            dataStartDateTime={dataStartDateTime}
-            xScale={xScale}
-          />
+          <CGMSamplesRenderer data={data} xScale={xScale} yScale={yScale} />
+          <XGridAndAxis graphHeight={graphHeight} xScale={xScale} />
           <YGridAndAxis
             graphWidth={graphWidth}
             graphHeight={graphHeight}
