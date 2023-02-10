@@ -24,6 +24,12 @@ export const formatDateToLocaleDateString = (date: Date | string | number) => {
   return new Date(date).toLocaleDateString();
 };
 
+export const formatDateToDateAndTimeString = (date: Date | string | number) => {
+  return `${formatDateToLocaleDateString(date)} ${formatDateToLocaleTimeString(
+    date,
+  )}`;
+};
+
 // get the local start of the day in utc time
 export const getLocalStartOfTheDay = (date: Date | number) => {
   const startOfTheDay = new Date(date);

@@ -5,6 +5,7 @@ import {colors} from 'app/style/colors';
 import {Theme} from 'app/types/theme';
 import {Dimensions} from 'react-native';
 import {determineBgColorByGlucoseValue} from 'app/utils/styling.utils';
+import {shadowStyles} from 'app/style/styling-utils';
 
 const {width, height} = Dimensions.get('window');
 
@@ -33,5 +34,15 @@ export const theme: Theme = {
   borderRadius: 8,
   get determineBgColorByGlucoseValue() {
     return (bgValue: number) => determineBgColorByGlucoseValue(bgValue, this);
+  },
+
+  get getShadowStyles() {
+    return (elevation: number) => shadowStyles(elevation, this);
+  },
+
+  get shadow() {
+    return {
+      default: this.getShadowStyles(1),
+    };
   },
 };

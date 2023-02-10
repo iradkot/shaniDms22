@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import styled from 'styled-components/native';
 import AntDesign from 'react-native-vector-icons/AntDesign';
+import {useLayout} from '@react-native-community/hooks';
 
 const CollapsableContainer = styled.View`
   width: 100%;
@@ -65,7 +66,11 @@ const Collapsable: React.FC<CollapsableProps> = ({
   const contentHeight = useRef(new Animated.Value(0)).current;
   const overlayOpacity = useRef(new Animated.Value(1)).current;
   const arrowRotation = useRef(new Animated.Value(0)).current;
+  // WIP TO MAKE BETTER ANIMATION WITH LAYOUT PROP
+  // const {onLayout, ...layout} = useLayout();
+  const {onLayout} = useLayout();
 
+  // console.log('layout: ', layout);
   useEffect(() => {
     if (isCollapsed) {
       contentHeight.setValue(0);
@@ -127,7 +132,10 @@ const Collapsable: React.FC<CollapsableProps> = ({
         </TitleContainer>
       </TouchableOpacity>
       {!isCollapsed && (
-        <ContentContainer style={{height: contentHeight}} pointerEvents="auto">
+        <ContentContainer
+          // style={{height: contentHeight}}
+          pointerEvents="auto"
+          onLayout={onLayout}>
           {children}
           <ContentOverlay
             style={{

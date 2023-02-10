@@ -1,11 +1,9 @@
-import firestore, {
-  FirebaseFirestoreTypes,
-} from '@react-native-firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import {BgSample} from 'src/types/day_bgs';
 import messaging from '@react-native-firebase/messaging';
 import auth from '@react-native-firebase/auth';
-import {FoodItemDTO} from 'app/types/foodItems';
+import {FoodItemDTO} from 'app/types/foodItems.types';
 import {
   getLocalEndOfTheDay,
   getLocalStartOfTheDay,
@@ -52,7 +50,6 @@ export class FirebaseService {
     const bgParsedData = dayBgs.reduce<BgSample[]>((acc, dayBg) => {
       return [...acc, ...JSON.parse(dayBg.data)];
     }, []);
-    console.log({dayBgs});
 
     const localDateBgs = bgParsedData.filter((bg: BgSample) => {
       const bgDate = new Date(bg.date);
@@ -116,9 +113,7 @@ export class FirebaseService {
   }
 
   // Define a function that returns a list of food items, and write in ts that it returns a list of food items
-  async getFoodItems(
-    date: Date,
-  ): Promise<FirebaseFirestoreTypes.DocumentData[]> {
+  async getFoodItems(date: Date): Promise<FoodItemDTO[]> {
     // FoodItemDTO[]
     const dayBefore = new Date(date);
     dayBefore.setDate(dayBefore.getDate());
@@ -129,7 +124,7 @@ export class FirebaseService {
     // .where('timestamp', '>=', dayBefore.setHours(0, 0, 0, 0))
     // .where('timestamp', '<=', dayAfter.setHours(0, 0, 0, 0))
 
-    const foodItems = snapshot.docs.map(doc => doc.data());
+    const foodItems = snapshot.docs.map(doc => doc.data() as FoodItemDTO);
     return foodItems;
   }
 

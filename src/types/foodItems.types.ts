@@ -7,3 +7,9 @@ export interface FoodItemDTO {
   score: number;
   timestamp: number; // timestamp in millisecondsFoodItemDTO
 }
+
+export interface formattedItemDTO extends FoodItemDTO {
+  localDateString: string; // formatted date
+  time: string; // formatted
+  bgData: BgSample[];
+}

@@ -1,5 +1,4 @@
 import React from 'react';
-import {View, Image, Text} from 'react-native';
 import styled from 'styled-components/native';
 import {Theme} from 'app/types/theme';
 import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
@@ -11,21 +10,22 @@ interface FoodCardProps {
   name: string;
   notes: string;
   bgData: BgSample[];
-  date: string;
+  date: string; // Date is in string format of 'MM/DD/YYYY'
 }
 
-const FoodCardContainer = styled.TouchableOpacity<{theme: Theme}>`
+const FoodCardContainer = styled.View<{
+  theme: Theme;
+}>`
   width: 100%;
-  min-height: 250px;
   border-radius: 10px;
   background-color: #f9f9f9;
   margin-bottom: 10px;
-  box-shadow: 0px 0px 8px #ccc;
-  elevation: 2;
+  ${({theme}) => theme.shadow.default}
   padding: 10px;
+  flex-direction: column;
 `;
 
-const FoodCardImage = styled.Image`
+const FoodCardImage = styled.ImageBackground`
   width: 100%;
   height: 150px;
   border-top-left-radius: 10px;
@@ -38,6 +38,9 @@ const FoodCardInfoContainer = styled.View`
   background-color: #fff;
   border-bottom-left-radius: 10px;
   border-bottom-right-radius: 10px;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
 `;
 
 const FoodCardName = styled.Text`
@@ -66,20 +69,18 @@ const FoodCard: React.FC<FoodCardProps> = ({
   bgData,
   date,
   notes,
-}) => {
-  return (
-    <FoodCardContainer>
-      <FoodCardImage source={{uri: image}} />
-      <FoodCardInfoContainer>
-        <FoodCardName>{name}</FoodCardName>
-        <FoodCardNotes>{notes}</FoodCardNotes>
-        <FoodCardDate>{date}</FoodCardDate>
-      </FoodCardInfoContainer>
-      <Collapsable title={'Blood Glucose Data'} initialIsCollapsed={false}>
-        <BgGraph data={bgData} width={400} height={200} />
-      </Collapsable>
-    </FoodCardContainer>
-  );
-};
+}) => (
+  <FoodCardContainer>
+    <FoodCardImage source={{uri: image}} />
+    <FoodCardInfoContainer>
+      <FoodCardName>{name}</FoodCardName>
+      <FoodCardNotes>{notes}</FoodCardNotes>
+      <FoodCardDate>{date}</FoodCardDate>
+    </FoodCardInfoContainer>
+    <Collapsable title={'Blood Glucose Data'} initialIsCollapsed={true}>
+      <BgGraph data={bgData} width={400} height={200} />
+    </Collapsable>
+  </FoodCardContainer>
+);
 
 export default FoodCard;

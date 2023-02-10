@@ -35,4 +35,9 @@ export type Theme = {
   textSize: number;
   borderRadius: number;
   determineBgColorByGlucoseValue: (bgValue: number) => string;
+  getShadowStyles: (elevation: number) => string;
+
+  shadow: {
+    default: string;
+  };
 };
