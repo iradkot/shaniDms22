@@ -13,33 +13,45 @@ const YGridAndAxis = ({
 }: Props) => {
   const ticksAmount = 6;
   const ticks = Array.from({length: ticksAmount}, (_, i) => i);
+  const GridLine = ({y}: {y: number}) => (
+    <Line
+      x1={0}
+      y1={y}
+      x2={graphWidth}
+      y2={y}
+      stroke="black"
+      opacity={0.2}
+      strokeWidth={1}
+    />
+  );
+  const GridLabel = ({y, index}: {y: number; index: number}) => (
+    <Text
+      x={0}
+      y={y}
+      fontSize={10}
+      fill="black"
+      opacity={0.5}
+      textAnchor="middle">
+      {Math.round(
+        highestBgThreshold - (highestBgThreshold / ticksAmount) * index,
+      )}
+    </Text>
+  );
+
   return (
     <>
-      {ticks.map((tick, index) => (
-        <G key={index}>
-          <Line
-            key={index}
-            x1={0}
-            y1={(graphHeight / ticksAmount) * index}
-            x2={graphWidth}
-            y2={(graphHeight / ticksAmount) * index}
-            stroke="black"
-            opacity={0.2}
-            strokeWidth={1}
-          />
-          <Text
-            x={0}
-            y={(graphHeight / ticksAmount) * index}
-            fontSize={10}
-            fill="black"
-            opacity={0.5}
-            textAnchor="middle">
-            {Math.round(
-              highestBgThreshold - (highestBgThreshold / ticksAmount) * index,
-            )}
-          </Text>
-        </G>
-      ))}
+      {ticks.map((tick, index) => {
+        // skip the first tick
+        if (index === 0) {
+          return null;
+        }
+        return (
+          <G key={index}>
+            <GridLine y={(graphHeight / ticksAmount) * tick} />
+            <GridLabel y={(graphHeight / ticksAmount) * tick} index={index} />
+          </G>
+        );
+      })}
     </>
   );
 };

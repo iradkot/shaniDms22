@@ -21,7 +21,11 @@ export const formatDateToLocaleTimeString = (date: Date | string | number) => {
 };
 
 export const formatDateToLocaleDateString = (date: Date | string | number) => {
-  return new Date(date).toLocaleDateString();
+  return new Date(date).toLocaleDateString(['he'], {
+    year: '2-digit',
+    month: '2-digit',
+    day: '2-digit',
+  });
 };
 
 export const formatDateToDateAndTimeString = (date: Date | string | number) => {

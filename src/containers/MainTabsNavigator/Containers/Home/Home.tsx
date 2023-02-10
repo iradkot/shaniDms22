@@ -54,7 +54,10 @@ const Home: React.FC = () => {
   const getBgDataByDate = async (date?: Date): Promise<void> => {
     setIsLoading(true);
     const fsManager = new FirebaseService();
-    const bgData = await fsManager.getBgDataByDateFS(date ?? new Date());
+    const bgData = await fsManager.getBgDataByDate({
+      endDate: date ?? new Date(),
+      getWholeDays: true,
+    });
     const sortedBgData = bgData.sort(sortFunction(false));
     if (!date || isShowingToday) {
       setTodayBgData(sortedBgData);

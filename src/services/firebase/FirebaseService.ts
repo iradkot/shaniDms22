@@ -16,51 +16,43 @@ import {AuthService} from './services/AuthService';
 
 // FirestoreManager class is responsible for all the interactions with the FirestoreManager database
 export class FirebaseService {
-  private authService: AuthService;
+  private authService = new AuthService();
 
-  constructor() {
-    // inject the firebase service
-    // this is the firebase service
-    this.authService = new AuthService();
-  }
-
-  async getBgDataByDateFS(endDate: Date, startDate?: number | Date) {
+  async getBgDataByDate({
+    startDate,
+    endDate,
+    getWholeDays = false,
+  }: {
+    startDate?: Date;
+    endDate: Date;
+    getWholeDays?: boolean;
+  }) {
     if (!startDate) {
-      // set utc start date to the local start of the endDate day
-      const localStartDate = setDate(endDate, endDate.getDate());
-      startDate = subMilliseconds(localStartDate, 1);
+      startDate = subMilliseconds(setDate(endDate, endDate.getDate()), 1);
     }
-    const localStartDateStartOfDay = getLocalStartOfTheDay(startDate);
-    // get data for day before and day after
-    const localEndDateEndOfDay = getLocalEndOfTheDay(endDate);
+    console.log({startDate, endDate});
+    let localStart = startDate,
+      localEnd = endDate;
+    if (getWholeDays) {
+      localStart = getLocalStartOfTheDay(startDate);
+      localEnd = getLocalEndOfTheDay(endDate);
+    }
 
-    const utcStartDateStartOfDay = getUtcStartOfTheDay(
-      localStartDateStartOfDay,
-    );
-    const utcEndDateEndOfDay = getUtcEndOfTheDay(localEndDateEndOfDay);
+    const utcStart = getUtcStartOfTheDay(localStart);
+    const utcEnd = getUtcEndOfTheDay(localEnd);
 
-    // Retrieve documents from the day_bgs collection with timestamps between the start and end of the day in UTC time
     const snapshot = await firestore()
       .collection('day_bgs')
-      .where('timestamp', '>=', utcStartDateStartOfDay.getTime())
-      .where('timestamp', '<=', utcEndDateEndOfDay.getTime())
+      .where('timestamp', '>=', utcStart.getTime())
+      .where('timestamp', '<=', utcEnd.getTime())
       .get();
 
-    const dayBgs = snapshot.docs.map(doc => doc.data());
-    const bgParsedData = dayBgs.reduce<BgSample[]>((acc, dayBg) => {
-      return [...acc, ...JSON.parse(dayBg.data)];
-    }, []);
-
-    const localDateBgs = bgParsedData.filter((bg: BgSample) => {
-      const bgDate = new Date(bg.date);
-      if (
-        bgDate.getTime() <= localEndDateEndOfDay.getTime() &&
-        bgDate.getTime() >= localStartDateStartOfDay.getTime()
-      ) {
-        return true;
-      }
+    const bgData = snapshot.docs.map(doc => JSON.parse(doc.data().data));
+    const localData = bgData.flat().filter(bg => {
+      const date = new Date(bg.date);
+      return date >= localStart && date <= localEnd;
     });
-    return localDateBgs;
+    return localData;
   }
 
   async getCurrentUserFSData() {
@@ -133,7 +125,7 @@ export class FirebaseService {
     const startDate = new Date(foodItem.timestamp);
     startDate.setHours(startDate.getHours() - 4);
     const endDate = new Date(foodItem.timestamp);
-    const bgData = await this.getBgDataByDateFS(endDate, startDate);
+    const bgData = await this.getBgDataByDate({startDate, endDate});
     return bgData;
   }
 }

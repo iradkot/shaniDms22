@@ -8,6 +8,7 @@ import XGridAndAxis from 'app/components/CgmGraph/components/XGridAndAxis';
 import YGridAndAxis from 'app/components/CgmGraph/components/YGridAndAxis';
 import {xAccessor} from 'app/components/CgmGraph/utils';
 import CGMSamplesRenderer from 'app/components/CgmGraph/components/CGMSamplesRenderer';
+import GraphDateDisplay from './components/GraphDateDisplay';
 
 interface Props {
   data: BgSample[];
@@ -24,9 +25,12 @@ const StyledSvg = styled(Svg)`
 // This component displays a graph of continuous glucose monitor data using D3.js
 const CGMGraph: React.FC<Props> = ({data, width, height}) => {
   // Graph margins
-  const graphMargin = 28;
-  const graphWidth = width - graphMargin * 2;
-  const graphHeight = height - graphMargin * 2;
+  const topMargin = 20;
+  const bottomMargin = 10;
+  const leftMargin = 30;
+  const rightMargin = 15;
+  const graphWidth = width - leftMargin - rightMargin;
+  const graphHeight = height - topMargin - bottomMargin;
 
   // Reference to container view for D3 calculations
   const containerRef = useRef<View>(null);
@@ -76,7 +80,8 @@ const CGMGraph: React.FC<Props> = ({data, width, height}) => {
         x={0}
         y={0}
         viewBox={`0 0 ${width} ${height}`}>
-        <G x={graphMargin} y={graphMargin}>
+        <G x={leftMargin} y={topMargin}>
+          <GraphDateDisplay xScale={xScale} />
           <CGMSamplesRenderer data={data} xScale={xScale} yScale={yScale} />
           <XGridAndAxis graphHeight={graphHeight} xScale={xScale} />
           <YGridAndAxis

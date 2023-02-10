@@ -16,6 +16,12 @@ const XGridAndAxis = ({graphHeight, xScale}: Props) => {
     ? (xScale.range()[1] - xScale.range()[0]) / 100
     : 5;
   const ticks = Array.from({length: ticksAmount}, (_, i) => i);
+  const startDateTime = xScale.domain()[0];
+  const endDateTime = xScale.domain()[1];
+  console.log('startDateTime', startDateTime);
+  console.log('endDateTime', endDateTime);
+  // const formattedStartDate = formatDateToLocaleDateString(startDateTime);
+  // const formattedEndDate = formatDateToLocaleDateString(endDateTime);
   return (
     <>
       {ticks.map((tick, index) => {
