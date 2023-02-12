@@ -3,7 +3,7 @@
  */
 import {useState} from 'react';
 import firestore from '@react-native-firebase/firestore';
-import {NotificationResponse} from '../types/notifications';
+import {NotificationResponse} from 'src/types/notifications';
 
 export const useUpdateNotification = () => {
   const [isLoading, setIsLoading] = useState(false);

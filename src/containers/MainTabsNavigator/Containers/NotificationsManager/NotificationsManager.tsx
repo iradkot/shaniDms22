@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import {NavigationProp} from '@react-navigation/native';
 import styled from 'styled-components/native';
-import {useGetNotifications} from 'app/hooks/useGetNotifications';
-import {useDeleteNotification} from 'app/hooks/useDeleteNotification';
+import {useGetNotifications} from 'app/hooks/notifications/useGetNotifications';
+import {useDeleteNotification} from 'app/hooks/notifications/useDeleteNotification';
 import {
   ADD_NOTIFICATION_SCREEN,
   EDIT_NOTIFICATION_SCREEN,

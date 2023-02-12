@@ -8,7 +8,7 @@ import React, {FC} from 'react';
 import {NavigationProp, useNavigation} from '@react-navigation/native';
 import {Keyboard} from 'react-native';
 import {NotificationRequest} from 'app/types/notifications';
-import {useAddNotification} from 'app/hooks/useAddNotification';
+import {useAddNotification} from 'app/hooks/notifications/useAddNotification';
 import {
   HOME_TAB_SCREEN,
   NOTIFICATION_TAB_SCREEN,

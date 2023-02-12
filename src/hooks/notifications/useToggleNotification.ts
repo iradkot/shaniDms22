@@ -1,6 +1,6 @@
 import {useState} from 'react';
-import {NotificationResponse} from '../types/notifications';
-import {useUpdateNotification} from './useUpdateNotification';
+import {NotificationResponse} from 'app/types/notifications';
+import {useUpdateNotification} from 'app/hooks/notifications/useUpdateNotification';
 
 export const useToggleNotification = (enabled: boolean) => {
   const [isEnabled, setIsEnabled] = useState(enabled);

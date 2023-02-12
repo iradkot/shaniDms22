@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import firestore from '@react-native-firebase/firestore';
-import {NotificationResponse} from '../types/notifications';
-import {docDTOConvert} from '../types/firestore';
+import {NotificationResponse} from 'app/types/notifications';
+import {docDTOConvert} from 'app/types/firestore';
 
 export const useGetNotifications = () => {
   const [data, setData] = useState<NotificationResponse[]>([]);

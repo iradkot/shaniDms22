@@ -1,20 +1,20 @@
 import React, {FC} from 'react';
-import {ActivityIndicator, Alert, Pressable, View} from 'react-native';
+import {Alert, Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
-import {useToggleNotification} from 'app/hooks/useToggleNotification';
+import {useToggleNotification} from 'app/hooks/notifications/useToggleNotification';
 import {NotificationResponse} from 'app/types/notifications';
 import {formatMinutesToLocaleTimeString} from 'app/utils/datetime.utils';
 import {
-  NotificationEnableSwitch,
+  DeleteButton,
+  DeleteButtonContainer,
+  DeleteButtonText,
   NotificationCardContainer,
-  NotificationTitle,
-  NotificationCardText,
   NotificationCardDetails,
   NotificationCardRow,
+  NotificationCardText,
+  NotificationEnableSwitch,
   NotificationSwitchContainer,
-  DeleteButton,
-  DeleteButtonText,
-  DeleteButtonContainer,
+  NotificationTitle,
 } from './NotificationCard.style';
 import Loader from 'app/components/common-ui/Loader/Loader';
 

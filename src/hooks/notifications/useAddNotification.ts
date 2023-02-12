@@ -4,7 +4,7 @@
 
 import {useCallback} from 'react';
 import firestore from '@react-native-firebase/firestore';
-import {NotificationRequest} from '../types/notifications';
+import {NotificationRequest} from 'src/types/notifications';
 import {useGetUser} from 'app/hooks/useGetUser';
 
 export const useAddNotification = () => {

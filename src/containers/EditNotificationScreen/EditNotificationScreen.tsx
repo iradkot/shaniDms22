@@ -11,7 +11,7 @@ import {
   NotificationRequest,
   NotificationResponse,
 } from 'app/types/notifications';
-import {useUpdateNotification} from 'app/hooks/useUpdateNotification';
+import {useUpdateNotification} from 'app/hooks/notifications/useUpdateNotification';
 import {
   HOME_TAB_SCREEN,
   NOTIFICATION_TAB_SCREEN,
