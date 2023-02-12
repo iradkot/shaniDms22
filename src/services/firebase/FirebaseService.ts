@@ -30,7 +30,6 @@ export class FirebaseService {
     if (!startDate) {
       startDate = subMilliseconds(setDate(endDate, endDate.getDate()), 1);
     }
-    console.log({startDate, endDate});
     let localStart = startDate,
       localEnd = endDate;
     if (getWholeDays) {
