@@ -2,7 +2,6 @@ import {G, Line, Text} from 'react-native-svg';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import React from 'react';
 import subMinutes from 'date-fns/subMinutes';
-import useIsLandscape from 'app/hooks/useIsLandscape';
 
 interface Props {
   graphHeight: number;
@@ -10,16 +9,21 @@ interface Props {
 }
 
 const XGridAndAxis = ({graphHeight, xScale}: Props) => {
-  const isLandscape = useIsLandscape();
-
-  const ticksAmount = isLandscape
-    ? (xScale.range()[1] - xScale.range()[0]) / 100
-    : 5;
+  const getTicksAmount = (duration: number) => {
+    const durationInHours = duration / 1000 / 60 / 60;
+    if (durationInHours < 1) {
+      return 2;
+    } else if (durationInHours < 2) {
+      return 3;
+    } else if (durationInHours < 3) {
+      return 4;
+    } else {
+      return 5;
+    }
+  };
+  const duration = xScale.domain()[1] - xScale.domain()[0];
+  const ticksAmount = getTicksAmount(duration);
   const ticks = Array.from({length: ticksAmount}, (_, i) => i);
-  const startDateTime = xScale.domain()[0];
-  const endDateTime = xScale.domain()[1];
-  console.log('startDateTime', startDateTime);
-  console.log('endDateTime', endDateTime);
   // const formattedStartDate = formatDateToLocaleDateString(startDateTime);
   // const formattedEndDate = formatDateToLocaleDateString(endDateTime);
   return (
