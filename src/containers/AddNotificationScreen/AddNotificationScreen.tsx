@@ -13,7 +13,7 @@ import {
   HOME_TAB_SCREEN,
   NOTIFICATION_TAB_SCREEN,
 } from 'app/constants/SCREEN_NAMES';
-import NotificationForm from 'app/components/NotificationForm/NotificationForm';
+import NotificationForm from 'app/components/forms/NotificationForm/NotificationForm';
 import {
   AddNotificationScreenButton,
   AddNotificationScreenButtonText,

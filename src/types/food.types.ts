@@ -1,6 +1,7 @@
 import {BgSample} from 'app/types/day_bgs';
 
 export interface FoodItemDTO {
+  carbs: number;
   name: string;
   image: string;
   notes: string;

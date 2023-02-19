@@ -7,7 +7,7 @@
 import {FlatList} from 'react-native';
 import React from 'react';
 import FoodCard from 'app/containers/FoodTracker/Components/FoodCard';
-import {formattedItemDTO} from 'app/types/foodItems.types';
+import {formattedItemDTO} from 'app/types/food.types';
 
 interface FoodCardsListProps {
   foodItems: formattedItemDTO[];
@@ -22,11 +22,12 @@ const FoodCardsList: React.FC<FoodCardsListProps> = ({foodItems}) => {
       scrollEnabled={false}
       renderItem={({item}) => (
         <FoodCard
-          image={item.image}
+          imageUri={item.image}
           name={item.name}
-          bgData={item.bgData || []}
+          bgSamples={item.bgData || []}
           date={item.localDateString}
           notes={item.notes}
+          carbsGrams={item.carbs}
         />
       )}
       keyExtractor={item => item.localDateString}

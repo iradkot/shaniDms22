@@ -21,8 +21,10 @@ export const theme: Theme = {
   severeAboveRange: colors.yellow[800],
   backgroundColor: colors.gray[200],
   textColor: colors.black,
+  buttonTextColor: colors.white,
+  buttonBackgroundColor: colors.purple[500],
   accentColor: colors.purple[500],
-  white: '#ffffff',
+  white: colors.white,
   dimensions: {
     width,
     height,

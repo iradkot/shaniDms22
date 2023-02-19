@@ -4,82 +4,117 @@ import {Theme} from 'app/types/theme';
 import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
 import BgGraph from 'app/components/CgmGraph/CgmGraph';
 import {BgSample} from 'app/types/day_bgs';
+import {Text, View, ImageBackground, Dimensions} from 'react-native';
+import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 interface FoodCardProps {
-  image: string;
+  imageUri: string;
   name: string;
   notes: string;
-  bgData: BgSample[];
+  bgSamples: BgSample[];
   date: string; // Date is in string format of 'MM/DD/YYYY'
+  carbsGrams: number;
 }
 
-const FoodCardContainer = styled.View<{
+const {width} = Dimensions.get('window');
+
+const FoodCardContainer = styled(View)<{
   theme: Theme;
 }>`
-  width: 100%;
   border-radius: 10px;
   background-color: #f9f9f9;
-  margin-bottom: 10px;
   ${({theme}) => theme.shadow.default}
-  padding: 10px;
-  flex-direction: column;
 `;
 
-const FoodCardImage = styled.ImageBackground`
-  width: 100%;
-  height: 150px;
+const FoodCardImage = styled(ImageBackground)`
+  height: ${width}px;
   border-top-left-radius: 10px;
   border-top-right-radius: 10px;
 `;
 
-const FoodCardInfoContainer = styled.View`
-  width: 100%;
-  padding: 10px;
+const FoodCardInfoContainer = styled(View)`
+  padding: 20px;
   background-color: #fff;
   border-bottom-left-radius: 10px;
   border-bottom-right-radius: 10px;
   flex: 1;
   flex-direction: column;
-  align-items: flex-start;
+  min-height: 200px;
 `;
 
-const FoodCardName = styled.Text`
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-  text-transform: capitalize;
-  margin-bottom: 5px;
-`;
-
-const FoodCardNotes = styled.Text`
-  font-size: 14px;
-  color: #666;
+const SectionContainer = styled(View)`
+  flex-direction: row;
+  align-items: center;
   margin-bottom: 10px;
 `;
 
-const FoodCardDate = styled.Text`
-  font-size: 14px;
+const SectionIcon = styled(Icon)`
+  margin-right: 10px;
+`;
+
+const SectionTitle = styled(Text)`
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+  text-transform: capitalize;
+`;
+
+const SectionText = styled(Text)`
+  font-size: 16px;
   color: #666;
-  text-align: right;
 `;
 
 const FoodCard: React.FC<FoodCardProps> = ({
-  image,
+  imageUri,
   name,
-  bgData,
+  bgSamples,
   date,
   notes,
+  carbsGrams,
 }) => (
   <FoodCardContainer>
-    <FoodCardImage source={{uri: image}} />
+    <FoodCardImage source={{uri: imageUri}} />
+    <TimeInRangeRow bgData={bgSamples} />
+
     <FoodCardInfoContainer>
-      <FoodCardName>{name}</FoodCardName>
-      <FoodCardNotes>{notes}</FoodCardNotes>
-      <FoodCardDate>{date}</FoodCardDate>
+      <SectionContainer>
+        <SectionIcon name="restaurant-outline" size={24} color="#333" />
+        <View>
+          <SectionTitle>Name</SectionTitle>
+          <SectionText>{name}</SectionText>
+        </View>
+      </SectionContainer>
+      <SectionContainer>
+        <SectionIcon name="clipboard" size={24} color="#333" />
+        <View>
+          <SectionTitle>Notes</SectionTitle>
+          <SectionText>{notes}</SectionText>
+        </View>
+      </SectionContainer>
+      <SectionContainer>
+        <SectionIcon name="calendar" size={24} color="#333" />
+        <View>
+          <SectionTitle>Date</SectionTitle>
+          <SectionText>{date}</SectionText>
+        </View>
+      </SectionContainer>
+      <SectionContainer>
+        <SectionIcon name="nutrition" size={24} color="#333" />
+        <View>
+          <SectionTitle>Carbs</SectionTitle>
+          <SectionText>Carbs: {carbsGrams} </SectionText>
+        </View>
+      </SectionContainer>
+      <Collapsable title={'Blood Glucose Data'}>
+        <BgGraph
+          bgSamples={bgSamples}
+          width={width}
+          height={width}
+          foodItems={[{name, carbs: carbsGrams}]}
+        />
+      </Collapsable>
     </FoodCardInfoContainer>
-    <Collapsable title={'Blood Glucose Data'} initialIsCollapsed={true}>
-      <BgGraph data={bgData} width={400} height={200} />
-    </Collapsable>
   </FoodCardContainer>
 );
 

@@ -9,9 +9,12 @@ import YGridAndAxis from 'app/components/CgmGraph/components/YGridAndAxis';
 import {xAccessor} from 'app/components/CgmGraph/utils';
 import CGMSamplesRenderer from 'app/components/CgmGraph/components/CGMSamplesRenderer';
 import GraphDateDisplay from './components/GraphDateDisplay';
+import {formattedItemDTO} from 'app/types/food.types';
+import FoodItemsRenderer from 'app/components/CgmGraph/components/FoodItemsRenderer';
 
 interface Props {
-  data: BgSample[];
+  bgSamples: BgSample[];
+  foodItems: formattedItemDTO[] | null;
   width: number;
   height: number;
 }
@@ -23,7 +26,7 @@ const StyledSvg = styled(Svg)`
 `;
 
 // This component displays a graph of continuous glucose monitor data using D3.js
-const CGMGraph: React.FC<Props> = ({data, width, height}) => {
+const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
   // Graph margins
   const topMargin = 20;
   const bottomMargin = 10;
@@ -54,7 +57,7 @@ const CGMGraph: React.FC<Props> = ({data, width, height}) => {
   const xScale = d3
     .scaleTime()
     // @ts-ignore
-    .domain(d3.extent(data, xAccessor))
+    .domain(d3.extent(bgSamples, xAccessor))
     .range([0, graphWidth]);
 
   // Calculate y-axis scale
@@ -63,7 +66,7 @@ const CGMGraph: React.FC<Props> = ({data, width, height}) => {
     .domain([0, highestBgThreshold])
     .range([graphHeight, 0]);
 
-  if (!data?.length) {
+  if (!bgSamples?.length) {
     return null;
   }
 
@@ -81,8 +84,17 @@ const CGMGraph: React.FC<Props> = ({data, width, height}) => {
         y={0}
         viewBox={`0 0 ${width} ${height}`}>
         <G x={leftMargin} y={topMargin}>
+          <FoodItemsRenderer
+            foodItems={foodItems}
+            xScale={xScale}
+            yScale={yScale}
+          />
           <GraphDateDisplay xScale={xScale} />
-          <CGMSamplesRenderer data={data} xScale={xScale} yScale={yScale} />
+          <CGMSamplesRenderer
+            data={bgSamples}
+            xScale={xScale}
+            yScale={yScale}
+          />
           <XGridAndAxis graphHeight={graphHeight} xScale={xScale} />
           <YGridAndAxis
             graphWidth={graphWidth}

@@ -1,47 +1,24 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import {Controller, useForm} from 'react-hook-form';
-import * as S from './NotificationForm.styles';
+import * as S from 'app/components/forms/NotificationForm/NotificationForm.styles';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 
 import {
   NotificationRequest,
   TrendDirectionString,
 } from 'app/types/notifications';
-import React, {useEffect, useState, MutableRefObject} from 'react';
+import React, {MutableRefObject, useEffect, useState} from 'react';
 import {
   formatMinutesToLocaleTimeString,
   getTimeInMinutes,
 } from 'app/utils/datetime.utils';
-import {TextInput, KeyboardType, ReturnKeyType} from 'react-native';
+import {KeyboardType, ReturnKeyType, TextInput} from 'react-native';
+import {rules} from 'app/components/forms/rules/NotificationForm.rules';
 
 type Props = {
   notification: NotificationRequest | null;
   onSubmit: (notification: NotificationRequest) => Promise<void>;
   submitHandlerRef: MutableRefObject<null | (() => void)>;
-};
-
-const rules = {
-  range: {
-    required: true,
-    min: 1,
-    max: 1000,
-    pattern: /^\d+$/,
-  },
-  name: {
-    required: true,
-    minLength: 3,
-    maxLength: 50,
-  },
-  timeInMinutes: {
-    required: true,
-    min: 0,
-    max: 1440,
-    // pattern to allow only numbers
-    pattern: /^\d+$/,
-  },
-  trend: {
-    required: true,
-  },
 };
 
 const NotificationForm = ({
@@ -82,6 +59,7 @@ const NotificationForm = ({
   const nameRef = React.useRef<TextInput>(null);
   const range_start_ref = React.useRef<TextInput>(null);
   const range_end_ref = React.useRef<TextInput>(null);
+
   interface InputControllerProps {
     ref: React.RefObject<TextInput>;
     name: 'name' | 'range_start' | 'range_end';
@@ -91,6 +69,7 @@ const NotificationForm = ({
     onSubmitEditing: () => void;
     rules: any;
   }
+
   const InputComponents: InputControllerProps[] = [
     {
       ref: nameRef,

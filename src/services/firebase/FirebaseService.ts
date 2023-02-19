@@ -3,7 +3,7 @@ import storage from '@react-native-firebase/storage';
 import {BgSample} from 'src/types/day_bgs';
 import messaging from '@react-native-firebase/messaging';
 import auth from '@react-native-firebase/auth';
-import {FoodItemDTO} from 'app/types/foodItems.types';
+import {FoodItemDTO} from 'app/types/food.types';
 import {
   getLocalEndOfTheDay,
   getLocalStartOfTheDay,
@@ -112,8 +112,6 @@ export class FirebaseService {
     dayAfter.setDate(dayAfter.getDate() + 2);
 
     const snapshot = await firestore().collection('food_items').get();
-    // .where('timestamp', '>=', dayBefore.setHours(0, 0, 0, 0))
-    // .where('timestamp', '<=', dayAfter.setHours(0, 0, 0, 0))
 
     const foodItems = snapshot.docs.map(doc => doc.data() as FoodItemDTO);
     return foodItems;
@@ -122,8 +120,9 @@ export class FirebaseService {
   async getFoodItemBgData(foodItem: FoodItemDTO): Promise<BgSample[]> {
     // get the bg data and pull 12 hours of bg data before the food item timestamp
     const startDate = new Date(foodItem.timestamp);
-    startDate.setHours(startDate.getHours() - 4);
+    startDate.setHours(startDate.getHours() - 1);
     const endDate = new Date(foodItem.timestamp);
+    endDate.setHours(endDate.getHours() + 3);
     const bgData = await this.getBgDataByDate({startDate, endDate});
     return bgData;
   }

@@ -1,4 +1,4 @@
-import {FoodItemDTO, formattedItemDTO} from 'app/types/foodItems.types';
+import {FoodItemDTO, formattedItemDTO} from 'app/types/food.types';
 import {FirebaseService} from 'app/services/firebase/FirebaseService';
 import {formatDateToDateAndTimeString} from 'app/utils/datetime.utils';
 

@@ -17,6 +17,8 @@ import {
   LOGIN_SCREEN,
   ADD_NOTIFICATION_SCREEN,
   EDIT_NOTIFICATION_SCREEN,
+  ADD_FOOD_ITEM_SCREEN,
+  CAMERA_SCREEN,
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 import AddNotificationScreen from './containers/AddNotificationScreen/AddNotificationScreen';
@@ -25,6 +27,8 @@ import {firebase} from '@react-native-firebase/messaging';
 import styled, {ThemeProvider} from 'styled-components/native';
 import {theme} from 'app/style/theme';
 import {Theme} from 'app/types/theme';
+import CameraScreen from 'app/components/CameraScreen/CameraScreen';
+import AddFoodItemScreen from 'app/containers/AddFoodItem/AddFoodItem';
 
 const Stack = createNativeStackNavigator();
 
@@ -67,6 +71,16 @@ const App: () => JSX.Element = () => {
                 options={{headerShown: true, headerTitle: ''}}
                 name={EDIT_NOTIFICATION_SCREEN}
                 component={EditNotificationScreen}
+              />
+              <Stack.Screen
+                options={{headerShown: true, headerTitle: ''}}
+                name={ADD_FOOD_ITEM_SCREEN}
+                component={AddFoodItemScreen}
+              />
+              <Stack.Screen
+                options={{headerShown: true, headerTitle: ''}}
+                name={CAMERA_SCREEN}
+                component={CameraScreen}
               />
             </Stack.Navigator>
           </NavigationContainer>

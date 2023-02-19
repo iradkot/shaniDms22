@@ -23,6 +23,8 @@ export type Theme = {
   severeAboveRange: string;
   backgroundColor: string;
   textColor: string;
+  buttonTextColor: string;
+  buttonBackgroundColor: string;
   accentColor: string;
   white: string;
   borderColor: string;

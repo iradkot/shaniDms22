@@ -23,7 +23,7 @@ import {
   AddNotificationScreenContainer,
   AddNotificationScreenTitle,
 } from 'app/containers/AddNotificationScreen/AddNotificationScreen.style';
-import NotificationForm from 'app/components/NotificationForm/NotificationForm';
+import NotificationForm from 'app/components/forms/NotificationForm/NotificationForm';
 
 const EditNotificationScreen: FC = (props: any) => {
   const navigation = useNavigation<NavigationProp<any>>();

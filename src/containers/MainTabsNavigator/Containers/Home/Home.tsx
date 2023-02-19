@@ -13,6 +13,8 @@ import BgGraph from 'app/components/CgmGraph/CgmGraph';
 import {cloneDeep} from 'lodash';
 import {Theme} from 'app/types/theme';
 import {Dimensions} from 'react-native';
+import {FoodItemDTO, formattedItemDTO} from 'app/types/food.types';
+import {formatFoodItem} from 'app/containers/FoodTracker/utils';
 
 const HomeContainer = styled.View<{theme: Theme}>`
   flex: 1;
@@ -112,6 +114,20 @@ const Home: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayBgData]);
 
+  const [foodItems, setFoodItems] = useState<formattedItemDTO[]>([]);
+
+  useEffect(() => {
+    const fsManager = new FirebaseService();
+    const date = new Date(currentDate);
+    fsManager.getFoodItems(date).then(items => {
+      Promise.all(
+        items.map((item: FoodItemDTO) => formatFoodItem(item, fsManager)),
+      ).then(formattedItems => {
+        setFoodItems(formattedItems);
+      });
+    });
+  }, []);
+
   return (
     <HomeContainer>
       <BGValueRow
@@ -124,9 +140,10 @@ const Home: React.FC = () => {
       </Collapsable>
       <Collapsable title={'chart'}>
         <BgGraph
-          data={cloneDeep(bgData).sort(sortFunction(true))}
+          bgSamples={cloneDeep(bgData).sort(sortFunction(true))}
           width={Dimensions.get('window').width}
           height={200}
+          foodItems={foodItems}
         />
       </Collapsable>
       {/*{isShowingToday && (*/}
