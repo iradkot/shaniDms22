@@ -63,3 +63,25 @@ buck-out/
 /ios/Pods/
 /vendor/bundle/
 /releases/
+
+# fastlane specific
+fastlane/report.xml
+ios/fastlane/report.xml
+
+# deliver temporary files
+fastlane/Preview.html
+ios/fastlane/Preview.html
+
+# snapshot generated screenshots
+fastlane/screenshots
+ios/fastlane/screenshots
+
+# scan temporary files
+fastlane/test_output
+ios/fastlane/test_output
+
+# fastlane builds
+builds/*
+ios/builds/*
+*.xcarchive
+ios/*.xcarchive

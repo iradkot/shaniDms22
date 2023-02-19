@@ -53,6 +53,7 @@
 		AB5F5FE3D155CA92459E58AA /* libPods-shaniDms22-shaniDms22Tests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-shaniDms22-shaniDms22Tests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B38BE0B500535E7477E2EF03 /* libPods-shaniDms22.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-shaniDms22.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E438BF8F29840A89007101E6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E461334C29A27B85001508F1 /* shaniDms22Debug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = shaniDms22Debug.entitlements; path = shaniDms22/shaniDms22Debug.entitlements; sourceTree = "<group>"; };
 		E48C3CAD28DE854600C08AA8 /* libGoogleSignIn.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; path = libGoogleSignIn.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		E48C3CAF28DE854600C08AA8 /* libRNGoogleSignin.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; path = libRNGoogleSignin.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		E48C3CB128DE859E00C08AA8 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "shaniDms22/GoogleService-Info.plist"; sourceTree = "<group>"; };
@@ -102,6 +103,7 @@
 		13B07FAE1A68108700A75B9A /* shaniDms22 */ = {
 			isa = PBXGroup;
 			children = (
+				E461334C29A27B85001508F1 /* shaniDms22Debug.entitlements */,
 				13B07FAF1A68108700A75B9A /* AppDelegate.h */,
 				13B07FB01A68108700A75B9A /* AppDelegate.mm */,
 				E438BF8F29840A89007101E6 /* Assets.xcassets */,
@@ -468,6 +470,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COPY_PHASE_STRIP = NO;
+				DEVELOPMENT_TEAM = 8KHU9V3DTQ;
 				INFOPLIST_FILE = shaniDms22Tests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 12.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -482,6 +485,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE = "915b3b6f-aaa8-4b17-9c65-fffb271dd36e";
+				PROVISIONING_PROFILE_SPECIFIER = "com.shanidms22 AppStore 1676821562";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/shaniDms22.app/shaniDms22";
 			};
 			name = Release;
@@ -492,10 +497,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CODE_SIGN_ENTITLEMENTS = shaniDms22/shaniDms22Debug.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 8KHU9V3DTQ;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = shaniDms22/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = easyDms;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -508,6 +517,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.shanidms22;
 				PRODUCT_NAME = shaniDms22;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -520,9 +530,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 8KHU9V3DTQ;
 				INFOPLIST_FILE = shaniDms22/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = easyDms;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -535,6 +547,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.shanidms22;
 				PRODUCT_NAME = shaniDms22;
+				PROVISIONING_PROFILE = "915b3b6f-aaa8-4b17-9c65-fffb271dd36e";
+				PROVISIONING_PROFILE_SPECIFIER = "com.shanidms22 AppStore 1676821562";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
