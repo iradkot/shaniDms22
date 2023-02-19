@@ -4,7 +4,6 @@
 
 // Based on this file, create a RN typescript with styled components, FoodCards list renderer Path: src/containers/FoodTracker/Components/FoodCard.tsx
 
-import {FlatList} from 'react-native';
 import React from 'react';
 import FoodCard from 'app/containers/FoodTracker/Components/FoodCard';
 import {formattedItemDTO} from 'app/types/food.types';
@@ -12,26 +11,25 @@ import {formattedItemDTO} from 'app/types/food.types';
 interface FoodCardsListProps {
   foodItems: formattedItemDTO[];
 }
-const FoodCardsList: React.FC<FoodCardsListProps> = ({foodItems}) => {
+
+const FoodCardsList: ({foodItems}: {foodItems: any}) => JSX.Element = ({
+  foodItems,
+}) => {
   if (!foodItems) {
     return <></>;
   }
-  return (
-    <FlatList
-      data={foodItems}
-      scrollEnabled={false}
-      renderItem={({item}) => (
-        <FoodCard
-          imageUri={item.image}
-          name={item.name}
-          bgSamples={item.bgData || []}
-          date={item.localDateString}
-          notes={item.notes}
-          carbsGrams={item.carbs}
-        />
-      )}
-      keyExtractor={item => item.localDateString}
-    />
+  return foodItems.map(
+    (item: formattedItemDTO, index: React.Key | null | undefined) => (
+      <FoodCard
+        key={index}
+        imageUri={item.image}
+        name={item.name}
+        bgSamples={item.bgData || []}
+        date={item.localDateString}
+        notes={item.notes}
+        carbsGrams={item.carbs}
+      />
+    ),
   );
 };
 
