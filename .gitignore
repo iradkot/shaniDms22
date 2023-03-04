@@ -64,6 +64,9 @@ buck-out/
 /vendor/bundle/
 /releases/
 
+
+ios/fastlane/.env.default
+
 # fastlane specific
 fastlane/report.xml
 ios/fastlane/report.xml
@@ -85,3 +88,27 @@ builds/*
 ios/builds/*
 *.xcarchive
 ios/*.xcarchive
+
+
+# fastlane specific
+android/fastlane/report.xml
+
+# deliver temporary files
+android/fastlane/Preview.html
+
+# snapshot generated screenshots
+android/fastlane/screenshots
+
+# scan temporary files
+android/fastlane/test_output
+
+# Fastlane builds
+android/builds/*
+
+android/key.json
+
+keys/*
+
+
+
+

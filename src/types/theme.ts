@@ -41,5 +41,6 @@ export type Theme = {
 
   shadow: {
     default: string;
+    small: string;
   };
 };

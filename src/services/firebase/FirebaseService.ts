@@ -98,7 +98,15 @@ export class FirebaseService {
       const imageRef = storage().ref(imageName);
       const url = await imageRef.getDownloadURL();
       return url;
-    } catch (error) {
+    } catch (error: any) {
+      // Error getting image from storage [Error: [storage/object-not-found] No object exists at the desired reference.]
+      const expectedErrors = ['storage/object-not-found'];
+      if (expectedErrors.includes(error.code)) {
+        // exmple image name: https://firebasestorage.googleapis.com:443/v0/b/shanidms-3a065.appspot.com/o/food_item_images%2FzZHMiF29YzFcVo1yN8GW?alt=media&token=da6c9f54-a330-48ca-b954-7f5052f7c1bc
+        // we need the
+        console.log('Image not found in storage', {imageName});
+        return null;
+      }
       console.error('Error getting image from storage', error);
     }
   }

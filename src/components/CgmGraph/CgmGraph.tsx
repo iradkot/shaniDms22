@@ -84,11 +84,6 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
         y={0}
         viewBox={`0 0 ${width} ${height}`}>
         <G x={leftMargin} y={topMargin}>
-          <FoodItemsRenderer
-            foodItems={foodItems}
-            xScale={xScale}
-            yScale={yScale}
-          />
           <GraphDateDisplay xScale={xScale} />
           <CGMSamplesRenderer
             data={bgSamples}
@@ -100,6 +95,11 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
             graphWidth={graphWidth}
             graphHeight={graphHeight}
             highestBgThreshold={highestBgThreshold}
+          />
+          <FoodItemsRenderer
+            foodItems={foodItems}
+            xScale={xScale}
+            yScale={yScale}
           />
         </G>
       </StyledSvg>

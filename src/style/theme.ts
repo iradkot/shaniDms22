@@ -45,6 +45,7 @@ export const theme: Theme = {
   get shadow() {
     return {
       default: this.getShadowStyles(1),
+      small: this.getShadowStyles(0.5),
     };
   },
 };

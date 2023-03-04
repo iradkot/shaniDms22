@@ -67,6 +67,15 @@ const FoodItemForm = ({
     };
   }, [handleSubmit, onSubmit, photo, submitHandlerRef]);
 
+  useEffect(() => {
+    if (!foodItem) {
+      // open camera first step when adding a new food item
+      navigation.navigate('CameraScreen', {
+        onTakePhoto: (picture: PhotoFile) => setPhoto(picture),
+      });
+    }
+  }, [foodItem, navigation]);
+
   const nameRef = React.useRef<TextInput>(null);
   const carbsRef = React.useRef<TextInput>(null);
   const notesRef = React.useRef<TextInput>(null);
