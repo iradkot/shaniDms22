@@ -11,7 +11,6 @@ import {format, isSameDay, subDays, startOfWeek, endOfWeek} from 'date-fns';
 import FoodCardsList from 'app/containers/FoodTracker/Components/FoodCardsList';
 import FoodCameraButton from 'app/containers/FoodTracker/Components/FoodCameraButton';
 import {NavigationProp} from '@react-navigation/native';
-import {formatDateToLocaleDateString} from 'app/utils/datetime.utils';
 
 const formatDate = (date: Date) => {
   const today = new Date();
@@ -33,11 +32,14 @@ const formatDate = (date: Date) => {
   }
 };
 
+type groupBy = 'day' | 'week' | 'food' | 'exact food';
+
 const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   navigation,
 }) => {
   const [foodItems, setFoodItems] = useState<formattedItemDTO[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [groupBy, setGroupBy] = useState<groupBy>('day');
   const fsManager = new FirebaseService();
 
   const getFoodItems = async (date: Date) => {
@@ -65,8 +67,45 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
     return null;
   }, [foodItems]);
 
+  const groupByFood = (acc: any, cur: formattedItemDTO) => {
+    const wordsToIgnoreEnglish = [
+      'and',
+      'the',
+      'a',
+      'an',
+      'of',
+      'with',
+      'in',
+      'to',
+    ];
+    const wordsToIgnoreHe = ['עם', 'ו2'];
+
+    const wordsToIgnore = wordsToIgnoreEnglish.concat(wordsToIgnoreHe);
+    ('');
+    const nameWords = cur.name.toLowerCase().split(' ');
+
+    for (let i = 0; i < nameWords.length; i++) {
+      const word = nameWords[i];
+      if (!wordsToIgnore.includes(word)) {
+        if (word.length > 1) {
+          if (!acc[word]) {
+            acc[word] = {meals: [], count: 0};
+          }
+          acc[word].meals.push(cur);
+          acc[word].count++;
+        }
+      }
+    }
+    return acc;
+  };
+
   const groupedMeals = useMemo(() => {
-    const grouped = foodItems.reduce((acc, cur) => {
+    const grouped = foodItems.reduce(
+      groupByFood,
+      {} as {[date: string]: {meals: formattedItemDTO[]; count: number}},
+    );
+
+    function groupByDay(acc: any, cur: formattedItemDTO) {
       const date = formatDate(new Date(cur.timestamp));
 
       if (!acc[date]) {
@@ -75,7 +114,8 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
       acc[date].meals.push(cur);
       acc[date].count++;
       return acc;
-    }, {} as {[date: string]: {meals: formattedItemDTO[]; count: number}});
+    }
+
     return Object.entries(grouped).map(([date, {meals, count}]) => ({
       date,
       meals,
