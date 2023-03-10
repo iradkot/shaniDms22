@@ -22,6 +22,7 @@ const FoodCardsList: ({foodItems}: {foodItems: any}) => JSX.Element = ({
     (item: formattedItemDTO, index: React.Key | null | undefined) => (
       <FoodCard
         key={index}
+        foodItem={item}
         imageUri={item.image}
         name={item.name}
         bgSamples={item.bgData || []}

@@ -22,7 +22,6 @@ const AddFoodItemScreen: FC = () => {
   };
 
   const onSubmit = async (foodItem: AddFoodItem) => {
-    console.log({foodItem});
     Keyboard.dismiss();
     await addFoodItem(foodItem);
     goBack();

@@ -1,6 +1,10 @@
 import {formatDateToLocaleDateString} from 'app/utils/datetime.utils';
-import React from 'react';
+import React, {useContext} from 'react';
 import {G, Text} from 'react-native-svg';
+import {
+  createGraphStyleContext,
+  GraphStyleContext,
+} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
 
 interface Props {
   xScale: any;
@@ -34,7 +38,8 @@ const getShownDays: (xScale: any) => ShownDay[] = xScale => {
   return shownDays;
 };
 
-const GraphDateDisplay = ({xScale}: Props) => {
+const GraphDateDisplay = () => {
+  const [{xScale}] = useContext(GraphStyleContext);
   const shownDays = getShownDays(xScale);
   const minTicksAmount = 1;
   const maxTicksAmount = 4;

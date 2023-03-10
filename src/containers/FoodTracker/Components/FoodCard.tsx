@@ -7,6 +7,7 @@ import {BgSample} from 'app/types/day_bgs';
 import {Text, View, ImageBackground, Dimensions} from 'react-native';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import Icon from 'react-native-vector-icons/Ionicons';
+import {FoodItemDTO, formattedItemDTO} from 'app/types/food.types';
 
 interface FoodCardProps {
   imageUri: string;
@@ -15,6 +16,7 @@ interface FoodCardProps {
   bgSamples: BgSample[];
   date: string; // Date is in string format of 'MM/DD/YYYY'
   carbsGrams: number;
+  foodItem: formattedItemDTO;
 }
 
 const {width} = Dimensions.get('window');
@@ -72,6 +74,7 @@ const FoodCard: React.FC<FoodCardProps> = ({
   date,
   notes,
   carbsGrams,
+  foodItem,
 }) => (
   <FoodCardContainer>
     <FoodCardImage source={{uri: imageUri}} />
@@ -111,7 +114,7 @@ const FoodCard: React.FC<FoodCardProps> = ({
           bgSamples={bgSamples}
           width={width}
           height={width}
-          foodItems={[{name, carbs: carbsGrams}]}
+          foodItems={[foodItem]}
         />
       </Collapsable>
     </FoodCardInfoContainer>

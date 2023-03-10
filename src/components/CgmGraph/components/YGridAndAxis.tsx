@@ -1,16 +1,14 @@
 import {G, Line, Text} from 'react-native-svg';
-import React from 'react';
+import React, {useContext} from 'react';
+import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
 
 interface Props {
-  graphWidth: number;
-  graphHeight: number;
   highestBgThreshold: number;
 }
 const YGridAndAxis = ({
-  graphWidth,
-  graphHeight,
   highestBgThreshold, // max y value
 }: Props) => {
+  const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
   const ticksAmount = 6;
   const ticks = Array.from({length: ticksAmount}, (_, i) => i);
   const GridLine = ({y}: {y: number}) => (

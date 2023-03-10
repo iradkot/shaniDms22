@@ -61,7 +61,6 @@ const CameraScreen: React.FC<Props> = () => {
     const photo = await camera?.current?.takePhoto({
       flash: 'on',
     });
-    console.log('photo', photo);
     onTakePhoto && onTakePhoto(photo);
     navigation.goBack();
   };

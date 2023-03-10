@@ -99,6 +99,7 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
                   date={lastMeal.localDateString}
                   notes={lastMeal.notes}
                   carbsGrams={lastMeal.carbs}
+                  foodItem={lastMeal}
                 />
               )}
             </Collapsable>
