@@ -35,14 +35,14 @@ export const useGraphStyleContext = (
   initialHeight: number,
   initialBgSamples: BgSample[],
 ): [
-  Partial<GraphStyleContextInterface>,
-  (values: Partial<GraphStyleContextInterface>) => void,
+  GraphStyleContextInterface,
+  (values: GraphStyleContextInterface) => void,
 ] => {
   const highestBgThreshold = 300;
   const [width, setWidth] = useState(initialWidth);
   const [height, setHeight] = useState(initialHeight);
   const [bgSamples, setBgSamples] = useState(initialBgSamples);
-  const [margin, setMargin] = useState({
+  const [margin] = useState({
     top: 20,
     right: 15,
     bottom: 30,
@@ -60,7 +60,7 @@ export const useGraphStyleContext = (
     .domain([0, highestBgThreshold])
     .range([height - margin.top - margin.bottom, 0]);
 
-  const graphStyleContextValue: Partial<GraphStyleContextInterface> = {
+  const graphStyleContextValue: GraphStyleContextInterface = {
     width,
     height,
     margin,
@@ -71,9 +71,7 @@ export const useGraphStyleContext = (
     bgSamples,
   };
 
-  const setGraphStyleContextValue = (
-    values: Partial<GraphStyleContextInterface>,
-  ) => {
+  const setGraphStyleContextValue = (values: GraphStyleContextInterface) => {
     if (values.width) {
       setWidth(values.width);
     }

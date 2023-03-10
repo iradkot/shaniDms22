@@ -16,6 +16,7 @@ const AddFoodItemScreen: FC = () => {
   const goBack = () => {
     navigation.reset({
       index: 1,
+      // @ts-ignore
       routes: [{name: HOME_TAB_SCREEN}, {name: ADD_FOOD_ITEM_SCREEN}],
     });
     navigation.goBack();

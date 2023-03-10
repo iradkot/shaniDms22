@@ -8,6 +8,9 @@ import {GraphStyleContext} from '../contextStores/GraphStyleContext';
 interface TickProps {
   x: number;
   withDate?: boolean;
+  lineStyle?: any;
+  textStyle?: any;
+  roundTicks?: boolean;
 }
 
 const StyledLine = styled(Line)`
@@ -19,22 +22,29 @@ const StyledText = styled(Text)`
   fill: black;
   opacity: 0.5;
 `;
-const XTick = ({x, withDate}: TickProps) => {
+const XTick = ({x, withDate, lineStyle, textStyle, roundTicks}: TickProps) => {
   const [{xScale, graphHeight}] = useContext(GraphStyleContext);
   const dateTick = xScale.invert(x);
-  const roundHourOffset = new Date(dateTick).getMinutes() % 30;
+  const roundHourOffset = new Date(dateTick).getMinutes() % 60;
   const roundHourDate = new Date(subMinutes(dateTick, roundHourOffset));
-  const roundTickX = xScale(roundHourDate);
+  const tickX = xScale(roundTicks ? roundHourDate : (dateTick as any));
 
   return (
     <G>
-      <StyledLine x1={roundTickX} y1={0} x2={roundTickX} y2={graphHeight} />
+      <StyledLine
+        x1={tickX}
+        y1={0}
+        x2={tickX}
+        y2={graphHeight}
+        {...lineStyle}
+      />
       {withDate && (
         <StyledText
-          x={roundTickX}
+          x={tickX}
           y={graphHeight}
           fontSize={10}
-          textAnchor="middle">
+          textAnchor="middle"
+          {...textStyle}>
           {formatDateToLocaleTimeString(roundHourDate)}
         </StyledText>
       )}

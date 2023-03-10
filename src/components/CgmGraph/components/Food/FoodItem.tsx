@@ -1,18 +1,20 @@
 import {FoodItemDTO, formattedItemDTO} from 'app/types/food.types';
-import * as d3 from 'd3';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import {Theme} from 'app/types/theme';
 import React, {useContext} from 'react';
-import {Line, Rect, Text} from 'react-native-svg';
+import {Rect, Text} from 'react-native-svg';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import XTick from 'app/components/CgmGraph/components/XTick';
 import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
+import {theme} from 'app/style/theme';
 
 interface FoodItemProps {
   foodItem: FoodItemDTO | formattedItemDTO;
   isFocused: boolean;
-  setFocusedItem: (item: FoodItemDTO | null) => void;
+  setFocusedItem: (
+    item: (preFocusedItem: any) => null | FoodItemDTO | formattedItemDTO,
+  ) => void;
 }
 
 export const FoodItem = ({
@@ -20,6 +22,7 @@ export const FoodItem = ({
   isFocused,
   setFocusedItem,
 }: FoodItemProps): JSX.Element => {
+  const appTheme = useTheme() as typeof theme;
   const [{xScale, yScale, margin}] = useContext(GraphStyleContext);
   const [containerWidth, setContainerWidth] = React.useState<number>(0);
   const [containerHeight, setContainerHeight] = React.useState<number>(0);
@@ -46,13 +49,16 @@ export const FoodItem = ({
       </Container>
       {isFocused && (
         <>
-          <XTick x={x} graphHeight={yScale(0)} xScale={xScale} />
+          <XTick
+            x={x}
+            lineStyle={{stroke: appTheme.accentColor, strokeWidth: 2}}
+          />
           <Text
             x={x}
             y={y + containerHeight + 20}
             fontSize={12}
             textAnchor="middle"
-            fill="black">
+            fill={appTheme.accentColor}>
             {formatDateToLocaleTimeString(foodItem.timestamp)}
           </Text>
         </>
