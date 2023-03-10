@@ -58,7 +58,7 @@ export const useGraphStyleContext = (
   const yScale = d3
     .scaleLinear()
     .domain([0, highestBgThreshold])
-    .range([height, 0]);
+    .range([height - margin.top - margin.bottom, 0]);
 
   const graphStyleContextValue: Partial<GraphStyleContextInterface> = {
     width,
