@@ -130,7 +130,7 @@ export class FirebaseService {
     const startDate = new Date(foodItem.timestamp);
     startDate.setHours(startDate.getHours() - 1);
     const endDate = new Date(foodItem.timestamp);
-    endDate.setHours(endDate.getHours() + 3);
+    endDate.setHours(endDate.getHours() + 4);
     const bgData = await this.getBgDataByDate({startDate, endDate});
     return bgData;
   }
