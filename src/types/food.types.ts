@@ -1,4 +1,4 @@
-import {BgSample} from 'app/types/day_bgs';
+import {CommonFormattedEvent} from 'app/types/commonEvent.types';
 
 export interface FoodItemDTO {
   carbs: number;
@@ -9,8 +9,6 @@ export interface FoodItemDTO {
   timestamp: number; // timestamp in millisecondsFoodItemDTO
 }
 
-export interface formattedItemDTO extends FoodItemDTO {
-  localDateString: string; // formatted date
-  time: string; // formatted
-  bgData: BgSample[];
-}
+export interface formattedFoodItemDTO
+  extends FoodItemDTO,
+    CommonFormattedEvent {}

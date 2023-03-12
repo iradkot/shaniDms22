@@ -7,6 +7,8 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import ADIcon from 'react-native-vector-icons/AntDesign';
 import {theme} from 'app/style/theme';
 import FoodTracker from 'app/containers/FoodTracker/FoodTracker';
+import {SPORT_TRACKING_TAB_SCREEN} from 'app/constants/SCREEN_NAMES';
+import SportTracker from '../SportTracker/SportTracker';
 
 const Tab = createBottomTabNavigator();
 
@@ -47,6 +49,16 @@ const MainTabsNavigator: React.FC = () => {
             <MaterialIcons name="fastfood" color={color} size={size} />
           ),
           tabBarLabel: 'Food Tracking',
+        }}
+      />
+      <Tab.Screen
+        name={SCREEN_NAMES.SPORT_TRACKING_TAB_SCREEN}
+        component={SportTracker}
+        options={{
+          tabBarIcon: ({color, size}) => (
+            <MaterialIcons name="directions-run" color={color} size={size} />
+          ),
+          tabBarLabel: 'Sport Tracking',
         }}
       />
       <Tab.Screen

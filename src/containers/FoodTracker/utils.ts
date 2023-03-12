@@ -1,4 +1,4 @@
-import {FoodItemDTO, formattedItemDTO} from 'app/types/food.types';
+import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import {FirebaseService} from 'app/services/firebase/FirebaseService';
 import {formatDateToDateAndTimeString} from 'app/utils/datetime.utils';
 
@@ -9,8 +9,8 @@ import {formatDateToDateAndTimeString} from 'app/utils/datetime.utils';
 export const formatFoodItem = async (
   item: FoodItemDTO,
   fsManager: FirebaseService,
-): Promise<formattedItemDTO> => {
-  const formattedItem = item as formattedItemDTO;
+): Promise<formattedFoodItemDTO> => {
+  const formattedItem = item as formattedFoodItemDTO;
   if (!item.image) {
     return formattedItem;
   }

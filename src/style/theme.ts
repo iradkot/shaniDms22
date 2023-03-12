@@ -25,6 +25,7 @@ export const theme: Theme = {
   buttonBackgroundColor: colors.purple[500],
   accentColor: colors.purple[500],
   white: colors.white,
+  black: colors.black,
   dimensions: {
     width,
     height,

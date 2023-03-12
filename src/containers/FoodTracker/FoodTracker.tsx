@@ -2,7 +2,7 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {Text} from 'react-native';
 import FoodCard from 'app/containers/FoodTracker/Components/FoodCard';
 import {FirebaseService} from 'app/services/firebase/FirebaseService';
-import {FoodItemDTO, formattedItemDTO} from 'app/types/food.types';
+import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import {isEmpty} from 'lodash';
 import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
 import {formatFoodItem} from 'app/containers/FoodTracker/utils';
@@ -37,7 +37,7 @@ type groupBy = 'day' | 'week' | 'food' | 'exact food';
 const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   navigation,
 }) => {
-  const [foodItems, setFoodItems] = useState<formattedItemDTO[]>([]);
+  const [foodItems, setFoodItems] = useState<formattedFoodItemDTO[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [groupBy, setGroupBy] = useState<groupBy>('day');
   const fsManager = new FirebaseService();
@@ -67,7 +67,7 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
     return null;
   }, [foodItems]);
 
-  const groupByFood = (acc: any, cur: formattedItemDTO) => {
+  const groupByFood = (acc: any, cur: formattedFoodItemDTO) => {
     const wordsToIgnoreEnglish = [
       'and',
       'the',
@@ -102,10 +102,10 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   const groupedMeals = useMemo(() => {
     const grouped = foodItems.reduce(
       groupByFood,
-      {} as {[date: string]: {meals: formattedItemDTO[]; count: number}},
+      {} as {[date: string]: {meals: formattedFoodItemDTO[]; count: number}},
     );
 
-    function groupByDay(acc: any, cur: formattedItemDTO) {
+    function groupByDay(acc: any, cur: formattedFoodItemDTO) {
       const date = formatDate(new Date(cur.timestamp));
 
       if (!acc[date]) {
@@ -155,17 +155,7 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
           ))}
         </ScrollContainer>
       )}
-      <FoodCameraButton
-        navigation={navigation}
-        // onTakePhoto={async (uri) => {
-        //   navigation.navigate('FoodDetails', {
-        //     imageUri: uri,
-        //     onSave: async (foodItem: formattedItemDTO) => {
-        //       setFoodItems([...foodItems, foodItem]);
-        //     },
-        //   });
-        // }}
-      />
+      <FoodCameraButton navigation={navigation} />
     </Container>
   );
 };

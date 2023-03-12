@@ -13,6 +13,7 @@ import {
 import setDate from 'date-fns/setDate';
 import subMilliseconds from 'date-fns/subMilliseconds';
 import {AuthService} from './services/AuthService';
+import {SportItemDTO} from 'app/types/sport.types';
 
 // FirestoreManager class is responsible for all the interactions with the FirestoreManager database
 export class FirebaseService {
@@ -133,5 +134,49 @@ export class FirebaseService {
     endDate.setHours(endDate.getHours() + 4);
     const bgData = await this.getBgDataByDate({startDate, endDate});
     return bgData;
+  }
+
+  async getSportItems(date: Date): Promise<SportItemDTO[]> {
+    // FoodItemDTO[]
+    // const dayBefore = new Date(date);
+    // dayBefore.setDate(dayBefore.getDate());
+    // const dayAfter = new Date(date);
+    // dayAfter.setDate(dayAfter.getDate() + 2);
+    //
+    // const snapshot = await firestore().collection('sport_items').get();
+    //
+    // const sportItems = snapshot.docs.map(doc => doc.data() as SportItemDTO);
+    // return sportItems;
+    const dummyData = [
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 5,
+        // 1st May 2021
+        timestamp: 1620000000000,
+      },
+      {
+        name: 'Fighting',
+        durationMinutes: 30,
+        intensity: 4,
+        // 2nd May 2021
+        timestamp: 1620086400000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 60,
+        intensity: 3,
+        // 3rd May 2021
+        timestamp: 1620172800000,
+      },
+      {
+        name: 'Swimming',
+        durationMinutes: 30,
+        intensity: 2,
+        // 4th May 2021
+        timestamp: 1620259200000,
+      },
+    ];
+    return dummyData;
   }
 }

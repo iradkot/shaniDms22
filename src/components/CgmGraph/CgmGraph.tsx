@@ -7,7 +7,7 @@ import XGridAndAxis from 'app/components/CgmGraph/components/XGridAndAxis';
 import YGridAndAxis from 'app/components/CgmGraph/components/YGridAndAxis';
 import CGMSamplesRenderer from 'app/components/CgmGraph/components/CGMSamplesRenderer';
 import GraphDateDisplay from './components/GraphDateDisplay';
-import {formattedItemDTO} from 'app/types/food.types';
+import {formattedFoodItemDTO} from 'app/types/food.types';
 import FoodItemsRenderer from 'app/components/CgmGraph/components/Food/FoodItemsRenderer';
 import {
   GraphStyleContext,
@@ -16,7 +16,7 @@ import {
 
 interface Props {
   bgSamples: BgSample[];
-  foodItems: formattedItemDTO[] | null;
+  foodItems: formattedFoodItemDTO[] | null;
   width: number;
   height: number;
 }

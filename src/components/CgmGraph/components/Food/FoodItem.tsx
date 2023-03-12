@@ -1,4 +1,4 @@
-import {FoodItemDTO, formattedItemDTO} from 'app/types/food.types';
+import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import styled, {useTheme} from 'styled-components/native';
 import {Theme} from 'app/types/theme';
 import React, {useContext} from 'react';
@@ -10,10 +10,10 @@ import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyl
 import {theme} from 'app/style/theme';
 
 interface FoodItemProps {
-  foodItem: FoodItemDTO | formattedItemDTO;
+  foodItem: FoodItemDTO | formattedFoodItemDTO;
   isFocused: boolean;
   setFocusedItem: (
-    item: (preFocusedItem: any) => null | FoodItemDTO | formattedItemDTO,
+    item: (preFocusedItem: any) => null | FoodItemDTO | formattedFoodItemDTO,
   ) => void;
 }
 

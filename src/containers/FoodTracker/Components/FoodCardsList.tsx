@@ -6,10 +6,10 @@
 
 import React from 'react';
 import FoodCard from 'app/containers/FoodTracker/Components/FoodCard';
-import {formattedItemDTO} from 'app/types/food.types';
+import {formattedFoodItemDTO} from 'app/types/food.types';
 
 interface FoodCardsListProps {
-  foodItems: formattedItemDTO[];
+  foodItems: formattedFoodItemDTO[];
 }
 
 const FoodCardsList: ({foodItems}: {foodItems: any}) => JSX.Element = ({
@@ -19,7 +19,7 @@ const FoodCardsList: ({foodItems}: {foodItems: any}) => JSX.Element = ({
     return <></>;
   }
   return foodItems.map(
-    (item: formattedItemDTO, index: React.Key | null | undefined) => (
+    (item: formattedFoodItemDTO, index: React.Key | null | undefined) => (
       <FoodCard
         key={index}
         foodItem={item}

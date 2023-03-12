@@ -1,10 +1,10 @@
 import React, {useContext} from 'react';
-import {FoodItemDTO, formattedItemDTO} from 'app/types/food.types';
+import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import {FoodItem} from 'app/components/CgmGraph/components/Food/FoodItem';
 import {GraphStyleContext} from '../../contextStores/GraphStyleContext';
 
 interface Props {
-  foodItems: FoodItemDTO[] | formattedItemDTO[] | null;
+  foodItems: FoodItemDTO[] | formattedFoodItemDTO[] | null;
 }
 
 const FoodItemsRenderer = ({foodItems}: Props): JSX.Element => {

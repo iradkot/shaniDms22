@@ -5,46 +5,24 @@ import {ADD_FOOD_ITEM_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {NavigationProp} from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {Theme} from 'app/types/theme';
+import Button from 'app/components/Button/Button';
 
 const FoodCameraButton: React.FC<{navigation: NavigationProp<any>}> = ({
   navigation,
 }) => {
+  const handlePress = () => {
+    navigation.navigate(ADD_FOOD_ITEM_SCREEN);
+  };
   return (
-    <ButtonContainer
-      disabled={false}
-      onPress={() => navigation.navigate(ADD_FOOD_ITEM_SCREEN)}>
-      <CameraIcon name="camera" size={25} color="white" />
-      <ButtonText>Take a picture</ButtonText>
-    </ButtonContainer>
+    <Button
+      onClick={handlePress}
+      text="Add Food"
+      icon={<CameraIcon name="camera-alt" size={30} color="white" />}
+    />
   );
 };
-
-const ButtonContainer = styled.TouchableOpacity<{
-  disabled?: boolean;
-  theme: Theme;
-}>`
-  background-color: ${({disabled, theme}) =>
-    disabled ? theme.textColor : theme.accentColor};
-  border-radius: 25px;
-  padding: 5px;
-  margin: 10px;
-  width: 170px;
-  height: 50px;
-  justify-content: center;
-  align-items: center;
-  flex-direction: row;
-  position: absolute;
-  bottom: 0;
-  right: 0;
-`;
 
 const CameraIcon = styled(MaterialIcons)`
   margin-right: 10px;
 `;
-
-const ButtonText = styled(Text)`
-  font-size: 18px;
-  color: white;
-`;
-
 export default FoodCameraButton;

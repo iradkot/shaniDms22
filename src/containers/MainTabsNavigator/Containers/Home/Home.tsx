@@ -13,7 +13,7 @@ import BgGraph from 'app/components/CgmGraph/CgmGraph';
 import {cloneDeep} from 'lodash';
 import {Theme} from 'app/types/theme';
 import {Dimensions} from 'react-native';
-import {FoodItemDTO, formattedItemDTO} from 'app/types/food.types';
+import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import {formatFoodItem} from 'app/containers/FoodTracker/utils';
 
 const HomeContainer = styled.View<{theme: Theme}>`
@@ -114,7 +114,7 @@ const Home: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayBgData]);
 
-  const [foodItems, setFoodItems] = useState<formattedItemDTO[]>([]);
+  const [foodItems, setFoodItems] = useState<formattedFoodItemDTO[]>([]);
 
   useEffect(() => {
     const fsManager = new FirebaseService();
