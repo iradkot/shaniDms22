@@ -9,6 +9,7 @@ import {formatDateToDateAndTimeString} from 'app/utils/datetime.utils';
 import SportItem from './components/SportItem';
 import Button from 'app/components/Button/Button';
 import Icon from 'react-native-vector-icons/Ionicons';
+import {ADD_SPORT_ITEM_SCREEN} from 'app/constants/SCREEN_NAMES';
 
 export const formatSportItem = async (
   item: SportItemDTO,
@@ -85,7 +86,7 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
 
   const handleAddSportItemPress = () => {
     // navigate to add sport item screen
-    navigation.navigate('AddSportItem');
+    navigation.navigate(ADD_SPORT_ITEM_SCREEN);
   };
 
   return (

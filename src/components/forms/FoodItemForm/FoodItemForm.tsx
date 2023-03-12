@@ -61,10 +61,7 @@ const FoodItemForm = ({
       };
       onSubmit(newData);
     };
-    submitHandlerRef.current = () => {
-      console.log('submitting');
-      return handleSubmit(onSubmitForm)();
-    };
+    submitHandlerRef.current = () => handleSubmit(onSubmitForm)();
   }, [handleSubmit, onSubmit, photo, submitHandlerRef]);
 
   useEffect(() => {
