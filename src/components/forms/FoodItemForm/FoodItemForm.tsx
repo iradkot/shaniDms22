@@ -2,7 +2,7 @@ import {Controller, useForm} from 'react-hook-form';
 import * as S from 'app/components/forms/FoodItemForm/FoodItemForm.styles';
 
 import React, {useEffect} from 'react';
-import {TextInput} from 'react-native';
+import {Keyboard, TextInput} from 'react-native';
 import {PhotoFile} from 'react-native-vision-camera';
 import {NavigationProp, useNavigation} from '@react-navigation/native';
 import {AddFoodItem} from 'app/hooks/foods/useAddFoodItem';
@@ -82,9 +82,10 @@ const FoodItemForm = ({
       ref: nameRef,
       name: 'name',
       placeholder: 'Name',
-      keyboardType: 'default',
-      returnKeyType: 'next',
-      onSubmitEditing: () => carbsRef.current?.focus(),
+      keyboardType: 'number-pad',
+      returnKeyType: 'done',
+      // onSubmitEditing: () => carbsRef.current?.focus(),
+      onSubmitEditing: () => Keyboard.dismiss(),
       rules: rules.name,
     },
     {
@@ -96,15 +97,15 @@ const FoodItemForm = ({
       onSubmitEditing: () => notesRef.current?.focus(),
       rules: rules.carbs,
     },
-    {
-      ref: notesRef,
-      name: 'notes',
-      placeholder: 'Notes',
-      keyboardType: 'default',
-      returnKeyType: 'done',
-      onSubmitEditing: () => {},
-      rules: rules.notes,
-    },
+    // {
+    //   ref: notesRef,
+    //   name: 'notes',
+    //   placeholder: 'Notes',
+    //   keyboardType: 'default',
+    //   returnKeyType: 'done',
+    //   onSubmitEditing: () => {},
+    //   rules: rules.notes,
+    // },
   ];
   const onTakePhoto = (photo: PhotoFile | undefined) => {
     setPhoto(photo);
