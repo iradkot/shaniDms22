@@ -1,3 +1,5 @@
+import {endOfWeek, format, isSameDay, startOfWeek, subDays} from 'date-fns';
+
 export const formatMinutesToLocaleTimeString = (minutes: number) => {
   let hours: number | string = Math.floor(minutes / 60);
   if (hours < 10) {
@@ -58,4 +60,24 @@ export const getUtcEndOfTheDay = (date: Date) => {
   const utcEndOfTheDay = new Date(date);
   utcEndOfTheDay.setUTCHours(23, 59, 59, 999);
   return utcEndOfTheDay;
+};
+
+export const getRelativeDateText = (date: Date): string => {
+  const today = new Date();
+  const yesterday = subDays(today, 1);
+
+  if (isSameDay(date, today)) {
+    return `Today, ${format(date, 'MMM d')}`;
+  } else if (isSameDay(date, yesterday)) {
+    return `Yesterday, ${format(date, 'MMM d')}`;
+  } else if (date > subDays(today, 7)) {
+    return `${format(date, 'EEEE')}, ${format(date, 'MMM d')}`;
+  } else if (
+    date >= startOfWeek(subDays(today, 14)) &&
+    date <= endOfWeek(subDays(today, 14))
+  ) {
+    return `${format(date, 'EEEE')}, ${format(date, 'MMM d')}`;
+  } else {
+    return format(date, 'MMM d');
+  }
 };

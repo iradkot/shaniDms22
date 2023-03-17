@@ -2,7 +2,7 @@ import {Controller, useForm} from 'react-hook-form';
 import * as S from 'app/components/forms/FoodItemForm/FoodItemForm.styles';
 
 import React, {useEffect} from 'react';
-import {Keyboard, TextInput} from 'react-native';
+import {Alert, Keyboard, TextInput} from 'react-native';
 import {PhotoFile} from 'react-native-vision-camera';
 import {NavigationProp, useNavigation} from '@react-navigation/native';
 import {AddFoodItem} from 'app/hooks/foods/useAddFoodItem';
@@ -44,8 +44,12 @@ const FoodItemForm = ({
   useEffect(() => {
     // this is a workaround to get the form values
     const onSubmitForm = (data: AddFoodItem) => {
-      console.log('onSubmitForm', {data, photo, date});
       if (!photo || !date) {
+        Alert.alert(
+          'Image Required',
+          'Please add an image to submit the form.',
+          [{text: 'OK', onPress: () => {}}],
+        );
         return;
       }
       let timestamp: number;
@@ -82,7 +86,7 @@ const FoodItemForm = ({
       ref: nameRef,
       name: 'name',
       placeholder: 'Name',
-      keyboardType: 'number-pad',
+      keyboardType: 'default',
       returnKeyType: 'done',
       // onSubmitEditing: () => carbsRef.current?.focus(),
       onSubmitEditing: () => Keyboard.dismiss(),
@@ -96,6 +100,7 @@ const FoodItemForm = ({
       returnKeyType: 'next',
       onSubmitEditing: () => notesRef.current?.focus(),
       rules: rules.carbs,
+      selectTextOnFocus: true,
     },
     // {
     //   ref: notesRef,

@@ -14,6 +14,7 @@ import setDate from 'date-fns/setDate';
 import subMilliseconds from 'date-fns/subMilliseconds';
 import {AuthService} from './services/AuthService';
 import {SportItemDTO} from 'app/types/sport.types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // FirestoreManager class is responsible for all the interactions with the FirestoreManager database
 export class FirebaseService {
@@ -94,21 +95,21 @@ export class FirebaseService {
    * @param {string} imageName
    * @returns {Promise<string>} url of the image in the storage bucket
    */
-  async getFoodItemImage(imageName: string) {
+  async getFoodItemImage(imageName: string | undefined) {
     try {
+      // Check if the image URL is already cached
+      const cachedUrl = await AsyncStorage.getItem(`image-${imageName}`);
+      if (cachedUrl) {
+        return cachedUrl;
+      }
+
+      // If not, download the image and cache the URL
       const imageRef = storage().ref(imageName);
       const url = await imageRef.getDownloadURL();
+      await AsyncStorage.setItem(`image-${imageName}`, url);
       return url;
-    } catch (error: any) {
-      // Error getting image from storage [Error: [storage/object-not-found] No object exists at the desired reference.]
-      const expectedErrors = ['storage/object-not-found'];
-      if (expectedErrors.includes(error.code)) {
-        // exmple image name: https://firebasestorage.googleapis.com:443/v0/b/shanidms-3a065.appspot.com/o/food_item_images%2FzZHMiF29YzFcVo1yN8GW?alt=media&token=da6c9f54-a330-48ca-b954-7f5052f7c1bc
-        // we need the
-        console.log('Image not found in storage', {imageName});
-        return null;
-      }
-      console.error('Error getting image from storage', error);
+    } catch (error) {
+      // Handle errors
     }
   }
 
@@ -175,6 +176,167 @@ export class FirebaseService {
         intensity: 2,
         // 4th May 2021
         timestamp: 1620259200000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 1,
+        // 5th May 2021
+        timestamp: 1620345600000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 5,
+        // 6th May 2021
+        timestamp: 1620432000000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 4,
+        // 7th May 2021
+        timestamp: 1620518400000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 3,
+        // 8th May 2021
+        timestamp: 1620604800000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 2,
+        // 9th May 2021
+        timestamp: 1620691200000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 1,
+        // 10th May 2021
+        timestamp: 1620777600000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 5,
+        // 11th May 2021
+        timestamp: 1620864000000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 4,
+        // 12th May 2021
+        timestamp: 1620950400000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 3,
+        // 13th May 2021
+        timestamp: 1621036800000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 2,
+        // 14th May 2021
+        timestamp: 1621123200000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 1,
+        // 15th May 2021
+        timestamp: 1621209600000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 5,
+        // 16th May 2021
+        timestamp: 1621296000000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 4,
+        // 17th May 2021
+        timestamp: 1621382400000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 3,
+        // 18th May 2021
+        timestamp: 1621468800000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 2,
+        // 19th May 2021
+        timestamp: 1621555200000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 1,
+        // 20th May 2021
+        timestamp: 1621641600000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 5,
+        // 21st May 2021
+        timestamp: 1621728000000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 4,
+        // 22nd May 2021
+        timestamp: 1621814400000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 3,
+        // 23rd May 2021
+        timestamp: 1621900800000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 2,
+        // 24th May 2021
+        timestamp: 1621987200000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 1,
+        // 25th May 2021
+        timestamp: 1622073600000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 5,
+        // 26th May 2021
+        timestamp: 1622160000000,
+      },
+      {
+        name: 'Running',
+        durationMinutes: 30,
+        intensity: 4,
+        // 27th May 2021
+        timestamp: 1622246400000,
       },
     ];
     return dummyData;

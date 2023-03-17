@@ -9,13 +9,19 @@ import {imagePathToUri} from 'app/utils/image.utils';
 export interface AddFoodItem extends Omit<FoodItemDTO, 'id' | 'image'> {
   image: PhotoFile;
 }
-export const useAddFoodItem = () => {
+export const useAddFoodItem: () => {
+  addFoodItem: (foodItem: AddFoodItem) => Promise<FoodItemDTO>;
+} = () => {
   const {userData} = useGetUser();
   const addFoodItem = useCallback(
     async (foodItem: AddFoodItem) => {
       try {
-        const foodItemRef = firestore().collection('food_items').doc();
-        const imageRef = storage().ref(`food_item_images/${foodItemRef.id}`);
+        const foodItemsCollectionRef = firestore()
+          .collection('food_items')
+          .doc();
+        const imageRef = storage().ref(
+          `food_item_images/${foodItemsCollectionRef.id}`,
+        );
         await imageRef.putFile(imagePathToUri(foodItem.image.path), {
           contentType: 'image/jpeg',
         });
@@ -23,14 +29,21 @@ export const useAddFoodItem = () => {
 
         const foodItemRequest = {
           ...foodItem,
-          id: foodItemRef.id,
+          id: foodItemsCollectionRef.id,
           image: downloadURL,
           timestamp: Number(foodItem.timestamp),
           related_user: firestore().collection('users').doc(userData?.id),
         };
-        await foodItemRef.set(foodItemRequest);
+        await foodItemsCollectionRef.set(foodItemRequest);
+
+        const lastSavedFoodItem = await firestore()
+          .collection('food_items')
+          .doc(foodItemsCollectionRef.id)
+          .get();
+        return lastSavedFoodItem.data() as FoodItemDTO;
       } catch (error) {
         console.log('Error adding food item', error);
+        throw error;
       }
     },
     [userData?.id],

@@ -25,22 +25,18 @@ export const BackgroundImage = styled.ImageBackground<{theme: Theme}>`
   justify-content: center;
 `;
 
-export const FAB = styled.TouchableOpacity<{theme: Theme}>`
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  width: 60px;
-  height: 60px;
-  border-radius: 30px;
-  background-color: ${props => props.theme.accentColor};
-  align-items: center;
-  justify-content: center;
-  ${({theme}) => theme.shadow};
-`;
-
 export const EmptyListText = styled.Text<{theme: Theme}>`
   color: ${props => props.theme.white};
   font-size: ${props => props.theme.textSize * 1.5}px;
   font-weight: bold;
   text-align: center;
+`;
+
+export const SectionHeader = styled.Text`
+  font-size: 18px;
+  font-weight: bold;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  padding-left: 16px;
+  color: #fff;
 `;

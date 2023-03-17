@@ -1,36 +1,16 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {Text} from 'react-native';
 import FoodCard from 'app/containers/FoodTracker/Components/FoodCard';
 import {FirebaseService} from 'app/services/firebase/FirebaseService';
 import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
-import {isEmpty} from 'lodash';
+import {cloneDeep, isEmpty} from 'lodash';
 import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
 import {formatFoodItem} from 'app/containers/FoodTracker/utils';
 import {Container, ScrollContainer, Section} from './styles';
-import {format, isSameDay, subDays, startOfWeek, endOfWeek} from 'date-fns';
 import FoodCardsList from 'app/containers/FoodTracker/Components/FoodCardsList';
 import FoodCameraButton from 'app/containers/FoodTracker/Components/FoodCameraButton';
 import {NavigationProp} from '@react-navigation/native';
-
-const formatDate = (date: Date) => {
-  const today = new Date();
-  const yesterday = subDays(today, 1);
-
-  if (isSameDay(date, today)) {
-    return `Today, ${format(date, 'MMM d')}`;
-  } else if (isSameDay(date, yesterday)) {
-    return `Yesterday, ${format(date, 'MMM d')}`;
-  } else if (date > subDays(today, 7)) {
-    return `${format(date, 'EEEE')}, ${format(date, 'MMM d')}`;
-  } else if (
-    date >= startOfWeek(subDays(today, 14)) &&
-    date <= endOfWeek(subDays(today, 14))
-  ) {
-    return `${format(date, 'EEEE')}, ${format(date, 'MMM d')}`;
-  } else {
-    return format(date, 'MMM d');
-  }
-};
+import {getRelativeDateText} from 'app/utils/datetime.utils';
+import Loader from 'app/components/common-ui/Loader/Loader';
 
 type groupBy = 'day' | 'week' | 'food' | 'exact food';
 
@@ -38,6 +18,7 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   navigation,
 }) => {
   const [foodItems, setFoodItems] = useState<formattedFoodItemDTO[]>([]);
+  const [fsFoodItems, setFsFoodItems] = useState<FoodItemDTO[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [groupBy, setGroupBy] = useState<groupBy>('day');
   const fsManager = new FirebaseService();
@@ -45,13 +26,8 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   const getFoodItems = async (date: Date) => {
     setIsLoading(true);
     const FSfoodItems = await fsManager.getFoodItems(date);
-    const updatedFoodItems = await Promise.all(
-      FSfoodItems.map((item: FoodItemDTO) => formatFoodItem(item, fsManager)),
-    );
-    const sortedFoodItems = updatedFoodItems.sort((a, b) => {
-      return b.timestamp - a.timestamp;
-    });
-    setFoodItems(sortedFoodItems);
+    console.log('FSfoodItems', FSfoodItems);
+    setFsFoodItems(cloneDeep(FSfoodItems));
     setIsLoading(false);
   };
 
@@ -59,6 +35,22 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
     getFoodItems(new Date());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const sortAndFormatFoodItems = async () => {
+    const updatedFoodItems = await Promise.all(
+      fsFoodItems.map((item: FoodItemDTO) => formatFoodItem(item, fsManager)),
+    );
+    const sortedFoodItems = updatedFoodItems.sort((a, b) => {
+      return b.timestamp - a.timestamp;
+    });
+    setFoodItems(cloneDeep(sortedFoodItems));
+  };
+
+  useEffect(() => {
+    setIsLoading(true);
+    sortAndFormatFoodItems();
+    setIsLoading(false);
+  }, [fsFoodItems]);
 
   const lastMeal = useMemo(() => {
     if (foodItems.length > 0) {
@@ -106,7 +98,7 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
     );
 
     function groupByDay(acc: any, cur: formattedFoodItemDTO) {
-      const date = formatDate(new Date(cur.timestamp));
+      const date = getRelativeDateText(new Date(cur.timestamp));
 
       if (!acc[date]) {
         acc[date] = {meals: [], count: 0};
@@ -126,7 +118,7 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   return (
     <Container>
       {isLoading ? (
-        <Text>Loading...</Text>
+        <Loader />
       ) : (
         <ScrollContainer>
           <Section>
@@ -155,7 +147,10 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
           ))}
         </ScrollContainer>
       )}
-      <FoodCameraButton navigation={navigation} />
+      <FoodCameraButton
+        navigation={navigation}
+        setFsFoodItems={setFsFoodItems}
+      />
     </Container>
   );
 };

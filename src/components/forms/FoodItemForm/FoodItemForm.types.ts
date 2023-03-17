@@ -16,4 +16,5 @@ export interface InputControllerProps {
   returnKeyType: ReturnKeyType;
   onSubmitEditing: () => void;
   rules: any;
+  selectTextOnFocus?: boolean;
 }

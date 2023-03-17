@@ -88,27 +88,27 @@ const FoodCard: React.FC<FoodCardProps> = ({
           <SectionText>{name}</SectionText>
         </View>
       </SectionContainer>
-      {!!notes && (
-        <SectionContainer>
-          <SectionIcon name="clipboard" size={24} color="#333" />
-          <View>
-            <SectionTitle>Notes</SectionTitle>
-            <SectionText>{notes}</SectionText>
-          </View>
-        </SectionContainer>
-      )}
-      <SectionContainer>
-        <SectionIcon name="calendar" size={24} color="#333" />
-        <View>
-          <SectionTitle>Date</SectionTitle>
-          <SectionText>{date}</SectionText>
-        </View>
-      </SectionContainer>
+      {/*{!!notes && (*/}
+      {/*  <SectionContainer>*/}
+      {/*    <SectionIcon name="clipboard" size={24} color="#333" />*/}
+      {/*    <View>*/}
+      {/*      <SectionTitle>Notes</SectionTitle>*/}
+      {/*      <SectionText>{notes}</SectionText>*/}
+      {/*    </View>*/}
+      {/*  </SectionContainer>*/}
+      {/*)}*/}
       <SectionContainer>
         <SectionIcon name="nutrition" size={24} color="#333" />
         <View>
           <SectionTitle>Carbs</SectionTitle>
           <SectionText>Carbs: {carbsGrams} </SectionText>
+        </View>
+      </SectionContainer>
+      <SectionContainer>
+        <SectionIcon name="calendar" size={24} color="#333" />
+        <View>
+          <SectionTitle>Date</SectionTitle>
+          <SectionText>{date}</SectionText>
         </View>
       </SectionContainer>
       <Collapsable title={'Blood Glucose Data'}>

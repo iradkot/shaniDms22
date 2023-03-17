@@ -1,5 +1,5 @@
 import React from 'react';
-import {Text} from 'react-native';
+import {Animated, Text} from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {SportItemDTO} from 'app/types/sport.types';
@@ -9,24 +9,81 @@ import {theme} from 'app/style/theme';
 
 interface SportItemProps {
   sportItem: SportItemDTO;
+  y: Animated.Value;
+  index: number;
 }
+
+const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 
 const SportItem: React.FC<SportItemProps> = ({
   sportItem: {name, durationMinutes, intensity, timestamp},
+  y,
+  index,
 }) => {
   const appTheme = useTheme() as typeof theme;
+  const {height} = appTheme.dimensions;
+  const availableHeight = height - appTheme.tabBarHeight;
+  const CARD_AREA = availableHeight * 0.25;
+  const position = Animated.subtract(index * CARD_AREA, y);
+  const isDisappearing = -CARD_AREA;
+  const isTop = 0;
+  const isBottom = availableHeight - CARD_AREA;
+  const isAppearing = availableHeight;
+  const translateY = Animated.add(
+    y,
+    y.interpolate({
+      inputRange: [0, index * CARD_AREA],
+      outputRange: [0, -index * CARD_AREA],
+      extrapolateRight: 'clamp',
+    }),
+  );
+  const scale = position.interpolate({
+    inputRange: [isDisappearing, isTop, isBottom, isAppearing],
+    outputRange: [0.7, 1, 1, 0.8],
+    extrapolate: 'clamp',
+  });
+  const opacity = position.interpolate({
+    inputRange: [isDisappearing, isTop, isBottom, isAppearing],
+    outputRange: [0.5, 0.8, 0.8, 0.5],
+  });
+  const rotate = position.interpolate({
+    inputRange: [isDisappearing, isTop, isBottom, isAppearing],
+    outputRange: ['-10deg', '0deg', '0deg', '10deg'],
+    extrapolate: 'clamp',
+  });
+
+  const focusedOpacity = position.interpolate({
+    inputRange: [isDisappearing, isTop, isBottom, isAppearing],
+    outputRange: [0.5, 1, 1, 0.5],
+  });
+
+  const borderColor = position.interpolate({
+    inputRange: [isDisappearing, isTop, isBottom, isAppearing],
+    outputRange: [
+      appTheme.white,
+      appTheme.accentColor,
+      appTheme.accentColor,
+      appTheme.white,
+    ],
+  });
+
+  const borderWidth = position.interpolate({
+    inputRange: [isDisappearing, isTop, isBottom, isAppearing],
+    outputRange: [1, 2, 2, 1],
+  });
 
   // convert timestamp to readable date format
   const date = new Date(timestamp).toLocaleDateString();
 
   return (
-    <LinearGradient
+    <AnimatedLinearGradient
       style={{
-        opacity: 0.95,
         borderRadius: appTheme.borderRadius,
         borderColor: appTheme.white,
         borderWidth: 1,
-        marginVertical: appTheme.dimensions.height * 0.015,
+        // marginVertical: appTheme.dimensions.height * 0.015,
+        // opacity,
+        transform: [{translateY}, {scale}, {rotate}],
       }}
       colors={[appTheme.accentColor, appTheme.white]}
       start={{x: 0, y: 0}}
@@ -56,11 +113,11 @@ const SportItem: React.FC<SportItemProps> = ({
           </Text>
         </Content>
       </Container>
-    </LinearGradient>
+    </AnimatedLinearGradient>
   );
 };
 
-const Container = styled.View<{theme: Theme}>`
+const Container = styled(Animated.View)<{theme: Theme}>`
   position: relative;
   border-radius: ${props => props.theme.borderRadius}px;
   margin-horizontal: ${props => props.theme.dimensions.width * 0.05}px;

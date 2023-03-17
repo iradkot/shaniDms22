@@ -6,12 +6,14 @@ import {NavigationProp} from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {Theme} from 'app/types/theme';
 import Button from 'app/components/Button/Button';
+import {formattedFoodItemDTO} from 'app/types/food.types';
 
-const FoodCameraButton: React.FC<{navigation: NavigationProp<any>}> = ({
-  navigation,
-}) => {
+const FoodCameraButton: React.FC<{
+  navigation: NavigationProp<any>;
+  setFsFoodItems: (foodItems: formattedFoodItemDTO[]) => void;
+}> = ({navigation, setFsFoodItems}) => {
   const handlePress = () => {
-    navigation.navigate(ADD_FOOD_ITEM_SCREEN);
+    navigation.navigate(ADD_FOOD_ITEM_SCREEN, {setFsFoodItems: setFsFoodItems});
   };
   return (
     <Button

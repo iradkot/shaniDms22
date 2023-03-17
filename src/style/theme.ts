@@ -28,7 +28,7 @@ export const theme: Theme = {
   black: colors.black,
   dimensions: {
     width,
-    height,
+    height: height,
   },
   borderColor: colors.gray[300],
   fontFamily: 'sans-serif',
