@@ -142,6 +142,7 @@ const FoodItemForm = ({
               returnKeyType={input.returnKeyType}
               onChangeText={(text: string) => onChange(text)}
               onSubmitEditing={input.onSubmitEditing}
+              selectTextOnFocus={input.selectTextOnFocus}
             />
           )}
           name={input.name}
