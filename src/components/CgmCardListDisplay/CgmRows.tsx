@@ -9,7 +9,7 @@ interface CgmCardListDisplayProps {
   isLoading: boolean;
 }
 
-const CgmCardListDisplay: FC<CgmCardListDisplayProps> = ({
+const CgmRows: FC<CgmCardListDisplayProps> = ({
   bgData,
   onPullToRefreshRefresh,
   isLoading,
@@ -31,4 +31,4 @@ const CgmCardListDisplay: FC<CgmCardListDisplayProps> = ({
   );
 };
 
-export default CgmCardListDisplay;
+export default CgmRows;

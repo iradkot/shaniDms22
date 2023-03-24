@@ -22,15 +22,15 @@ import {
   ADD_SPORT_ITEM_SCREEN,
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
-import AddNotificationScreen from './containers/AddNotificationScreen/AddNotificationScreen';
-import EditNotificationScreen from 'app/containers/EditNotificationScreen/EditNotificationScreen';
+import AddNotificationScreen from './containers/forms/AddNotificationScreen/AddNotificationScreen';
+import EditNotificationScreen from 'app/containers/forms/EditNotificationScreen/EditNotificationScreen';
 import {firebase} from '@react-native-firebase/messaging';
 import styled, {ThemeProvider} from 'styled-components/native';
 import {theme} from 'app/style/theme';
 import {Theme} from 'app/types/theme';
 import CameraScreen from 'app/components/CameraScreen/CameraScreen';
-import AddFoodItemScreen from 'app/containers/AddFoodItem/AddFoodItem';
-import AddSportItem from 'app/containers/AddSportItem/AddSportItem';
+import AddFoodItemScreen from 'app/containers/forms/AddFoodItem/AddFoodItem';
+import AddSportItem from 'app/containers/forms/AddSportItem/AddSportItem';
 
 const Stack = createNativeStackNavigator();
 

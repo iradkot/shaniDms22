@@ -6,9 +6,9 @@ import * as SCREEN_NAMES from 'app/constants/SCREEN_NAMES';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import ADIcon from 'react-native-vector-icons/AntDesign';
 import {theme} from 'app/style/theme';
-import FoodTracker from 'app/containers/FoodTracker/FoodTracker';
+import FoodTracker from 'app/containers/MainTabsNavigator/Containers/FoodTracker/FoodTracker';
 import {SPORT_TRACKING_TAB_SCREEN} from 'app/constants/SCREEN_NAMES';
-import SportTracker from '../SportTracker/SportTracker';
+import SportTracker from './Containers/SportTracker/SportTracker';
 
 const Tab = createBottomTabNavigator();
 

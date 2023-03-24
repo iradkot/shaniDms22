@@ -128,13 +128,25 @@ export class FirebaseService {
   }
 
   async getFoodItemBgData(foodItem: FoodItemDTO): Promise<BgSample[]> {
-    // get the bg data and pull 12 hours of bg data before the food item timestamp
+    const currentTime = new Date();
     const startDate = new Date(foodItem.timestamp);
     startDate.setHours(startDate.getHours() - 1);
     const endDate = new Date(foodItem.timestamp);
     endDate.setHours(endDate.getHours() + 4);
-    const bgData = await this.getBgDataByDate({startDate, endDate});
-    return bgData;
+
+    if (currentTime >= endDate) {
+      const cacheKey = `bgData-${foodItem.timestamp}`;
+      const cachedBgData = await AsyncStorage.getItem(cacheKey);
+      if (cachedBgData) {
+        return JSON.parse(cachedBgData);
+      } else {
+        const bgData = await this.getBgDataByDate({startDate, endDate});
+        return bgData;
+      }
+    } else {
+      const bgData = await this.getBgDataByDate({startDate, endDate});
+      return bgData;
+    }
   }
 
   async getSportItems(date: Date): Promise<SportItemDTO[]> {

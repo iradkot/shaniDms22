@@ -83,3 +83,20 @@ export function findBiggestChangesInTimeRange(
 
   return maxChanges;
 }
+
+/**
+ * This is a curried function that returns a function that sorts an array of BgSample objects
+ * @param ascending
+ * @returns {(a: BgSample, b: BgSample) => number}
+ * @example
+ * const sortedBgData = bgData.sort(sortFunction(false));
+ **/
+export const bgSortFunction =
+  (ascending = false) =>
+  (a: BgSample, b: BgSample) => {
+    if (ascending) {
+      return a.date - b.date;
+    } else {
+      return b.date - a.date;
+    }
+  };

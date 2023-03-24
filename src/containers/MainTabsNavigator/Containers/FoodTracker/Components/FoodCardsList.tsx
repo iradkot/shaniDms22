@@ -5,7 +5,7 @@
 // Based on this file, create a RN typescript with styled components, FoodCards list renderer Path: src/containers/FoodTracker/Components/FoodCard.tsx
 
 import React from 'react';
-import FoodCard from 'app/containers/FoodTracker/Components/FoodCard';
+import FoodCard from 'app/containers/MainTabsNavigator/Containers/FoodTracker/Components/FoodCard';
 import {formattedFoodItemDTO} from 'app/types/food.types';
 
 interface FoodCardsListProps {

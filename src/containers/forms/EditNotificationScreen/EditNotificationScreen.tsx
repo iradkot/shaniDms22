@@ -22,7 +22,7 @@ import {
   AddNotificationScreenButtonText,
   AddNotificationScreenContainer,
   AddNotificationScreenTitle,
-} from 'app/containers/AddNotificationScreen/AddNotificationScreen.style';
+} from 'app/containers/forms/AddNotificationScreen/AddNotificationScreen.style';
 import NotificationForm from 'app/components/forms/NotificationForm/NotificationForm';
 
 const EditNotificationScreen: FC = (props: any) => {

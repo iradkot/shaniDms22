@@ -1,49 +1,27 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo} from 'react';
 import styled from 'styled-components/native';
-import {FirebaseService} from 'app/services/firebase/FirebaseService';
-import {BgSample} from 'app/types/day_bgs';
-import CgmCardListDisplay from 'app/components/CgmCardListDisplay/CgmCardListDisplay';
+import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
-import Collapsable from 'app/containers/MainTabsNavigator/Containers/Home/components/Collapsable';
+import Collapsable from 'app/components/Collapsable';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import BGValueRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestBgValueRow';
 import BgGraph from 'app/components/CgmGraph/CgmGraph';
 import {cloneDeep} from 'lodash';
 import {Theme} from 'app/types/theme';
 import {Dimensions} from 'react-native';
-import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
-import {formatFoodItem} from 'app/containers/FoodTracker/utils';
+import {useBgData} from 'app/hooks/useBgData';
+import {useFoodItems} from 'app/hooks/useFoodItems';
+import {bgSortFunction} from 'app/utils/bg.utils';
 
 const HomeContainer = styled.View<{theme: Theme}>`
   flex: 1;
   background-color: ${({theme}) => theme.backgroundColor};
 `;
 
-/**
- * This is a curried function that returns a function that sorts an array of BgSample objects
- * @param ascending
- * @returns {(a: BgSample, b: BgSample) => number}
- * @example
- * const sortedBgData = bgData.sort(sortFunction(false));
- **/
-const sortFunction =
-  (ascending = false) =>
-  (a: BgSample, b: BgSample) => {
-    if (ascending) {
-      return a.date - b.date;
-    } else {
-      return b.date - a.date;
-    }
-  };
-
 // create dummy home component with typescript
 const Home: React.FC = () => {
-  const [latestBgSample, setLatestBgSample] = useState<BgSample>();
-  const [bgData, setBgData] = React.useState<BgSample[]>([]);
-  const [todayBgData, setTodayBgData] = React.useState<BgSample[]>([]);
-  const [isLoading, setIsLoading] = React.useState<boolean>(false);
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
   const isShowingToday = useMemo(() => {
     const today = new Date();
@@ -53,46 +31,18 @@ const Home: React.FC = () => {
       today.getDate() === currentDate.getDate()
     );
   }, [currentDate]);
-  const getBgDataByDate = async (date?: Date): Promise<void> => {
-    setIsLoading(true);
-    const fsManager = new FirebaseService();
-    const bgData = await fsManager.getBgDataByDate({
-      endDate: date ?? new Date(),
-      getWholeDays: true,
-    });
-    const sortedBgData = bgData.sort(sortFunction(false));
-    if (!date || isShowingToday) {
-      setTodayBgData(sortedBgData);
-      if (isShowingToday) {
-        setBgData(sortedBgData);
-      }
-    } else {
-      setBgData(sortedBgData);
-    }
-    setIsLoading(false);
-  };
 
   const [debouncedCurrentDate, setDebouncedCurrentDate] = useDebouncedState(
     currentDate,
     500,
   );
-  useEffect(() => {
-    setDebouncedCurrentDate(currentDate);
-    setIsLoading(currentDate !== debouncedCurrentDate);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDate]);
+  const {bgData, latestBgSample, isLoading, getUpdatedBgData} =
+    useBgData(debouncedCurrentDate);
 
   useEffect(() => {
-    // noinspection JSIgnoredPromiseFromCall
-    getBgDataByDate(debouncedCurrentDate);
+    setDebouncedCurrentDate(currentDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedCurrentDate]);
-  // getUpdatedBgData - get the bg data for today and update the state
-  const getUpdatedBgData = async () => {
-    // noinspection JSIgnoredPromiseFromCall
-    await getBgDataByDate();
-  };
-  const pullToRefreshBgData = isShowingToday ? getUpdatedBgData : undefined;
+  }, [currentDate]);
 
   const setCustomDate = (date: Date) => {
     setCurrentDate(date);
@@ -104,29 +54,7 @@ const Home: React.FC = () => {
     setCurrentDate(new Date(currentDate.setDate(currentDate.getDate() - 1)));
   };
 
-  useEffect(() => {
-    if (
-      todayBgData?.length &&
-      (!latestBgSample || todayBgData[0].date > latestBgSample?.date)
-    ) {
-      setLatestBgSample(todayBgData[0]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [todayBgData]);
-
-  const [foodItems, setFoodItems] = useState<formattedFoodItemDTO[]>([]);
-
-  useEffect(() => {
-    const fsManager = new FirebaseService();
-    const date = new Date(currentDate);
-    fsManager.getFoodItems(date).then(items => {
-      Promise.all(
-        items.map((item: FoodItemDTO) => formatFoodItem(item, fsManager)),
-      ).then(formattedItems => {
-        setFoodItems(formattedItems);
-      });
-    });
-  }, []);
+  const {foodItems} = useFoodItems(currentDate);
 
   return (
     <HomeContainer>
@@ -140,17 +68,14 @@ const Home: React.FC = () => {
       </Collapsable>
       <Collapsable title={'chart'}>
         <BgGraph
-          bgSamples={cloneDeep(bgData).sort(sortFunction(true))}
+          bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}
           width={Dimensions.get('window').width}
           height={200}
           foodItems={foodItems}
         />
       </Collapsable>
-      {/*{isShowingToday && (*/}
-      {/*  <Timer latestBgSample={latestBgSample} callback={getUpdatedBgData} />*/}
-      {/*)}*/}
-      <CgmCardListDisplay
-        onPullToRefreshRefresh={pullToRefreshBgData}
+      <CgmRows
+        onPullToRefreshRefresh={getUpdatedBgData}
         isLoading={isLoading}
         bgData={bgData}
       />

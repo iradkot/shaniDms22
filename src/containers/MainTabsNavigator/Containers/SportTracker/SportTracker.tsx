@@ -8,14 +8,14 @@ import React, {
 import {NavigationProp} from '@react-navigation/native';
 import {FirebaseService} from 'app/services/firebase/FirebaseService';
 import {FlatList} from 'react-native-gesture-handler';
-import SportTrackerHeader from './components/SportTrackerHeader';
-import * as Styled from './styles';
+import SportTrackerHeader from 'app/containers/MainTabsNavigator/Containers/SportTracker/components/SportTrackerHeader';
+import * as Styled from 'app/containers/MainTabsNavigator/Containers/SportTracker/styles';
 import {formattedSportItemDTO, SportItemDTO} from 'app/types/sport.types';
 import {
   formatDateToDateAndTimeString,
   getRelativeDateText,
 } from 'app/utils/datetime.utils';
-import SportItem from './components/SportItem';
+import SportItem from 'app/containers/MainTabsNavigator/Containers/SportTracker/components/SportItem';
 import Button from 'app/components/Button/Button';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {ADD_SPORT_ITEM_SCREEN} from 'app/constants/SCREEN_NAMES';
