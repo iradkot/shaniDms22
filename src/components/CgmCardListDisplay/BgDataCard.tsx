@@ -1,9 +1,10 @@
 import React from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import LinearGradient from 'react-native-linear-gradient';
-import DirectionArrows from '../../components/DirectionArrows';
-import {BgSample} from '../../types/day_bgs';
+import DirectionArrows from 'app/components/DirectionArrows';
+import {BgSample} from 'app/types/day_bgs';
 import {Theme} from 'app/types/theme';
+import DropShadow from 'react-native-drop-shadow';
 
 const BgDataCard = ({
   bgData,
@@ -22,8 +23,9 @@ const BgDataCard = ({
             : '#FFFFFF',
           theme.determineBgColorByGlucoseValue(bgData.sgv),
         ]}
-        start={{x: 0, y: 0}}
-        end={{x: 1, y: 0}}
+        // colors={['#FFFFFF', '#FFFFFF']}
+        start={{x: 0, y: 1}}
+        end={{x: 0, y: 0}}
         style={{
           flexDirection: 'row',
           justifyContent: 'space-between',
@@ -35,7 +37,18 @@ const BgDataCard = ({
           borderRadius: 5, // Added border radius for better visual effect
           marginTop: 2, // Added margin top for a stacked card effect
         }}>
-        <DataRowText>{bgData.sgv}</DataRowText>
+        <DropShadow
+          style={{
+            shadowColor: '#fff',
+            shadowOffset: {
+              width: 1,
+              height: 1,
+            },
+            shadowOpacity: 0.5,
+            shadowRadius: 2,
+          }}>
+          <DataRowText>{bgData.sgv}</DataRowText>
+        </DropShadow>
         <DirectionArrows trendDirection={bgData.direction} />
         <DataRowText> {prevBgData && bgData.sgv - prevBgData.sgv} </DataRowText>
         <DataRowText>{new Date(bgData.date).toLocaleString()}</DataRowText>
@@ -50,8 +63,9 @@ const DataRowContainer = styled.View`
   align-items: center;
 `;
 
-const DataRowText = styled.Text`
+const DataRowText = styled.Text<{theme: Theme}>`
   font-size: 16px;
+  color: ${props => props.theme.textColor};
 `;
 
 export default React.memo(BgDataCard, (prevProps, nextProps) => {

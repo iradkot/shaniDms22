@@ -57,7 +57,7 @@ const TimeValueText = styled(ValueText)`
 `;
 
 const StDevValueText = styled(ValueText)`
-  font-size: 26px;
+  font-size: 16px;
   color: ${props => props.theme.textColor};
 `;
 

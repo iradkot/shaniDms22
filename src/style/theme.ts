@@ -9,7 +9,7 @@ import {shadowStyles} from 'app/style/styling-utils';
 
 const {width, height} = Dimensions.get('window');
 
-export const theme: Theme = {
+export const theme: { screenWidth: number; borderColor: string; readonly shadow: { small: string; default: string }; readonly getShadowStyles: (elevation: number, color: string) => string; belowRangeColor: string; severeAboveRange: string; fontFamily: string; white: string; dark: boolean; tabBarHeight: number; buttonTextColor: string; inRangeColor: string; backgroundColor: string; textSize: number; accentColor: string; screenHeight: number; black: string; textColor: string; aboveRangeColor: string; buttonBackgroundColor: string; borderRadius: number; readonly determineBgColorByGlucoseValue: (bgValue: number) => string; lineHeight: number; severeBelowRange: string; dimensions: { width: number; height: number } } = {
   screenHeight: height,
   screenWidth: width,
   tabBarHeight: 50,
@@ -40,13 +40,14 @@ export const theme: Theme = {
   },
 
   get getShadowStyles() {
-    return (elevation: number) => shadowStyles(elevation, this);
+    return (elevation: number, color: string) => shadowStyles({ elevation, color, theme: this });
   },
 
   get shadow() {
     return {
       default: this.getShadowStyles(1),
       small: this.getShadowStyles(0.5),
+      dark: this.getShadowStyles(1, colors.black),
     };
   },
 };

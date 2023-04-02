@@ -13,6 +13,10 @@ import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import AppInitScreen from './containers/initScreen';
 import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import {
   MAIN_TAB_NAVIGATOR,
   LOGIN_SCREEN,
   ADD_NOTIFICATION_SCREEN,
@@ -49,48 +53,54 @@ const AppContainer = styled.View<{theme: Theme}>`
 `;
 
 const App: () => JSX.Element = () => {
+  const extendedTheme = {
+    ...theme,
+  };
+
   // if user is not logged in, show login screen else show home screen
   return (
     // TODO - move SafeAreaView style outside
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={extendedTheme}>
       <StatusBar backgroundColor={theme.backgroundColor} />
       <AppContainer>
         <SafeAreaView style={{flex: 1}}>
-          <NavigationContainer>
-            <Stack.Navigator screenOptions={{headerShown: false}}>
-              <Stack.Screen name="initScreen" component={AppInitScreen} />
-              <Stack.Screen name={LOGIN_SCREEN} component={Login} />
-              <Stack.Screen
-                name={MAIN_TAB_NAVIGATOR}
-                component={MainTabsNavigator}
-              />
-              <Stack.Screen
-                options={{headerShown: true, headerTitle: ''}}
-                name={ADD_NOTIFICATION_SCREEN}
-                component={AddNotificationScreen}
-              />
-              <Stack.Screen
-                options={{headerShown: true, headerTitle: ''}}
-                name={EDIT_NOTIFICATION_SCREEN}
-                component={EditNotificationScreen}
-              />
-              <Stack.Screen
-                options={{headerShown: true, headerTitle: ''}}
-                name={ADD_FOOD_ITEM_SCREEN}
-                component={AddFoodItemScreen}
-              />
-              <Stack.Screen
-                options={{headerShown: true, headerTitle: ''}}
-                name={CAMERA_SCREEN}
-                component={CameraScreen}
-              />
-              <Stack.Screen
-                options={{headerShown: true, headerTitle: ''}}
-                name={ADD_SPORT_ITEM_SCREEN}
-                component={AddSportItem}
-              />
-            </Stack.Navigator>
-          </NavigationContainer>
+          <SafeAreaProvider>
+            <NavigationContainer>
+              <Stack.Navigator screenOptions={{headerShown: false}}>
+                <Stack.Screen name="initScreen" component={AppInitScreen} />
+                <Stack.Screen name={LOGIN_SCREEN} component={Login} />
+                <Stack.Screen
+                  name={MAIN_TAB_NAVIGATOR}
+                  component={MainTabsNavigator}
+                />
+                <Stack.Screen
+                  options={{headerShown: true, headerTitle: ''}}
+                  name={ADD_NOTIFICATION_SCREEN}
+                  component={AddNotificationScreen}
+                />
+                <Stack.Screen
+                  options={{headerShown: true, headerTitle: ''}}
+                  name={EDIT_NOTIFICATION_SCREEN}
+                  component={EditNotificationScreen}
+                />
+                <Stack.Screen
+                  options={{headerShown: true, headerTitle: ''}}
+                  name={ADD_FOOD_ITEM_SCREEN}
+                  component={AddFoodItemScreen}
+                />
+                <Stack.Screen
+                  options={{headerShown: true, headerTitle: ''}}
+                  name={CAMERA_SCREEN}
+                  component={CameraScreen}
+                />
+                <Stack.Screen
+                  options={{headerShown: true, headerTitle: ''}}
+                  name={ADD_SPORT_ITEM_SCREEN}
+                  component={AddSportItem}
+                />
+              </Stack.Navigator>
+            </NavigationContainer>
+          </SafeAreaProvider>
         </SafeAreaView>
       </AppContainer>
     </ThemeProvider>

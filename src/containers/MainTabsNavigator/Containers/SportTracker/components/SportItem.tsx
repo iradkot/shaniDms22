@@ -6,6 +6,7 @@ import {SportItemDTO} from 'app/types/sport.types';
 import styled, {useTheme} from 'styled-components/native';
 import {Theme} from 'app/types/theme';
 import {theme} from 'app/style/theme';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 interface SportItemProps {
   sportItem: SportItemDTO;
@@ -22,8 +23,11 @@ const SportItem: React.FC<SportItemProps> = ({
 }) => {
   const appTheme = useTheme() as typeof theme;
   const {height} = appTheme.dimensions;
-  const availableHeight = height - appTheme.tabBarHeight;
-  const CARD_AREA = availableHeight * 0.25;
+  const insets = useSafeAreaInsets();
+
+  // const availableHeight = height - appTheme.tabBarHeight - insets.top - insets.bottom;
+  const availableHeight = height;
+  const CARD_AREA = availableHeight * 0.135;
   const position = Animated.subtract(index * CARD_AREA, y);
   const isDisappearing = -CARD_AREA;
   const isTop = 0;
@@ -42,34 +46,10 @@ const SportItem: React.FC<SportItemProps> = ({
     outputRange: [0.7, 1, 1, 0.8],
     extrapolate: 'clamp',
   });
-  const opacity = position.interpolate({
-    inputRange: [isDisappearing, isTop, isBottom, isAppearing],
-    outputRange: [0.5, 0.8, 0.8, 0.5],
-  });
   const rotate = position.interpolate({
     inputRange: [isDisappearing, isTop, isBottom, isAppearing],
     outputRange: ['-10deg', '0deg', '0deg', '10deg'],
     extrapolate: 'clamp',
-  });
-
-  const focusedOpacity = position.interpolate({
-    inputRange: [isDisappearing, isTop, isBottom, isAppearing],
-    outputRange: [0.5, 1, 1, 0.5],
-  });
-
-  const borderColor = position.interpolate({
-    inputRange: [isDisappearing, isTop, isBottom, isAppearing],
-    outputRange: [
-      appTheme.white,
-      appTheme.accentColor,
-      appTheme.accentColor,
-      appTheme.white,
-    ],
-  });
-
-  const borderWidth = position.interpolate({
-    inputRange: [isDisappearing, isTop, isBottom, isAppearing],
-    outputRange: [1, 2, 2, 1],
   });
 
   // convert timestamp to readable date format
