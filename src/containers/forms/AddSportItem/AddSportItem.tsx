@@ -6,9 +6,8 @@ import { Theme } from "app/types/theme";
 import { ImageBackground } from "react-native";
 import styled from "styled-components/native";
 
-import gymImage from "app/assets/iradkot_Thw_woman_Is_in_the_GYM_6147922e-89dc-4413-967e-5b2e89500075.png";
-import runningImage
-  from "app/assets/iradkot_The_woman_running_towards_the_camera_going_to_run_as_co_863168de-2e5d-4ddd-83ae-31378b5334fe.png";
+import gymImage from "app/assets/woman_in_gym.png";
+import runningImage from "app/assets/woman_running_strong.png"
 import useAddSportItem from "app/hooks/sport/useAddSportItem";
 
 interface AddSportItemProps {
