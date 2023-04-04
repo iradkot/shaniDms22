@@ -1,39 +1,43 @@
-import React, { useState } from 'react';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { SportItemDTO } from 'app/types/sport.types';
-import SportItemForm from 'app/components/forms/SportForm';
-import { Theme } from 'app/types/theme';
-import { TouchableOpacity, Text, ImageBackground } from 'react-native';
-import styled from 'styled-components/native';
-import {SportTypeButton} from 'app/components/forms/SportForm/components/SportTypeButton';
+import React, { useState } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { SportItemDTO } from "app/types/sport.types";
+import SportItemForm from "app/components/forms/SportForm";
+import { Theme } from "app/types/theme";
+import { ImageBackground } from "react-native";
+import styled from "styled-components/native";
 
-import gymImage from 'app/assets/iradkot_Thw_woman_Is_in_the_GYM_6147922e-89dc-4413-967e-5b2e89500075.png';
-import runningImage from 'app/assets/iradkot_The_woman_running_towards_the_camera_going_to_run_as_co_863168de-2e5d-4ddd-83ae-31378b5334fe.png';
+import gymImage from "app/assets/iradkot_Thw_woman_Is_in_the_GYM_6147922e-89dc-4413-967e-5b2e89500075.png";
+import runningImage
+  from "app/assets/iradkot_The_woman_running_towards_the_camera_going_to_run_as_co_863168de-2e5d-4ddd-83ae-31378b5334fe.png";
+import useAddSportItem from "app/hooks/sport/useAddSportItem";
 
-interface AddSportItemProps {}
+interface AddSportItemProps {
+}
 
 const AddSportItem: React.FC<AddSportItemProps> = () => {
   const navigation = useNavigation();
 
   const [sportItem, setSportItem] = useState<SportItemDTO | null>(null);
-  const [selectedSportType, setSelectedSportType] = useState<'GYM' | 'RUNNING'>(
-    'GYM',
+  const [selectedSportType, setSelectedSportType] = useState<"GYM" | "RUNNING">(
+    "GYM"
   );
+
+  const { addSportItem, isLoading, error } = useAddSportItem();
 
   useFocusEffect(
     React.useCallback(() => {
       setSportItem(null);
-    }, []),
+    }, [])
   );
 
-  const handleAddSportItem = (values: SportItemDTO) => {
+  const handleAddSportItem = async (values: SportItemDTO) => {
     const sportItemDTO: SportItemDTO = {
       name: values.name,
       durationMinutes: values.durationMinutes,
       intensity: values.intensity,
-      timestamp: new Date().getTime(),
+      timestamp: new Date().getTime()
     };
-    console.log('sportItemDTO', sportItemDTO);
+    await addSportItem(sportItemDTO);
     navigation.goBack();
   };
 
@@ -41,7 +45,7 @@ const AddSportItem: React.FC<AddSportItemProps> = () => {
 
   const sportTypeBackground = {
     GYM: gymImage,
-    RUNNING: runningImage,
+    RUNNING: runningImage
   };
 
   return (
@@ -71,14 +75,14 @@ const Container = styled.View<{ theme: Theme }>`
 const styles = {
   imageBackground: {
     flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
+    justifyContent: "center",
+    paddingHorizontal: 20
   },
   sportTypeButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: 'bold',
-  },
+    fontWeight: "bold"
+  }
 };
 
 export default AddSportItem;

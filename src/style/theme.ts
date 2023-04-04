@@ -48,6 +48,7 @@ export const theme: { screenWidth: number; borderColor: string; readonly shadow:
       default: this.getShadowStyles(1),
       small: this.getShadowStyles(0.5),
       dark: this.getShadowStyles(1, colors.black),
+      bright: this.getShadowStyles(2, colors.white),
     };
   },
 };

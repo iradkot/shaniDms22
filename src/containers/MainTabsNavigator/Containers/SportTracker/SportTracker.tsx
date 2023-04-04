@@ -49,9 +49,9 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const fsManager = new FirebaseService();
 
-  const getSportItems = async (date: Date) => {
+  const getSportItems = async () => {
     setIsLoading(true);
-    const FSsportItems = await fsManager.getSportItems(date);
+    const FSsportItems = await fsManager.getSportItems();
     const updatedSportItems = await Promise.all(
       FSsportItems.map((item: SportItemDTO) =>
         formatSportItem(item, fsManager),
@@ -104,7 +104,7 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
 
   useEffect(() => {
     ListRef.current.scrollToOffset({animated: false, offset: 0});
-    getSportItems(new Date());
+    getSportItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

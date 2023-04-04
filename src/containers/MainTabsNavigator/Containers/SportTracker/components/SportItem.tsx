@@ -7,6 +7,7 @@ import styled, {useTheme} from 'styled-components/native';
 import {Theme} from 'app/types/theme';
 import {theme} from 'app/style/theme';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import { colors } from "app/style/colors";
 
 interface SportItemProps {
   sportItem: SportItemDTO;
@@ -65,7 +66,7 @@ const SportItem: React.FC<SportItemProps> = ({
         // opacity,
         transform: [{translateY}, {scale}, {rotate}],
       }}
-      colors={[appTheme.accentColor, appTheme.white]}
+      colors={[appTheme.accentColor, colors.purple["300"], 'rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.6)']}
       start={{x: 0, y: 0}}
       end={{x: 1, y: 0}}>
       <Container>

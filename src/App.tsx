@@ -35,6 +35,7 @@ import {Theme} from 'app/types/theme';
 import CameraScreen from 'app/components/CameraScreen/CameraScreen';
 import AddFoodItemScreen from 'app/containers/forms/AddFoodItem/AddFoodItem';
 import AddSportItem from 'app/containers/forms/AddSportItem/AddSportItem';
+import { SportItemsProvider } from "app/contexts/SportItemsContext";
 
 const Stack = createNativeStackNavigator();
 
@@ -65,6 +66,7 @@ const App: () => JSX.Element = () => {
       <AppContainer>
         <SafeAreaView style={{flex: 1}}>
           <SafeAreaProvider>
+            <SportItemsProvider>
             <NavigationContainer>
               <Stack.Navigator screenOptions={{headerShown: false}}>
                 <Stack.Screen name="initScreen" component={AppInitScreen} />
@@ -100,6 +102,7 @@ const App: () => JSX.Element = () => {
                 />
               </Stack.Navigator>
             </NavigationContainer>
+            </SportItemsProvider>
           </SafeAreaProvider>
         </SafeAreaView>
       </AppContainer>

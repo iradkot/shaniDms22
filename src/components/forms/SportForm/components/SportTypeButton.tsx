@@ -27,7 +27,7 @@ const SportTypeWrapper = styled.TouchableOpacity<{ theme: Theme, isSelected: boo
   flex: 1;
   margin: 10px;
   border-radius: 10px;
-  ${({theme, isSelected}) => isSelected && theme.shadow.dark};
+  ${({theme, isSelected}) => isSelected && theme.shadow.bright};
 `;
 
 const SportTypeText = styled.Text`
