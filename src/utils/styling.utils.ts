@@ -51,3 +51,37 @@ export const determineBgColorByGlucoseValue: DetermineBgColorByGlucoseValue = (
     return SEVERE_HYPO_COLOR;
   }
 };
+
+const hexToRgba = (hex: string, opacity: number): string => {
+  const hexValue = hex.replace('#', '');
+  const r = parseInt(hexValue.substring(0, 2), 16);
+  const g = parseInt(hexValue.substring(2, 4), 16);
+  const b = parseInt(hexValue.substring(4, 6), 16);
+
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+export const addOpacity = (color: string, opacity: number): string => {
+  // If color is in HEX format
+  if (color.startsWith('#')) {
+    return hexToRgba(color, opacity);
+  }
+
+  // If color is in RGB or RGBA format
+  const rgbaRegex = /^rgba?\(\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*(?:,\s*([0-9.]+)\s*)?\)$/i;
+  const matches = color.match(rgbaRegex);
+
+  if (matches) {
+    const r = parseInt(matches[1], 10);
+    const g = parseInt(matches[2], 10);
+    const b = parseInt(matches[3], 10);
+    const existingOpacity = matches[4] ? parseFloat(matches[4]) : 1;
+
+    return `rgba(${r}, ${g}, ${b}, ${opacity * existingOpacity})`;
+  }
+
+  // If color format is not supported, return the original color
+  console.log(`Color format not supported: ${color}`);
+  return color;
+};
+
