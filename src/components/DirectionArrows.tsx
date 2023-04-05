@@ -19,7 +19,7 @@ const ArrowIcon = styled(Icon)<{
   trendDirection: keyof typeof trendDirectionToRotation;
 }>`
   transform: ${({trendDirection}) => {
-    const rotation = trendDirectionToRotation[trendDirection] || 20;
+    const rotation = trendDirectionToRotation[trendDirection] || 0;
     return `rotate(${rotation}deg)`;
   }};
 `;
@@ -31,7 +31,7 @@ const DirectionArrows = ({
   size?: number;
 }) => {
   return (
-    <>
+    <ArrowsContainer>
       {trendDirection === 'DoubleUp' || trendDirection === 'DoubleDown' ? (
         <>
           <ArrowIcon
@@ -65,8 +65,15 @@ const DirectionArrows = ({
           }}
         />
       )}
-    </>
+    </ArrowsContainer>
   );
 };
+
+const ArrowsContainer = styled.View`
+  flex-direction: row;
+  justify-content: space-around;
+  align-items: center;
+  width: 55px;
+`;
 
 export default DirectionArrows;
