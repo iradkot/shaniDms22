@@ -68,6 +68,8 @@ export const FoodItem = ({
         height={containerHeight}
         x={x - containerWidth / 2}
         y={y}
+        rx={5}
+        ry={5}
         fill="red"
         onPress={() => {
           setFocusedItem(preFocusedItem => {
