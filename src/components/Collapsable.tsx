@@ -8,6 +8,7 @@ import {
 import styled from 'styled-components/native';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import {useLayout} from '@react-native-community/hooks';
+import { Theme } from "app/types/theme";
 
 const CollapsableContainer = styled.View`
   width: 100%;
@@ -23,10 +24,11 @@ const TitleContainer = styled.View`
   padding: 0 16px;
 `;
 
-const TitleText = styled.Text`
+const TitleText = styled.Text<{theme: Theme}>`
   font-size: 18px;
   color: #333;
   flex: 1;
+  ${({theme}) => theme.shadow.default}};
 `;
 
 const IconContainer = styled.View`
