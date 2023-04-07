@@ -6,19 +6,20 @@ import {BgSample} from 'app/types/day_bgs';
 import {Animated} from 'react-native';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
 import {Theme} from 'app/types/theme';
+import DropShadow from 'react-native-drop-shadow';
 
 const Container = styled.View<{theme: Theme}>`
   flex-direction: row;
   justify-content: space-around;
   align-items: center;
   border-radius: 10px;
-  background-color: ${props => props.theme.backgroundColor};
+  background-color: rgba(255, 255, 255, 0);
   shadow-color: #000;
   shadow-offset: 0px 4px;
   shadow-opacity: 0.3;
   shadow-radius: 4px;
   elevation: 2;
-  border: 2px solid #333;
+  margin: 10px 0;
 `;
 
 const Column = styled(Animated.View)<{
@@ -144,17 +145,55 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
   }, [bgData]);
 
   return (
-    <Container>
-      <Column style={{width: lowPercentageAnimation}} belowRange>
-        <PercentageText>{lowPercentage || 0}%</PercentageText>
-      </Column>
-      <Column style={{width: inTargetPercentageAnimation}} inRange>
-        <PercentageText>{timeInRangePercentage || 0}%</PercentageText>
-      </Column>
-      <Column style={{width: highPercentageAnimation}} aboveRange>
-        <PercentageText color={'black'}>{highPercentage || 0}%</PercentageText>
-      </Column>
-    </Container>
+    <DropShadow
+      style={{
+        shadowColor: '#000',
+        shadowOffset: {width: 0, height: 4},
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 2,
+      }}>
+      <Container>
+        <Column style={{width: lowPercentageAnimation}} belowRange>
+          <DropShadow
+            style={{
+              shadowColor: '#000',
+              shadowOffset: {width: 0, height: 4},
+              shadowOpacity: 0.3,
+              shadowRadius: 4,
+              elevation: 2,
+            }}>
+            <PercentageText>{lowPercentage || 0}%</PercentageText>
+          </DropShadow>
+        </Column>
+        <Column style={{width: inTargetPercentageAnimation}} inRange>
+          <DropShadow
+            style={{
+              shadowColor: '#000',
+              shadowOffset: {width: 0, height: 4},
+              shadowOpacity: 0.3,
+              shadowRadius: 4,
+              elevation: 2,
+            }}>
+            <PercentageText>{timeInRangePercentage || 0}%</PercentageText>
+          </DropShadow>
+        </Column>
+        <Column style={{width: highPercentageAnimation}} aboveRange>
+          <DropShadow
+            style={{
+              shadowColor: '#000',
+              shadowOffset: {width: 0, height: 4},
+              shadowOpacity: 0.3,
+              shadowRadius: 4,
+              elevation: 2,
+            }}>
+            <PercentageText color={'black'}>
+              {highPercentage || 0}%
+            </PercentageText>
+          </DropShadow>
+        </Column>
+      </Container>
+    </DropShadow>
   );
 };
 

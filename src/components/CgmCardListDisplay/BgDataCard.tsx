@@ -1,16 +1,17 @@
-import React from "react";
-import styled, { useTheme } from "styled-components/native";
-import LinearGradient from "react-native-linear-gradient";
-import DirectionArrows from "app/components/DirectionArrows";
-import { BgSample } from "app/types/day_bgs";
-import { Theme } from "app/types/theme";
-import DropShadow from "react-native-drop-shadow";
-import { addOpacity } from "app/utils/styling.utils";
+import React from 'react';
+import styled, {useTheme} from 'styled-components/native';
+import LinearGradient from 'react-native-linear-gradient';
+import DirectionArrows from 'app/components/DirectionArrows';
+import {BgSample} from 'app/types/day_bgs';
+import {Theme} from 'app/types/theme';
+import DropShadow from 'react-native-drop-shadow';
+import {addOpacity} from 'app/utils/styling.utils';
+import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 
 const BgDataCard = ({
-                      bgData,
-                      prevBgData
-                    }: {
+  bgData,
+  prevBgData,
+}: {
   bgData: BgSample;
   prevBgData: BgSample;
 }) => {
@@ -18,7 +19,7 @@ const BgDataCard = ({
 
   const bgStartColor = prevBgData
     ? theme.determineBgColorByGlucoseValue(prevBgData.sgv)
-    : "#FFFFFF";
+    : '#FFFFFF';
   const bgEndColor = theme.determineBgColorByGlucoseValue(bgData.sgv);
 
   return (
@@ -32,39 +33,39 @@ const BgDataCard = ({
           bgEndColor,
           addOpacity(bgEndColor, 0.9),
           addOpacity(bgEndColor, 0.5),
-          addOpacity(bgEndColor, 0.2)
+          addOpacity(bgEndColor, 0.2),
         ]}
         locations={[0, 0.02, 0.15, 0.25, 0.75, 0.85, 0.98, 1]}
-        start={{ x: 0, y: 1 }}
-        end={{ x: 0, y: 0 }}
+        start={{x: 0, y: 1}}
+        end={{x: 0, y: 0}}
         style={{
-          flexDirection: "row",
-          justifyContent: "space-around",
-          alignItems: "center",
+          flexDirection: 'row',
+          justifyContent: 'space-around',
+          alignItems: 'center',
           padding: 10,
           borderBottomWidth: 1,
           borderBottomColor: theme.borderColor,
-          width: "100%",
+          width: '100%',
           borderRadius: 5,
-          marginTop: 0.1
-        }}
-      >
+          marginTop: 0.1,
+        }}>
         <DropShadow
           style={{
-            shadowColor: "#000",
+            shadowColor: '#000',
             shadowOffset: {
               width: 1,
-              height: 1
+              height: 1,
             },
             shadowOpacity: 0.5,
-            shadowRadius: 2
-          }}
-        >
+            shadowRadius: 2,
+          }}>
           <DataRowText>{bgData.sgv}</DataRowText>
         </DropShadow>
         <DirectionArrows trendDirection={bgData.direction} />
         <DataRowText> {prevBgData && bgData.sgv - prevBgData.sgv} </DataRowText>
-        <DataRowText>{new Date(bgData.date).toLocaleString()}</DataRowText>
+        <DataRowText>
+          {formatDateToLocaleTimeString(new Date(bgData.date))}
+        </DataRowText>
       </LinearGradient>
     </DataRowContainer>
   );
@@ -76,7 +77,7 @@ const DataRowContainer = styled.View`
   align-items: center;
 `;
 
-const DataRowText = styled.Text<{ theme: Theme }>`
+const DataRowText = styled.Text<{theme: Theme}>`
   font-size: 16px;
   color: ${props => props.theme.textColor};
 `;

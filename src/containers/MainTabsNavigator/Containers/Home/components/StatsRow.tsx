@@ -1,6 +1,6 @@
 import React from 'react';
-import styled from 'styled-components/native';
-import {View, Text} from 'react-native';
+import styled, {useTheme} from 'styled-components/native';
+import {Text, View} from 'react-native';
 import {BgSample} from 'app/types/day_bgs';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {
@@ -8,6 +8,7 @@ import {
   findBiggestChangesInTimeRange,
 } from 'app/utils/bg.utils';
 import {Theme} from 'app/types/theme';
+import LinearGradient from 'react-native-linear-gradient';
 
 // Add background colors to the Container component
 const Container = styled.View<{theme: Theme}>`
@@ -24,30 +25,50 @@ const Column = styled.View<{
   theme: Theme;
   bgValue?: number;
 }>`
-  background-color: ${({bgValue, theme}) => {
-    if (bgValue) {
-      return theme.determineBgColorByGlucoseValue(bgValue);
-    } else {
-      return theme.backgroundColor;
-    }
-  }};
   flex-direction: column;
   align-items: center;
   padding: 10px;
   height: 100%;
 `;
 
+const GradientColumn = styled(LinearGradient).attrs(({theme, bgValue}) => ({
+  colors: [
+    'rgba(255, 255, 255, 0.1)',
+    theme.determineBgColorByGlucoseValue(bgValue),
+    theme.determineBgColorByGlucoseValue(bgValue),
+    theme.determineBgColorByGlucoseValue(bgValue),
+    'rgba(255, 255, 255, 0.1)',
+  ],
+  locations: [0, 0.1, 0.5, 0.9, 1],
+  start: {x: 0, y: 1},
+  end: {x: 0, y: 0},
+  useAngle: true,
+  angle: 90,
+  angleCenter: {x: 0.5, y: 0.5},
+}))`
+  flex-direction: column;
+  align-items: center;
+  padding: 10px;
+  height: 100%;
+  flex: 1;
+  border-radius: 5px;
+  margin: 2.5px;
+`;
+
 // Increase the font size and weight of the ValueText component
 const ValueText = styled.Text<{color?: string; theme: Theme}>`
-  font-size: 24px;
+  font-size: 18px;
   font-weight: bold;
   color: ${props => (props.color ? props.color : props.theme.textColor)};
 `;
 
 // Increase the font size of the LabelText component
 const LabelText = styled.Text<{color?: string}>`
-  font-size: 18px;
+  font-size: 16px;
   color: ${props => (props.color ? props.color : '#333')};
+  margin: 4px 0;
+  font-family: Courier New;
+  font-weight: bold;
 `;
 
 // noinspection CssNoGenericFontName
@@ -89,34 +110,36 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
     bgChangeTimeRange,
   );
 
+  const theme = useTheme() as Theme;
+
   return (
     <>
       <Container>
         {/* Add a background color to the column with the lowest blood glucose value */}
-        <Column style={{flex: 1}} bgValue={averageBg}>
+        <GradientColumn bgValue={averageBg}>
           <LabelText>Average BG</LabelText>
           <ValueText>{averageBg}</ValueText>
           <StDevValueText>
             {stdDev >= 0 ? '+' : '-'}
             {stdDev.toFixed(2)}
           </StDevValueText>
-        </Column>
+        </GradientColumn>
         {/* Add a background color to the column with the lowest blood glucose value */}
-        <Column style={{flex: 1}} bgValue={lowestBg.sgv}>
+        <GradientColumn bgValue={lowestBg.sgv}>
           <LabelText color={'#ffffff'}>Lowest BG</LabelText>
           <ValueText color={'#ffffff'}>{lowestBg.sgv}</ValueText>
           <TimeValueText color={'#ffffff'}>
             {formatDateToLocaleTimeString(lowestBg.date)}
           </TimeValueText>
-        </Column>
+        </GradientColumn>
         {/* Add a background color to the column with the highest blood glucose value */}
-        <Column style={{flex: 1}} bgValue={highestBg.sgv}>
+        <GradientColumn bgValue={highestBg.sgv}>
           <LabelText>Highest BG</LabelText>
           <ValueText>{highestBg.sgv}</ValueText>
           <TimeValueText>
             {formatDateToLocaleTimeString(highestBg.date)}
           </TimeValueText>
-        </Column>
+        </GradientColumn>
       </Container>
       <Container>
         <Column style={{flex: 1}}>

@@ -8,13 +8,13 @@ import {
 import styled from 'styled-components/native';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import {useLayout} from '@react-native-community/hooks';
-import { Theme } from "app/types/theme";
+import {Theme} from 'app/types/theme';
 
-const CollapsableContainer = styled.View`
+const CollapsableContainer = styled.View<{theme: Theme}>`
   width: 100%;
   border-bottom-width: 1px;
   border-bottom-color: #ddd;
-  background-color: rgba(255, 255, 255, 0.7);
+  background-color: ${({theme}) => theme.backgroundColor};
 `;
 
 const TitleContainer = styled.View`
