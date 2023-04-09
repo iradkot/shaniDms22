@@ -1,3 +1,5 @@
+import {addBrightness} from 'app/utils/styling.utils';
+
 export const colors = {
   white: '#ffffff',
   black: '#000000',
@@ -24,7 +26,7 @@ export const colors = {
     800: '#d32f2f',
     900: '#c62828',
     get main() {
-      return this[500];
+      return addBrightness(this[500], 44);
     },
   },
   darkRed: {

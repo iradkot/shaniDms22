@@ -1,6 +1,6 @@
 import {interpolateRgb} from 'd3';
-import {Theme, DetermineBgColorByGlucoseValue} from 'app/types/theme';
-import {theme} from 'app/style/theme';
+import {DetermineBgColorByGlucoseValue, Theme} from 'app/types/theme';
+import {Platform} from 'react-native';
 //
 const SEVERE_HYPO_THRESHOLD = 55;
 const HYPO_THRESHOLD = 70;
@@ -68,7 +68,8 @@ export const addOpacity = (color: string, opacity: number): string => {
   }
 
   // If color is in RGB or RGBA format
-  const rgbaRegex = /^rgba?\(\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*(?:,\s*([0-9.]+)\s*)?\)$/i;
+  const rgbaRegex =
+    /^rgba?\(\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*(?:,\s*([0-9.]+)\s*)?\)$/i;
   const matches = color.match(rgbaRegex);
 
   if (matches) {
@@ -85,3 +86,39 @@ export const addOpacity = (color: string, opacity: number): string => {
   return color;
 };
 
+export const shadowStyles = ({
+  theme,
+  color,
+  elevation,
+}: {
+  theme: Theme;
+  color?: string;
+  elevation?: number;
+}) => {
+  const shadowTL = Platform.select({
+    ios: `shadowColor: ${
+      color || theme.shadowColor
+    }; shadowOffset: {width: 0, height: 2}; shadowOpacity: 0.8; shadowRadius: ${
+      theme.borderRadius
+    }px;`,
+    android: `elevation: ${elevation};`,
+  });
+
+  return shadowTL || '';
+};
+
+export const addBrightness = (color: string, amount: number): string => {
+  const rgbaRegex =
+    /^rgba?\(\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*(?:,\s*([0-9.]+)\s*)?\)$/i;
+  const matches = color.match(rgbaRegex);
+
+  if (matches) {
+    const r = parseInt(matches[1], 10);
+    const g = parseInt(matches[2], 10);
+    const b = parseInt(matches[3], 10);
+
+    return `rgb(${r + amount}, ${g + amount}, ${b + amount})`;
+  }
+
+  return color;
+};
