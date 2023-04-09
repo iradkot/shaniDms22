@@ -9,6 +9,7 @@ import styled from 'styled-components/native';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import {useLayout} from '@react-native-community/hooks';
 import {Theme} from 'app/types/theme';
+import DropShadow from 'react-native-drop-shadow';
 
 const CollapsableContainer = styled.View<{theme: Theme}>`
   width: 100%;
@@ -27,8 +28,8 @@ const TitleContainer = styled.View`
 const TitleText = styled.Text<{theme: Theme}>`
   font-size: 18px;
   color: #333;
-  flex: 1;
-  ${({theme}) => theme.shadow.default}};
+  align-items: center;
+  justify-content: center;
 `;
 
 const IconContainer = styled.View`
@@ -115,22 +116,47 @@ const Collapsable: React.FC<CollapsableProps> = ({
         activeOpacity={0.8}
         onPress={() => setIsCollapsed(prevCollapsed => !prevCollapsed)}>
         <TitleContainer>
-          <TitleText>{title}</TitleText>
-          <IconContainer>
-            <Animated.View
-              style={{
-                transform: [
-                  {
-                    rotate: arrowRotation.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0deg', '180deg'],
-                    }),
-                  },
-                ],
-              }}>
-              <AntDesign name="up" size={24} color="#333" />
-            </Animated.View>
-          </IconContainer>
+          <DropShadow
+            style={{
+              shadowColor: '#000',
+              shadowOffset: {
+                width: 1,
+                height: 1,
+              },
+              shadowOpacity: 0.2,
+              shadowRadius: 1,
+              flex: 1,
+              height: 48,
+              justifyContent: 'center',
+            }}>
+            <TitleText>{title}</TitleText>
+          </DropShadow>
+          <DropShadow
+            style={{
+              shadowColor: '#000',
+              shadowOffset: {
+                width: 1,
+                height: 1,
+              },
+              shadowOpacity: 0.5,
+              shadowRadius: 1,
+            }}>
+            <IconContainer>
+              <Animated.View
+                style={{
+                  transform: [
+                    {
+                      rotate: arrowRotation.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '180deg'],
+                      }),
+                    },
+                  ],
+                }}>
+                <AntDesign name="up" size={24} color="#333" />
+              </Animated.View>
+            </IconContainer>
+          </DropShadow>
         </TitleContainer>
       </TouchableOpacity>
       {!isCollapsed && (
