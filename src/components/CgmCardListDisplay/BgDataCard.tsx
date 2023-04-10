@@ -1,12 +1,11 @@
 import React, {useMemo} from 'react';
 import styled, {useTheme} from 'styled-components/native';
-import LinearGradient from 'react-native-linear-gradient';
 import DirectionArrows from 'app/components/DirectionArrows';
 import {BgSample} from 'app/types/day_bgs';
 import {Theme} from 'app/types/theme';
 import DropShadow from 'react-native-drop-shadow';
-import {addOpacity} from 'app/utils/styling.utils';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
+import BgGradient from 'app/components/BgGradient';
 
 interface BgDataCardProps {
   bgData: BgSample;
@@ -39,7 +38,7 @@ const BgDataCard = ({bgData, prevBgData}: BgDataCardProps) => {
       borderBottomWidth: 1,
       borderBottomColor: theme.borderColor,
       width: '100%',
-      borderRadius: 5,
+      borderRadius: 1,
       marginTop: 0.1,
     };
   }, [theme]);
@@ -58,20 +57,10 @@ const BgDataCard = ({bgData, prevBgData}: BgDataCardProps) => {
 
   return (
     <DataRowContainer>
-      <LinearGradient
-        colors={[
-          addOpacity(bgStartColor, 0.2),
-          addOpacity(bgStartColor, 0.5),
-          addOpacity(bgStartColor, 0.9),
-          bgStartColor,
-          bgEndColor,
-          addOpacity(bgEndColor, 0.9),
-          addOpacity(bgEndColor, 0.5),
-          addOpacity(bgEndColor, 0.2),
-        ]}
-        locations={[0, 0.02, 0.15, 0.25, 0.75, 0.85, 0.98, 1]}
-        start={{x: 0, y: 1}}
-        end={{x: 0, y: 0}}
+      <BgGradient
+        startColor={bgEndColor}
+        endColor={bgStartColor}
+        theme={theme}
         style={linearGradientStyle}>
         <DropShadow style={dropShadowStyle}>
           <DataRowText>{bgData.sgv}</DataRowText>
@@ -79,7 +68,7 @@ const BgDataCard = ({bgData, prevBgData}: BgDataCardProps) => {
         <DirectionArrows trendDirection={bgData.direction} />
         <DataRowText>{prevBgData && bgData.sgv - prevBgData.sgv}</DataRowText>
         <DataRowText>{formattedDate}</DataRowText>
-      </LinearGradient>
+      </BgGradient>
     </DataRowContainer>
   );
 };
@@ -98,6 +87,6 @@ const DataRowText = styled.Text<{theme: Theme}>`
 export default React.memo(
   BgDataCard,
   (prevProps, nextProps) =>
-    prevProps.bgData.sgv === nextProps.bgData.sgv &&
-    prevProps.prevBgData.sgv === nextProps.prevBgData.sgv,
+    prevProps?.bgData?.sgv === nextProps?.bgData?.sgv &&
+    prevProps?.prevBgData?.sgv === nextProps?.prevBgData?.sgv,
 );

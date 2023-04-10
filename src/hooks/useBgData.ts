@@ -80,12 +80,15 @@ export const useBgData = (currentDate: Date) => {
 
   const latestBgSample = todayBgData[0];
 
+  const latestPrevBgSample = todayBgData[1];
+
   return {
     bgData,
     todayBgData,
     isLoading,
     getBgData,
     latestBgSample,
+    latestPrevBgSample,
     getUpdatedBgData: getBgDataForToday,
   };
 };

@@ -7,19 +7,21 @@ interface CgmCardListDisplayProps {
   bgData: BgSample[];
   onPullToRefreshRefresh?: () => void;
   isLoading: boolean;
+  isToday: boolean;
 }
 
 const CgmRows: FC<CgmCardListDisplayProps> = ({
   bgData,
   onPullToRefreshRefresh,
   isLoading,
+  isToday,
 }) => {
   const bgDataKeyExtractor = useCallback((item: BgSample) => {
     return item.date.toString();
   }, []);
 
   const renderItem = useCallback(
-    ({item, index}) => (
+    ({item, index}: {item: BgSample; index: number}) => (
       <BgDataCard bgData={item} prevBgData={bgData[index + 1]} />
     ),
     [bgData],
@@ -42,6 +44,8 @@ const CgmRows: FC<CgmCardListDisplayProps> = ({
         offset: 50 * index,
         index,
       })}
+      inverted // Invert the FlatList to start from the bottom
+      contentContainerStyle={{flexGrow: 1}} // Make sure the list grows from the bottom
     />
   );
 };

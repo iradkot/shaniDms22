@@ -36,8 +36,13 @@ const Home: React.FC = () => {
     currentDate,
     200,
   );
-  const {bgData, latestBgSample, isLoading, getUpdatedBgData} =
-    useBgData(debouncedCurrentDate);
+  const {
+    bgData,
+    latestBgSample,
+    latestPrevBgSample,
+    isLoading,
+    getUpdatedBgData,
+  } = useBgData(debouncedCurrentDate);
 
   useEffect(() => {
     setDebouncedCurrentDate(currentDate);
@@ -59,31 +64,33 @@ const Home: React.FC = () => {
   return (
     <HomeContainer>
       <TimeInRangeRow bgData={bgData} />
+      <BGValueRow
+        prevBgData={latestPrevBgSample}
+        bgData={latestBgSample}
+        getUpdatedBgDataCallback={getUpdatedBgData}
+      />
       <Collapsable title={'Stats'}>
         <StatsRow bgData={bgData} />
       </Collapsable>
-      <BgGraph
-        bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}
-        width={Dimensions.get('window').width}
-        height={200}
-        foodItems={foodItems}
-      />
-      {/*<Collapsable title={'chart'}>*/}
-      {/*  <BgGraph*/}
-      {/*    bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}*/}
-      {/*    width={Dimensions.get('window').width}*/}
-      {/*    height={200}*/}
-      {/*    foodItems={foodItems}*/}
-      {/*  />*/}
-      {/*</Collapsable>*/}
+      {/*<BgGraph*/}
+      {/*  bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}*/}
+      {/*  width={Dimensions.get('window').width}*/}
+      {/*  height={200}*/}
+      {/*  foodItems={foodItems}*/}
+      {/*/>*/}
+      <Collapsable title={'chart'}>
+        <BgGraph
+          bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}
+          width={Dimensions.get('window').width}
+          height={200}
+          foodItems={foodItems}
+        />
+      </Collapsable>
       <CgmRows
         onPullToRefreshRefresh={getUpdatedBgData}
         isLoading={isLoading}
         bgData={bgData}
-      />
-      <BGValueRow
-        bgData={latestBgSample}
-        getUpdatedBgDataCallback={getUpdatedBgData}
+        isToday={isShowingToday}
       />
       <DateNavigatorRow
         isLoading={isLoading || currentDate !== debouncedCurrentDate}

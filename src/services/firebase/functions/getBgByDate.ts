@@ -37,7 +37,6 @@ export const getBgDataByDate = async ({
   endDate: Date;
   getWholeDays?: boolean;
 }) => {
-  const start = new Date();
   if (!startDate) {
     startDate = subMilliseconds(setDate(endDate, endDate.getDate()), 1);
   }
@@ -57,10 +56,6 @@ export const getBgDataByDate = async ({
   if (!isToday(endDate)) {
     const cachedData = await getCachedBgData(cacheKey);
     if (cachedData) {
-      console.log(
-        'Duration till bg data is cached: ',
-        new Date().getTime() - start.getTime(),
-      );
       return cachedData;
     }
   }
@@ -74,9 +69,5 @@ export const getBgDataByDate = async ({
   if (!isToday(endDate)) {
     cacheBgData(cacheKey, localData);
   }
-  console.log(
-    'Duration till bg data is fetched: ',
-    new Date().getTime() - start.getTime(),
-  );
   return localData;
 };

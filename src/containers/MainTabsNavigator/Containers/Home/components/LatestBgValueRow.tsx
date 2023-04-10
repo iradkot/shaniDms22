@@ -1,6 +1,6 @@
 /* eslint-disable react-native/no-inline-styles */
-import React, {useEffect, useState} from 'react';
-import styled from 'styled-components/native';
+import React, {useMemo} from 'react';
+import styled, {useTheme} from 'styled-components/native';
 import {formatDistanceToNow} from 'date-fns';
 import DirectionArrows from 'app/components/DirectionArrows';
 import {BgSample} from 'app/types/day_bgs';
@@ -8,6 +8,8 @@ import {isEmpty} from 'lodash';
 import {View} from 'react-native';
 import {Theme} from 'app/types/theme';
 import {TrendDirectionString} from 'app/types/notifications';
+import {useTimer} from 'app/hooks/useTimer';
+import BgGradient from 'app/components/BgGradient';
 
 // Separate components into smaller reusable components
 const BGValueText = ({value}: {value: number}) => (
@@ -34,20 +36,17 @@ const TimePassed = ({date}: {date: number}) => {
 // Styled components
 const Container = styled.View<{bgValue: number; theme: Theme}>`
   height: 80px;
-  width: 95%;
+  width: 99%;
   flex-direction: row;
   justify-content: space-around;
-  align-items: center;
   border-radius: 20px;
-  background-color: ${({bgValue, theme}) =>
-    theme.determineBgColorByGlucoseValue(bgValue)};
-  padding: 20px;
+  background-color: rgba(0, 0, 255, 0.1);
   shadow-color: #000;
   shadow-offset: 0px 4px;
   shadow-opacity: 0.3;
   shadow-radius: 4px;
   elevation: 2;
-  margin: 20px auto;
+  margin: 4px auto;
 `;
 
 const StyledBGValueText = styled.Text`
@@ -73,78 +72,60 @@ const StyledTimePassedText = styled.Text`
   text-shadow: 0 0 5px #000;
 `;
 
-// Custom hooks
-const useTimer = (
-  latestBgSample: BgSample | undefined,
-  callback: {(): void; (): void},
-) => {
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [callbackRuns, setCallbackRuns] = useState(0);
-
-  useEffect(() => {
-    const getTimeLeft = () => {
-      setTimeout(() => {
-        if (!latestBgSample) {
-          return;
-        }
-        const commonTimeDiffBetweenBgReading = 5 * 60 * 1000;
-        const delay = 40 * 1000;
-        const updatedTimeLeft =
-          latestBgSample.date +
-          commonTimeDiffBetweenBgReading +
-          delay -
-          new Date().getTime();
-        setTimeLeft(updatedTimeLeft);
-      }, 1000);
-    };
-    getTimeLeft();
-  }, [latestBgSample, timeLeft]);
-
-  useEffect(() => {
-    if (timeLeft > 0 && callbackRuns > 0) {
-      setCallbackRuns(0);
-    } else {
-      const expectedCallbackRuns = Math.floor(timeLeft / 60 / 1000) * -1;
-      if (expectedCallbackRuns > callbackRuns) {
-        setCallbackRuns(expectedCallbackRuns);
-        callback();
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, callbackRuns]);
-
-  return {timeLeft};
-};
-
 // Main component
 interface BGValueRowProps {
+  prevBgData?: BgSample;
   bgData?: BgSample;
   getUpdatedBgDataCallback: () => void;
 }
 
 const BGValueRow: React.FC<BGValueRowProps> = ({
+  prevBgData,
   bgData,
   getUpdatedBgDataCallback,
 }) => {
   useTimer(bgData, getUpdatedBgDataCallback);
+  const theme = useTheme() as Theme;
+
+  const {sgv, direction, date} = bgData || {};
+
+  const bgStartColor = useMemo(() => {
+    // Modify this based on your desired start color logic
+    const prevSgv = prevBgData?.sgv;
+    return theme.determineBgColorByGlucoseValue(prevSgv || sgv);
+  }, [sgv, theme]);
+
+  const bgEndColor = useMemo(() => {
+    // Modify this based on your desired end color logic
+    return theme.determineBgColorByGlucoseValue(sgv);
+  }, [sgv, theme]);
 
   if (isEmpty(bgData)) {
     return null;
   }
 
-  const {sgv, direction, date} = bgData;
-
   return (
     <Container bgValue={sgv}>
-      <View style={{flex: 1, alignItems: 'center'}}>
-        <BGValueText value={sgv} />
-      </View>
-      <View style={{flex: 1, alignItems: 'center'}}>
-        <TrendDirection direction={direction} size={40} />
-      </View>
-      <View style={{flex: 1.5, alignItems: 'center'}}>
-        <TimePassed date={date} />
-      </View>
+      <BgGradient
+        startColor={bgStartColor}
+        endColor={bgEndColor}
+        theme={theme}
+        style={{
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          borderRadius: 20,
+        }}>
+        <View style={{flex: 1, alignItems: 'center'}}>
+          <BGValueText value={sgv} />
+        </View>
+        <View style={{flex: 1, alignItems: 'center'}}>
+          <TrendDirection direction={direction} size={40} />
+        </View>
+        <View style={{flex: 1.5, alignItems: 'center'}}>
+          <TimePassed date={date} />
+        </View>
+      </BgGradient>
     </Container>
   );
 };
