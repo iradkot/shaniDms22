@@ -1,11 +1,10 @@
-import {Controller, useForm} from 'react-hook-form';
-import * as S from 'app/components/forms/FoodItemForm/FoodItemForm.styles';
-
 import React, {useEffect} from 'react';
 import {Alert, Keyboard, TextInput} from 'react-native';
 import {PhotoFile} from 'react-native-vision-camera';
 import {NavigationProp, useNavigation} from '@react-navigation/native';
 import {AddFoodItem} from 'app/hooks/foods/useAddFoodItem';
+import {Controller, useForm} from 'react-hook-form';
+import * as S from 'app/components/forms/FoodItemForm/FoodItemForm.styles';
 import DateTimePickerCard from 'app/components/forms/FoodItemForm/components/DateTimePickerCard';
 import {
   FoodItemFormProps,
@@ -14,16 +13,18 @@ import {
 import {rules} from 'app/components/forms/rules/FoodItemForm.Rules';
 import {isDate} from 'lodash';
 import ImageField from 'app/components/forms/FoodItemForm/components/ImageField';
+import {EditFoodItem} from 'app/hooks/foods/useEditFoodItem';
 
 const FoodItemForm = ({
   foodItem,
   onSubmit,
   submitHandlerRef,
 }: FoodItemFormProps) => {
+  const isEditMode = !!foodItem;
   const navigation = useNavigation<NavigationProp<any>>();
-  const [photo, setPhoto] = React.useState<PhotoFile | undefined>(
-    foodItem?.image,
-  );
+  const [photo, setPhoto] = React.useState<
+    PhotoFile | undefined | {uri: PhotoFile}
+  >(foodItem?.image ? {uri: foodItem.image} : undefined);
   const [date, setDate] = React.useState<Date | number | undefined>(
     foodItem?.timestamp ?? new Date(),
   );
@@ -32,7 +33,7 @@ const FoodItemForm = ({
     control,
     handleSubmit,
     formState: {errors},
-  } = useForm<AddFoodItem>({
+  } = useForm<AddFoodItem | EditFoodItem>({
     defaultValues: {
       name: foodItem?.name || '',
       carbs: foodItem?.carbs || 0,
@@ -43,12 +44,17 @@ const FoodItemForm = ({
 
   useEffect(() => {
     // this is a workaround to get the form values
-    const onSubmitForm = (data: AddFoodItem) => {
+    const onSubmitForm = (data: AddFoodItem | EditFoodItem) => {
       if (!photo || !date) {
         Alert.alert(
           'Image Required',
           'Please add an image to submit the form.',
-          [{text: 'OK', onPress: () => {}}],
+          [
+            {
+              text: 'OK',
+              onPress: () => {},
+            },
+          ],
         );
         return;
       }
@@ -58,15 +64,22 @@ const FoodItemForm = ({
       } else {
         timestamp = date;
       }
+
       const newData = {
         ...data,
         timestamp,
         image: photo,
       };
-      onSubmit(newData);
+
+      if (isEditMode && foodItem) {
+        // If it's in edit mode, include the foodItem id and other unchanged properties
+        onSubmit({...foodItem, ...newData}, foodItem);
+      } else {
+        onSubmit(newData, foodItem);
+      }
     };
     submitHandlerRef.current = () => handleSubmit(onSubmitForm)();
-  }, [handleSubmit, onSubmit, photo, submitHandlerRef]);
+  }, [handleSubmit, onSubmit, photo, submitHandlerRef, isEditMode, foodItem]);
 
   useEffect(() => {
     if (!foodItem) {
@@ -102,15 +115,6 @@ const FoodItemForm = ({
       rules: rules.carbs,
       selectTextOnFocus: true,
     },
-    // {
-    //   ref: notesRef,
-    //   name: 'notes',
-    //   placeholder: 'Notes',
-    //   keyboardType: 'default',
-    //   returnKeyType: 'done',
-    //   onSubmitEditing: () => {},
-    //   rules: rules.notes,
-    // },
   ];
   const onTakePhoto = (photo: PhotoFile | undefined) => {
     setPhoto(photo);
@@ -122,6 +126,7 @@ const FoodItemForm = ({
         photo={photo}
         navigation={navigation}
         onTakePhoto={onTakePhoto}
+        initialSource={foodItem?.image && {uri: foodItem.image}} // Add this prop to pass the initial image URI
       />
       <DateTimePickerCard
         initialTimestamp={date ? (isDate(date) ? date.getTime() : date) : 0}

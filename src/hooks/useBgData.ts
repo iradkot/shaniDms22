@@ -36,13 +36,10 @@ const getBgDataByDate = async (
 ) => {
   setIsLoading(true);
   const fsManager = createFirebaseService();
-  const startTimestamp = new Date().getTime();
   const bgData = await fsManager.getBgDataByDate({
     endDate: date,
     getWholeDays: true,
   });
-  const duration = (new Date().getTime() - startTimestamp) / 1000;
-  console.log('duration of getting bg data in seconds: ', duration);
 
   const sortedBgData = bgData.sort(bgSortFunction(false));
 
@@ -51,7 +48,6 @@ const getBgDataByDate = async (
   } else {
     dispatch({type: 'setBgData', payload: sortedBgData});
   }
-  console.log('getBgDataByDate duration in seconds: ', duration);
 };
 
 export const useBgData = (currentDate: Date) => {

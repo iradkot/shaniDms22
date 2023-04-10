@@ -5,12 +5,17 @@ import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import {cloneDeep, isEmpty} from 'lodash';
 import Collapsable from 'app/components/Collapsable';
 import {formatFoodItem} from 'app/containers/MainTabsNavigator/Containers/FoodTracker/utils';
-import {Container, ScrollContainer, Section} from 'app/containers/MainTabsNavigator/Containers/FoodTracker/styles';
+import {
+  Container,
+  ScrollContainer,
+  Section,
+} from 'app/containers/MainTabsNavigator/Containers/FoodTracker/styles';
 import FoodCardsList from 'app/containers/MainTabsNavigator/Containers/FoodTracker/Components/FoodCardsList';
 import FoodCameraButton from 'app/containers/MainTabsNavigator/Containers/FoodTracker/Components/FoodCameraButton';
 import {NavigationProp} from '@react-navigation/native';
 import {getRelativeDateText} from 'app/utils/datetime.utils';
 import Loader from 'app/components/common-ui/Loader/Loader';
+import {EDIT_FOOD_ITEM_SCREEN} from 'app/constants/SCREEN_NAMES';
 
 type groupBy = 'day' | 'week' | 'food' | 'exact food';
 
@@ -20,13 +25,12 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   const [foodItems, setFoodItems] = useState<formattedFoodItemDTO[]>([]);
   const [fsFoodItems, setFsFoodItems] = useState<FoodItemDTO[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [groupBy, setGroupBy] = useState<groupBy>('day');
+  // const [groupBy, setGroupBy] = useState<groupBy>('day');
   const fsManager = new FirebaseService();
 
   const getFoodItems = async (date: Date) => {
     setIsLoading(true);
     const FSfoodItems = await fsManager.getFoodItems(date);
-    console.log('FSfoodItems', FSfoodItems);
     setFsFoodItems(cloneDeep(FSfoodItems));
     setIsLoading(false);
   };
@@ -50,6 +54,7 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
     setIsLoading(true);
     sortAndFormatFoodItems();
     setIsLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fsFoodItems]);
 
   const lastMeal = useMemo(() => {
@@ -73,7 +78,6 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
     const wordsToIgnoreHe = ['עם', 'ו2'];
 
     const wordsToIgnore = wordsToIgnoreEnglish.concat(wordsToIgnoreHe);
-    ('');
     const nameWords = cur.name.toLowerCase().split(' ');
 
     for (let i = 0; i < nameWords.length; i++) {
@@ -125,6 +129,12 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
             <Collapsable title={'Last Meal'} initialIsCollapsed={false}>
               {lastMeal && !isEmpty(lastMeal) && (
                 <FoodCard
+                  onEdit={() => {
+                    navigation.navigate(EDIT_FOOD_ITEM_SCREEN, {
+                      foodItem: lastMeal,
+                      setFsFoodItems,
+                    });
+                  }}
                   imageUri={lastMeal.image}
                   name={lastMeal.name}
                   bgSamples={lastMeal.bgData || []}

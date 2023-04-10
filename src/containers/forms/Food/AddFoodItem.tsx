@@ -33,7 +33,6 @@ const AddFoodItemScreen: FC = () => {
     Keyboard.dismiss();
     try {
       const savedFoodItem = await addFoodItem(foodItem);
-      console.log('savedFoodItem', savedFoodItem);
       setFsFoodItems?.((prev: any) => [...prev, savedFoodItem]);
       setIsLoading(false);
       goBack();

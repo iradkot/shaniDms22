@@ -24,6 +24,7 @@ import {
   ADD_FOOD_ITEM_SCREEN,
   CAMERA_SCREEN,
   ADD_SPORT_ITEM_SCREEN,
+  EDIT_FOOD_ITEM_SCREEN,
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 import AddNotificationScreen from './containers/forms/AddNotificationScreen/AddNotificationScreen';
@@ -33,9 +34,10 @@ import styled, {ThemeProvider} from 'styled-components/native';
 import {theme} from 'app/style/theme';
 import {Theme} from 'app/types/theme';
 import CameraScreen from 'app/components/CameraScreen/CameraScreen';
-import AddFoodItemScreen from 'app/containers/forms/AddFoodItem/AddFoodItem';
+import AddFoodItemScreen from 'app/containers/forms/Food/AddFoodItem';
 import AddSportItem from 'app/containers/forms/AddSportItem/AddSportItem';
-import { SportItemsProvider } from "app/contexts/SportItemsContext";
+import {SportItemsProvider} from 'app/contexts/SportItemsContext';
+import EditFoodItemScreen from './containers/forms/Food/EditFoodItemScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -67,41 +69,46 @@ const App: () => JSX.Element = () => {
         <SafeAreaView style={{flex: 1}}>
           <SafeAreaProvider>
             <SportItemsProvider>
-            <NavigationContainer>
-              <Stack.Navigator screenOptions={{headerShown: false}}>
-                <Stack.Screen name="initScreen" component={AppInitScreen} />
-                <Stack.Screen name={LOGIN_SCREEN} component={Login} />
-                <Stack.Screen
-                  name={MAIN_TAB_NAVIGATOR}
-                  component={MainTabsNavigator}
-                />
-                <Stack.Screen
-                  options={{headerShown: true, headerTitle: ''}}
-                  name={ADD_NOTIFICATION_SCREEN}
-                  component={AddNotificationScreen}
-                />
-                <Stack.Screen
-                  options={{headerShown: true, headerTitle: ''}}
-                  name={EDIT_NOTIFICATION_SCREEN}
-                  component={EditNotificationScreen}
-                />
-                <Stack.Screen
-                  options={{headerShown: true, headerTitle: ''}}
-                  name={ADD_FOOD_ITEM_SCREEN}
-                  component={AddFoodItemScreen}
-                />
-                <Stack.Screen
-                  options={{headerShown: true, headerTitle: ''}}
-                  name={CAMERA_SCREEN}
-                  component={CameraScreen}
-                />
-                <Stack.Screen
-                  options={{headerShown: true, headerTitle: ''}}
-                  name={ADD_SPORT_ITEM_SCREEN}
-                  component={AddSportItem}
-                />
-              </Stack.Navigator>
-            </NavigationContainer>
+              <NavigationContainer>
+                <Stack.Navigator screenOptions={{headerShown: false}}>
+                  <Stack.Screen name="initScreen" component={AppInitScreen} />
+                  <Stack.Screen name={LOGIN_SCREEN} component={Login} />
+                  <Stack.Screen
+                    name={MAIN_TAB_NAVIGATOR}
+                    component={MainTabsNavigator}
+                  />
+                  <Stack.Screen
+                    options={{headerShown: true, headerTitle: ''}}
+                    name={ADD_NOTIFICATION_SCREEN}
+                    component={AddNotificationScreen}
+                  />
+                  <Stack.Screen
+                    options={{headerShown: true, headerTitle: ''}}
+                    name={EDIT_NOTIFICATION_SCREEN}
+                    component={EditNotificationScreen}
+                  />
+                  <Stack.Screen
+                    options={{headerShown: true, headerTitle: ''}}
+                    name={ADD_FOOD_ITEM_SCREEN}
+                    component={AddFoodItemScreen}
+                  />
+                  <Stack.Screen
+                    options={{headerShown: true, headerTitle: ''}}
+                    name={CAMERA_SCREEN}
+                    component={CameraScreen}
+                  />
+                  <Stack.Screen
+                    options={{headerShown: true, headerTitle: ''}}
+                    name={ADD_SPORT_ITEM_SCREEN}
+                    component={AddSportItem}
+                  />
+                  <Stack.Screen
+                    options={{headerShown: true, headerTitle: ''}}
+                    name={EDIT_FOOD_ITEM_SCREEN}
+                    component={EditFoodItemScreen}
+                  />
+                </Stack.Navigator>
+              </NavigationContainer>
             </SportItemsProvider>
           </SafeAreaProvider>
         </SafeAreaView>

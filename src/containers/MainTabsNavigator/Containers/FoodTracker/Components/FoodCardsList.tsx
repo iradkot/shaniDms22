@@ -7,20 +7,33 @@
 import React from 'react';
 import FoodCard from 'app/containers/MainTabsNavigator/Containers/FoodTracker/Components/FoodCard';
 import {formattedFoodItemDTO} from 'app/types/food.types';
+import {useNavigation} from '@react-navigation/native';
+import {EDIT_FOOD_ITEM_SCREEN} from 'app/constants/SCREEN_NAMES';
 
 interface FoodCardsListProps {
   foodItems: formattedFoodItemDTO[];
+  setFsFoodItems: (foodItems: formattedFoodItemDTO[]) => void;
 }
 
-const FoodCardsList: ({foodItems}: {foodItems: any}) => JSX.Element = ({
+const FoodCardsList: ({
   foodItems,
-}) => {
+  setFsFoodItems,
+}: FoodCardsListProps) => JSX.Element = ({foodItems, setFsFoodItems}) => {
+  const navigation = useNavigation();
   if (!foodItems) {
     return <></>;
   }
   return foodItems.map(
     (item: formattedFoodItemDTO, index: React.Key | null | undefined) => (
       <FoodCard
+        onEdit={() => {
+          console.log('onEdit', item.id);
+          // @ts-ignore
+          navigation.navigate(EDIT_FOOD_ITEM_SCREEN, {
+            foodItem: item,
+            setFsFoodItems: setFsFoodItems,
+          });
+        }}
         key={index}
         foodItem={item}
         imageUri={item.image}

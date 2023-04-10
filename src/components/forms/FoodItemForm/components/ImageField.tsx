@@ -12,9 +12,15 @@ interface ImageFieldProps {
   photo: PhotoFile | undefined;
   navigation: NavigationProp<any>;
   onTakePhoto: (photo: PhotoFile) => void;
+  initialSource?: {uri: string};
 }
 
-const ImageField = ({photo, onTakePhoto, navigation}: ImageFieldProps) => {
+const ImageField = ({
+  photo,
+  onTakePhoto,
+  navigation,
+  initialSource,
+}: ImageFieldProps) => {
   const openCamera = () => {
     navigation.navigate(CAMERA_SCREEN, {
       onTakePhoto,
@@ -22,13 +28,12 @@ const ImageField = ({photo, onTakePhoto, navigation}: ImageFieldProps) => {
   };
 
   const photoPath = photo?.path;
-  const source = useMemo(
-    () => photoPath && {uri: imagePathToUri(photoPath)},
-    [photoPath],
-  );
+  const source = useMemo(() => {
+    return (photoPath && {uri: imagePathToUri(photoPath)}) || initialSource;
+  }, [photoPath, initialSource]);
   return (
     <Container>
-      {photoPath && source ? (
+      {source ? (
         <>
           <Image source={source} />
           <RetakeButtonContainer>

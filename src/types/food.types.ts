@@ -1,6 +1,7 @@
 import {CommonFormattedEvent} from 'app/types/commonEvent.types';
 
 export interface FoodItemDTO {
+  id: string;
   carbs: number;
   name: string;
   image: string;
@@ -11,4 +12,6 @@ export interface FoodItemDTO {
 
 export interface formattedFoodItemDTO
   extends FoodItemDTO,
-    CommonFormattedEvent {}
+    CommonFormattedEvent {
+  id: string;
+}

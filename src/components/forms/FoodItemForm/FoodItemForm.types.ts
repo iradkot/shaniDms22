@@ -1,12 +1,16 @@
 import React, {MutableRefObject} from 'react';
 import {KeyboardType, ReturnKeyType, TextInput} from 'react-native';
 import {AddFoodItem} from 'app/hooks/foods/useAddFoodItem';
+import {FoodItemDTO} from 'app/types/food.types';
 
-export type FoodItemFormProps = {
-  foodItem: AddFoodItem | null;
-  onSubmit: (foodItem: AddFoodItem) => Promise<void>;
+export interface FoodItemFormProps {
+  foodItem?: AddFoodItem; // Make this prop optional
+  onSubmit: (
+    foodItem: AddFoodItem,
+    foodItemFromProps?: FoodItemDTO,
+  ) => Promise<void>;
   submitHandlerRef: MutableRefObject<null | (() => void)>;
-};
+}
 
 export interface InputControllerProps {
   ref: React.RefObject<TextInput>;
