@@ -1,4 +1,4 @@
-import React, {FC, useMemo} from 'react';
+import React, {FC, useCallback, useMemo} from 'react';
 import {FlatList} from 'react-native';
 import BgDataCard from 'app/components/CgmCardListDisplay/BgDataCard';
 import {BgSample} from 'app/types/day_bgs';
@@ -14,19 +14,34 @@ const CgmRows: FC<CgmCardListDisplayProps> = ({
   onPullToRefreshRefresh,
   isLoading,
 }) => {
-  const bgDataKeyExtractor = useMemo(() => {
-    return (item: BgSample) => item.date.toString();
-  }, [bgData]);
+  const bgDataKeyExtractor = useCallback((item: BgSample) => {
+    return item.date.toString();
+  }, []);
+
+  const renderItem = useCallback(
+    ({item, index}) => (
+      <BgDataCard bgData={item} prevBgData={bgData[index + 1]} />
+    ),
+    [bgData],
+  );
 
   return (
     <FlatList
       keyExtractor={bgDataKeyExtractor}
       data={bgData}
-      renderItem={({item, index}) => (
-        <BgDataCard bgData={item} prevBgData={bgData[index + 1]} />
-      )}
+      renderItem={renderItem}
       refreshing={isLoading}
       onRefresh={onPullToRefreshRefresh}
+      initialNumToRender={10}
+      maxToRenderPerBatch={10}
+      updateCellsBatchingPeriod={50}
+      windowSize={21}
+      removeClippedSubviews={true}
+      getItemLayout={(_, index) => ({
+        length: 50,
+        offset: 50 * index,
+        index,
+      })}
     />
   );
 };

@@ -15,46 +15,12 @@ import subMilliseconds from 'date-fns/subMilliseconds';
 import {AuthService} from './services/AuthService';
 import {SportItemDTO} from 'app/types/sport.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {getBgDataByDate} from 'app/services/firebase/functions/getBgByDate';
 
 // FirestoreManager class is responsible for all the interactions with the FirestoreManager database
 export class FirebaseService {
   private authService = new AuthService();
-
-  async getBgDataByDate({
-    startDate,
-    endDate,
-    getWholeDays = false,
-  }: {
-    startDate?: Date;
-    endDate: Date;
-    getWholeDays?: boolean;
-  }) {
-    if (!startDate) {
-      startDate = subMilliseconds(setDate(endDate, endDate.getDate()), 1);
-    }
-    let localStart = startDate,
-      localEnd = endDate;
-    if (getWholeDays) {
-      localStart = getLocalStartOfTheDay(startDate);
-      localEnd = getLocalEndOfTheDay(endDate);
-    }
-
-    const utcStart = getUtcStartOfTheDay(localStart);
-    const utcEnd = getUtcEndOfTheDay(localEnd);
-
-    const snapshot = await firestore()
-      .collection('day_bgs')
-      .where('timestamp', '>=', utcStart.getTime())
-      .where('timestamp', '<=', utcEnd.getTime())
-      .get();
-
-    const bgData = snapshot.docs.map(doc => JSON.parse(doc.data().data));
-    const localData = bgData.flat().filter(bg => {
-      const date = new Date(bg.date);
-      return date >= localStart && date <= localEnd;
-    });
-    return localData;
-  }
+  getBgDataByDate = getBgDataByDate;
 
   async getCurrentUserFSData() {
     const firebaseUser = await this.authService.getCurrentUser();
@@ -149,7 +115,10 @@ export class FirebaseService {
     }
   }
 
-  async getSportItems(startDate?: Date, endDate?: Date): Promise<SportItemDTO[]> {
+  async getSportItems(
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<SportItemDTO[]> {
     const now = new Date();
     const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 

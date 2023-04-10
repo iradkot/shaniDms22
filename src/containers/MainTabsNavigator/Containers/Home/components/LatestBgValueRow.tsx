@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import React, {useEffect, useState} from 'react';
 import styled from 'styled-components/native';
 import {formatDistanceToNow} from 'date-fns';
@@ -6,15 +7,34 @@ import {BgSample} from 'app/types/day_bgs';
 import {isEmpty} from 'lodash';
 import {View} from 'react-native';
 import {Theme} from 'app/types/theme';
+import {TrendDirectionString} from 'app/types/notifications';
 
-interface BGValueRowProps {
-  bgData?: BgSample;
-  getUpdatedBgDataCallback: () => void;
-}
+// Separate components into smaller reusable components
+const BGValueText = ({value}: {value: number}) => (
+  <StyledBGValueText>{value}</StyledBGValueText>
+);
 
+const TrendDirection = ({
+  direction,
+  size,
+}: {
+  direction: TrendDirectionString;
+  size: number;
+}) => (
+  <StyledTrendDirectionContainer>
+    <DirectionArrows trendDirection={direction} size={size} />
+  </StyledTrendDirectionContainer>
+);
+
+const TimePassed = ({date}: {date: number}) => {
+  const timePassed = formatDistanceToNow(date);
+  return <StyledTimePassedText>{timePassed} ago</StyledTimePassedText>;
+};
+
+// Styled components
 const Container = styled.View<{bgValue: number; theme: Theme}>`
   height: 80px;
-  width: 90%;
+  width: 95%;
   flex-direction: row;
   justify-content: space-around;
   align-items: center;
@@ -30,103 +50,100 @@ const Container = styled.View<{bgValue: number; theme: Theme}>`
   margin: 20px auto;
 `;
 
-const BGValueText = styled.Text`
+const StyledBGValueText = styled.Text`
   font-size: 24px;
   font-weight: bold;
   color: #fff;
-  text-shadow: 0px 0px 5px #000;
+  text-shadow: 0 0 5px #000;
 `;
 
-const TrendDirectionContainer = styled.View`
+const StyledTrendDirectionContainer = styled.View`
   padding: 5px;
   border-radius: 15px;
   justify-content: center;
   align-items: center;
 `;
 
-const TimePassedText = styled.Text`
+const StyledTimePassedText = styled.Text`
   min-width: 80px;
   font-size: 16px;
   font-weight: bold;
   color: #fff;
   text-align: center;
-  text-shadow: 0px 0px 5px #000;
+  text-shadow: 0 0 5px #000;
 `;
-interface UseTimerReturn {
-  timeLeft: number;
-}
 
+// Custom hooks
 const useTimer = (
   latestBgSample: BgSample | undefined,
-  callback: () => void,
-): UseTimerReturn => {
-  const [timeLeft, setTimeLeft] = useState<number>(0);
-  const [callbackRuns, setCallbackRuns] = useState<number>(0);
+  callback: {(): void; (): void},
+) => {
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [callbackRuns, setCallbackRuns] = useState(0);
 
-  // Get the time left until the next background reading
   useEffect(() => {
     const getTimeLeft = () => {
       setTimeout(() => {
         if (!latestBgSample) {
           return;
         }
-        // 5 minutes in milliseconds
         const commonTimeDiffBetweenBgReading = 5 * 60 * 1000;
-        // 40 seconds in milliseconds
         const delay = 40 * 1000;
-        const timeLeft =
+        const updatedTimeLeft =
           latestBgSample.date +
           commonTimeDiffBetweenBgReading +
           delay -
           new Date().getTime();
-        setTimeLeft(timeLeft);
+        setTimeLeft(updatedTimeLeft);
       }, 1000);
     };
     getTimeLeft();
   }, [latestBgSample, timeLeft]);
 
-  // Handle the callback function
   useEffect(() => {
     if (timeLeft > 0 && callbackRuns > 0) {
       setCallbackRuns(0);
     } else {
-      // expectedCallbackRuns will be a negative number
       const expectedCallbackRuns = Math.floor(timeLeft / 60 / 1000) * -1;
       if (expectedCallbackRuns > callbackRuns) {
         setCallbackRuns(expectedCallbackRuns);
         callback();
       }
     }
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft, callbackRuns]);
 
   return {timeLeft};
 };
+
+// Main component
+interface BGValueRowProps {
+  bgData?: BgSample;
+  getUpdatedBgDataCallback: () => void;
+}
 
 const BGValueRow: React.FC<BGValueRowProps> = ({
   bgData,
   getUpdatedBgDataCallback,
 }) => {
   useTimer(bgData, getUpdatedBgDataCallback);
+
   if (isEmpty(bgData)) {
     return null;
   }
 
   const {sgv, direction, date} = bgData;
-  const timePassed = formatDistanceToNow(date);
 
   return (
     <Container bgValue={sgv}>
       <View style={{flex: 1, alignItems: 'center'}}>
-        <BGValueText>{sgv}</BGValueText>
+        <BGValueText value={sgv} />
       </View>
       <View style={{flex: 1, alignItems: 'center'}}>
-        <TrendDirectionContainer>
-          <DirectionArrows trendDirection={direction} size={40} />
-        </TrendDirectionContainer>
+        <TrendDirection direction={direction} size={40} />
       </View>
       <View style={{flex: 1.5, alignItems: 'center'}}>
-        <TimePassedText>{timePassed} ago</TimePassedText>
+        <TimePassed date={date} />
       </View>
     </Container>
   );

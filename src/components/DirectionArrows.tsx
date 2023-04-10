@@ -26,9 +26,11 @@ const ArrowIcon = styled(Icon)<{
 const DirectionArrows = ({
   trendDirection,
   size = 20,
+  color = 'black',
 }: {
   trendDirection: TrendDirectionString;
   size?: number;
+  color?: string;
 }) => {
   return (
     <ArrowsContainer>
@@ -37,24 +39,24 @@ const DirectionArrows = ({
           <ArrowIcon
             name="arrow-up"
             size={size}
-            color="black"
+            color={color}
             trendDirection={trendDirection}
           />
           <ArrowIcon
             name="arrow-up"
             size={size}
-            color="black"
+            color={color}
             trendDirection={trendDirection}
           />
         </>
       ) : trendDirection === 'NOT COMPUTABLE' ||
         trendDirection === 'RATE OUT OF RANGE' ? (
-        <Icon name="heart" size={size} color="black" />
+        <Icon name="heart" size={size} color={color} />
       ) : (
         <ArrowIcon
           name="arrow-up"
           size={size}
-          color="black"
+          color={color}
           trendDirection={trendDirection}
           style={{
             shadowColor: '#000',

@@ -1,62 +1,91 @@
-// hooks/useBgData.ts
-import {useState, useEffect} from 'react';
+import {useEffect, useReducer} from 'react';
 import {FirebaseService} from 'app/services/firebase/FirebaseService';
-import {BgSample} from 'app/types/day_bgs';
 import {bgSortFunction} from 'app/utils/bg.utils';
 
-export const useBgData = (currentDate: Date) => {
-  const [bgData, setBgData] = useState<BgSample[]>([]);
-  const [todayBgData, setTodayBgData] = useState<BgSample[]>([]);
-  const [latestBgSample, setLatestBgSample] = useState<BgSample>();
-  const [isLoading, setIsLoading] = useState(true);
+const initialState = {
+  todayBgData: [],
+  bgData: [],
+  isLoading: false,
+};
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'setTodayBgData':
+      return {
+        ...state,
+        todayBgData: action.payload,
+        bgData: action.payload,
+        isLoading: false,
+      };
+    case 'setBgData':
+      return {...state, bgData: action.payload, isLoading: false};
+    case 'setIsLoading':
+      return {...state, isLoading: action.payload};
+    default:
+      return state;
+  }
+};
+const createFirebaseService = () => {
+  return new FirebaseService();
+};
 
-  const isShowingToday = (): boolean => {
-    const today = new Date();
-    return (
-      today.getFullYear() === currentDate.getFullYear() &&
-      today.getMonth() === currentDate.getMonth() &&
-      today.getDate() === currentDate.getDate()
-    );
+const getBgDataByDate = async (
+  date: Date,
+  dispatch: any,
+  setIsLoading: any,
+  isToday: boolean,
+) => {
+  setIsLoading(true);
+  const fsManager = createFirebaseService();
+  const startTimestamp = new Date().getTime();
+  const bgData = await fsManager.getBgDataByDate({
+    endDate: date,
+    getWholeDays: true,
+  });
+  const duration = (new Date().getTime() - startTimestamp) / 1000;
+  console.log('duration of getting bg data in seconds: ', duration);
+
+  const sortedBgData = bgData.sort(bgSortFunction(false));
+
+  if (isToday) {
+    dispatch({type: 'setTodayBgData', payload: sortedBgData});
+  } else {
+    dispatch({type: 'setBgData', payload: sortedBgData});
+  }
+  console.log('getBgDataByDate duration in seconds: ', duration);
+};
+
+export const useBgData = (currentDate: Date) => {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const {todayBgData, bgData} = state;
+  const isLoading = state.isLoading;
+  const setIsLoading = (value: boolean) =>
+    dispatch({type: 'setIsLoading', payload: value});
+
+  const getBgData = async (date: Date) => {
+    const isToday =
+      new Date().getFullYear() === currentDate.getFullYear() &&
+      new Date().getMonth() === currentDate.getMonth() &&
+      new Date().getDate() === currentDate.getDate();
+
+    await getBgDataByDate(date, dispatch, setIsLoading, isToday);
   };
 
-  const getBgDataByDate = async (date?: Date): Promise<void> => {
-    setIsLoading(true);
-    const fsManager = new FirebaseService();
-    const bgData = await fsManager.getBgDataByDate({
-      endDate: date ?? new Date(),
-      getWholeDays: true,
-    });
-    const sortedBgData = bgData.sort(bgSortFunction(false));
-    if (!date || isShowingToday()) {
-      setTodayBgData(sortedBgData);
-      if (isShowingToday()) {
-        setBgData(sortedBgData);
-      }
-    } else {
-      setBgData(sortedBgData);
-    }
-    setIsLoading(false);
+  const getBgDataForToday = async () => {
+    await getBgData(currentDate);
   };
 
   useEffect(() => {
-    getBgDataByDate(currentDate);
+    getBgDataForToday();
   }, [currentDate]);
 
-  useEffect(() => {
-    if (
-      todayBgData?.length &&
-      (!latestBgSample || todayBgData[0].date > latestBgSample?.date)
-    ) {
-      setLatestBgSample(todayBgData[0]);
-    }
-  }, [todayBgData]);
+  const latestBgSample = todayBgData[0];
 
   return {
     bgData,
     todayBgData,
-    latestBgSample,
     isLoading,
-    getBgDataByDate,
-    getUpdatedBgData: () => getBgDataByDate(currentDate),
+    getBgData,
+    latestBgSample,
+    getUpdatedBgData: getBgDataForToday,
   };
 };

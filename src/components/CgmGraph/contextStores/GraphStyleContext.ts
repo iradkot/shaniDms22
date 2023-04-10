@@ -79,7 +79,6 @@ export const useGraphStyleContext = (
       setHeight(values.height);
     }
     if (values.bgSamples) {
-      console.log('setting bg samples', values.bgSamples);
       setBgSamples(values.bgSamples);
     }
   };

@@ -4,12 +4,14 @@ import {colors} from 'app/style/colors';
 // import {typography} from 'app/style/typography';
 import {Theme} from 'app/types/theme';
 import {Dimensions} from 'react-native';
-import {determineBgColorByGlucoseValue} from 'app/utils/styling.utils';
-import {shadowStyles} from 'app/style/styling-utils';
+import {
+  determineBgColorByGlucoseValue,
+  shadowStyles,
+} from 'app/utils/styling.utils';
 
 const {width, height} = Dimensions.get('window');
 
-export const theme: { screenWidth: number; borderColor: string; readonly shadow: { small: string; default: string }; readonly getShadowStyles: (elevation: number, color: string) => string; belowRangeColor: string; severeAboveRange: string; fontFamily: string; white: string; dark: boolean; tabBarHeight: number; buttonTextColor: string; inRangeColor: string; backgroundColor: string; textSize: number; accentColor: string; screenHeight: number; black: string; textColor: string; aboveRangeColor: string; buttonBackgroundColor: string; borderRadius: number; readonly determineBgColorByGlucoseValue: (bgValue: number) => string; lineHeight: number; severeBelowRange: string; dimensions: { width: number; height: number } } = {
+export const theme: Theme = {
   screenHeight: height,
   screenWidth: width,
   tabBarHeight: 50,
@@ -24,6 +26,7 @@ export const theme: { screenWidth: number; borderColor: string; readonly shadow:
   buttonTextColor: colors.white,
   buttonBackgroundColor: colors.purple[500],
   accentColor: colors.purple[500],
+  shadowColor: colors.black,
   white: colors.white,
   black: colors.black,
   dimensions: {
@@ -40,7 +43,8 @@ export const theme: { screenWidth: number; borderColor: string; readonly shadow:
   },
 
   get getShadowStyles() {
-    return (elevation: number, color: string) => shadowStyles({ elevation, color, theme: this });
+    return (elevation: number, color?: string) =>
+      shadowStyles({elevation, color, theme: this});
   },
 
   get shadow() {

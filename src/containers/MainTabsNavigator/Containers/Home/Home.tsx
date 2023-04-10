@@ -34,7 +34,7 @@ const Home: React.FC = () => {
 
   const [debouncedCurrentDate, setDebouncedCurrentDate] = useDebouncedState(
     currentDate,
-    500,
+    200,
   );
   const {bgData, latestBgSample, isLoading, getUpdatedBgData} =
     useBgData(debouncedCurrentDate);
@@ -58,26 +58,32 @@ const Home: React.FC = () => {
 
   return (
     <HomeContainer>
-      <BGValueRow
-        bgData={latestBgSample}
-        getUpdatedBgDataCallback={getUpdatedBgData}
-      />
       <TimeInRangeRow bgData={bgData} />
       <Collapsable title={'Stats'}>
         <StatsRow bgData={bgData} />
       </Collapsable>
-      <Collapsable title={'chart'}>
-        <BgGraph
-          bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}
-          width={Dimensions.get('window').width}
-          height={200}
-          foodItems={foodItems}
-        />
-      </Collapsable>
+      <BgGraph
+        bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}
+        width={Dimensions.get('window').width}
+        height={200}
+        foodItems={foodItems}
+      />
+      {/*<Collapsable title={'chart'}>*/}
+      {/*  <BgGraph*/}
+      {/*    bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}*/}
+      {/*    width={Dimensions.get('window').width}*/}
+      {/*    height={200}*/}
+      {/*    foodItems={foodItems}*/}
+      {/*  />*/}
+      {/*</Collapsable>*/}
       <CgmRows
         onPullToRefreshRefresh={getUpdatedBgData}
         isLoading={isLoading}
         bgData={bgData}
+      />
+      <BGValueRow
+        bgData={latestBgSample}
+        getUpdatedBgDataCallback={getUpdatedBgData}
       />
       <DateNavigatorRow
         isLoading={isLoading || currentDate !== debouncedCurrentDate}

@@ -26,6 +26,7 @@ export type Theme = {
   buttonTextColor: string;
   buttonBackgroundColor: string;
   accentColor: string;
+  shadowColor: string;
   white: string;
   borderColor: string;
   dimensions: {
@@ -37,7 +38,7 @@ export type Theme = {
   textSize: number;
   borderRadius: number;
   determineBgColorByGlucoseValue: (bgValue: number) => string;
-  getShadowStyles: (elevation: number) => string;
+  getShadowStyles: (elevation: number, color?: string) => string;
 
   shadow: {
     default: string;
