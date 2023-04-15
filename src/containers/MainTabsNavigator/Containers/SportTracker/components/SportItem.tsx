@@ -1,5 +1,5 @@
 import React from 'react';
-import {Animated, Text} from 'react-native';
+import {Animated, Text, View} from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {SportItemDTO} from 'app/types/sport.types';
@@ -7,7 +7,13 @@ import styled, {useTheme} from 'styled-components/native';
 import {Theme} from 'app/types/theme';
 import {theme} from 'app/style/theme';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import { colors } from "app/style/colors";
+import {colors} from 'app/style/colors';
+import {
+  formatDateToDateAndTimeString,
+  formatDateToLocaleTimeString,
+  getTimeInMinutes,
+} from 'app/utils/datetime.utils';
+import DigitalClock from 'app/components/DigitalClock';
 
 interface SportItemProps {
   sportItem: SportItemDTO;
@@ -18,7 +24,7 @@ interface SportItemProps {
 const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 
 const SportItem: React.FC<SportItemProps> = ({
-  sportItem: {name, durationMinutes, intensity, timestamp},
+  sportItem: {name, intensity, startTimestamp, endTimestamp},
   y,
   index,
 }) => {
@@ -53,8 +59,8 @@ const SportItem: React.FC<SportItemProps> = ({
     extrapolate: 'clamp',
   });
 
-  // convert timestamp to readable date format
-  const date = new Date(timestamp).toLocaleDateString();
+  // convert startTimestamp to readable date format
+  const date = new Date(startTimestamp).toLocaleDateString();
 
   return (
     <AnimatedLinearGradient
@@ -66,7 +72,12 @@ const SportItem: React.FC<SportItemProps> = ({
         // opacity,
         transform: [{translateY}, {scale}, {rotate}],
       }}
-      colors={[appTheme.accentColor, colors.purple["300"], 'rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.6)']}
+      colors={[
+        appTheme.accentColor,
+        colors.purple['300'],
+        'rgba(255, 255, 255, 0.8)',
+        'rgba(255, 255, 255, 0.6)',
+      ]}
       start={{x: 0, y: 0}}
       end={{x: 1, y: 0}}>
       <Container>
@@ -74,24 +85,50 @@ const SportItem: React.FC<SportItemProps> = ({
           <HeaderText>{name}</HeaderText>
         </Header>
         <Content>
-          <IconContainer>
-            <Icon name="time-outline" size={24} color="#FFFFFF" />
-          </IconContainer>
-          <Text style={{color: '#FFFFFF', fontSize: appTheme.textSize}}>
-            {durationMinutes} min
-          </Text>
-          <IconContainer>
-            <Icon name="flame-outline" size={24} color="#FFFFFF" />
-          </IconContainer>
-          <Text style={{color: '#FFFFFF', fontSize: appTheme.textSize}}>
-            {intensity}
-          </Text>
-          <IconContainer>
-            <Icon name="calendar-outline" size={24} color="#FFFFFF" />
-          </IconContainer>
-          <Text style={{color: '#FFFFFF', fontSize: appTheme.textSize}}>
-            {date}
-          </Text>
+          <TimeWrapper>
+            <TimeItem>
+              <IconContainer>
+                <Icon name="time-outline" size={24} color="#FFFFFF" />
+              </IconContainer>
+              <Text style={{color: '#FFFFFF', fontSize: appTheme.textSize}}>
+                Start: {formatDateToLocaleTimeString(startTimestamp)}
+              </Text>
+            </TimeItem>
+            <TimeItem>
+              <IconContainer>
+                <Icon name="time-outline" size={24} color="#FFFFFF" />
+              </IconContainer>
+              <Text style={{color: '#FFFFFF', fontSize: appTheme.textSize}}>
+                End: {formatDateToLocaleTimeString(endTimestamp)}
+              </Text>
+            </TimeItem>
+          </TimeWrapper>
+          <InfoWrapper>
+            <IconContainer>
+              <Icon name="flame-outline" size={24} color="#FFFFFF" />
+            </IconContainer>
+            <Text
+              style={{
+                color: '#FFFFFF',
+                fontSize: appTheme.textSize,
+                fontWeight: 'bold',
+              }}>
+              {intensity}
+            </Text>
+            <IconContainer>
+              <Icon name="calendar-outline" size={24} color="#FFFFFF" />
+            </IconContainer>
+            <Text
+              style={{
+                color: '#FFFFFF',
+                fontSize: appTheme.textSize,
+                fontWeight: 'bold',
+              }}>
+              Duration -{' '}
+              {getTimeInMinutes(new Date(endTimestamp - startTimestamp))}
+              Minutes
+            </Text>
+          </InfoWrapper>
         </Content>
       </Container>
     </AnimatedLinearGradient>
@@ -120,19 +157,36 @@ const HeaderText = styled.Text<{theme: Theme}>`
   text-transform: uppercase;
 `;
 
-const Content = styled.View<{theme: Theme}>`
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: ${props => props.theme.dimensions.height * 0.02}px;
-`;
-
 const IconContainer = styled.View<{theme: Theme}>`
   background-color: rgba(255, 255, 255, 0.2);
   border-radius: ${props => props.theme.borderRadius * 0.5}px;
   width: ${props => props.theme.dimensions.width * 0.1}px;
   height: ${props => props.theme.dimensions.width * 0.1}px;
   justify-content: center;
+  align-items: center;
+  margin-right: ${props => props.theme.dimensions.width * 0.025}px;
+`;
+
+const Content = styled.View<{theme: Theme}>`
+  flex-direction: column;
+  margin-top: ${props => props.theme.dimensions.height * 0.02}px;
+`;
+
+const TimeWrapper = styled.View<{theme: Theme}>`
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: ${props => props.theme.dimensions.height * 0.01}px;
+`;
+
+const TimeItem = styled.View<{theme: Theme}>`
+  flex-direction: row;
+  align-items: center;
+`;
+
+const InfoWrapper = styled.View<{theme: Theme}>`
+  flex-direction: row;
+  justify-content: space-between;
   align-items: center;
 `;
 

@@ -1,83 +1,29 @@
 import React, {
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
 } from 'react';
 import {NavigationProp} from '@react-navigation/native';
-import {FirebaseService} from 'app/services/firebase/FirebaseService';
 import {FlatList} from 'react-native-gesture-handler';
 import SportTrackerHeader from 'app/containers/MainTabsNavigator/Containers/SportTracker/components/SportTrackerHeader';
 import * as Styled from 'app/containers/MainTabsNavigator/Containers/SportTracker/styles';
-import {formattedSportItemDTO, SportItemDTO} from 'app/types/sport.types';
-import {
-  formatDateToDateAndTimeString,
-  getRelativeDateText,
-} from 'app/utils/datetime.utils';
 import SportItem from 'app/containers/MainTabsNavigator/Containers/SportTracker/components/SportItem';
 import Button from 'app/components/Button/Button';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {ADD_SPORT_ITEM_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {Animated} from 'react-native';
+import SportItemsContext from 'app/contexts/SportItemsContext';
+
+import {fetchSportItems} from 'app/utils/sportItems.utils';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
-
-export const formatSportItem = async (
-  item: SportItemDTO,
-  fsManager: FirebaseService,
-): Promise<formattedSportItemDTO> => {
-  const formattedItem = item as formattedSportItemDTO;
-  const startDate = new Date(item.timestamp);
-  startDate.setHours(startDate.getHours() - 1);
-  const endDate = new Date(item.timestamp);
-  endDate.setHours(endDate.getHours() + 3);
-  formattedItem.bgData = await fsManager.getBgDataByDate({
-    startDate,
-    endDate,
-  });
-  formattedItem.localDateString = formatDateToDateAndTimeString(item.timestamp);
-  return formattedItem;
-};
 
 const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   navigation,
 }) => {
-  const [sportItems, setSportItems] = useState<
-    Record<string, formattedSportItemDTO[]>
-  >({});
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const fsManager = new FirebaseService();
-
-  const getSportItems = async () => {
-    setIsLoading(true);
-    const FSsportItems = await fsManager.getSportItems();
-    const updatedSportItems = await Promise.all(
-      FSsportItems.map((item: SportItemDTO) =>
-        formatSportItem(item, fsManager),
-      ),
-    );
-    const sortedSportItems = updatedSportItems.sort((a, b) => {
-      return b.timestamp - a.timestamp;
-    });
-    const groupedSportItems = sortedSportItems.reduce((grouped, item) => {
-      const relativeDateText = getRelativeDateText(item.timestamp);
-      if (!grouped[relativeDateText]) {
-        grouped[relativeDateText] = [];
-      }
-      grouped[relativeDateText].push(item);
-      return grouped;
-    }, {});
-
-    setSportItems(groupedSportItems);
-    setIsLoading(false);
-  };
-
-  // useFocusEffect(
-  //   React.useCallback(() => {
-  //     getSportItems(new Date());
-  //   }, []),
-  // );
+  const {sportItems, setSportItems} = useContext(SportItemsContext);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -86,16 +32,10 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   }, [navigation]);
 
   const handleAddSportItemPress = () => {
-    // navigate to add sport item screen
     navigation.navigate(ADD_SPORT_ITEM_SCREEN);
   };
 
-  /**
-   * Animated scroll
-   * @type {Animated.Value<number>}
-   */
   const y = useMemo(() => new Animated.Value(0), []);
-
   const onScroll = Animated.event([{nativeEvent: {contentOffset: {y}}}], {
     useNativeDriver: true,
   });
@@ -104,9 +44,17 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
 
   useEffect(() => {
     ListRef.current.scrollToOffset({animated: false, offset: 0});
-    getSportItems();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchSportItems(setSportItems);
   }, []);
+
+  const renderItem = ({item, index}) => {
+    if (typeof item === 'string') {
+      return <Styled.SectionHeader>{item}</Styled.SectionHeader>;
+    }
+    return (
+      <SportItem sportItem={item} y={y} key={item.timestamp} index={index} />
+    );
+  };
 
   return (
     <Styled.Container>
@@ -116,24 +64,12 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
           animated={true}
           useNativeDriver={true}
           ref={ListRef}
-          scrollEventThrottle={16} // <-- Use 1 in production so scrolling feels smooth
-          bounces={false} // <-- Disable bounce effect
+          scrollEventThrottle={16}
+          bounces={false}
           keyExtractor={(item, index) => index.toString()}
           onScroll={onScroll}
           data={Object.entries(sportItems).flat().flat()}
-          renderItem={({item, index}) => {
-            if (typeof item === 'string') {
-              return <Styled.SectionHeader>{item}</Styled.SectionHeader>;
-            }
-            return (
-              <SportItem
-                sportItem={item}
-                y={y}
-                key={item.timestamp}
-                index={index}
-              />
-            );
-          }}
+          renderItem={renderItem}
           ItemSeparatorComponent={() => <Styled.Separator />}
           ListEmptyComponent={() => (
             <Styled.EmptyListText>No sport items yet</Styled.EmptyListText>

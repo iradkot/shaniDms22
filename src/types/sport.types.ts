@@ -12,7 +12,8 @@ export interface SportItemDTO {
   name: string;
   durationMinutes: number; // duration in minutes of the sport activity
   intensity: activityIntensity; // intensity of the sport activity
-  timestamp: number; // timestamp in milliseconds
+  startTimestamp: number; // timestamp in milliseconds
+  endTimestamp: number; // timestamp in milliseconds
 }
 
 export interface formattedSportItemDTO

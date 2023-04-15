@@ -1,142 +1,175 @@
-import { Controller, useForm } from "react-hook-form";
-import styled from "styled-components/native";
-import React, { MutableRefObject, useEffect, useState } from "react";
-import { SportItemDTO } from "app/types/sport.types";
-import { Theme } from "app/types/theme";
-import { Slider, Text, TouchableOpacity } from "react-native";
-import { SubmitButton } from "app/components/forms/SportForm/components/SubmitButton";
-import { SportTypeButton, SportTypesContainer } from "app/components/forms/SportForm/components/SportTypeButton";
+import {Controller, useForm} from 'react-hook-form';
+import styled from 'styled-components/native';
+import React, {MutableRefObject, useEffect, useState} from 'react';
+import {SportItemDTO} from 'app/types/sport.types';
+import {Theme} from 'app/types/theme';
+import {ImageBackground, Slider, Text, TouchableOpacity} from 'react-native';
+import {SubmitButton} from 'app/components/forms/SportForm/components/SubmitButton';
+import {
+  SportTypeButton,
+  SportTypesContainer,
+} from 'app/components/forms/SportForm/components/SportTypeButton';
+import DateTimePickerCard from '../DateTimePickerCard';
+import {sportTypeBackground} from 'app/containers/forms/Sport/styles';
 
 interface SportItemFormProps {
   sportItem?: SportItemDTO;
   onSubmit: (data: SportItemDTO) => void;
   submitHandlerRef: MutableRefObject<null | (() => void)>;
-  selectedSportType: "GYM" | "RUNNING";
 }
 
 const SportItemForm = ({
-                         sportItem,
-                         onSubmit,
-                         submitHandlerRef,
-                         selectedSportType,
-                         setSelectedSportType
-                       }: SportItemFormProps) => {
+  sportItem,
+  onSubmit,
+  submitHandlerRef,
+}: SportItemFormProps) => {
+  const [selectedSportType, setSelectedSportType] = useState<'GYM' | 'RUNNING'>(
+    'GYM',
+  );
+
   const {
     control,
     setValue,
     handleSubmit,
-    formState: { errors }
+    formState: {errors},
   } = useForm<SportItemDTO>({
     defaultValues: {
-      name: sportItem?.name || "",
-      durationMinutes: sportItem?.durationMinutes || 0,
+      name: sportItem?.name || '',
+      startTimestamp: sportItem?.startTimestamp || Date.now(),
+      endTimestamp: sportItem?.endTimestamp || Date.now(),
       intensity: sportItem?.intensity || 0,
-      timestamp: sportItem?.timestamp || 0
-    }
+    },
   });
 
   useEffect(() => {
     submitHandlerRef.current = () => handleSubmit(onSubmit);
-    setValue("name", selectedSportType === "GYM" ? "Gym Workout" : "Running");
+    setValue('name', selectedSportType === 'GYM' ? 'Gym Workout' : 'Running');
   }, [handleSubmit, onSubmit, submitHandlerRef, selectedSportType, setValue]);
 
   const durationOptions = [
-    { label: "15 minutes", value: 15 },
-    { label: "Half an hour", value: 30 },
-    { label: "45 minutes", value: 45 },
-    { label: "1 Hour", value: 60 },
-    { label: "2 Hours", value: 120 },
-    { label: "4 Hours", value: 240 },
-    { label: "8 Hours", value: 480 }
+    {label: '15 minutes', value: 15},
+    {label: 'Half an hour', value: 30},
+    {label: '45 minutes', value: 45},
+    {label: '1 Hour', value: 60},
+    {label: '2 Hours', value: 120},
+    {label: '4 Hours', value: 240},
+    {label: '8 Hours', value: 480},
   ];
 
-  const DurationButton = ({ label, value, isSelected, onPress }) => (
+  const DurationButton = ({label, value, isSelected, onPress}) => (
     <TouchableOpacity
       onPress={() => {
         onPress();
-        setValue("durationMinutes", value);
+        setValue('durationMinutes', value);
       }}
-      style={[styles.durationButton, isSelected && styles.durationButtonSelected]}
-    >
+      style={[
+        styles.durationButton,
+        isSelected && styles.durationButtonSelected,
+      ]}>
       <Text style={styles.durationButtonText}>{label}</Text>
     </TouchableOpacity>
   );
 
   const [selectedDuration, setSelectedDuration] = useState<number>(0);
 
-
   return (
     <>
-      <Container>
-        <Controller
-          control={control}
-          name="name"
-          rules={rules.name}
-          render={({ field: { onChange, value } }) => (
-            <FormInput
-              placeholder="Name"
-              onChangeText={(text) => onChange(text)}
-              value={value}
-              error={errors.name?.message}
-            />
-          )}
-        />
-        <DurationOptionsContainer>
-          {durationOptions.map((option) => (
-            <DurationButton key={option.value} label={option.label} value={option.value}
-                            isSelected={selectedDuration === option.value}
-                            onPress={() => setSelectedDuration(option.value)} />
-          ))}
-        </DurationOptionsContainer>
-        <Controller
-          control={control}
-          name="intensity"
-          rules={rules.intensity}
-          render={({ field: { onChange, value } }) => (
-            <>
-              <IntensityText>Intensity: {value}</IntensityText>
-              <Slider
-                style={styles.slider}
-                minimumValue={1}
-                maximumValue={10}
-                step={1}
+      <ImageBackground
+        source={sportTypeBackground[selectedSportType]}
+        resizeMode="cover"
+        style={styles.imageBackground}>
+        <Container>
+          <Controller
+            control={control}
+            name="name"
+            rules={rules.name}
+            render={({field: {onChange, value}}) => (
+              <FormInput
+                placeholder="Name"
+                onChangeText={text => onChange(text)}
                 value={value}
-                onValueChange={(val) => onChange(val)}
-                thumbTintColor="white"
-                minimumTrackTintColor="white"
+                error={errors.name?.message}
               />
-              <SubmitButton onPress={handleSubmit(onSubmit)} />
-            </>
-          )}
-        />
-      </Container>
-      <SportTypesContainer>
-        <SportTypeButton
-          title="GYM"
-          iconName="dumbbell"
-          onPress={() => {
-            setSelectedSportType("GYM");
-            setValue("name", "Gym Workout");
-          }}
-          isSelected={selectedSportType === "GYM"}
-        />
-        <SportTypeButton
-          title="RUNNING"
-          iconName="run-fast"
-          onPress={() => {
-            setSelectedSportType("RUNNING");
-            setValue("name", "Running");
-          }}
-          isSelected={selectedSportType === "RUNNING"}
-        />
-      </SportTypesContainer>
+            )}
+          />
+          <Controller
+            control={control}
+            name="startTimestamp"
+            rules={rules.startTimestamp}
+            render={() => (
+              <DateTimePickerCard
+                label={'Start'}
+                initialTimestamp={sportItem?.startTimestamp}
+                onTimestampChange={timestamp =>
+                  setValue('startTimestamp', timestamp)
+                }
+              />
+            )}
+          />
+          <Controller
+            control={control}
+            name="endTimestamp"
+            rules={rules.endTimestamp}
+            render={() => (
+              <DateTimePickerCard
+                label={'End'}
+                initialTimestamp={sportItem?.endTimestamp}
+                onTimestampChange={timestamp =>
+                  setValue('endTimestamp', timestamp)
+                }
+              />
+            )}
+          />
+          <Controller
+            control={control}
+            name="intensity"
+            rules={rules.intensity}
+            render={({field: {onChange, value}}) => (
+              <>
+                <IntensityText>Intensity: {value}</IntensityText>
+                <Slider
+                  style={styles.slider}
+                  minimumValue={1}
+                  maximumValue={10}
+                  step={1}
+                  value={value}
+                  onValueChange={val => onChange(val)}
+                  thumbTintColor="white"
+                  minimumTrackTintColor="white"
+                />
+                <SubmitButton onPress={handleSubmit(onSubmit)} />
+              </>
+            )}
+          />
+        </Container>
+        <SportTypesContainer>
+          <SportTypeButton
+            title="GYM"
+            iconName="dumbbell"
+            onPress={() => {
+              setSelectedSportType('GYM');
+              setValue('name', 'Gym Workout');
+            }}
+            isSelected={selectedSportType === 'GYM'}
+          />
+          <SportTypeButton
+            title="RUNNING"
+            iconName="run-fast"
+            onPress={() => {
+              setSelectedSportType('RUNNING');
+              setValue('name', 'Running');
+            }}
+            isSelected={selectedSportType === 'RUNNING'}
+          />
+        </SportTypesContainer>
+      </ImageBackground>
     </>
   );
 };
 
-const Container = styled.View<{ theme: Theme }>`
+const Container = styled.View<{theme: Theme}>`
   flex: 1;
-  padding: ${({ theme }) => theme.dimensions.width * 0.05}px;
+  padding: ${({theme}) => theme.dimensions.width * 0.05}px;
 `;
 
 const FormInput = styled.TextInput`
@@ -159,68 +192,68 @@ const IntensityText = styled.Text`
   text-align: center;
 `;
 
-
-const DurationOptionsContainer = styled.TouchableOpacity<{ theme: Theme, isSelected: boolean }>`
+const DurationOptionsContainer = styled.TouchableOpacity<{
+  theme: Theme;
+  isSelected: boolean;
+}>`
   flex-direction: row;
   flex-wrap: wrap;
   justify-content: space-between;
   margin-bottom: 10px;
-  ${({ isSelected }) => isSelected && "background-color: #5b5b5b;"}
-
+  ${({isSelected}) => isSelected && 'background-color: #5b5b5b;'}
 `;
-
 
 const styles = {
   durationButtonSelected: {
-    backgroundColor: "#5b5b5b"
+    backgroundColor: '#5b5b5b',
   },
   durationButton: {
-    backgroundColor: "#3f3f3f",
+    backgroundColor: '#3f3f3f',
     paddingVertical: 10,
     paddingHorizontal: 15,
     borderRadius: 5,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 10,
-    width: "48%"
+    width: '48%',
   },
   durationButtonText: {
-    color: "white",
+    color: 'white',
     fontSize: 16,
-    fontWeight: "bold"
+    fontWeight: 'bold',
   },
   slider: {
-    width: "100%",
-    height: 40
-  }
+    width: '100%',
+    height: 40,
+  },
+  imageBackground: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
 };
 
 const rules = {
   name: {
-    required: "Name is required"
+    required: 'Name is required',
   },
-  durationMinutes: {
-    required: "Duration is required",
-    min: {
-      value: 1,
-      message: "Duration must be at least 1 minute"
-    },
-    max: {
-      value: 1440,
-      message: "Duration must be at most 1440 minutes"
-    }
+  startTimestamp: {
+    required: 'Start time is required',
+  },
+  endTimestamp: {
+    required: 'End time is required',
   },
   intensity: {
-    required: "Intensity is required",
+    required: 'Intensity is required',
     min: {
       value: 1,
-      message: "Intensity must be at least 1"
+      message: 'Intensity must be at least 1',
     },
     max: {
       value: 10,
-      message: "Intensity must be at most 10"
-    }
-  }
+      message: 'Intensity must be at most 10',
+    },
+  },
 };
 
 export default SportItemForm;

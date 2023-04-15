@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
-import { SportItemDTO } from './path/to/your/SportItemDTO';
+import React, {createContext, useContext, useState} from 'react';
+import {SportItemDTO} from './path/to/your/SportItemDTO';
 
 interface SportItemsContextValue {
   sportItems: SportItemDTO[];
@@ -15,12 +15,14 @@ export const useSportItems = () => {
   return useContext(SportItemsContext);
 };
 
-export const SportItemsProvider: React.FC = ({ children }) => {
+export const SportItemsProvider: React.FC = ({children}) => {
   const [sportItems, setSportItems] = useState<SportItemDTO[]>([]);
 
   return (
-    <SportItemsContext.Provider value={{ sportItems, setSportItems }}>
+    <SportItemsContext.Provider value={{sportItems, setSportItems}}>
       {children}
     </SportItemsContext.Provider>
   );
 };
+
+export default SportItemsContext;
