@@ -17,6 +17,7 @@ import {Animated} from 'react-native';
 import SportItemsContext from 'app/contexts/SportItemsContext';
 
 import {fetchSportItems} from 'app/utils/sportItems.utils';
+import {SportItemDTO} from 'app/types/sport.types';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
@@ -43,11 +44,11 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   const ListRef = useRef(null);
 
   useEffect(() => {
-    ListRef.current.scrollToOffset({animated: false, offset: 0});
+    ListRef.current?.scrollToOffset({animated: false, offset: 0});
     fetchSportItems(setSportItems);
-  }, []);
+  }, [setSportItems]);
 
-  const renderItem = ({item, index}) => {
+  const renderItem = ({item, index}: {item: SportItemDTO; index: number}) => {
     if (typeof item === 'string') {
       return <Styled.SectionHeader>{item}</Styled.SectionHeader>;
     }
@@ -56,17 +57,22 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
     );
   };
 
+  // @ts-ignore
+  // @ts-ignore
   return (
     <Styled.Container>
       <Styled.BackgroundImage
         source={require('app/assets/Franek_woman_in_transparent_sport_bra_futuristic_outfit_cyberpu_1fbf6e84-1ad1-4fb8-8446-d4514d0e8f58.png')}>
         <AnimatedFlatList
+          // @ts-ignore
           animated={true}
           useNativeDriver={true}
           ref={ListRef}
           scrollEventThrottle={16}
           bounces={false}
-          keyExtractor={(item, index) => index.toString()}
+          keyExtractor={(item: SportItemDTO, index: number) =>
+            item.startTimestamp
+          }
           onScroll={onScroll}
           data={Object.entries(sportItems).flat().flat()}
           renderItem={renderItem}

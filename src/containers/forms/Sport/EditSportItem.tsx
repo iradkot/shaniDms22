@@ -17,8 +17,8 @@ interface EditSportItemProps {
 const EditSportItem: React.FC<EditSportItemProps> = ({sportItem}) => {
   const navigation = useNavigation();
   const [selectedSportType, setSelectedSportType] = React.useState<
-    'GYM' | 'RUNNING'
-  >(sportItem.type as 'GYM' | 'RUNNING');
+    SPORT_TYPES | SPORT_TYPES.AEROBIC
+  >(sportItem.type as SPORT_TYPES | SPORT_TYPES.AEROBIC);
 
   const {editSportItem, isLoading, error} = useEditSportItem();
 

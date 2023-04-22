@@ -11,7 +11,7 @@ import {
 } from 'app/components/forms/SportForm/components/SportTypeButton';
 import DateTimePickerCard from '../DateTimePickerCard';
 import {sportTypeBackground} from 'app/containers/forms/Sport/styles';
-
+import {SPORT_TYPES} from 'app/constants/SPORT';
 interface SportItemFormProps {
   sportItem?: SportItemDTO;
   onSubmit: (data: SportItemDTO) => void;
@@ -23,9 +23,9 @@ const SportItemForm = ({
   onSubmit,
   submitHandlerRef,
 }: SportItemFormProps) => {
-  const [selectedSportType, setSelectedSportType] = useState<'GYM' | 'RUNNING'>(
-    'GYM',
-  );
+  const [selectedSportType, setSelectedSportType] = useState<
+    SPORT_TYPES.STRENGTH | SPORT_TYPES.STRENGTH
+  >(SPORT_TYPES.STRENGTH);
 
   const {
     control,
@@ -43,7 +43,12 @@ const SportItemForm = ({
 
   useEffect(() => {
     submitHandlerRef.current = () => handleSubmit(onSubmit);
-    setValue('name', selectedSportType === 'GYM' ? 'Gym Workout' : 'Running');
+    setValue(
+      'name',
+      selectedSportType === SPORT_TYPES.STRENGTH
+        ? SPORT_TYPES.STRENGTH
+        : SPORT_TYPES.AEROBIC,
+    );
   }, [handleSubmit, onSubmit, submitHandlerRef, selectedSportType, setValue]);
 
   const durationOptions = [
@@ -144,22 +149,22 @@ const SportItemForm = ({
         </Container>
         <SportTypesContainer>
           <SportTypeButton
-            title="GYM"
+            title={SPORT_TYPES.STRENGTH}
             iconName="dumbbell"
             onPress={() => {
-              setSelectedSportType('GYM');
-              setValue('name', 'Gym Workout');
+              setSelectedSportType(SPORT_TYPES.STRENGTH);
+              setValue('name', SPORT_TYPES.STRENGTH);
             }}
-            isSelected={selectedSportType === 'GYM'}
+            isSelected={selectedSportType === SPORT_TYPES.STRENGTH}
           />
           <SportTypeButton
-            title="RUNNING"
+            title={SPORT_TYPES.AEROBIC}
             iconName="run-fast"
             onPress={() => {
-              setSelectedSportType('RUNNING');
-              setValue('name', 'Running');
+              setSelectedSportType(SPORT_TYPES.AEROBIC);
+              setValue('name', SPORT_TYPES.AEROBIC);
             }}
-            isSelected={selectedSportType === 'RUNNING'}
+            isSelected={selectedSportType === SPORT_TYPES.AEROBIC}
           />
         </SportTypesContainer>
       </ImageBackground>
