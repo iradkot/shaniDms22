@@ -27,7 +27,6 @@ const FoodCardsList: ({
     (item: formattedFoodItemDTO, index: React.Key | null | undefined) => (
       <FoodCard
         onEdit={() => {
-          console.log('onEdit', item.id);
           // @ts-ignore
           navigation.navigate(EDIT_FOOD_ITEM_SCREEN, {
             foodItem: item,

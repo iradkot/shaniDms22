@@ -5,7 +5,7 @@ import {NavigationProp, useNavigation} from '@react-navigation/native';
 import {AddFoodItem} from 'app/hooks/foods/useAddFoodItem';
 import {Controller, useForm} from 'react-hook-form';
 import * as S from 'app/components/forms/FoodItemForm/FoodItemForm.styles';
-import DateTimePickerCard from 'app/components/forms/FoodItemForm/components/DateTimePickerCard';
+import DateTimePickerCard from 'app/components/forms/DateTimePickerCard';
 import {
   FoodItemFormProps,
   InputControllerProps,

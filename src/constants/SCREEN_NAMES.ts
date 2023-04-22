@@ -7,6 +7,7 @@ export const EDIT_NOTIFICATION_SCREEN: string = 'EditNotificationScreen';
 export const CAMERA_SCREEN: string = 'CameraScreen';
 export const SPORT_TRACKING_TAB_SCREEN: string = 'SportTrackingTabScreen';
 export const ADD_SPORT_ITEM_SCREEN: string = 'AddSportItemScreen';
+export const EDIT_SPORT_ITEM_SCREEN: string = 'EditSportItemScreen';
 
 // FOOD
 export const Food_Tracking_TAB_SCREEN: string = 'FoodTrackingTabScreen';

@@ -1,16 +1,23 @@
 import {Theme} from 'app/types/theme';
 import {formatDateToDateAndTimeString} from 'app/utils/datetime.utils';
 import React, {useState} from 'react';
-import {TouchableOpacity} from 'react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import styled from 'styled-components/native';
+import {addOpacity} from 'app/utils/styling.utils';
 
 interface Props {
   initialTimestamp?: number;
   onTimestampChange: (timestamp: number) => void;
+  textStyles?: object;
+  label?: string;
 }
 
-const DateTimePickerCard = ({initialTimestamp, onTimestampChange}: Props) => {
+const DateTimePickerCard = ({
+  initialTimestamp,
+  onTimestampChange,
+  textStyles,
+  label,
+}: Props) => {
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
   const [isTimePickerVisible, setTimePickerVisibility] = useState(false);
   const [pickedTimestamp, setPickedTimestamp] = useState<number | undefined>(
@@ -27,8 +34,14 @@ const DateTimePickerCard = ({initialTimestamp, onTimestampChange}: Props) => {
 
   const handleConfirmDate = (date: Date) => {
     hideDatePicker();
-    showTimePicker();
-    setPickedTimestamp(date.getTime());
+    const newTimestamp = new Date(pickedTimestamp);
+    newTimestamp.setFullYear(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+    );
+    setPickedTimestamp(newTimestamp.getTime());
+    onTimestampChange(newTimestamp.getTime());
   };
 
   const showTimePicker = () => {
@@ -41,18 +54,32 @@ const DateTimePickerCard = ({initialTimestamp, onTimestampChange}: Props) => {
 
   const handleConfirmTime = (time: Date) => {
     hideTimePicker();
-    onTimestampChange(time.getTime());
-    setPickedTimestamp(time.getTime());
+    const newTimestamp = new Date(pickedTimestamp);
+    newTimestamp.setHours(time.getHours(), time.getMinutes());
+    setPickedTimestamp(newTimestamp.getTime());
+    onTimestampChange(newTimestamp.getTime());
   };
 
   return (
     <StyledContainer>
-      <StyledButton onPress={showDatePicker}>
-        <StyledButtonText>Show Date-time Picker </StyledButtonText>
-      </StyledButton>
-      <StyledPickedDateTimeText>
-        Picked Date & Time: {formatDateToDateAndTimeString(pickedTimestamp)}
-      </StyledPickedDateTimeText>
+      <StyledButtonGroup>
+        <StyledButton onPress={showDatePicker}>
+          <StyledButtonText style={textStyles ?? {}}>
+            {label ? `${label} Date` : 'Date'}
+          </StyledButtonText>
+        </StyledButton>
+        <StyledButton onPress={showTimePicker}>
+          <StyledButtonText style={textStyles ?? {}}>
+            {label ? `${label} Time` : 'Time'}
+          </StyledButtonText>
+        </StyledButton>
+      </StyledButtonGroup>
+      <StyledCard>
+        <StyledPickedDateTimeText style={textStyles ?? {}}>
+          {label ? `${label}: ` : 'Picked Date & Time: '}
+          {formatDateToDateAndTimeString(pickedTimestamp)}
+        </StyledPickedDateTimeText>
+      </StyledCard>
       <DateTimePickerModal
         isVisible={isDatePickerVisible}
         mode="date"
@@ -73,20 +100,25 @@ const StyledContainer = styled.View<{theme: Theme}>`
   flex: 1;
   justify-content: center;
   align-items: center;
-  background-color: ${props => props.theme.backgroundColor};
-  padding-top: 20px;
 `;
 
 const StyledPickedDateTimeText = styled.Text<{theme: Theme}>`
-  font-size: ${props => props.theme.textSize}
+  font-size: ${props => props.theme.textSize};
   color: ${props => props.theme.textColor};
   margin: 10px 0;
+`;
+
+const StyledButtonGroup = styled.View<{theme: Theme}>`
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
 `;
 
 const StyledButton = styled.TouchableOpacity<{theme: Theme}>`
   background-color: ${props => props.theme.buttonBackgroundColor};
   padding: 10px 20px;
   border-radius: 5px;
+  margin: 0 5px;
 `;
 
 const StyledButtonText = styled.Text<{theme: Theme}>`
@@ -94,4 +126,15 @@ const StyledButtonText = styled.Text<{theme: Theme}>`
   color: ${props => props.theme.buttonTextColor};
 `;
 
+const StyledCard = styled.View<{theme: Theme}>`
+  background-color: ${({theme}) => addOpacity(theme.backgroundColor, 0.9)};
+  padding: 10px;
+  border-radius: 5px;
+  margin: 5px 0;
+  shadow-color: #000;
+  shadow-offset: 0px 1px;
+  shadow-opacity: 0.18;
+  shadow-radius: 1;
+  elevation: 1;
+`;
 export default DateTimePickerCard;

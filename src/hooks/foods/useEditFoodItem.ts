@@ -23,7 +23,6 @@ export const useEditFoodItem: () => {
           .doc(foodItem.id);
         const directGet = firestore().collection('food_items').doc(foodItem.id);
         const directGetResponse = await directGet.get();
-        console.log('directGetResponse', directGetResponse);
 
         let downloadURL = foodItem.image.uri; // Set the download URL to the current image URI by default
 
@@ -45,7 +44,6 @@ export const useEditFoodItem: () => {
           related_user: firestore().collection('users').doc(userData?.id),
         };
         const foorItemResponse = await foodItemsCollectionRef.get();
-        console.log('foorItemResponse', foorItemResponse);
         await foodItemsCollectionRef.update(foodItemRequest);
 
         const lastSavedFoodItem = await firestore()

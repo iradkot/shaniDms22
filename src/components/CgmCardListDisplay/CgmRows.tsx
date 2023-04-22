@@ -44,7 +44,7 @@ const CgmRows: FC<CgmCardListDisplayProps> = ({
         offset: 50 * index,
         index,
       })}
-      inverted // Invert the FlatList to start from the bottom
+      // inverted // Invert the FlatList to start from the bottom
       contentContainerStyle={{flexGrow: 1}} // Make sure the list grows from the bottom
     />
   );

@@ -58,8 +58,8 @@ const BgDataCard = ({bgData, prevBgData}: BgDataCardProps) => {
   return (
     <DataRowContainer>
       <BgGradient
-        startColor={bgEndColor}
-        endColor={bgStartColor}
+        startColor={bgStartColor}
+        endColor={bgEndColor}
         theme={theme}
         style={linearGradientStyle}>
         <DropShadow style={dropShadowStyle}>
