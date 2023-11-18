@@ -10,6 +10,7 @@ import {
   IconContainer,
 } from './DateNavigatorRow.style';
 import RollingFlower from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/components/LoadingFlower';
+import LoadingFlower from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/components/LoadingFlower';
 
 interface DateNavigatorRowProps {
   date: Date;
@@ -38,7 +39,9 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
   };
   return (
     <Container>
-      <RollingFlower isLoading={isLoading} />
+      <ButtonContainer>
+        <LoadingFlower isLoading={isLoading} />
+      </ButtonContainer>
       <ButtonContainer onPress={onGoBack} active={isToday} flex={1}>
         <LinearGradient
           colors={['#333', '#666']}
