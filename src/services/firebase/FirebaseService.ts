@@ -81,17 +81,18 @@ export class FirebaseService {
 
   // Define a function that returns a list of food items, and write in ts that it returns a list of food items
   async getFoodItems(date: Date): Promise<FoodItemDTO[]> {
-    // FoodItemDTO[]
-    const dayBefore = new Date(date);
-    dayBefore.setDate(dayBefore.getDate());
-    const dayAfter = new Date(date);
-    dayAfter.setDate(dayAfter.getDate() + 2);
+    const startOfTheDay = getLocalStartOfTheDay(date);
+    const endOfTheDay = getLocalEndOfTheDay(date);
 
-    const snapshot = await firestore().collection('food_items').get();
+    const snapshot = await firestore()
+      .collection('food_items')
+      .where('timestamp', '>=', startOfTheDay)
+      .where('timestamp', '<=', endOfTheDay)
+      .get();
 
-    const foodItems = snapshot.docs.map(doc => doc.data() as FoodItemDTO);
-    return foodItems;
+    return snapshot.docs.map(doc => doc.data() as FoodItemDTO);
   }
+
 
   async getFoodItemBgData(foodItem: FoodItemDTO): Promise<BgSample[]> {
     const currentTime = new Date();

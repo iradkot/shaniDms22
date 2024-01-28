@@ -1,3 +1,5 @@
+// noinspection CssInvalidPropertyValue
+
 import styled from 'styled-components/native';
 import {TouchableOpacity} from 'react-native';
 
@@ -39,8 +41,7 @@ export const ButtonContainer = styled(TouchableOpacity).attrs({
 `;
 
 export const IconContainer = styled.View`
-  width: ${props => props.width || '30px'};
-  width: ${props => props.width || '30px'};
+  width: 30px;
   border-radius: 15px;
   justify-content: center;
   align-items: center;

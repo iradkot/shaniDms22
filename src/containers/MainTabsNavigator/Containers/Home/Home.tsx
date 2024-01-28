@@ -14,6 +14,8 @@ import {Dimensions} from 'react-native';
 import {useBgData} from 'app/hooks/useBgData';
 import {useFoodItems} from 'app/hooks/useFoodItems';
 import {bgSortFunction} from 'app/utils/bg.utils';
+import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow';
+import {useInsulinData} from 'app/hooks/useInsulinData';
 
 const HomeContainer = styled.View<{theme: Theme}>`
   flex: 1;
@@ -44,6 +46,13 @@ const Home: React.FC = () => {
     getUpdatedBgData,
   } = useBgData(debouncedCurrentDate);
 
+  const {
+    insulinData,
+    todayInsulinData,
+    isLoading: insulinIsLoading,
+    basalProfileData,
+  } = useInsulinData(debouncedCurrentDate);
+
   useEffect(() => {
     setDebouncedCurrentDate(currentDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -71,6 +80,13 @@ const Home: React.FC = () => {
       />
       <Collapsable title={'Stats'}>
         <StatsRow bgData={bgData} />
+      </Collapsable>
+      <Collapsable title={'Insulin stats'}>
+        {/*<InsulinStatsRow insulinData={generateDummyInsulinData(10)} />*/}
+        <InsulinStatsRow
+          insulinData={insulinData}
+          basalProfileData={basalProfileData}
+        />
       </Collapsable>
       {/*<BgGraph*/}
       {/*  bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}*/}

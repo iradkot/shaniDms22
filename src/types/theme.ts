@@ -12,6 +12,8 @@ export interface DetermineBgColorByGlucoseValue {
 }
 
 export type Theme = {
+  primaryColor: string;
+  secondaryColor: string;
   tabBarHeight: number;
   screenHeight: number;
   screenWidth: number;
@@ -28,6 +30,7 @@ export type Theme = {
   accentColor: string;
   shadowColor: string;
   white: string;
+  black: string;
   borderColor: string;
   dimensions: {
     width: number;
@@ -45,3 +48,8 @@ export type Theme = {
     small: string;
   };
 };
+
+// Extend the DefaultTheme from styled-components
+declare module 'styled-components' {
+  export interface DefaultTheme extends Theme {}
+}

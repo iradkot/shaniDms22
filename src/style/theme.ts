@@ -11,7 +11,10 @@ import {
 
 const {width, height} = Dimensions.get('window');
 
+// TODO - move all coolors to be under colors key, so instead of inRangeColor or primaryColor, it will be colors.inRange or colors.primary
 export const theme: Theme = {
+  primaryColor: colors.purple[500],
+  secondaryColor: colors.gray[200],
   screenHeight: height,
   screenWidth: width,
   tabBarHeight: 50,

@@ -38,6 +38,7 @@ import AddSportItem from 'app/containers/forms/Sport/AddSportItem';
 import {SportItemsProvider} from 'app/contexts/SportItemsContext';
 import EditFoodItemScreen from './containers/forms/Food/EditFoodItemScreen';
 import EditSportItem from './containers/forms/Sport/EditSportItem';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
 
 const Stack = createNativeStackNavigator();
 
@@ -65,64 +66,69 @@ const App: () => JSX.Element = () => {
   // if user is not logged in, show login screen else show home screen
   return (
     // TODO - move SafeAreaView style outside
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={extendedTheme}>
-        <StatusBar backgroundColor={theme.backgroundColor} />
-        <AppContainer>
-          <SafeAreaView style={{flex: 1}}>
-            <SafeAreaProvider>
-              <SportItemsProvider>
-                <NavigationContainer>
-                  <Stack.Navigator screenOptions={{headerShown: false}}>
-                    <Stack.Screen name="initScreen" component={AppInitScreen} />
-                    <Stack.Screen name={LOGIN_SCREEN} component={Login} />
-                    <Stack.Screen
-                      name={MAIN_TAB_NAVIGATOR}
-                      component={MainTabsNavigator}
-                    />
-                    <Stack.Screen
-                      options={{headerShown: true, headerTitle: ''}}
-                      name={ADD_NOTIFICATION_SCREEN}
-                      component={AddNotificationScreen}
-                    />
-                    <Stack.Screen
-                      options={{headerShown: true, headerTitle: ''}}
-                      name={EDIT_NOTIFICATION_SCREEN}
-                      component={EditNotificationScreen}
-                    />
-                    <Stack.Screen
-                      options={{headerShown: true, headerTitle: ''}}
-                      name={ADD_FOOD_ITEM_SCREEN}
-                      component={AddFoodItemScreen}
-                    />
-                    <Stack.Screen
-                      options={{headerShown: true, headerTitle: ''}}
-                      name={CAMERA_SCREEN}
-                      component={CameraScreen}
-                    />
-                    <Stack.Screen
-                      options={{headerShown: true, headerTitle: ''}}
-                      name={ADD_SPORT_ITEM_SCREEN}
-                      component={AddSportItem}
-                    />
-                    <Stack.Screen
-                      options={{headerShown: true, headerTitle: ''}}
-                      name={EDIT_SPORT_ITEM_SCREEN}
-                      component={EditSportItem}
-                    />
-                    <Stack.Screen
-                      options={{headerShown: true, headerTitle: ''}}
-                      name={EDIT_FOOD_ITEM_SCREEN}
-                      component={EditFoodItemScreen}
-                    />
-                  </Stack.Navigator>
-                </NavigationContainer>
-              </SportItemsProvider>
-            </SafeAreaProvider>
-          </SafeAreaView>
-        </AppContainer>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <GestureHandlerRootView style={{flex: 1}}>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider theme={extendedTheme}>
+          <StatusBar backgroundColor={theme.backgroundColor} />
+          <AppContainer>
+            <SafeAreaView style={{flex: 1}}>
+              <SafeAreaProvider>
+                <SportItemsProvider>
+                  <NavigationContainer>
+                    <Stack.Navigator screenOptions={{headerShown: false}}>
+                      <Stack.Screen
+                        name="initScreen"
+                        component={AppInitScreen}
+                      />
+                      <Stack.Screen name={LOGIN_SCREEN} component={Login} />
+                      <Stack.Screen
+                        name={MAIN_TAB_NAVIGATOR}
+                        component={MainTabsNavigator}
+                      />
+                      <Stack.Screen
+                        options={{headerShown: true, headerTitle: ''}}
+                        name={ADD_NOTIFICATION_SCREEN}
+                        component={AddNotificationScreen}
+                      />
+                      <Stack.Screen
+                        options={{headerShown: true, headerTitle: ''}}
+                        name={EDIT_NOTIFICATION_SCREEN}
+                        component={EditNotificationScreen}
+                      />
+                      <Stack.Screen
+                        options={{headerShown: true, headerTitle: ''}}
+                        name={ADD_FOOD_ITEM_SCREEN}
+                        component={AddFoodItemScreen}
+                      />
+                      <Stack.Screen
+                        options={{headerShown: true, headerTitle: ''}}
+                        name={CAMERA_SCREEN}
+                        component={CameraScreen}
+                      />
+                      <Stack.Screen
+                        options={{headerShown: true, headerTitle: ''}}
+                        name={ADD_SPORT_ITEM_SCREEN}
+                        component={AddSportItem}
+                      />
+                      <Stack.Screen
+                        options={{headerShown: true, headerTitle: ''}}
+                        name={EDIT_SPORT_ITEM_SCREEN}
+                        component={EditSportItem}
+                      />
+                      <Stack.Screen
+                        options={{headerShown: true, headerTitle: ''}}
+                        name={EDIT_FOOD_ITEM_SCREEN}
+                        component={EditFoodItemScreen}
+                      />
+                    </Stack.Navigator>
+                  </NavigationContainer>
+                </SportItemsProvider>
+              </SafeAreaProvider>
+            </SafeAreaView>
+          </AppContainer>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 };
 

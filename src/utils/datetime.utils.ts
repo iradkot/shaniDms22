@@ -81,3 +81,15 @@ export const getRelativeDateText = (date: Date): string => {
     return format(date, 'MMM d');
   }
 };
+
+export const getFormattedStartEndOfDay = (date) => {
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const formattedStartDate = startOfDay.toISOString();
+
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+  const formattedEndDate = endOfDay.toISOString();
+
+  return { formattedStartDate, formattedEndDate };
+};

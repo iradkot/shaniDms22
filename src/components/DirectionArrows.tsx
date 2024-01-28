@@ -1,9 +1,10 @@
-import React from 'react';
+import React, {useMemo} from 'react';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import PropTypes from 'prop-types';
 import {TrendDirectionString} from 'app/types/notifications';
 
-const trendDirectionToRotation: {[key in TrendDirectionString]: number} = {
+const TrendDirectionRotations: {[key in TrendDirectionString]: number} = {
   DoubleUp: 0,
   SingleUp: 0,
   FortyFiveUp: 45,
@@ -15,61 +16,23 @@ const trendDirectionToRotation: {[key in TrendDirectionString]: number} = {
   'RATE OUT OF RANGE': 270,
 };
 
-const ArrowIcon = styled(Icon)<{
-  trendDirection: keyof typeof trendDirectionToRotation;
-}>`
-  transform: ${({trendDirection}) => {
-    const rotation = trendDirectionToRotation[trendDirection] || 0;
-    return `rotate(${rotation}deg)`;
-  }};
-`;
-const DirectionArrows = ({
-  trendDirection,
-  size = 20,
-  color = 'black',
-}: {
-  trendDirection: TrendDirectionString;
-  size?: number;
-  color?: string;
-}) => {
-  return (
-    <ArrowsContainer>
-      {trendDirection === 'DoubleUp' || trendDirection === 'DoubleDown' ? (
-        <>
-          <ArrowIcon
-            name="arrow-up"
-            size={size}
-            color={color}
-            trendDirection={trendDirection}
-          />
-          <ArrowIcon
-            name="arrow-up"
-            size={size}
-            color={color}
-            trendDirection={trendDirection}
-          />
-        </>
-      ) : trendDirection === 'NOT COMPUTABLE' ||
-        trendDirection === 'RATE OUT OF RANGE' ? (
-        <Icon name="heart" size={size} color={color} />
-      ) : (
-        <ArrowIcon
-          name="arrow-up"
-          size={size}
-          color={color}
-          trendDirection={trendDirection}
-          style={{
-            shadowColor: '#000',
-            shadowOffset: {width: 0, height: 4},
-            shadowOpacity: 0.3,
-            shadowRadius: 4,
-            elevation: 2,
-          }}
-        />
-      )}
-    </ArrowsContainer>
-  );
+const IconTypes = {
+  ARROW: 'arrow-up',
+  HEART: 'heart',
 };
+
+const ShadowStyle = {
+  shadowColor: '#000',
+  shadowOffset: {width: 0, height: 4},
+  shadowOpacity: 0.3,
+  shadowRadius: 4,
+  elevation: 2,
+};
+
+const ArrowIcon = styled(Icon)<{rotation: number}>`
+  transform: ${({rotation}) => `rotate(${rotation}deg)`};
+  ${ShadowStyle}
+`;
 
 const ArrowsContainer = styled.View`
   flex-direction: row;
@@ -77,5 +40,64 @@ const ArrowsContainer = styled.View`
   align-items: center;
   width: 55px;
 `;
+
+const getIconName = (trendDirection: TrendDirectionString) =>
+  ['NOT COMPUTABLE', 'RATE OUT OF RANGE'].includes(trendDirection)
+    ? IconTypes.HEART
+    : IconTypes.ARROW;
+
+const getIconCount = (trendDirection: TrendDirectionString) =>
+  ['DoubleUp', 'DoubleDown'].includes(trendDirection) ? 2 : 1;
+
+const getRotation = (trendDirection: TrendDirectionString) =>
+  TrendDirectionRotations[trendDirection] !== undefined
+    ? TrendDirectionRotations[trendDirection]
+    : 0;
+
+interface DirectionArrowsProps {
+  trendDirection: TrendDirectionString;
+  size?: number;
+  color?: string;
+}
+
+const DirectionArrows: React.FC<DirectionArrowsProps> = ({
+  trendDirection,
+  size = 20,
+  color = 'black',
+}) => {
+  const iconName = useMemo(() => getIconName(trendDirection), [trendDirection]);
+  const iconCount = useMemo(
+    () => getIconCount(trendDirection),
+    [trendDirection],
+  );
+  const rotation = useMemo(() => getRotation(trendDirection), [trendDirection]);
+
+  return (
+    <ArrowsContainer>
+      {Array.from({length: iconCount}, (_, index) => (
+        <ArrowIcon
+          key={index}
+          name={iconName}
+          size={size}
+          color={color}
+          rotation={rotation}
+        />
+      ))}
+    </ArrowsContainer>
+  );
+};
+
+DirectionArrows.propTypes = {
+  trendDirection: PropTypes.oneOf(
+    Object.keys(TrendDirectionRotations) as TrendDirectionString[],
+  ).isRequired,
+  size: PropTypes.number,
+  color: PropTypes.string,
+};
+
+DirectionArrows.defaultProps = {
+  size: 20,
+  color: 'black',
+};
 
 export default DirectionArrows;
