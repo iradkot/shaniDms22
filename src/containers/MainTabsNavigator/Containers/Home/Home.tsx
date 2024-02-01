@@ -96,7 +96,7 @@ const Home: React.FC = () => {
       {/*/>*/}
       <Collapsable title={'chart'}>
         <BgGraph
-          bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}
+          bgSamples={cloneDeep(bgData.slice(-20)).sort(bgSortFunction(true))}
           width={Dimensions.get('window').width}
           height={200}
           foodItems={foodItems}
