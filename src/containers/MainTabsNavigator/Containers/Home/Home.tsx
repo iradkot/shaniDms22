@@ -70,6 +70,10 @@ const Home: React.FC = () => {
 
   const {foodItems} = useFoodItems(currentDate);
 
+  const memoizedBgSamples = useMemo(() => {
+    return cloneDeep(bgData).sort(bgSortFunction(true));
+  });
+
   return (
     <HomeContainer>
       <TimeInRangeRow bgData={bgData} />
@@ -96,7 +100,7 @@ const Home: React.FC = () => {
       {/*/>*/}
       <Collapsable title={'chart'}>
         <BgGraph
-          bgSamples={cloneDeep(bgData.slice(-20)).sort(bgSortFunction(true))}
+          bgSamples={memoizedBgSamples}
           width={Dimensions.get('window').width}
           height={200}
           foodItems={foodItems}

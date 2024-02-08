@@ -10,7 +10,7 @@ interface TooltipProps {
 
 const Tooltip: React.FC<TooltipProps> = ({x, y, value}) => {
   return (
-    <View style={{position: 'absolute', left: x - 20, top: y - 25}}>
+    <View style={{position: 'absolute', left: x, top: y}}>
       <Text>{value}</Text>
     </View>
   );

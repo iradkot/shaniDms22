@@ -1,7 +1,7 @@
 import React, {useMemo} from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import DirectionArrows from 'app/components/DirectionArrows';
-import {BgSample} from 'app/types/day_bgs';
+import {BgSample} from 'app/types/day_bgs.types';
 import {Theme} from 'app/types/theme';
 import DropShadow from 'react-native-drop-shadow';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';

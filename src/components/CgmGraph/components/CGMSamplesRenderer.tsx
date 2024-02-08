@@ -1,6 +1,6 @@
 import React, {useContext} from 'react';
 import * as d3 from 'd3';
-import {BgSample} from 'app/types/day_bgs';
+import {BgSample} from 'app/types/day_bgs.types';
 import {Circle, G} from 'react-native-svg';
 import {xAccessor, yAccessor} from 'app/components/CgmGraph/utils';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
@@ -23,8 +23,8 @@ const CGMSamplesRenderer = () => {
           yAccessor(d) < cgmRange.TARGET.min
             ? theme.belowRangeColor
             : yAccessor(d) > cgmRange.TARGET.max
-            ? theme.aboveRangeColor
-            : theme.inRangeColor;
+              ? theme.aboveRangeColor
+              : theme.inRangeColor;
         return (
           <G key={d.dateString}>
             <Circle

@@ -1,6 +1,6 @@
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
-import {BgSample} from 'src/types/day_bgs';
+import {BgSample} from 'app/types/day_bgs.types';
 import messaging from '@react-native-firebase/messaging';
 import auth from '@react-native-firebase/auth';
 import {FoodItemDTO} from 'app/types/food.types';
@@ -92,7 +92,6 @@ export class FirebaseService {
 
     return snapshot.docs.map(doc => doc.data() as FoodItemDTO);
   }
-
 
   async getFoodItemBgData(foodItem: FoodItemDTO): Promise<BgSample[]> {
     const currentTime = new Date();

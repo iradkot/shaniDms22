@@ -1,4 +1,4 @@
-import {BgSample} from 'app/types/day_bgs';
+import {BgSample} from 'app/types/day_bgs.types';
 
 type FormattedEvent = {
   bgData: BgSample[];
