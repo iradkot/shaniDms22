@@ -1,4 +1,4 @@
-import React, {useEffect, useRef} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {View} from 'react-native';
 import Svg, {G, Line} from 'react-native-svg';
 import styled from 'styled-components/native';
@@ -8,7 +8,7 @@ import YGridAndAxis from './components/YGridAndAxis';
 import CGMSamplesRenderer from './components/CGMSamplesRenderer';
 import GraphDateDisplay from './components/GraphDateDisplay';
 import FoodItemsRenderer from './components/Food/FoodItemsRenderer';
-import Tooltip from './components/Tooltip';
+import Tooltip from './components/Tooltips/Tooltip';
 import {
   GraphStyleContext,
   useGraphStyleContext,
@@ -16,6 +16,8 @@ import {
 import {TouchProvider, useTouchContext} from './contextStores/TouchContext';
 import {formattedFoodItemDTO} from 'app/types/food.types';
 import {findClosestBgSample} from 'app/components/CgmGraph/utils';
+import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
+import SgvTooltip from 'app/components/CgmGraph/components/Tooltips/SgvTooltip';
 
 interface Props {
   bgSamples: BgSample[];
@@ -58,17 +60,22 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
 
   const closestBgSample = isTouchActive
     ? findClosestBgSample(
-        touchPosition.x - graphStyleContextValue.margin.left,
+        graphStyleContextValue.xScale.invert(touchPosition.x),
         bgSamples,
       )
     : null;
-  console.log({bgSamples});
+
+  const [graphPosition, setGraphPosition] = useState({x: 0, y: 0});
 
   return (
     <GraphStyleContext.Provider
       value={[graphStyleContextValue, setGraphStyleContextValue]}>
       <View ref={containerRef} style={{width, height}}>
         <StyledSvg
+          onLayout={event => {
+            const {x, y} = event.nativeEvent.layout;
+            setGraphPosition({x, y});
+          }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -76,8 +83,8 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
           height={height}
           viewBox={`0 0 ${width} ${height}`}>
           <G
-            x={graphStyleContextValue.margin.left}
-            y={graphStyleContextValue.margin.top}>
+            x={graphStyleContextValue.margin?.left}
+            y={graphStyleContextValue.margin?.top}>
             <GraphDateDisplay />
             <CGMSamplesRenderer />
             <XGridAndAxis />
@@ -103,10 +110,10 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
                   strokeWidth={1}
                   opacity={0.5}
                 />
-                <Tooltip
+                <SgvTooltip
                   x={touchPosition.x - graphStyleContextValue.margin.left}
                   y={touchPosition.y - graphStyleContextValue.margin.top}
-                  value={closestBgSample.sgv}
+                  bgSample={closestBgSample}
                 />
               </>
             )}
