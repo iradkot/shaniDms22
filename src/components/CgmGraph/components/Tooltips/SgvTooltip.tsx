@@ -14,7 +14,7 @@ interface SgvTooltipProps {
 const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
   const textMargin = 10; // Margin for the text
   const lineHeight = 14; // Line height for the text
-  const tooltipWidth = 120; // Tooltip width
+  const tooltipWidth = 150; // Tooltip width
 
   // Calculate the x position of the tooltip
   let tooltipX = x - tooltipWidth / 2;

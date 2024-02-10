@@ -58,24 +58,20 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
     return null;
   }
 
+  const xTouchPosition = touchPosition.x - graphStyleContextValue.margin.left;
+  const yTouchPosition = touchPosition.y - graphStyleContextValue.margin.top;
   const closestBgSample = isTouchActive
     ? findClosestBgSample(
-        graphStyleContextValue.xScale.invert(touchPosition.x),
+        graphStyleContextValue.xScale.invert(xTouchPosition),
         bgSamples,
       )
     : null;
-
-  const [graphPosition, setGraphPosition] = useState({x: 0, y: 0});
 
   return (
     <GraphStyleContext.Provider
       value={[graphStyleContextValue, setGraphStyleContextValue]}>
       <View ref={containerRef} style={{width, height}}>
         <StyledSvg
-          onLayout={event => {
-            const {x, y} = event.nativeEvent.layout;
-            setGraphPosition({x, y});
-          }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -93,9 +89,9 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
             {isTouchActive && closestBgSample && (
               <>
                 <Line
-                  x1={touchPosition.x}
+                  x1={xTouchPosition}
                   y1="0"
-                  x2={touchPosition.x}
+                  x2={xTouchPosition}
                   y2={height}
                   stroke="black"
                   strokeWidth={1}
@@ -103,16 +99,16 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
                 />
                 <Line
                   x1="0"
-                  y1={touchPosition.y}
+                  y1={yTouchPosition}
                   x2={width}
-                  y2={touchPosition.y}
+                  y2={yTouchPosition}
                   stroke="grey"
                   strokeWidth={1}
                   opacity={0.5}
                 />
                 <SgvTooltip
-                  x={touchPosition.x - graphStyleContextValue.margin.left}
-                  y={touchPosition.y - graphStyleContextValue.margin.top}
+                  x={xTouchPosition}
+                  y={yTouchPosition}
                   bgSample={closestBgSample}
                 />
               </>

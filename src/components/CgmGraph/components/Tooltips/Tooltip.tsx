@@ -9,7 +9,7 @@ interface TooltipProps {
 }
 
 const Tooltip: React.FC<TooltipProps> = ({x, y, children}) => {
-  const tooltipWidth = 100;
+  const tooltipWidth = 150;
   const tooltipHeight = 50;
 
   return (
