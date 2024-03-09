@@ -1,7 +1,11 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import FoodCard from 'app/containers/MainTabsNavigator/Containers/FoodTracker/Components/FoodCard';
-import {FirebaseService} from 'app/services/firebase/FirebaseService';
-import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
+import FirebaseService from 'app/api/firebase/FirebaseService';
+import {
+  FoodItemDTO,
+  formattedFoodItemDTO,
+  GroupedMeal,
+} from 'app/types/food.types';
 import {cloneDeep, isEmpty} from 'lodash';
 import Collapsable from 'app/components/Collapsable';
 import {formatFoodItem} from 'app/containers/MainTabsNavigator/Containers/FoodTracker/utils';
@@ -13,9 +17,10 @@ import {
 import FoodCardsList from 'app/containers/MainTabsNavigator/Containers/FoodTracker/Components/FoodCardsList';
 import FoodCameraButton from 'app/containers/MainTabsNavigator/Containers/FoodTracker/Components/FoodCameraButton';
 import {NavigationProp} from '@react-navigation/native';
-import {getRelativeDateText} from 'app/utils/datetime.utils';
+// import {getRelativeDateText} from 'app/utils/datetime.utils';
 import Loader from 'app/components/common-ui/Loader/Loader';
 import {EDIT_FOOD_ITEM_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {subDays} from 'date-fns';
 
 type groupBy = 'day' | 'week' | 'food' | 'exact food';
 
@@ -26,11 +31,20 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   const [fsFoodItems, setFsFoodItems] = useState<FoodItemDTO[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   // const [groupBy, setGroupBy] = useState<groupBy>('day');
-  const fsManager = new FirebaseService();
 
   const getFoodItems = async (date: Date) => {
     setIsLoading(true);
-    const FSfoodItems = await fsManager.getFoodItems(date);
+    console.log('Getting FSfoodItems');
+    const daysRange = 365;
+    const endDate = new Date(date);
+    // using dateFns I want the start date will be daysRange ago
+    const startDate = subDays(endDate, daysRange);
+    const FSfoodItems = await FirebaseService.getFoodItemsByDateRange(
+      startDate,
+      endDate,
+    );
+
+    console.log('FSfoodItems', FSfoodItems);
     setFsFoodItems(cloneDeep(FSfoodItems));
     setIsLoading(false);
   };
@@ -42,7 +56,7 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
 
   const sortAndFormatFoodItems = async () => {
     const updatedFoodItems = await Promise.all(
-      fsFoodItems.map((item: FoodItemDTO) => formatFoodItem(item, fsManager)),
+      fsFoodItems.map((item: FoodItemDTO) => formatFoodItem(item)),
     );
     const sortedFoodItems = updatedFoodItems.sort((a, b) => {
       return b.timestamp - a.timestamp;
@@ -64,7 +78,14 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
     return null;
   }, [foodItems]);
 
-  const groupByFood = (acc: any, cur: formattedFoodItemDTO) => {
+  interface GroupByFoodAccumulator {
+    [key: string]: GroupedMeal;
+  }
+
+  const groupByFood = (
+    acc: GroupByFoodAccumulator,
+    cur: formattedFoodItemDTO,
+  ) => {
     const wordsToIgnoreEnglish = [
       'and',
       'the',
@@ -85,7 +106,7 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
       if (!wordsToIgnore.includes(word)) {
         if (word.length > 1) {
           if (!acc[word]) {
-            acc[word] = {meals: [], count: 0};
+            acc[word] = {meals: [], count: 0, date: cur.localDateString};
           }
           acc[word].meals.push(cur);
           acc[word].count++;
@@ -96,24 +117,12 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   };
 
   const groupedMeals = useMemo(() => {
-    const grouped = foodItems.reduce(
-      groupByFood,
-      {} as {[date: string]: {meals: formattedFoodItemDTO[]; count: number}},
-    );
+    const grouped = foodItems.reduce(groupByFood, {} as GroupByFoodAccumulator);
 
-    function groupByDay(acc: any, cur: formattedFoodItemDTO) {
-      const date = getRelativeDateText(new Date(cur.timestamp));
-
-      if (!acc[date]) {
-        acc[date] = {meals: [], count: 0};
-      }
-      acc[date].meals.push(cur);
-      acc[date].count++;
-      return acc;
-    }
-
-    return Object.entries(grouped).map(([date, {meals, count}]) => ({
-      date,
+    return Object.entries(grouped).map(([key, {meals, count}]) => ({
+      // Assuming `key` should actually be something like a date or identifier
+      // Adjust accordingly if `key` is not what you intended to use as `date`
+      date: key, // Make sure this is the correct value you intend to use for date
       meals,
       count,
     }));
@@ -151,7 +160,10 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
               <Collapsable
                 title={`${date} (${count})`}
                 initialIsCollapsed={true}>
-                <FoodCardsList foodItems={meals} />
+                <FoodCardsList
+                  foodItems={meals}
+                  setFsFoodItems={setFsFoodItems}
+                />
               </Collapsable>
             </Section>
           ))}

@@ -14,7 +14,7 @@ import {Dimensions} from 'react-native';
 import {useBgData} from 'app/hooks/useBgData';
 import {useFoodItems} from 'app/hooks/useFoodItems';
 import {bgSortFunction} from 'app/utils/bg.utils';
-import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow';
+import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
 import {useInsulinData} from 'app/hooks/useInsulinData';
 
 const HomeContainer = styled.View<{theme: Theme}>`

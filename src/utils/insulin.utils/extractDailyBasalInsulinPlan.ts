@@ -1,7 +1,7 @@
 // Function to calculate total basal for a date range
 import {BasalProfile} from 'app/types/insulin.types';
 
-function calculateTotalScheduledBasal(
+function extractDailyBasalInsulinPlan(
   basalProfile: BasalProfile,
   startDate: Date,
   endDate: Date,
@@ -44,9 +44,4 @@ const basalProfileSample: BasalProfile = [
 let startDate = new Date('2023-12-01');
 let endDate = new Date('2023-12-02');
 
-console.log(
-  'Total Scheduled Basal:',
-  calculateTotalScheduledBasal(basalProfileSample, startDate, endDate),
-);
-
-export default calculateTotalScheduledBasal;
+export default extractDailyBasalInsulinPlan;

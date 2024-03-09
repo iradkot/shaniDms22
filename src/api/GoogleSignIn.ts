@@ -39,7 +39,7 @@ class GoogleSignIn {
       return {user, error: null};
     } catch (error: any) {
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        return {user: null, error: new Error('User Cancelled the Login Flow')};
+        return {user: null, error: new Error('UserTypes Cancelled the Login Flow')};
       } else if (error.code === statusCodes.IN_PROGRESS) {
         return {user: null, error: new Error('Signing In')};
       } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {

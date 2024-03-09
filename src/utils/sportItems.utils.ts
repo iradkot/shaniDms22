@@ -1,13 +1,13 @@
-import {FirebaseService} from 'app/services/firebase/FirebaseService';
+import FirebaseService from 'app/api/firebase/FirebaseService';
 import {
   formatDateToDateAndTimeString,
   getRelativeDateText,
 } from 'app/utils/datetime.utils';
 import {formattedSportItemDTO, SportItemDTO} from 'app/types/sport.types';
+import {getBgDataByDate} from 'app/api/firebase/functions/getBgByDate';
 
 export const formatSportItem = async (
   item: SportItemDTO,
-  fsManager: FirebaseService,
 ): Promise<formattedSportItemDTO> => {
   if (!item?.startTimestamp) {
     item.startTimestamp = item.timestamp;
@@ -17,7 +17,7 @@ export const formatSportItem = async (
   startDate.setHours(startDate.getHours() - 1);
   const endDate = new Date(item.endTimestamp);
   endDate.setHours(endDate.getHours() + 3);
-  formattedItem.bgData = await fsManager.getBgDataByDate({
+  formattedItem.bgData = await getBgDataByDate({
     startDate,
     endDate,
   });
@@ -33,11 +33,10 @@ export const formatSportItem = async (
 };
 
 export const fetchSportItems = async setSportItems => {
-  const fsManager = new FirebaseService();
-  const FSsportItems = await fsManager.getSportItems();
+  const FSsportItems = await FirebaseService.getSportItems();
   const updatedSportItems = await Promise.all(
     FSsportItems.map((item: SportItemDTO) => {
-      return formatSportItem(item, fsManager);
+      return formatSportItem(item);
     }),
   );
   const sortedSportItems = updatedSportItems.sort((a, b) => {
