@@ -2,23 +2,48 @@ import {Dispatch, useEffect, useReducer} from 'react';
 import {bgSortFunction} from 'app/utils/bg.utils';
 import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
 import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
+import {BgSample} from 'app/types/day_bgs.types';
 
-const initialState = {
+interface State {
+  todayBgData: BgSample[];
+  bgData: BgSample[];
+  isLoading: boolean;
+  latestBgSample: BgSample | null;
+  latestPrevBgSample: BgSample | null;
+}
+
+type Action =
+  | {type: 'setBgData'; payload: BgSample[]; isToday: boolean}
+  | {type: 'setIsLoading'; payload: boolean}
+  | {
+      type: 'setLatestSamples';
+      payload: {latest: BgSample | null; previous: BgSample | null};
+    };
+
+const initialState: State = {
   todayBgData: [],
   bgData: [],
   isLoading: false,
+  latestBgSample: null,
+  latestPrevBgSample: null,
 };
 
-const reducer = (state: any, action: {type: any; payload: any}) => {
+const reducer = (state: State, action: Action): State => {
   switch (action.type) {
-    case 'setTodayBgData':
-      return {
-        ...state,
-        todayBgData: action.payload,
-        bgData: action.payload,
-        isLoading: false,
-      };
     case 'setBgData':
+      const isToday = action.isToday;
+      if (isToday) {
+        const latest = action.payload[0] || null;
+        const previous = action.payload[1] || null;
+        return {
+          ...state,
+          bgData: action.payload,
+          todayBgData: action.payload,
+          latestBgSample: latest,
+          latestPrevBgSample: previous,
+          isLoading: false,
+        };
+      }
       return {...state, bgData: action.payload, isLoading: false};
     case 'setIsLoading':
       return {...state, isLoading: action.payload};
@@ -27,37 +52,35 @@ const reducer = (state: any, action: {type: any; payload: any}) => {
   }
 };
 
-const getBgDataFromNightscout = async (
-  date: Date,
-  setIsLoading: (loading: boolean) => void,
-) => {
-  setIsLoading(true);
-
-  const {formattedStartDate, formattedEndDate} =
-    getFormattedStartEndOfDay(date);
-  const maxCount = 1000; // Assuming 5-minute intervals for 24 hours
-  const apiUrl = `/api/v1/entries?find[dateString][$gte]=${formattedStartDate}&find[dateString][$lte]=${formattedEndDate}&count=${maxCount}`;
-
+const fetchBgData = async (apiUrl: string): Promise<BgSample[]> => {
   try {
     const response = await nightscoutInstance.get(apiUrl);
-    return response.data; // Adjust based on your actual API response structure
+    return response.data as BgSample[];
   } catch (error) {
     console.error('Error fetching data from Nightscout:', error);
     return [];
   }
 };
 
-// New function to encapsulate the fetching logic
 async function fetchBgDataForDate(
   date: Date,
-  dispatch: Dispatch<any>,
-  setIsLoading: (loading: boolean) => void,
+  dispatch: Dispatch<Action>,
+  setIsLoading: Dispatch<boolean>,
 ) {
   setIsLoading(true);
-  const bgData = await getBgDataFromNightscout(date, setIsLoading);
+  const {formattedStartDate, formattedEndDate} =
+    getFormattedStartEndOfDay(date);
+  const maxCount = 1000;
+  const apiUrl = `/api/v1/entries?find[dateString][$gte]=${formattedStartDate}&find[dateString][$lte]=${formattedEndDate}&count=${maxCount}`;
+
+  const bgData = await fetchBgData(apiUrl);
   const sortedBgData = bgData.sort(bgSortFunction(false));
-  dispatch({type: 'setBgData', payload: sortedBgData});
+
+  const today = new Date();
+  const isToday = date.toDateString() === today.toDateString();
+
   setIsLoading(false);
+  dispatch({type: 'setBgData', payload: sortedBgData, isToday: isToday});
 }
 
 export const useBgData = (currentDate: Date) => {
@@ -66,15 +89,13 @@ export const useBgData = (currentDate: Date) => {
     dispatch({type: 'setIsLoading', payload: loading});
 
   useEffect(() => {
-    fetchBgDataForDate(currentDate, dispatch, setIsLoading).catch(error =>
-      console.error('Error fetching BG data:', error),
-    );
+    fetchBgDataForDate(currentDate, dispatch, setIsLoading).catch(error => {
+      console.error('Error fetching bg data:', error);
+    });
   }, [currentDate]);
 
   return {
-    bgData: state.bgData,
-    todayBgData: state.todayBgData,
-    isLoading: state.isLoading,
+    ...state,
     getUpdatedBgData: () =>
       fetchBgDataForDate(currentDate, dispatch, setIsLoading),
   };
