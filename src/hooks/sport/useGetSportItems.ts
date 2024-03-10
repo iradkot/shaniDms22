@@ -1,17 +1,15 @@
 // useGetSportItems.ts
 import {useQuery} from 'react-query';
-import {FirebaseService} from 'app/services/firebase/FirebaseService';
+import FirebaseService from 'app/api/firebase/FirebaseService';
 import {formatSportItem} from 'app/utils/sportItems.utils';
 import {getRelativeDateText} from 'app/utils/datetime.utils';
 
 const useGetSportItems = () => {
-  const fsManager = new FirebaseService();
-
   const fetchSportItems = async () => {
-    const FSsportItems = await fsManager.getSportItems();
+    const FSsportItems = await FirebaseService.getSportItems();
     const updatedSportItems = await Promise.all(
       FSsportItems.map(item => {
-        return formatSportItem(item, fsManager);
+        return formatSportItem(item, FirebaseService);
       }),
     );
     const sortedSportItems = updatedSportItems.sort((a, b) => {

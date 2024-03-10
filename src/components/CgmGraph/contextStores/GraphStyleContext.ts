@@ -1,6 +1,6 @@
 import * as d3 from 'd3';
 import {createContext, useState} from 'react';
-import {BgSample} from 'app/types/day_bgs';
+import {BgSample} from 'app/types/day_bgs.types';
 import {xAccessor} from 'app/components/CgmGraph/utils';
 
 interface GraphStyleContextInterface {

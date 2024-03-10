@@ -15,3 +15,9 @@ export interface formattedFoodItemDTO
     CommonFormattedEvent {
   id: string;
 }
+
+export interface GroupedMeal {
+  date: string;
+  meals: formattedFoodItemDTO[];
+  count: number;
+}

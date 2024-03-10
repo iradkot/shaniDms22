@@ -1,4 +1,4 @@
-import {BgSample} from 'app/types/day_bgs';
+import {BgSample} from 'app/types/day_bgs.types';
 
 export function calculateAverageAndStdDev(bgSamples: BgSample[]) {
   // Calculate the average sgv

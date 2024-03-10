@@ -3,7 +3,7 @@ import React, {useMemo} from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import {formatDistanceToNow} from 'date-fns';
 import DirectionArrows from 'app/components/DirectionArrows';
-import {BgSample} from 'app/types/day_bgs';
+import {BgSample} from 'app/types/day_bgs.types';
 import {isEmpty} from 'lodash';
 import {View} from 'react-native';
 import {Theme} from 'app/types/theme';

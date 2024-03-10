@@ -16,8 +16,6 @@ const EditFoodItemScreen: FC = () => {
   const route = useRoute();
   const {setFsFoodItems, foodItem} = route.params as any;
 
-  console.log('foodItem id', foodItem.id);
-
   const {editFoodItem} = useEditFoodItem();
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);

@@ -14,7 +14,7 @@ import {Dimensions} from 'react-native';
 import {useBgData} from 'app/hooks/useBgData';
 import {useFoodItems} from 'app/hooks/useFoodItems';
 import {bgSortFunction} from 'app/utils/bg.utils';
-import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow';
+import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
 import {useInsulinData} from 'app/hooks/useInsulinData';
 
 const HomeContainer = styled.View<{theme: Theme}>`
@@ -70,6 +70,10 @@ const Home: React.FC = () => {
 
   const {foodItems} = useFoodItems(currentDate);
 
+  const memoizedBgSamples = useMemo(() => {
+    return cloneDeep(bgData).sort(bgSortFunction(true));
+  });
+
   return (
     <HomeContainer>
       <TimeInRangeRow bgData={bgData} />
@@ -96,7 +100,7 @@ const Home: React.FC = () => {
       {/*/>*/}
       <Collapsable title={'chart'}>
         <BgGraph
-          bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}
+          bgSamples={memoizedBgSamples}
           width={Dimensions.get('window').width}
           height={200}
           foodItems={foodItems}

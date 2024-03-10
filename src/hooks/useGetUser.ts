@@ -1,4 +1,4 @@
-import {FirebaseService} from 'app/services/firebase/FirebaseService';
+import FirebaseService from 'app/api/firebase/FirebaseService';
 import {useEffect, useState} from 'react';
 
 export const useGetUser = () => {
@@ -7,8 +7,7 @@ export const useGetUser = () => {
 
   const getUserData = async () => {
     setIsLoading(true);
-    const fsManager = new FirebaseService();
-    const userFSData = await fsManager.getCurrentUserFSData();
+    const userFSData = await FirebaseService.getCurrentUserFSData();
     setUserData(userFSData);
     setIsLoading(false);
   };

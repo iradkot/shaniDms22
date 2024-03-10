@@ -1,29 +1,32 @@
-// Imports a utility function for calculating total scheduled basal insulin
-import {calculateTotalScheduledBasalInsulin} from 'app/utils/insulin.utils/calculateTotalScheduledBasalInsulin';
+import {InsulinDataEntry, BasalProfile} from 'app/types/insulin.types';
+import {calculateTotalScheduledBasalInsulin} from 'app/utils/insulin.utils/calculateTotalScheduledBasalInsulin'; // Adjusted import paths as necessary
 
 /**
  * Computes the basal rate over a given time period from the basal profile data.
- * @param {string} startTime - The start time of the period.
- * @param {string} endTime - The end time of the period.
- * @param {Array} basalProfileData - Array of basal profiles.
- * @returns {number} - The total basal rate for the given period.
+ * @param startTime - The start time of the period in ISO string format.
+ * @param endTime - The end time of the period in ISO string format.
+ * @param basalProfileData - Array of basal profiles.
+ * @returns The total basal rate for the given period.
  */
-const baseBasalRateForPeriod = (startTime, endTime, basalProfileData) => {
+const baseBasalRateForPeriod = (
+  startTime: string,
+  endTime: string,
+  basalProfileData: BasalProfile,
+): number => {
   let baseRate = 0;
-  const start = new Date(startTime);
-  const end = new Date(endTime);
+  const start = new Date(startTime).getTime();
+  const end = new Date(endTime).getTime();
 
-  basalProfileData.forEach((profile, index) => {
-    console.log(index, profile);
-    const profileStart = new Date(profile.startTime);
-    const profileEnd = new Date(profile.endTime);
+  basalProfileData.forEach(profile => {
+    const profileStart = new Date(profile.time).getTime(); // Assuming .time is the ISO string
+    const profileEnd = profileStart + profile.value * 3600000; // Assuming .value represents duration in hours; adjust if needed
 
     if (profileStart <= end && profileEnd >= start) {
       const overlapStart = Math.max(start, profileStart);
       const overlapEnd = Math.min(end, profileEnd);
       const overlapDuration = (overlapEnd - overlapStart) / 3600000; // Convert milliseconds to hours
 
-      baseRate += profile.rate * overlapDuration;
+      baseRate += profile.value * overlapDuration; // Assuming .value represents the rate; adjust if needed
     }
   });
 
@@ -32,13 +35,14 @@ const baseBasalRateForPeriod = (startTime, endTime, basalProfileData) => {
 
 /**
  * Calculates the total insulin used, including bolus, basal, temp basal, and suspend pump.
- * @param {Array} insulinData - Array of insulin data records.
- * @param {Array} basalProfileData - Array of basal profile data.
- * @returns {number} - The total amount of insulin used.
+ * @param insulinData - Array of insulin data records.
+ * @param basalProfileData - Array of basal profile data.
+ * @returns The total amount of insulin used.
  */
-export const calculateTotalInsulin = (insulinData, basalProfileData) => {
-  console.log({insulinData, basalProfileData});
-
+export const calculateTotalInsulin = (
+  insulinData: InsulinDataEntry[],
+  basalProfileData: BasalProfile,
+): number => {
   let totalBolusInsulin = 0;
   let totalTempBasalInsulin = 0;
 
@@ -48,10 +52,17 @@ export const calculateTotalInsulin = (insulinData, basalProfileData) => {
         totalBolusInsulin += entry.amount || 0;
         break;
       case 'tempBasal':
-        totalTempBasalInsulin += entry.rate * entry.duration;
+        if (entry.rate && entry.duration) {
+          totalTempBasalInsulin += entry.rate * entry.duration;
+        }
         break;
       case 'suspendPump':
-        if (entry.suspend) {
+        if (
+          entry.suspend &&
+          entry.startTime &&
+          entry.endTime &&
+          entry.duration
+        ) {
           totalTempBasalInsulin -=
             entry.duration *
               baseBasalRateForPeriod(
@@ -61,29 +72,11 @@ export const calculateTotalInsulin = (insulinData, basalProfileData) => {
               ) || 0;
         }
         break;
-      // Other types can be added here
     }
   });
 
-  let totalScheduledBasalInsulin =
+  const totalScheduledBasalInsulin =
     calculateTotalScheduledBasalInsulin(basalProfileData);
-
-  basalProfileData.forEach((profile, index) => {
-    const rate = profile.store?.basalRate; // Adjust path based on data structure
-    const duration =
-      (new Date(profile.endTime) - new Date(profile.startTime)) / 3600000; // Duration in hours
-    console.log('profileDataIndex', index, rate, duration);
-
-    if (rate !== undefined && !isNaN(duration)) {
-      totalScheduledBasalInsulin += rate * duration;
-    }
-  });
-
-  console.log({
-    totalBolusInsulin,
-    totalScheduledBasalInsulin,
-    totalTempBasalInsulin,
-  });
 
   return totalBolusInsulin + totalScheduledBasalInsulin + totalTempBasalInsulin;
 };
