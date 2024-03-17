@@ -5,9 +5,8 @@ import {
   getLocalStartOfTheDay,
   getLocalEndOfTheDay,
 } from 'app/utils/datetime.utils';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {getBgDataByDate} from '../functions/getBgByDate';
 import {FoodItemDTO} from 'app/types/food.types';
+import BGDataService from 'app/api/firebase/services/BGDataService';
 
 export class FoodService {
   async getFoodItemsForSingleDay(date: Date): Promise<FoodItemDTO[]> {
@@ -26,7 +25,6 @@ export class FoodService {
   }
 
   private async queryFoodItems(start: Date, end: Date): Promise<FoodItemDTO[]> {
-    // Convert start and end dates to timestamps
     const startTimestamp = start.getTime();
     const endTimestamp = end.getTime();
 
@@ -45,29 +43,18 @@ export class FoodService {
     return snapshot.docs.map(doc => doc.data() as FoodItemDTO);
   }
 
-  async getFoodItemBgData(foodItem: FoodItemDTO): Promise<BgSample[]> {
-    const currentTime = new Date();
-    const startDate = new Date(foodItem.timestamp);
-    startDate.setHours(startDate.getHours() - 1);
-    const endDate = new Date(foodItem.timestamp);
-    endDate.setHours(endDate.getHours() + 4);
+  // Replace the existing getBgDataByDate method with a call to BGDataService
+  static async getFoodItemBgData(foodItem: FoodItemDTO): Promise<BgSample[]> {
+    console.log('start');
+    const startDate = new Date(foodItem.timestamp - 3600 * 1000); // 1 hour before
+    const endDate = new Date(foodItem.timestamp + 4 * 3600 * 1000); // 4 hours after
 
-    if (currentTime >= endDate) {
-      const cacheKey = `bgData-${foodItem.timestamp}`;
-      const cachedBgData = await AsyncStorage.getItem(cacheKey);
-      if (cachedBgData) {
-        return JSON.parse(cachedBgData);
-      }
-    }
+    console.log('foodItem', foodItem);
+    console.log('item name:', foodItem.name);
+    console.log('foodItem.timestamp', new Date(foodItem.timestamp));
+    console.log('startDate', startDate);
+    console.log('endDate', endDate);
 
-    // Fetch BG data and cache if not already cached
-    const bgData = await getBgDataByDate({startDate, endDate});
-    if (currentTime >= endDate) {
-      await AsyncStorage.setItem(
-        `bgData-${foodItem.timestamp}`,
-        JSON.stringify(bgData),
-      );
-    }
-    return bgData;
+    return BGDataService.fetchBgDataForDateRange(startDate, endDate);
   }
 }

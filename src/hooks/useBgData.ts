@@ -1,8 +1,9 @@
-import {Dispatch, useEffect, useReducer} from 'react';
+import {useEffect, useReducer, Dispatch} from 'react';
 import {bgSortFunction} from 'app/utils/bg.utils';
 import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
 import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
 import {BgSample} from 'app/types/day_bgs.types';
+import BGDataService from 'app/api/firebase/services/BGDataService';
 
 interface State {
   todayBgData: BgSample[];
@@ -51,29 +52,13 @@ const reducer = (state: State, action: Action): State => {
       return state;
   }
 };
-
-const fetchBgData = async (apiUrl: string): Promise<BgSample[]> => {
-  try {
-    const response = await nightscoutInstance.get(apiUrl);
-    return response.data as BgSample[];
-  } catch (error) {
-    console.error('Error fetching data from Nightscout:', error);
-    return [];
-  }
-};
-
 async function fetchBgDataForDate(
   date: Date,
   dispatch: Dispatch<Action>,
   setIsLoading: Dispatch<boolean>,
 ) {
   setIsLoading(true);
-  const {formattedStartDate, formattedEndDate} =
-    getFormattedStartEndOfDay(date);
-  const maxCount = 1000;
-  const apiUrl = `/api/v1/entries?find[dateString][$gte]=${formattedStartDate}&find[dateString][$lte]=${formattedEndDate}&count=${maxCount}`;
-
-  const bgData = await fetchBgData(apiUrl);
+  const bgData = await BGDataService.fetchBgDataForDate(date);
   const sortedBgData = bgData.sort(bgSortFunction(false));
 
   const today = new Date();
