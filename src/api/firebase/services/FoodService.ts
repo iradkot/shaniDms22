@@ -28,12 +28,6 @@ export class FoodService {
     const startTimestamp = start.getTime();
     const endTimestamp = end.getTime();
 
-    console.log(
-      'Querying food items from:',
-      startTimestamp,
-      'to:',
-      endTimestamp,
-    );
     const snapshot = await firestore()
       .collection('food_items')
       .where('timestamp', '>=', startTimestamp)
@@ -45,15 +39,8 @@ export class FoodService {
 
   // Replace the existing getBgDataByDate method with a call to BGDataService
   static async getFoodItemBgData(foodItem: FoodItemDTO): Promise<BgSample[]> {
-    console.log('start');
     const startDate = new Date(foodItem.timestamp - 3600 * 1000); // 1 hour before
     const endDate = new Date(foodItem.timestamp + 4 * 3600 * 1000); // 4 hours after
-
-    console.log('foodItem', foodItem);
-    console.log('item name:', foodItem.name);
-    console.log('foodItem.timestamp', new Date(foodItem.timestamp));
-    console.log('startDate', startDate);
-    console.log('endDate', endDate);
 
     return BGDataService.fetchBgDataForDateRange(startDate, endDate);
   }

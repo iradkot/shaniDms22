@@ -21,7 +21,6 @@ class BGDataService {
     try {
       const response = await nightscoutInstance.get<BgSample[]>(apiUrl);
       const bgData: BgSample[] = response.data;
-      console.log('bgData', bgData);
       const sortedBgData: BgSample[] = bgData.sort(bgSortFunction(false));
 
       await AsyncStorage.setItem(cacheKey, JSON.stringify(sortedBgData));
