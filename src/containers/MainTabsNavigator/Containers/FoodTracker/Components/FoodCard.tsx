@@ -85,7 +85,7 @@ const FoodCard: React.FC<FoodCardProps> = ({
   name,
   bgSamples,
   date,
-  notes,
+  // notes,
   carbsGrams,
   foodItem,
   onEdit,

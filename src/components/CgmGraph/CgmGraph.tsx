@@ -18,6 +18,7 @@ import {formattedFoodItemDTO} from 'app/types/food.types';
 import {findClosestBgSample} from 'app/components/CgmGraph/utils';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import SgvTooltip from 'app/components/CgmGraph/components/Tooltips/SgvTooltip';
+import {useClosestBgSample} from 'app/components/CgmGraph/hooks/useClosestBgSample';
 
 interface Props {
   bgSamples: BgSample[];
@@ -82,7 +83,9 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
             x={graphStyleContextValue.margin?.left}
             y={graphStyleContextValue.margin?.top}>
             <GraphDateDisplay />
-            <CGMSamplesRenderer />
+            <CGMSamplesRenderer
+              focusedSampleDateString={closestBgSample?.dateString}
+            />
             <XGridAndAxis />
             <YGridAndAxis highestBgThreshold={300} />
             <FoodItemsRenderer foodItems={foodItems} />

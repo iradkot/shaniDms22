@@ -555,7 +555,7 @@
 				CODE_SIGN_ENTITLEMENTS = shaniDms22/shaniDms22Debug.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 50;
+				CURRENT_PROJECT_VERSION = 61;
 				DEVELOPMENT_TEAM = 8KHU9V3DTQ;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = shaniDms22/Info.plist;
@@ -588,7 +588,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 50;
+				CURRENT_PROJECT_VERSION = 61;
 				DEVELOPMENT_TEAM = 8KHU9V3DTQ;
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 8KHU9V3DTQ;
 				INFOPLIST_FILE = shaniDms22/Info.plist;

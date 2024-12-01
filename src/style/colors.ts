@@ -1,4 +1,4 @@
-import {addBrightness} from 'app/utils/styling.utils';
+import {addBrightness} from 'app/style/styling.utils';
 
 export const colors = {
   white: '#ffffff',

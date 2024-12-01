@@ -48,10 +48,14 @@ const Home: React.FC = () => {
 
   const {
     insulinData,
-    todayInsulinData,
-    isLoading: insulinIsLoading,
     basalProfileData,
+    isLoading: insulinIsLoading,
   } = useInsulinData(debouncedCurrentDate);
+
+  const startOfDay = new Date(debouncedCurrentDate);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(debouncedCurrentDate);
+  endOfDay.setHours(23, 59, 59, 999);
 
   useEffect(() => {
     setDebouncedCurrentDate(currentDate);
@@ -90,6 +94,8 @@ const Home: React.FC = () => {
         <InsulinStatsRow
           insulinData={insulinData}
           basalProfileData={basalProfileData}
+          startDate={startOfDay}
+          endDate={endOfDay}
         />
       </Collapsable>
       {/*<BgGraph*/}

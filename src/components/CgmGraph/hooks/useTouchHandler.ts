@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {GestureResponderEvent} from 'react-native';
+const DEBOUNCE_DELAY = 300; // Adjust this value as needed
 
 const useTouchHandler = () => {
   const [isTouchActive, setIsTouchActive] = useState(false);

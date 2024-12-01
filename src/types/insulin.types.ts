@@ -17,6 +17,7 @@ export interface InsulinDataEntry {
   suspend?: boolean; // for suspendPump
   startTime?: string; // for tempBasal and suspendPump
   endTime?: string; // for tempBasal and suspendPump
+  timestamp?: string; // ISO Format
 }
 
 // Represents a single insulin dose

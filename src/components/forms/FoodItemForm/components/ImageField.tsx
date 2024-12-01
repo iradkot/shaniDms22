@@ -6,10 +6,10 @@ import {CAMERA_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {imagePathToUri} from 'app/utils/image.utils';
 import styled from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import {Theme} from 'app/types/theme';
+import {ThemeType} from 'app/types/theme';
 
 interface ImageFieldProps {
-  photo: PhotoFile | undefined;
+  photo: PhotoFile | {uri: string} | undefined;
   navigation: NavigationProp<any>;
   onTakePhoto: (photo: PhotoFile) => void;
   initialSource?: {uri: string};
@@ -27,10 +27,18 @@ const ImageField = ({
     });
   };
 
-  const photoPath = photo?.path;
+  // Type guard to check if the photo is a PhotoFile
+  const isPhotoFile = (
+    photo: PhotoFile | {uri: string} | undefined,
+  ): photo is PhotoFile => {
+    return (photo as PhotoFile)?.path !== undefined;
+  };
+
+  const photoPath = isPhotoFile(photo) ? photo.path : undefined;
   const source = useMemo(() => {
     return (photoPath && {uri: imagePathToUri(photoPath)}) || initialSource;
   }, [photoPath, initialSource]);
+
   return (
     <Container>
       {source ? (
@@ -55,7 +63,7 @@ const ImageField = ({
   );
 };
 
-const Container = styled.View<{theme: Theme}>`
+const Container = styled.View<{theme: ThemeType}>`
   flex: 1;
   height: 200px;
   width: 100%;
@@ -64,12 +72,12 @@ const Container = styled.View<{theme: Theme}>`
   justify-content: center;
 `;
 
-const TakePictureContainer = styled.View<{theme: Theme}>`
+const TakePictureContainer = styled.View<{theme: ThemeType}>`
   align-items: center;
   justify-content: center;
 `;
 
-const TakePictureButton = styled.TouchableOpacity<{theme: Theme}>`
+const TakePictureButton = styled.TouchableOpacity<{theme: ThemeType}>`
   background-color: ${props => props.theme.accentColor};
   border-radius: 50px;
   width: 60px;
@@ -78,7 +86,7 @@ const TakePictureButton = styled.TouchableOpacity<{theme: Theme}>`
   justify-content: center;
 `;
 
-const TakePictureText = styled.Text<{theme: Theme}>`
+const TakePictureText = styled.Text<{theme: ThemeType}>`
   color: ${props => props.theme.textColor};
   font-size: 18px;
   margin-top: 10px;

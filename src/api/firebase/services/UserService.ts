@@ -10,6 +10,11 @@ export class UserService {
    * it creates a new record with the provided phone token and email.
    * @returns {Promise<FSUser | null>} The user data if available, otherwise null.
    */
+  /**
+   * Fetches the current user's data from Firestore. If the user does not exist,
+   * it creates a new record with the provided phone token and email.
+   * @returns {Promise<FSUser | null>} The user data if available, otherwise null.
+   */
   async getCurrentUserFSData(): Promise<FSUser | null> {
     try {
       const firebaseUser = auth().currentUser;
@@ -18,12 +23,19 @@ export class UserService {
       const userId = firebaseUser.uid;
       const userDoc = await firestore().collection('users').doc(userId).get();
 
+      const phoneToken = await messaging().getToken();
+      const email = firebaseUser.email ?? ''; // Assuming you'd want to use an empty string if email is null or undefined
+
       if (userDoc.exists) {
-        return userDoc.data() as FSUser;
+        const userData = userDoc.data() as FSUser;
+
+        if (userData.phoneToken !== phoneToken) {
+          await this.updateUserPhoneToken(userId, phoneToken);
+        }
+
+        return {...userData, phoneToken}; // Return updated user data including new phoneToken
       } else {
-        // UserTypes does not exist, so we attempt to create a new user record.
-        const phoneToken = await messaging().getToken();
-        const email = firebaseUser.email ?? ''; // Assuming you'd want to use an empty string if email is null or undefined
+        // User does not exist, so we attempt to create a new user record.
         await this.createUserFSData(userId, phoneToken, email);
 
         // Fetch the newly created user data.
@@ -36,6 +48,23 @@ export class UserService {
     } catch (error) {
       console.error("Failed to get or create user's Firestore data:", error);
       return null; // or throw the error, depending on your error handling strategy
+    }
+  }
+
+  /**
+   * Updates the user's phone token in Firestore.
+   * @param {string} userId - The user's ID.
+   * @param {string} phoneToken - The new phone's messaging token.
+   */
+  async updateUserPhoneToken(userId: string, phoneToken: string) {
+    try {
+      await firestore().collection('users').doc(userId).update({
+        phoneToken,
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('Failed to update user phone token in Firestore:', error);
+      // Handle the error as per your application's requirements
     }
   }
 

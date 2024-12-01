@@ -1,9 +1,11 @@
-// SgvTooltip.tsx
-import {BgSample} from 'app/types/day_bgs.types';
 import React from 'react';
-import {G, Rect, Text} from 'react-native-svg';
+import {Rect, Text} from 'react-native-svg';
 import Tooltip from './Tooltip';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
+import {BgSample} from 'app/types/day_bgs.types';
+import {ThemeType} from 'app/types/theme';
+import {determineBgColorByGlucoseValue} from 'app/style/styling.utils';
+import {useTheme} from 'styled-components/native';
 
 interface SgvTooltipProps {
   x: number;
@@ -12,58 +14,62 @@ interface SgvTooltipProps {
 }
 
 const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
-  const textMargin = 10; // Margin for the text
-  const lineHeight = 14; // Line height for the text
-  const tooltipWidth = 150; // Tooltip width
+  const theme = useTheme() as ThemeType;
 
-  // Calculate the x position of the tooltip
+  const tooltipWidth = 160;
+  const tooltipHeight = 70;
   let tooltipX = x - tooltipWidth / 2;
 
-  // If the tooltip is too close to the left edge of the screen, adjust its position
-  if (tooltipX < 0) {
-    tooltipX = tooltipWidth / 2;
+  const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
+
+  tooltipX = Math.max(0, tooltipX);
+  if (tooltipX + tooltipWidth > window.innerWidth) {
+    tooltipX = window.innerWidth - tooltipWidth;
   }
+
+  // More subtle shadow settings
+  const shadowColor = '#676767'; // Slightly darker shadow for subtlety
+  const shadowOffset = 0.5; // Reduced offset for a minimalistic look
 
   return (
     <Tooltip x={tooltipX} y={y}>
       <Rect
         width={tooltipWidth}
-        height={60}
-        fill="lightblue"
-        stroke="darkblue"
-        strokeWidth={2}
+        height={tooltipHeight}
+        fill="#f0f0f0"
+        stroke="#cccccc"
+        strokeWidth={1}
+        rx={8}
       />
+      {/* Subtle shadow for the glucose value text */}
       <Text
-        x={20} // Position the key text
-        y={textMargin + lineHeight} // Position the text with the margin and line height
-        fontSize={14}
-        fill="darkblue"
+        x={20 + shadowOffset}
+        y={20 + shadowOffset}
+        fontSize="12"
+        fontFamily="Arial, sans-serif"
+        fill={shadowColor} // Shadow with slight offset for minimalistic effect
         textAnchor="start">
-        BG:
+        BG: {`${bgSample.sgv} mg/dL`}
       </Text>
+      {/* Glucose value text */}
       <Text
-        x={60} // Position the value text
-        y={textMargin + lineHeight} // Position the text with the margin and line height
-        fontSize={14}
-        fill="darkblue"
+        x={20}
+        y={20}
+        fontSize="12"
+        fontFamily="Arial, sans-serif"
+        fill={bgColor}
         textAnchor="start">
-        {bgSample.sgv} mg/dL
+        BG: {`${bgSample.sgv} mg/dL`}
       </Text>
+      {/* Time text without shadow */}
       <Text
-        x={20} // Position the key text
-        y={textMargin + lineHeight * 2} // Position the text below the first text
-        fontSize={12}
-        fill="darkblue"
+        x={20}
+        y={40}
+        fontSize="12"
+        fontFamily="Arial, sans-serif"
+        fill="black"
         textAnchor="start">
-        Time:
-      </Text>
-      <Text
-        x={60} // Position the value text
-        y={textMargin + lineHeight * 2} // Position the text below the first text
-        fontSize={12}
-        fill="darkblue"
-        textAnchor="start">
-        {formatDateToLocaleTimeString(bgSample.date)}
+        Time: {formatDateToLocaleTimeString(bgSample.date)}
       </Text>
     </Tooltip>
   );

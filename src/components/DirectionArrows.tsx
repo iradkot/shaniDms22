@@ -22,13 +22,14 @@ const IconTypes = {
   HEART: 'heart',
 };
 
-const ShadowStyle = ({theme}: {theme: ThemeType}) => `
-  shadow-color: ${theme.textColor};
-  shadow-offset: 0px 0px;
-  shadow-opacity: 0.5;
-  shadow-radius: 3px;
-  elevation: ${theme.shadow.default};
-`;
+const ShadowStyle = ({theme}: {theme: ThemeType}) =>
+  `
+    ${theme.shadow.default};
+    shadow-color: ${theme.textColor};
+    shadow-offset: 0px 0px;
+    shadow-opacity: 0.5;
+    shadow-radius: 3px;
+  `;
 
 const ArrowIcon = styled(Icon)<{rotation: number}>`
   transform: ${({rotation}) => `rotate(${rotation}deg)`};

@@ -1,12 +1,53 @@
 import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
-import {BG_DATA_URL, INSULIN_DATA_URL} from './urls';
 import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
 import {
+  InsulinDataEntry,
   ProfileDataType,
-  TempBasalInsulinDataEntry,
-} from 'app/types/insulin.types';
+  TempBasalInsulinDataEntry
+} from "app/types/insulin.types";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {BgSample} from 'app/types/day_bgs.types';
+import {bgSortFunction} from 'app/utils/bg.utils';
 
-export const getInsulinData = async date => {
+export const fetchBgDataForDateRange = async (
+  startDate: Date,
+  endDate: Date,
+): Promise<BgSample[]> => {
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+  const cacheKey: string = `bgData-${startIso}-${endIso}`;
+  const cachedData: string | null = await AsyncStorage.getItem(cacheKey);
+
+  if (cachedData) {
+    return JSON.parse(cachedData);
+  }
+  const apiUrl: string = `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=1000`;
+  try {
+    const response = await nightscoutInstance.get<BgSample[]>(apiUrl);
+    const bgData: BgSample[] = response.data;
+    const sortedBgData: BgSample[] = bgData.sort(bgSortFunction(false));
+
+    await AsyncStorage.setItem(cacheKey, JSON.stringify(sortedBgData));
+    return sortedBgData;
+  } catch (error) {
+    console.error('Error fetching BG data from Nightscout:', error);
+    throw error;
+  }
+};
+
+export const fetchBgDataForDate = async (date: Date): Promise<BgSample[]> => {
+  const {formattedStartDate, formattedEndDate} =
+    getFormattedStartEndOfDay(date);
+
+  const startDate = new Date(formattedStartDate);
+  const endDate = new Date(formattedEndDate);
+
+  return fetchBgDataForDateRange(startDate, endDate);
+};
+
+export const getInsulinData = async (
+  date: Date,
+): Promise<TempBasalInsulinDataEntry[]> => {
   const {formattedStartDate, formattedEndDate} =
     getFormattedStartEndOfDay(date);
   const maxCount = 1000;
@@ -42,6 +83,7 @@ export const getUserProfileFromNightscout = async (
 
   // Constructing the API URL with the formatted date
   const apiUrl = `/api/v1/profiles?find[startDate][$lt]=${formattedDate}T23:59:59.999Z&find[startDate][$gt]=${formattedDate}T00:00:00.000Z&sort[startDate]=-1&count=10`;
+  console.log(`Fetching basal profile data from Nightscout: ${apiUrl}`);
 
   try {
     // Using the nightscoutInstance to perform the GET request
@@ -49,10 +91,58 @@ export const getUserProfileFromNightscout = async (
     if (response.status !== 200) {
       throw new Error('Failed to fetch profile data');
     }
+    console.log({'response data': response.data});
     // Assuming the response data directly matches the ProfileDataType structure
     return response.data as ProfileDataType;
   } catch (error) {
     console.error('Error fetching basal profile data from Nightscout:', error);
     throw error; // Propagate the error for handling elsewhere
+  }
+};
+
+export const fetchInsulinDataForDateRange = async (
+  startDate: Date,
+  endDate: Date,
+): Promise<InsulinDataEntry[]> => {
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+  const apiUrl = `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=1000`;
+
+  try {
+    const response = await nightscoutInstance.get<any[]>(apiUrl);
+    const treatments = response.data;
+
+    console.log('Fetched treatments data:', treatments);
+
+    const insulinData: InsulinDataEntry[] = treatments
+      .map(t => {
+        // Identify bolus events
+        if (
+          t.insulin && // Ensure there's an insulin amount
+          ['Bolus', 'Meal Bolus', 'Correction Bolus', 'Combo Bolus'].includes(t.eventType)
+        ) {
+          return {
+            type: 'bolus',
+            amount: t.insulin || t.amount || 0,
+            timestamp: t.created_at,
+          };
+        } else if (t.eventType === 'Temp Basal') {
+          return {
+            type: 'tempBasal',
+            rate: t.rate || 0,
+            duration: t.duration || 0, // Duration in minutes
+            timestamp: t.created_at,
+          };
+        } else {
+          return null; // Ignore other types
+        }
+      })
+      .filter(Boolean) as InsulinDataEntry[];
+
+
+    return insulinData;
+  } catch (error) {
+    console.error('Error fetching insulin data:', error);
+    throw error;
   }
 };

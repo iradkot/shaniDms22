@@ -7,6 +7,7 @@ import {
 } from 'app/utils/datetime.utils';
 import {FoodItemDTO} from 'app/types/food.types';
 import BGDataService from 'app/api/firebase/services/BGDataService';
+import {fetchBgDataForDateRange} from 'app/api/apiRequests';
 
 export class FoodService {
   async getFoodItemsForSingleDay(date: Date): Promise<FoodItemDTO[]> {
@@ -39,9 +40,15 @@ export class FoodService {
 
   // Replace the existing getBgDataByDate method with a call to BGDataService
   static async getFoodItemBgData(foodItem: FoodItemDTO): Promise<BgSample[]> {
-    const startDate = new Date(foodItem.timestamp - 3600 * 1000); // 1 hour before
-    const endDate = new Date(foodItem.timestamp + 4 * 3600 * 1000); // 4 hours after
+    const numberOfHoursBefore = 1;
+    const numberOfHoursAfter = 6;
+    const startDate = new Date(
+      foodItem.timestamp - numberOfHoursBefore * 3600 * 1000,
+    );
+    const endDate = new Date(
+      foodItem.timestamp + numberOfHoursAfter * 3600 * 1000,
+    ); // 4 hours after
 
-    return BGDataService.fetchBgDataForDateRange(startDate, endDate);
+    return fetchBgDataForDateRange(startDate, endDate);
   }
 }

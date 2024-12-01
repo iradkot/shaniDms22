@@ -1,9 +1,7 @@
 import {useEffect, useReducer, Dispatch} from 'react';
 import {bgSortFunction} from 'app/utils/bg.utils';
-import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
-import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
 import {BgSample} from 'app/types/day_bgs.types';
-import BGDataService from 'app/api/firebase/services/BGDataService';
+import {fetchBgDataForDate} from 'app/api/apiRequests';
 
 interface State {
   todayBgData: BgSample[];
@@ -52,13 +50,14 @@ const reducer = (state: State, action: Action): State => {
       return state;
   }
 };
-async function fetchBgDataForDate(
+
+async function fetchBgDayDataForDate(
   date: Date,
   dispatch: Dispatch<Action>,
   setIsLoading: Dispatch<boolean>,
 ) {
   setIsLoading(true);
-  const bgData = await BGDataService.fetchBgDataForDate(date);
+  const bgData = await fetchBgDataForDate(date);
   const sortedBgData = bgData.sort(bgSortFunction(false));
 
   const today = new Date();
@@ -74,7 +73,7 @@ export const useBgData = (currentDate: Date) => {
     dispatch({type: 'setIsLoading', payload: loading});
 
   useEffect(() => {
-    fetchBgDataForDate(currentDate, dispatch, setIsLoading).catch(error => {
+    fetchBgDayDataForDate(currentDate, dispatch, setIsLoading).catch(error => {
       console.error('Error fetching bg data:', error);
     });
   }, [currentDate]);
@@ -82,6 +81,6 @@ export const useBgData = (currentDate: Date) => {
   return {
     ...state,
     getUpdatedBgData: () =>
-      fetchBgDataForDate(currentDate, dispatch, setIsLoading),
+      fetchBgDayDataForDate(currentDate, dispatch, setIsLoading),
   };
 };
