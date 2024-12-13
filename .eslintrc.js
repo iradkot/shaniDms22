@@ -1,8 +1,8 @@
 module.exports = {
   root: true,
   extends: [
-    "@react-native-community",
-    "plugin:prettier/recommended" // Ensures ESLint uses Prettier rules
+    "@react-native",
+    "plugin:prettier/recommended"
   ],
   plugins: ["prettier"],
   rules: {

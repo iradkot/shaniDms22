@@ -59,7 +59,7 @@ const AppContainer = styled.View<{theme: Theme}>`
   background-color: ${props => props.theme.backgroundColor};
 `;
 
-const App: () => JSX.Element = () => {
+const App: () => React.JSX.Element = () => {
   const extendedTheme = {
     ...theme,
   };
