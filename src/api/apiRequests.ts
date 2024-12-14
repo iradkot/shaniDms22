@@ -112,8 +112,6 @@ export const fetchInsulinDataForDateRange = async (
     const response = await nightscoutInstance.get<any[]>(apiUrl);
     const treatments = response.data;
 
-    console.log('Fetched treatments data:', treatments);
-
     const insulinData: InsulinDataEntry[] = treatments
       .map(t => {
         // Identify bolus events
