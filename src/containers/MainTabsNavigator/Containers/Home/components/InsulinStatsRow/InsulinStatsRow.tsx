@@ -48,13 +48,13 @@ export const InsulinStatsRow: React.FC<InsulinStatsRowProps> = ({
       />
       <GradientColumnComponent
         label="Basal/Bolus Ratio"
-        value={`${basalRatioPercentage.toFixed(1)}%`}
+        value={`${basalRatioPercentage.toFixed(0)}%`}
         progress={basalRatioPercentage}
         gradientColors={['#00b09b', '#96c93d']} // Green gradient
       />
       <GradientColumnComponent
         label="Total Insulin"
-        value={`${stats.totalInsulin.toFixed(2)} U`}
+        value={`${stats.totalInsulin.toFixed(1)} U`}
         iconName="calculator"
         gradientColors={['#f7971e', '#ffd200']} // Yellow gradient
       />

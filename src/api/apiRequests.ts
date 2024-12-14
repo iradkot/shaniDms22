@@ -1,4 +1,4 @@
-import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
+import { nightscoutInstance, nightScoutUrl } from "app/api/shaniNightscoutInstances";
 import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
 import {
   InsulinDataEntry,
@@ -62,7 +62,7 @@ export const getInsulinDataFromNightscout = async (
   try {
     setIsLoading(true);
     const response = await fetch(
-      `https://shani-cgm.herokuapp.com/api/v1/treatments?find[created_at][$gte]=${dateStr}T00:00:00Z&find[created_at][$lte]=${dateStr}T23:59:59Z&count=10`,
+      `${nightScoutUrl}/api/v1/treatments?find[created_at][$gte]=${dateStr}T00:00:00Z&find[created_at][$lte]=${dateStr}T23:59:59Z&count=10`,
     );
     if (!response.ok) throw new Error('Failed to fetch insulin data');
     const data: TempBasalInsulinDataEntry[] = await response.json(); // Ensure the type matches what you expect based on the API response
@@ -71,6 +71,7 @@ export const getInsulinDataFromNightscout = async (
   } catch (error) {
     setIsLoading(false);
     console.error('Error fetching insulin data:', error);
+    console.log('error data:', error.data);
     throw error; // Propagate error up for handling elsewhere
   }
 };
@@ -91,7 +92,6 @@ export const getUserProfileFromNightscout = async (
     if (response.status !== 200) {
       throw new Error('Failed to fetch profile data');
     }
-    console.log({'response data': response.data});
     // Assuming the response data directly matches the ProfileDataType structure
     return response.data as ProfileDataType;
   } catch (error) {

@@ -17,7 +17,7 @@ const GradientColumn = styled(LinearGradient)<{ gradientColors: string[] }>`
 `;
 
 const ValueText = styled.Text<{ theme: Theme }>`
-    font-size: 20px;
+    font-size: 16px;
     font-weight: bold;
     color: ${props => props.theme.textColor};
     margin-top: 5px;
