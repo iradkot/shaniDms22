@@ -1,139 +1,43 @@
+// /Users/iradkotton/projects/shaniDms22/src/containers/MainTabsNavigator/Containers/Trends/Trends.tsx
+
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { View, Text, Button, ActivityIndicator, ScrollView, TouchableOpacity, Dimensions } from "react-native";
-import styled from "styled-components/native";
+import { View, Text, Button, ActivityIndicator, ScrollView } from "react-native";
 import Collapsable from "app/components/Collapsable";
 import { calculateTrendsMetrics, DayDetail } from "./trendsCalculations";
 import { BgSample } from "app/types/day_bgs.types";
-import BgGraph from "app/components/CgmGraph/CgmGraph";
 import {fetchBgDataForDateRange} from "app/api/apiRequests";
-
-const { width: screenWidth } = Dimensions.get('window');
-
-const TrendsContainer = styled.View`
-    flex: 1;
-    background-color: ${({ theme }) => theme.backgroundColor};
-    padding: 10px;
-`;
-
-const DateRangeSelector = styled.View`
-    flex-direction: row;
-    justify-content: space-around;
-    margin-vertical: 10px;
-`;
-
-const SectionTitle = styled.Text`
-    font-size: 20px;
-    font-weight: 700;
-    color: #333;
-    margin: 10px 0;
-`;
-
-const StatRow = styled.View`
-    margin-vertical: 5px;
-    padding: 10px;
-    background-color: #fafafa;
-    border-radius: 5px;
-`;
-
-const StatLabel = styled.Text`
-    font-size: 16px;
-    font-weight: 600;
-    color: #444;
-`;
-
-const StatValue = styled.Text<{ color?: string }>`
-    font-size: 16px;
-    font-weight: bold;
-    color: ${({ color }) => color || "#000"};
-`;
-
-const ExplanationText = styled.Text`
-    font-size: 14px;
-    color: #666;
-    margin-top: 2px;
-`;
-
-const HighlightBox = styled.View`
-    background-color: #e6f7ff;
-    border-left-width: 4px;
-    border-left-color: #1890ff;
-    padding: 10px;
-    border-radius: 5px;
-    margin-vertical: 5px;
-`;
-
-const CompareBox = styled.View`
-    background-color: #f0f5ff;
-    border-left-width: 4px;
-    border-left-color: #91d5ff;
-    padding: 10px;
-    border-radius: 5px;
-    margin-vertical: 5px;
-`;
-
-const BoldText = styled.Text`
-    font-weight: bold;
-`;
-
-const InteractiveRow = styled(TouchableOpacity)`
-    padding: 10px;
-    background-color: #eee;
-    margin-vertical: 5px;
-    border-radius: 5px;
-`;
-
-const InteractiveRowText = styled.Text`
-    font-size: 16px;
-    color: #333;
-`;
-
-const Emoji = styled.Text`
-    font-size: 16px;
-`;
-const Row = styled.View`
-    flex-direction: row;
-    align-items: center;
-`;
-const MetricSelector = styled.View`
-    flex-direction: row;
-    justify-content: center;
-    margin-bottom: 10px;
-`;
-
-const MetricButton = styled.TouchableOpacity<{selected?: boolean}>`
-    padding: 8px 12px;
-    border-radius: 5px;
-    margin: 0 5px;
-    background-color: ${({selected})=>selected?'#1890ff':'#ddd'};
-`;
-
-const MetricButtonText = styled.Text`
-    color: #fff;
-    font-weight: bold;
-`;
+import {
+  TrendsContainer,
+  DateRangeSelector,
+  SectionTitle,
+  StatRow,
+  StatLabel,
+  StatValue,
+  ExplanationText,
+  CompareBox,
+  BoldText,
+  MetricSelector,
+  MetricButton,
+  MetricButtonText,
+  Emoji
+} from "./Trends.styles";
+import {DayInsights} from './TrendsUI';
+import {
+  loadingSteps,
+  MAX_LOADING_TIME,
+  WARNING_TIME,
+  CHUNK_SIZE
+} from './Trends.constants';
 
 type MetricType = 'tir' | 'hypos' | 'hypers';
-
-const loadingSteps = [
-  "Contacting server...",
-  "Fetching data...",
-  "Processing data..."
-];
-
-const MAX_LOADING_TIME = 30000; // 30s
-const WARNING_TIME = 20000; // 20s
-const CHUNK_SIZE = 7; // fetch in 7-day increments
 
 const Trends: React.FC = () => {
   const [rangeDays, setRangeDays] = useState<number>(7);
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('tir');
-  const [showBestDayDetails, setShowBestDayDetails] = useState(false);
-  const [showWorstDayDetails, setShowWorstDayDetails] = useState(false);
   const [showComparison, setShowComparison] = useState<boolean>(false);
   const [comparing, setComparing] = useState<boolean>(false);
   const [previousMetrics, setPreviousMetrics] = useState<ReturnType<typeof calculateTrendsMetrics>|null>(null);
 
-  // Memoize start and end so they don't change every render
   const {start, end} = useMemo(()=>{
     const end = new Date();
     end.setHours(23, 59, 59, 999);
@@ -197,7 +101,6 @@ const Trends: React.FC = () => {
       }
     }
     fetchInChunks();
-    // Only re-run if rangeDays/start/end changes
   }, [start, end, rangeDays]);
 
   useEffect(() => {
@@ -221,7 +124,7 @@ const Trends: React.FC = () => {
   const showLongWaitWarning = isLoading && !fetchCancelled && !fetchError && loadingTime > WARNING_TIME && loadingTime < MAX_LOADING_TIME;
   const showMaxWaitReached = isLoading && !fetchCancelled && !fetchError && loadingTime >= MAX_LOADING_TIME;
 
-  const metrics = useMemo(() => fetchCancelled ? partialMetrics : calculateTrendsMetrics(bgData), [bgData, partialMetrics, fetchCancelled]);
+  const metrics = fetchCancelled ? partialMetrics : calculateTrendsMetrics(bgData);
 
   async function handleCompare() {
     setComparing(true);
@@ -364,6 +267,7 @@ const Trends: React.FC = () => {
           </Collapsable>
 
           {metrics.dailyDetails.length > 0 && (() => {
+            // Filter and sort days based on selected metric
             let displayDays = [...metrics.dailyDetails];
             if (selectedMetric==='tir'){
               displayDays.sort((a,b)=>b.tir - a.tir);
@@ -379,99 +283,13 @@ const Trends: React.FC = () => {
             const worstDay = worstDayDetail?.dateString || '';
 
             return (
-              <Collapsable title="Day Quality & Patterns">
-                <HighlightBox>
-                  <Row>
-                    <BoldText>Best Day ({selectedMetric==='tir'?'Highest TIR':selectedMetric==='hypos'?'Fewest Hypos':'Fewest Hypers'}): </BoldText>
-                    <Text>{bestDay || "N/A"}</Text>
-                  </Row>
-                  {bestDayDetail && (
-                    <ExplanationText>
-                      TIR: {(bestDayDetail.tir * 100).toFixed(1)}% | Hypos: {bestDayDetail.seriousHypos} | Hypers: {bestDayDetail.seriousHypers}
-                    </ExplanationText>
-                  )}
-                </HighlightBox>
-                {bestDayDetail && (
-                  <InteractiveRow onPress={()=>setShowBestDayDetails(!showBestDayDetails)}>
-                    <InteractiveRowText>
-                      {showBestDayDetails?'Hide':'View'} details of best day: <Text>{bestDay}</Text>
-                    </InteractiveRowText>
-                  </InteractiveRow>
-                )}
-
-                <HighlightBox style={{ backgroundColor: "#fff1f0", borderLeftColor: "#ff4d4f" }}>
-                  <Row>
-                    <BoldText>Worst Day ({selectedMetric==='tir'?'Lowest TIR':selectedMetric==='hypos'?'Most Hypos':'Most Hypers'}): </BoldText>
-                    <Text>{worstDay || "N/A"}</Text>
-                  </Row>
-                  {worstDayDetail && (
-                    <ExplanationText>
-                      TIR: {(worstDayDetail.tir * 100).toFixed(1)}% | Hypos: {worstDayDetail.seriousHypos} | Hypers: {worstDayDetail.seriousHypers}
-                    </ExplanationText>
-                  )}
-                </HighlightBox>
-                {worstDayDetail && (
-                  <InteractiveRow onPress={()=>setShowWorstDayDetails(!showWorstDayDetails)}>
-                    <InteractiveRowText>
-                      {showWorstDayDetails?'Hide':'View'} details of worst day: <Text>{worstDay}</Text>
-                    </InteractiveRowText>
-                  </InteractiveRow>
-                )}
-
-                {bestDayDetail && showBestDayDetails && (
-                  <Collapsable title="Best Day Insights">
-                    <StatRow>
-                      <StatLabel>Date:</StatLabel>
-                      <StatValue>{bestDayDetail.dateString}</StatValue>
-                    </StatRow>
-                    <StatRow>
-                      <StatLabel>Avg BG:</StatLabel>
-                      <StatValue>{bestDayDetail.avg.toFixed(1)} mg/dL</StatValue>
-                    </StatRow>
-                    <StatRow>
-                      <StatLabel>TIR:</StatLabel>
-                      <StatValue>{(bestDayDetail.tir * 100).toFixed(1)}%</StatValue>
-                    </StatRow>
-                    <ExplanationText>Stable overnight? Good meal timing? Learn from this pattern.</ExplanationText>
-
-                    <View style={{marginTop:10}}>
-                      <BgGraph
-                        bgSamples={bestDayDetail.samples}
-                        width={screenWidth-40}
-                        height={200}
-                        foodItems={null}
-                      />
-                    </View>
-                  </Collapsable>
-                )}
-
-                {worstDayDetail && showWorstDayDetails && (
-                  <Collapsable title="Worst Day Insights">
-                    <StatRow>
-                      <StatLabel>Date:</StatLabel>
-                      <StatValue>{worstDayDetail.dateString}</StatValue>
-                    </StatRow>
-                    <StatRow>
-                      <StatLabel>Avg BG:</StatLabel>
-                      <StatValue>{worstDayDetail.avg.toFixed(1)} mg/dL</StatValue>
-                    </StatRow>
-                    <StatRow>
-                      <StatLabel>TIR:</StatLabel>
-                      <StatValue>{(worstDayDetail.tir * 100).toFixed(1)}%</StatValue>
-                    </StatRow>
-                    <ExplanationText>Identify causes: Late meals? Missed bolus? Stress?</ExplanationText>
-
-                    <View style={{marginTop:10}}>
-                      <BgGraph
-                        bgSamples={worstDayDetail.samples}
-                        width={screenWidth-40}
-                        height={200}
-                        foodItems={null}
-                      />
-                    </View>
-                  </Collapsable>
-                )}
-              </Collapsable>
+              <DayInsights
+                bestDayDetail={bestDayDetail}
+                worstDayDetail={worstDayDetail}
+                bestDay={bestDay}
+                worstDay={worstDay}
+                selectedMetric={selectedMetric}
+              />
             );
           })()}
 
