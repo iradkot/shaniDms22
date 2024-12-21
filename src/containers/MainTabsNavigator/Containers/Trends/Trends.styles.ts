@@ -106,3 +106,26 @@ export const MetricButtonText = styled.Text`
   color: #fff;
   font-weight: bold;
 `;
+
+export const OverallStatsGrid = styled.View`
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 10px;
+`;
+
+export const OverallStatsItem = styled.View`
+  /* Each tile uses nearly half the container width */
+  width: 48%;
+  background-color: #fff;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  /* Optional: add shadow/elevation for a card effect */
+  shadow-color: #000;
+  shadow-offset: 0px 2px;
+  shadow-opacity: 0.1;
+  shadow-radius: 3px;
+  elevation: 2;
+`;
+

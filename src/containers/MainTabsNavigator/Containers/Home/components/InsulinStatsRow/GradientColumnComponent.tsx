@@ -9,7 +9,7 @@ import { AnimatedCircularProgress } from 'react-native-circular-progress';
 const GradientColumn = styled(LinearGradient)<{ gradientColors: string[] }>`
     flex-direction: column;
     align-items: center;
-    padding: 15px;
+    padding: 10px;
     height: 100%;
     flex: 1;
     border-radius: 10px;
