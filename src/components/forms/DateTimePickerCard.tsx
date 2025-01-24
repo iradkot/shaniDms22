@@ -3,7 +3,7 @@ import {formatDateToDateAndTimeString} from 'app/utils/datetime.utils';
 import React, {useState} from 'react';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import styled from 'styled-components/native';
-import {addOpacity} from 'app/utils/styling.utils';
+import {addOpacity} from 'app/style/styling.utils';
 
 interface Props {
   initialTimestamp?: number;

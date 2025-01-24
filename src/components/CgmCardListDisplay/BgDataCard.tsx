@@ -1,11 +1,12 @@
 import React, {useMemo} from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import DirectionArrows from 'app/components/DirectionArrows';
-import {BgSample} from 'app/types/day_bgs';
-import {Theme} from 'app/types/theme';
+import {BgSample} from 'app/types/day_bgs.types';
+import {ThemeType} from 'app/types/theme';
 import DropShadow from 'react-native-drop-shadow';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import BgGradient from 'app/components/BgGradient';
+import {FlexAlignType} from 'react-native';
 
 interface BgDataCardProps {
   bgData: BgSample;
@@ -13,7 +14,7 @@ interface BgDataCardProps {
 }
 
 const BgDataCard = ({bgData, prevBgData}: BgDataCardProps) => {
-  const theme = useTheme() as Theme;
+  const theme = useTheme() as ThemeType;
 
   const bgStartColor = useMemo(() => {
     return prevBgData
@@ -31,9 +32,9 @@ const BgDataCard = ({bgData, prevBgData}: BgDataCardProps) => {
 
   const linearGradientStyle = useMemo(() => {
     return {
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      alignItems: 'center',
+      flexDirection: 'row' as const,
+      justifyContent: 'space-around' as const,
+      alignItems: 'center' as FlexAlignType,
       padding: 10,
       borderBottomWidth: 1,
       borderBottomColor: theme.borderColor,
@@ -60,7 +61,6 @@ const BgDataCard = ({bgData, prevBgData}: BgDataCardProps) => {
       <BgGradient
         startColor={bgStartColor}
         endColor={bgEndColor}
-        theme={theme}
         style={linearGradientStyle}>
         <DropShadow style={dropShadowStyle}>
           <DataRowText>{bgData.sgv}</DataRowText>
@@ -79,7 +79,7 @@ const DataRowContainer = styled.View`
   align-items: center;
 `;
 
-const DataRowText = styled.Text<{theme: Theme}>`
+const DataRowText = styled.Text<{theme: ThemeType}>`
   font-size: 16px;
   color: ${props => props.theme.textColor};
 `;

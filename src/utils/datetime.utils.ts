@@ -82,14 +82,26 @@ export const getRelativeDateText = (date: Date): string => {
   }
 };
 
-export const getFormattedStartEndOfDay = (date) => {
+export const getFormattedStartEndOfDay = inputDate => {
+  const date = new Date(inputDate);
+  const now = new Date();
+
+  // Start of Day
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
   const formattedStartDate = startOfDay.toISOString();
 
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  // End of Day or Current Moment if Today
+  let endOfDay;
+  if (date.toDateString() === now.toDateString()) {
+    // If the input date is today, use current time
+    endOfDay = now;
+  } else {
+    // Else, use the end of the input date
+    endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+  }
   const formattedEndDate = endOfDay.toISOString();
 
-  return { formattedStartDate, formattedEndDate };
+  return {formattedStartDate, formattedEndDate};
 };

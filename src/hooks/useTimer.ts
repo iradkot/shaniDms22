@@ -1,5 +1,5 @@
 // Custom hooks
-import {BgSample} from 'app/types/day_bgs';
+import {BgSample} from 'app/types/day_bgs.types';
 import {useEffect, useState} from 'react';
 
 export const useTimer = (

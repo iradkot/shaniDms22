@@ -1,20 +1,18 @@
 import React from 'react';
 import {ViewStyle} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import {Theme} from 'app/types/theme';
-import {addOpacity} from 'app/utils/styling.utils';
+import {addOpacity} from 'app/style/styling.utils';
 
 interface BgGradientProps {
   startColor: string;
   endColor: string;
-  theme: Theme;
   style?: ViewStyle;
+  children?: React.ReactNode; // Explicitly declare children
 }
 
 const BgGradient: React.FC<BgGradientProps> = ({
   startColor,
   endColor,
-  theme,
   style,
   children,
 }) => {

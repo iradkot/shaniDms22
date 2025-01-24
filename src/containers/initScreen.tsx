@@ -1,4 +1,4 @@
-import GoogleSignIn from '../services/GoogleSignIn';
+import GoogleSignIn from '../api/GoogleSignIn';
 import React, {useEffect} from 'react';
 import {NavigationProp} from '@react-navigation/native';
 

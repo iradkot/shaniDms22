@@ -9,6 +9,7 @@ import {theme} from 'app/style/theme';
 import FoodTracker from 'app/containers/MainTabsNavigator/Containers/FoodTracker/FoodTracker';
 import {SPORT_TRACKING_TAB_SCREEN} from 'app/constants/SCREEN_NAMES';
 import SportTracker from './Containers/SportTracker/SportTracker';
+import Trends from "app/containers/MainTabsNavigator/Containers/Trends/Trends";
 
 const Tab = createBottomTabNavigator();
 
@@ -39,6 +40,16 @@ const MainTabsNavigator: React.FC = () => {
             <MaterialIcons name="home" color={color} size={size} />
           ),
           tabBarLabel: 'Home',
+        }}
+      />
+      <Tab.Screen
+        name="TRENDS_TAB_SCREEN"
+        component={Trends}
+        options={{
+          tabBarIcon: ({color, size}) => (
+            <MaterialIcons name="timeline" color={color} size={size} />
+          ),
+          tabBarLabel: 'Trends',
         }}
       />
       <Tab.Screen

@@ -3,6 +3,7 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import PropTypes from 'prop-types';
 import {TrendDirectionString} from 'app/types/notifications';
+import {ThemeType} from 'app/types/theme';
 
 const TrendDirectionRotations: {[key in TrendDirectionString]: number} = {
   DoubleUp: 0,
@@ -21,17 +22,18 @@ const IconTypes = {
   HEART: 'heart',
 };
 
-const ShadowStyle = {
-  shadowColor: '#000',
-  shadowOffset: {width: 0, height: 4},
-  shadowOpacity: 0.3,
-  shadowRadius: 4,
-  elevation: 2,
-};
+const ShadowStyle = ({theme}: {theme: ThemeType}) =>
+  `
+    ${theme.shadow.default};
+    shadow-color: ${theme.textColor};
+    shadow-offset: 0px 0px;
+    shadow-opacity: 0.5;
+    shadow-radius: 3px;
+  `;
 
 const ArrowIcon = styled(Icon)<{rotation: number}>`
   transform: ${({rotation}) => `rotate(${rotation}deg)`};
-  ${ShadowStyle}
+  ${({theme}) => ShadowStyle({theme})};
 `;
 
 const ArrowsContainer = styled.View`

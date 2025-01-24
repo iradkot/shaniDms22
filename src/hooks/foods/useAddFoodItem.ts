@@ -1,14 +1,9 @@
 import {useCallback} from 'react';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
-import {FoodItemDTO} from 'app/types/food.types';
+import {FoodItemDTO, AddFoodItem} from 'app/types/food.types';
 import {useGetUser} from 'app/hooks/useGetUser';
-import {PhotoFile} from 'react-native-vision-camera';
 import {imagePathToUri} from 'app/utils/image.utils';
-
-export interface AddFoodItem extends Omit<FoodItemDTO, 'id' | 'image'> {
-  image: PhotoFile;
-}
 export const useAddFoodItem: () => {
   addFoodItem: (foodItem: AddFoodItem) => Promise<FoodItemDTO>;
 } = () => {

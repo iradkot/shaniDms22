@@ -8,10 +8,10 @@ export interface colors {
 }
 
 export interface DetermineBgColorByGlucoseValue {
-  (bgValue: number, theme: Theme): string;
+  (bgValue: number, theme: ThemeType): string;
 }
 
-export type Theme = {
+export type ThemeType = {
   primaryColor: string;
   secondaryColor: string;
   tabBarHeight: number;
@@ -51,5 +51,5 @@ export type Theme = {
 
 // Extend the DefaultTheme from styled-components
 declare module 'styled-components' {
-  export interface DefaultTheme extends Theme {}
+  export interface DefaultTheme extends ThemeType {}
 }

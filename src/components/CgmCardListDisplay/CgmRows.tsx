@@ -1,7 +1,7 @@
 import React, {FC, useCallback, useMemo} from 'react';
 import {FlatList} from 'react-native';
 import BgDataCard from 'app/components/CgmCardListDisplay/BgDataCard';
-import {BgSample} from 'app/types/day_bgs';
+import {BgSample} from 'app/types/day_bgs.types';
 
 interface CgmCardListDisplayProps {
   bgData: BgSample[];

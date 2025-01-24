@@ -1,8 +1,13 @@
-export const calculateTotalScheduledBasalInsulin = basalProfileData => {
+import {ProfileDataEntry, TimeValueEntry} from 'src/types/insulin.types';
+
+export const calculateTotalScheduledBasalInsulin = (
+  basalProfileData: ProfileDataEntry[],
+): number => {
   let totalScheduledBasalInsulin = 0;
 
   basalProfileData.forEach(profile => {
-    const basalRates = profile.store?.[profile.defaultProfile]?.basal;
+    const basalRates: TimeValueEntry[] | undefined =
+      profile.store?.[profile.defaultProfile]?.basal;
     if (basalRates) {
       basalRates.forEach(rate => {
         const duration =

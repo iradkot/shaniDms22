@@ -1,18 +1,24 @@
-import Svg, {G} from 'react-native-svg';
-import React, {useEffect, useRef} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {View} from 'react-native';
-import styled from 'styled-components';
-import {BgSample} from 'app/types/day_bgs';
-import XGridAndAxis from 'app/components/CgmGraph/components/XGridAndAxis';
-import YGridAndAxis from 'app/components/CgmGraph/components/YGridAndAxis';
-import CGMSamplesRenderer from 'app/components/CgmGraph/components/CGMSamplesRenderer';
+import Svg, {G, Line} from 'react-native-svg';
+import styled from 'styled-components/native';
+import {BgSample} from 'app/types/day_bgs.types';
+import XGridAndAxis from './components/XGridAndAxis';
+import YGridAndAxis from './components/YGridAndAxis';
+import CGMSamplesRenderer from './components/CGMSamplesRenderer';
 import GraphDateDisplay from './components/GraphDateDisplay';
-import {formattedFoodItemDTO} from 'app/types/food.types';
-import FoodItemsRenderer from 'app/components/CgmGraph/components/Food/FoodItemsRenderer';
+import FoodItemsRenderer from './components/Food/FoodItemsRenderer';
+import Tooltip from './components/Tooltips/Tooltip';
 import {
   GraphStyleContext,
   useGraphStyleContext,
-} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
+} from './contextStores/GraphStyleContext';
+import {TouchProvider, useTouchContext} from './contextStores/TouchContext';
+import {formattedFoodItemDTO} from 'app/types/food.types';
+import {findClosestBgSample} from 'app/components/CgmGraph/utils';
+import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
+import SgvTooltip from 'app/components/CgmGraph/components/Tooltips/SgvTooltip';
+import {useClosestBgSample} from 'app/components/CgmGraph/hooks/useClosestBgSample';
 
 interface Props {
   bgSamples: BgSample[];
@@ -24,20 +30,21 @@ interface Props {
 const StyledSvg = styled(Svg)`
   height: 100%;
   width: 100%;
-  viewbox: '0 0 100 100';
 `;
 
 const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
-  // The highest BG threshold is the highest BG value that we want to show on the graph,
-  // this will affect the y-axis scale,
-  // which should be from 0 to highestBgThreshold
-  const highestBgThreshold = 300;
   const containerRef = useRef<View>(null);
-
   const [graphStyleContextValue, setGraphStyleContextValue] =
     useGraphStyleContext(width, height, bgSamples);
+  const touchContext = useTouchContext();
 
-  const {margin} = graphStyleContextValue;
+  const {
+    isTouchActive,
+    touchPosition,
+    handleTouchMove,
+    handleTouchStart,
+    handleTouchEnd,
+  } = touchContext;
 
   useEffect(() => {
     setGraphStyleContextValue({
@@ -48,32 +55,67 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
     });
   }, [width, height, bgSamples]);
 
-  if (!bgSamples?.length) {
+  if (!bgSamples || bgSamples.length === 0) {
     return null;
   }
+
+  const xTouchPosition = touchPosition.x - graphStyleContextValue.margin.left;
+  const yTouchPosition = touchPosition.y - graphStyleContextValue.margin.top;
+  const closestBgSample = isTouchActive
+    ? findClosestBgSample(
+        graphStyleContextValue.xScale.invert(xTouchPosition),
+        bgSamples,
+      )
+    : null;
 
   return (
     <GraphStyleContext.Provider
       value={[graphStyleContextValue, setGraphStyleContextValue]}>
-      <View
-        ref={containerRef}
-        style={{
-          width,
-          height,
-        }}>
+      <View ref={containerRef} style={{width, height}}>
         <StyledSvg
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           width={width}
           height={height}
-          pointerEvents="none"
-          x={0}
-          y={0}
           viewBox={`0 0 ${width} ${height}`}>
-          <G x={margin?.left} y={margin?.top}>
+          <G
+            x={graphStyleContextValue.margin?.left}
+            y={graphStyleContextValue.margin?.top}>
             <GraphDateDisplay />
-            <CGMSamplesRenderer />
+            <CGMSamplesRenderer
+              focusedSampleDateString={closestBgSample?.dateString}
+            />
             <XGridAndAxis />
-            <YGridAndAxis highestBgThreshold={highestBgThreshold} />
+            <YGridAndAxis highestBgThreshold={300} />
             <FoodItemsRenderer foodItems={foodItems} />
+            {isTouchActive && closestBgSample && (
+              <>
+                <Line
+                  x1={xTouchPosition}
+                  y1="0"
+                  x2={xTouchPosition}
+                  y2={height}
+                  stroke="black"
+                  strokeWidth={1}
+                  opacity={0.2}
+                />
+                <Line
+                  x1="0"
+                  y1={yTouchPosition}
+                  x2={width}
+                  y2={yTouchPosition}
+                  stroke="grey"
+                  strokeWidth={1}
+                  opacity={0.5}
+                />
+                <SgvTooltip
+                  x={xTouchPosition}
+                  y={yTouchPosition}
+                  bgSample={closestBgSample}
+                />
+              </>
+            )}
           </G>
         </StyledSvg>
       </View>

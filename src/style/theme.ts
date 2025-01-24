@@ -7,7 +7,7 @@ import {Dimensions} from 'react-native';
 import {
   determineBgColorByGlucoseValue,
   shadowStyles,
-} from 'app/utils/styling.utils';
+} from 'app/style/styling.utils';
 
 const {width, height} = Dimensions.get('window');
 

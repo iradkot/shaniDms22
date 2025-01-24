@@ -1,13 +1,16 @@
-import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
+import {Text, Rect} from 'react-native-svg';
+// Ensure XTick is correctly imported if it's a custom component
+// If XTick is not an SVG component, adjust its usage accordingly
+
+// Import statements for other dependencies
+import React, {useContext, useState} from 'react';
 import styled, {useTheme} from 'styled-components/native';
-import {Theme} from 'app/types/theme';
-import React, {useContext} from 'react';
-import {Rect, Text} from 'react-native-svg';
-import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import XTick from 'app/components/CgmGraph/components/XTick';
+import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
+// Adjusted import for XTick if it's an SVG-based component or ensure correct prop forwarding if custom
 import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
-import {theme} from 'app/style/theme';
+import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
+import {TouchableOpacity} from 'react-native';
 
 interface FoodItemProps {
   foodItem: FoodItemDTO | formattedFoodItemDTO;
@@ -22,83 +25,100 @@ export const FoodItem = ({
   isFocused,
   setFocusedItem,
 }: FoodItemProps): JSX.Element => {
-  const appTheme = useTheme() as typeof theme;
+  const appTheme = useTheme();
   const [{xScale, yScale, margin}] = useContext(GraphStyleContext);
-  const [containerWidth, setContainerWidth] = React.useState<number>(0);
-  const [containerHeight, setContainerHeight] = React.useState<number>(0);
 
   const x = xScale(new Date(foodItem.timestamp));
   const y = yScale(300);
+
+  // Function to toggle focus state of the item
+  const handlePress = () => {
+    setFocusedItem(prevItem =>
+      prevItem?.id === foodItem.id ? null : foodItem,
+    );
+  };
+
   return (
-    <>
-      <Container
-        isFocused={isFocused}
-        onLayout={event => {
-          const {width, height} = event.nativeEvent.layout;
-          setContainerWidth(width);
-          setContainerHeight(height);
-        }}
-        style={{
-          position: 'absolute',
-          left: x + margin.left - containerWidth / 2,
-          top: y + margin.top,
-          zIndex: isFocused ? 100 : 5,
-        }}>
-        <StyledIcon name="restaurant" size={15} />
-        <StyledText>{foodItem.name}</StyledText>
+    <TouchableOpacity
+      onPress={handlePress}
+      style={{
+        position: 'absolute',
+        left: x + margin.left,
+        top: y + margin.top,
+        zIndex: isFocused ? 100 : 5,
+      }}>
+      <Container isFocused={isFocused}>
+        <StyledIcon
+          name="restaurant"
+          size={24}
+          color={isFocused ? appTheme.primaryColor : appTheme.textColor}
+        />
+        {isFocused && (
+          <>
+            <FoodItemDetails>
+              <FoodItemName>{foodItem.name}</FoodItemName>
+              <ItemDetails>
+                Carbs: {foodItem.carbs}g -{' '}
+                {formatDateToLocaleTimeString(foodItem.timestamp)}
+              </ItemDetails>
+            </FoodItemDetails>
+            <XTick
+              x={x}
+              lineStyle={{stroke: appTheme.accentColor, strokeWidth: 2}}
+            />
+            <Text
+              x={x}
+              y={y + 20} // Adjust based on your actual layout needs
+              fontSize={12}
+              textAnchor="middle"
+              fill={appTheme.textColor}>
+              {formatDateToLocaleTimeString(foodItem.timestamp)}
+            </Text>
+          </>
+        )}
       </Container>
-      {isFocused && (
-        <>
-          <XTick
-            x={x}
-            lineStyle={{stroke: appTheme.accentColor, strokeWidth: 2}}
-          />
-          <Text
-            x={x}
-            y={y + containerHeight + 20}
-            fontSize={12}
-            textAnchor="middle"
-            fill={appTheme.accentColor}>
-            {formatDateToLocaleTimeString(foodItem.timestamp)}
-          </Text>
-        </>
-      )}
-      <Rect
-        width={containerWidth}
-        height={containerHeight}
-        x={x - containerWidth / 2}
-        y={y}
-        rx={5}
-        ry={5}
-        fill="red"
-        onPress={() => {
-          setFocusedItem(preFocusedItem => {
-            if (preFocusedItem?.timestamp === foodItem.timestamp) {
-              return null;
-            }
-            return foodItem;
-          });
-        }}
-      />
-    </>
+    </TouchableOpacity>
   );
 };
-const Container = styled.View<{theme: Theme; isFocused: Boolean}>`
-  position: absolute;
+
+// Adjusted for conditional props
+const Container = styled.View<{isFocused: boolean}>`
+  display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  background-color: ${({theme}) => theme.accentColor};
-  ${({theme}) => theme.shadow.small};
-  border-radius: 5px;
   padding: 5px;
-  border: 1px solid ${({theme}) => theme.buttonTextColor};
-  z-index: ${({isFocused}) => (isFocused ? 100 : 5)};
+  border-radius: ${({theme}) => theme.borderRadius}px;
+  border: 1px solid
+    ${({theme, isFocused}) => (isFocused ? theme.primaryColor : 'transparent')};
+  background-color: ${({theme, isFocused}) =>
+    isFocused ? theme.backgroundColor : 'transparent'};
+  ${({theme, isFocused}) => isFocused && theme.shadow.default};
 `;
-const StyledText = styled.Text<{theme: Theme}>`
-  font-size: 12px;
-  text-align: center;
-  color: ${({theme}) => theme.buttonTextColor};
+
+const FoodItemDetails = styled.View`
+  margin-left: 10px;
 `;
-const StyledIcon = styled(Icon)`
-  color: ${({theme}) => theme.buttonTextColor};
+
+const FoodItemName = styled.Text`
+  color: ${({theme}) => theme.textColor};
+  font-size: 16px;
+  font-weight: bold;
+`;
+
+const ItemDetails = styled.Text`
+  color: ${({theme}) => theme.textColor};
+  font-size: 14px;
+  opacity: 0.8;
+`;
+
+const StyledIcon = styled(Icon)<{color: string}>`
+  color: ${({color}) => color};
+`;
+
+const XTick = styled.View`
+  /* Placeholder for the actual XTick component */
+  height: 1px;
+  background-color: ${({theme}) => theme.accentColor};
+  width: 100%; /* Adjust based on your layout */
 `;

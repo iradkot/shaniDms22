@@ -2,7 +2,7 @@
 
 import React, {useEffect, useRef, useState} from 'react';
 import styled from 'styled-components/native';
-import {BgSample} from 'app/types/day_bgs';
+import {BgSample} from 'app/types/day_bgs.types';
 import {Animated} from 'react-native';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
 import {Theme} from 'app/types/theme';
