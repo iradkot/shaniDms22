@@ -1,10 +1,12 @@
-// /Users/iradkotton/projects/shaniDms22/src/containers/MainTabsNavigator/Containers/Trends/Trends.styles.ts
-import styled from "styled-components/native";
-import {TouchableOpacity} from 'react-native';
+// /Trends/styles/Trends.styles.ts
 
-export const TrendsContainer = styled.View`
+import styled from 'styled-components/native';
+import {TouchableOpacity} from 'react-native';
+import {ThemeType} from 'app/types/theme';
+
+export const TrendsContainer = styled.View<{theme: ThemeType}>`
   flex: 1;
-  background-color: ${({ theme }) => theme.backgroundColor};
+  background-color: ${({theme}) => theme.backgroundColor};
   padding: 10px;
 `;
 
@@ -34,10 +36,10 @@ export const StatLabel = styled.Text`
   color: #444;
 `;
 
-export const StatValue = styled.Text<{ color?: string }>`
+export const StatValue = styled.Text<{color?: string}>`
   font-size: 16px;
   font-weight: bold;
-  color: ${({ color }) => color || "#000"};
+  color: ${({color}) => color || '#000'};
 `;
 
 export const ExplanationText = styled.Text`
@@ -84,6 +86,11 @@ export const Emoji = styled.Text`
   font-size: 16px;
 `;
 
+interface StyledViewProps {
+  alignItems?: 'flex-start' | 'flex-end' | 'center' | 'stretch' | 'baseline';
+  marginBottom?: number;
+}
+
 export const Row = styled.View`
   flex-direction: row;
   align-items: center;
@@ -99,7 +106,7 @@ export const MetricButton = styled.TouchableOpacity<{selected?: boolean}>`
   padding: 8px 12px;
   border-radius: 5px;
   margin: 0 5px;
-  background-color: ${({selected})=>selected?'#1890ff':'#ddd'};
+  background-color: ${({selected}) => (selected ? '#1890ff' : '#ddd')};
 `;
 
 export const MetricButtonText = styled.Text`
@@ -107,6 +114,9 @@ export const MetricButtonText = styled.Text`
   font-weight: bold;
 `;
 
+/**
+ * Overall Stats Grid
+ */
 export const OverallStatsGrid = styled.View`
   flex-direction: row;
   flex-wrap: wrap;
@@ -115,17 +125,14 @@ export const OverallStatsGrid = styled.View`
 `;
 
 export const OverallStatsItem = styled.View`
-  /* Each tile uses nearly half the container width */
   width: 48%;
   background-color: #fff;
   padding: 10px;
   border-radius: 6px;
   margin-bottom: 10px;
-  /* Optional: add shadow/elevation for a card effect */
   shadow-color: #000;
   shadow-offset: 0px 2px;
   shadow-opacity: 0.1;
   shadow-radius: 3px;
   elevation: 2;
 `;
-

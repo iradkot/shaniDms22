@@ -1,4 +1,4 @@
-// /Users/iradkotton/projects/shaniDms22/src/containers/MainTabsNavigator/Containers/Trends/trendsCalculations.ts
+// /Trends/utils/trendsCalculations.ts
 
 import { BgSample } from 'app/types/day_bgs.types';
 import { format } from 'date-fns';
@@ -20,9 +20,9 @@ export interface DayDetail {
   eveningAvg: number;
   minBg: number;
   maxBg: number;
-  timeInRange: number;      // Percentage of time in range (70-180 mg/dL)
-  timeBelowRange: number;   // Percentage of time below 70 mg/dL
-  timeAboveRange: number;   // Percentage of time above 180 mg/dL
+  timeInRange: number;
+  timeBelowRange: number;
+  timeAboveRange: number;
   samples: BgSample[];
 }
 
@@ -65,19 +65,24 @@ export function calculateTrendsMetrics(bgData: BgSample[]) {
     const dMean = avg(vals);
     const inRange = vals.filter(v => v >= LOW_THRESHOLD && v <= HIGH_THRESHOLD).length;
     const dInRange = vals.length > 0 ? inRange / vals.length : 0;
-    const { seriousHypoEvents: dayHypoEvents, seriousHyperEvents: dayHyperEvents } = countSeriousEvents(samples);
+
+    const { seriousHypoEvents: dayHypoEvents, seriousHyperEvents: dayHyperEvents } =
+      countSeriousEvents(samples);
 
     const dMorning = filterValuesByTime(samples, 0, 6);
     const dMidday = filterValuesByTime(samples, 6, 12);
     const dAfternoon = filterValuesByTime(samples, 12, 18);
     const dEvening = filterValuesByTime(samples, 18, 24);
 
-    // Calculate additional stats with safeguards
     const minBg = vals.length > 0 ? Math.min(...vals) : 0;
     const maxBg = vals.length > 0 ? Math.max(...vals) : 0;
     const timeInRange = vals.length > 0 ? (inRange / vals.length) * 100 : 0;
-    const timeBelowRange = vals.length > 0 ? (vals.filter(v => v < LOW_THRESHOLD).length / vals.length) * 100 : 0;
-    const timeAboveRange = vals.length > 0 ? (vals.filter(v => v > HIGH_THRESHOLD).length / vals.length) * 100 : 0;
+    const timeBelowRange = vals.length > 0
+      ? (vals.filter(v => v < LOW_THRESHOLD).length / vals.length) * 100
+      : 0;
+    const timeAboveRange = vals.length > 0
+      ? (vals.filter(v => v > HIGH_THRESHOLD).length / vals.length) * 100
+      : 0;
 
     return {
       dateString: day,
@@ -120,11 +125,21 @@ function countSeriousEvents(samples: BgSample[]) {
 
   for (let i = 0; i < samples.length; i++) {
     const sgv = samples[i].sgv;
-    if (sgv < SERIOUS_HYPO_THRESHOLD && !inHypo) inHypo = true;
-    else if (sgv >= SERIOUS_HYPO_THRESHOLD && inHypo) { hypoEvents++; inHypo = false; }
+    // Check for serious hypo
+    if (sgv < SERIOUS_HYPO_THRESHOLD && !inHypo) {
+      inHypo = true;
+    } else if (sgv >= SERIOUS_HYPO_THRESHOLD && inHypo) {
+      hypoEvents++;
+      inHypo = false;
+    }
 
-    if (sgv > SERIOUS_HYPER_THRESHOLD && !inHyper) inHyper = true;
-    else if (sgv <= SERIOUS_HYPER_THRESHOLD && inHyper) { hyperEvents++; inHyper = false; }
+    // Check for serious hyper
+    if (sgv > SERIOUS_HYPER_THRESHOLD && !inHyper) {
+      inHyper = true;
+    } else if (sgv <= SERIOUS_HYPER_THRESHOLD && inHyper) {
+      hyperEvents++;
+      inHyper = false;
+    }
   }
 
   return { seriousHypoEvents: hypoEvents, seriousHyperEvents: hyperEvents };
@@ -142,17 +157,21 @@ function calcStdDev(arr: number[], mean: number): number {
 }
 
 function filterByHour(bgData: BgSample[], startH: number, endH: number): number[] {
-  return bgData.filter(d => {
-    const h = new Date(d.date).getHours();
-    return h >= startH && h < endH;
-  }).map(d => d.sgv);
+  return bgData
+    .filter(d => {
+      const h = new Date(d.date).getHours();
+      return h >= startH && h < endH;
+    })
+    .map(d => d.sgv);
 }
 
 function filterValuesByTime(samples: BgSample[], startH: number, endH: number): number[] {
-  return samples.filter(d => {
-    const h = new Date(d.date).getHours();
-    return h >= startH && h < endH;
-  }).map(d => d.sgv);
+  return samples
+    .filter(d => {
+      const h = new Date(d.date).getHours();
+      return h >= startH && h < endH;
+    })
+    .map(d => d.sgv);
 }
 
 function emptyMetrics() {
