@@ -87,9 +87,6 @@ const Home: React.FC = () => {
   return (
     <HomeContainer style={{ minHeight: 400, minWidth: 200, borderWidth: 2, borderColor: 'red', backgroundColor: 'pink' }}>
       <React.Fragment>
-        <SafeAreaView style={{ backgroundColor: 'yellow', minHeight: 50 }}>
-          <Text style={{ color: 'black', fontSize: 18 }}>HOME SCREEN DEBUG</Text>
-        </SafeAreaView>
         <TimeInRangeRow bgData={bgData} />
         <BGValueRow
           prevBgData={latestPrevBgSample}
