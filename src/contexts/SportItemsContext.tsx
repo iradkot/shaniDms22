@@ -21,17 +21,18 @@ export const useSportItems = () => {
   return useContext(SportItemsContext);
 };
 
-export const SportItemsProvider: React.FC = ({children}) => {
+export const SportItemsProvider: React.FC = ({ children }) => {
   const [sportItems, setSportItems] = useState<SportItemDTO[]>([]);
   const {
     sportItems: fetchedSportItems,
     isLoading,
     isError,
   } = useGetSportItems();
+  console.log('SportItemsProvider: render, isLoading=', isLoading, 'isError=', isError);
 
   useEffect(() => {
-    if (fetchedSportItems) {
-      setSportItems(fetchedSportItems);
+    if (fetchedSportItems && Array.isArray(fetchedSportItems)) {
+      setSportItems(fetchedSportItems as SportItemDTO[]);
     }
   }, [fetchedSportItems]);
 

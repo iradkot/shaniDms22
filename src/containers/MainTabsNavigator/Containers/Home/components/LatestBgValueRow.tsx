@@ -41,11 +41,6 @@ const Container = styled.View<{bgValue: number; theme: Theme}>`
   justify-content: space-around;
   border-radius: 20px;
   background-color: rgba(0, 0, 255, 0.1);
-  shadow-color: #000;
-  shadow-offset: 0px 4px;
-  shadow-opacity: 0.3;
-  shadow-radius: 4px;
-  elevation: 2;
   margin: 4px auto;
 `;
 

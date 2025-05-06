@@ -1,4 +1,10 @@
-import firestore from '@react-native-firebase/firestore';
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  getDocs,
+} from '@react-native-firebase/firestore';
 import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import isToday from 'date-fns/isToday';
@@ -21,12 +27,14 @@ const cacheBgData = (cacheKey: string, bgData: any) => {
 };
 
 const getBgDataFromFirestore = async (utcStart: Date, utcEnd: Date) => {
-  const snapshot = await firestore()
-    .collection('day_bgs')
-    .where('timestamp', '>=', utcStart.getTime())
-    .where('timestamp', '<=', utcEnd.getTime())
-    .get();
-  return snapshot.docs.map(doc => JSON.parse(doc.data().data));
+  const db = getFirestore();
+  const q = query(
+    collection(db, 'day_bgs'),
+    where('timestamp', '>=', utcStart.getTime()),
+    where('timestamp', '<=', utcEnd.getTime())
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => JSON.parse((doc.data() as any).data));
 };
 
 export const getBgDataByDate = async ({

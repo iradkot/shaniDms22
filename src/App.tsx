@@ -1,12 +1,15 @@
 /**
+/**
+/**
  * Sample React Native App
  * https://github.com/facebook/react-native
  *
  * @format
  * @flow strict-local
  */
-
 import React from 'react';
+import ErrorBoundary from 'app/components/ErrorBoundary';
+import {LogBox} from 'react-native';
 import {SafeAreaView, StatusBar} from 'react-native';
 import Login from './containers/Login';
 import {NavigationContainer} from '@react-navigation/native';
@@ -28,10 +31,12 @@ import {
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 import AddNotificationScreen from './containers/forms/AddNotificationScreen/AddNotificationScreen';
 import EditNotificationScreen from 'app/containers/forms/EditNotificationScreen/EditNotificationScreen';
-import {firebase} from '@react-native-firebase/messaging';
-import styled, {ThemeProvider} from 'styled-components/native';
+import { getApp } from '@react-native-firebase/app';
+import { getMessaging } from '@react-native-firebase/messaging';
+import {ThemeProvider} from 'styled-components';
+import styled from 'styled-components/native';
 import {theme} from 'app/style/theme';
-import {Theme} from 'app/types/theme';
+import {ThemeType as Theme} from 'app/types/theme';
 import CameraScreen from 'app/components/CameraScreen/CameraScreen';
 import AddFoodItemScreen from 'app/containers/forms/Food/AddFoodItem';
 import AddSportItem from 'app/containers/forms/Sport/AddSportItem';
@@ -41,42 +46,62 @@ import EditSportItem from './containers/forms/Sport/EditSportItem';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TouchProvider} from './components/CgmGraph/contextStores/TouchContext';
 
+// Suppress deprecation warnings from Firebase React Native v21 with Hermes
+LogBox.ignoreLogs([
+  'This method is deprecated (as well as all React Native Firebase namespaced API)',
+]);
 const Stack = createNativeStackNavigator();
 
 const queryClient = new QueryClient();
 
-// handle notification press with the firebase messaging library
+// handle notification press with the modular Messaging API
 // https://rnfirebase.io/messaging/usage#handling-messages
-firebase.messaging().onNotificationOpenedApp(remoteMessage => {
+const messagingInstance = getMessaging(getApp());
+messagingInstance.onNotificationOpenedApp(remoteMessage => {
   console.log(
-    'Notification caused app to open from background state:',
-    remoteMessage.notification,
+    'Notification caused app to open from background state, msgID=',
+    remoteMessage.messageId,
   );
 });
 
-const AppContainer = styled.View<{theme: Theme}>`
+interface AppContainerProps {
+  theme: Theme;
+}
+
+interface AppContainerProps {
+  theme: Theme;
+}
+
+const AppContainer = styled.View<AppContainerProps>`
   flex: 1;
-  background-color: ${props => props.theme.backgroundColor};
+  background-color: ${(props: AppContainerProps) => props.theme.backgroundColor};
 `;
 
-const App: () => JSX.Element = () => {
+const App: () => React.ReactElement = () => {
+  console.log('App.tsx: Entering App component');
   const extendedTheme = {
     ...theme,
   };
+  React.useEffect(() => {
+    console.log('App.tsx: App component mounted');
+  }, []);
+  console.log('App.tsx: App component render');
 
+  console.log('App.tsx: App component rendering');
   // if user is not logged in, show login screen else show home screen
   return (
     // TODO - move SafeAreaView style outside
-    <GestureHandlerRootView style={{flex: 1}}>
+      <GestureHandlerRootView style={{flex: 1}}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider theme={extendedTheme}>
-          <TouchProvider>
+            <ErrorBoundary>
+              <TouchProvider>
             <StatusBar backgroundColor={theme.backgroundColor} />
             <AppContainer>
               <SafeAreaView style={{flex: 1}}>
                 <SafeAreaProvider>
                   <SportItemsProvider>
-                    <NavigationContainer>
+                  <NavigationContainer>
                       <Stack.Navigator screenOptions={{headerShown: false}}>
                         <Stack.Screen
                           name="initScreen"
@@ -128,7 +153,8 @@ const App: () => JSX.Element = () => {
                 </SafeAreaProvider>
               </SafeAreaView>
             </AppContainer>
-          </TouchProvider>
+              </TouchProvider>
+            </ErrorBoundary>
         </ThemeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

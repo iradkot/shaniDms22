@@ -3,6 +3,7 @@ import {formatDateToDateAndTimeString} from 'app/utils/datetime.utils';
 import React, {useState} from 'react';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import styled from 'styled-components/native';
+import DropShadow from 'react-native-drop-shadow';
 import {addOpacity} from 'app/style/styling.utils';
 
 interface Props {
@@ -74,12 +75,20 @@ const DateTimePickerCard = ({
           </StyledButtonText>
         </StyledButton>
       </StyledButtonGroup>
-      <StyledCard>
-        <StyledPickedDateTimeText style={textStyles ?? {}}>
-          {label ? `${label}: ` : 'Picked Date & Time: '}
-          {formatDateToDateAndTimeString(pickedTimestamp)}
-        </StyledPickedDateTimeText>
-      </StyledCard>
+      <DropShadow style={{
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.18,
+        shadowRadius: 1,
+        elevation: 1,
+      }}>
+        <StyledCard>
+          <StyledPickedDateTimeText style={textStyles ?? {}}>
+            {label ? `${label}: ` : 'Picked Date & Time: '}
+            {formatDateToDateAndTimeString(pickedTimestamp)}
+          </StyledPickedDateTimeText>
+        </StyledCard>
+      </DropShadow>
       <DateTimePickerModal
         isVisible={isDatePickerVisible}
         mode="date"
@@ -131,10 +140,5 @@ const StyledCard = styled.View<{theme: Theme}>`
   padding: 10px;
   border-radius: 5px;
   margin: 5px 0;
-  shadow-color: #000;
-  shadow-offset: 0px 1px;
-  shadow-opacity: 0.18;
-  shadow-radius: 1;
-  elevation: 1;
 `;
 export default DateTimePickerCard;

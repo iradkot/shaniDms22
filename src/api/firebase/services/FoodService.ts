@@ -1,5 +1,13 @@
 // FoodService.ts
-import firestore from '@react-native-firebase/firestore';
+// migrate to modular Firestore API
+import { getApp } from '@react-native-firebase/app';
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  getDocs,
+} from '@react-native-firebase/firestore';
 import {BgSample} from 'app/types/day_bgs.types';
 import {
   getLocalStartOfTheDay,
@@ -29,13 +37,15 @@ export class FoodService {
     const startTimestamp = start.getTime();
     const endTimestamp = end.getTime();
 
-    const snapshot = await firestore()
-      .collection('food_items')
-      .where('timestamp', '>=', startTimestamp)
-      .where('timestamp', '<=', endTimestamp)
-      .get();
-
-    return snapshot.docs.map(doc => doc.data() as FoodItemDTO);
+    // Initialize Firestore using the default app (modular API)
+    const db = getFirestore(getApp());
+    const q = query(
+      collection(db, 'food_items'),
+      where('timestamp', '>=', startTimestamp),
+      where('timestamp', '<=', endTimestamp)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(docSnap => docSnap.data() as FoodItemDTO);
   }
 
   // Replace the existing getBgDataByDate method with a call to BGDataService

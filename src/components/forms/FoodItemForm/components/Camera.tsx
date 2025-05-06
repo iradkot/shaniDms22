@@ -9,7 +9,7 @@ interface Props {
 const Camera = ({onTakePhoto}: Props) => {
   const navigation = useNavigation<NavigationProp<any>>();
   const openCamera = () => {
-    navigation.navigate(CAMERA_SCREEN, {onTakePhoto});
+    navigation.navigate(CAMERA_SCREEN, { screen: CAMERA_SCREEN, params: { onTakePhoto } });
   };
   return {openCamera};
 };

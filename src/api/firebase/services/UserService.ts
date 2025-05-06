@@ -1,7 +1,8 @@
 // UserService.ts
-import firestore from '@react-native-firebase/firestore';
+import { getApp } from '@react-native-firebase/app';
+import { getFirestore, FieldValue } from '@react-native-firebase/firestore';
 import messaging from '@react-native-firebase/messaging';
-import auth from '@react-native-firebase/auth';
+import { getAuth } from '@react-native-firebase/auth';
 import {FSUser} from 'app/types/user.types';
 
 export class UserService {
@@ -17,11 +18,14 @@ export class UserService {
    */
   async getCurrentUserFSData(): Promise<FSUser | null> {
     try {
-      const firebaseUser = auth().currentUser;
+      const firebaseUser = getAuth(getApp()).currentUser;
       if (!firebaseUser) return null;
 
       const userId = firebaseUser.uid;
-      const userDoc = await firestore().collection('users').doc(userId).get();
+      const userDoc = await getFirestore(getApp())
+        .collection('users')
+        .doc(userId)
+        .get();
 
       const phoneToken = await messaging().getToken();
       const email = firebaseUser.email ?? ''; // Assuming you'd want to use an empty string if email is null or undefined
@@ -30,7 +34,7 @@ export class UserService {
         const userData = userDoc.data() as FSUser;
 
         if (userData.phoneToken !== phoneToken) {
-          await this.updateUserPhoneToken(userId, phoneToken);
+        await this.updateUserPhoneToken(userId, phoneToken);
         }
 
         return {...userData, phoneToken}; // Return updated user data including new phoneToken
@@ -39,7 +43,7 @@ export class UserService {
         await this.createUserFSData(userId, phoneToken, email);
 
         // Fetch the newly created user data.
-        const newUserDoc = await firestore()
+        const newUserDoc = await getFirestore(getApp())
           .collection('users')
           .doc(userId)
           .get();
@@ -58,10 +62,13 @@ export class UserService {
    */
   async updateUserPhoneToken(userId: string, phoneToken: string) {
     try {
-      await firestore().collection('users').doc(userId).update({
-        phoneToken,
-        updatedAt: firestore.FieldValue.serverTimestamp(),
-      });
+      await getFirestore(getApp())
+        .collection('users')
+        .doc(userId)
+        .update({
+          phoneToken,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
     } catch (error) {
       console.error('Failed to update user phone token in Firestore:', error);
       // Handle the error as per your application's requirements
@@ -76,12 +83,15 @@ export class UserService {
    */
   async createUserFSData(userId: string, phoneToken: string, email: string) {
     try {
-      await firestore().collection('users').doc(userId).set({
-        userId,
-        createdAt: firestore.FieldValue.serverTimestamp(),
-        phoneToken,
-        email,
-      });
+      await getFirestore(getApp())
+        .collection('users')
+        .doc(userId)
+        .set({
+          userId,
+          createdAt: FieldValue.serverTimestamp(),
+          phoneToken,
+          email,
+        });
     } catch (error) {
       console.error('Failed to create user data in Firestore:', error);
       // Handle the error as per your application's requirements

@@ -1,4 +1,5 @@
 import React from 'react';
+import {View} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import Home from './Containers/Home/Home';
 import NotificationsManager from './Containers/NotificationsManager/NotificationsManager';
@@ -14,12 +15,11 @@ import Trends from "app/containers/MainTabsNavigator/Containers/Trends";
 const Tab = createBottomTabNavigator();
 
 const MainTabsNavigator: React.FC = () => {
+  console.log('MainTabsNavigator: render');
   return (
     <Tab.Navigator
       initialRouteName={SCREEN_NAMES.HOME_TAB_SCREEN}
-      sceneContainerStyle={{
-        height: 30,
-      }}
+      // removed contentStyle, let each screen/container handle its own flex
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -30,7 +30,8 @@ const MainTabsNavigator: React.FC = () => {
           color: theme.textColor,
         },
         tabBarActiveTintColor: theme.accentColor,
-      }}>
+      }}
+    >
       <Tab.Screen
         name={SCREEN_NAMES.HOME_TAB_SCREEN}
         component={Home}
