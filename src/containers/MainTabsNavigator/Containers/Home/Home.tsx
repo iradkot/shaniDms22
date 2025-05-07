@@ -85,8 +85,7 @@ const Home: React.FC = () => {
 
   console.log('Home: render', { bgDataLen: bgData.length, insulinDataLen: insulinData.length, foodItemsLen: foodItems.length });
   return (
-    <HomeContainer style={{ minHeight: 400, minWidth: 200, borderWidth: 2, borderColor: 'red', backgroundColor: 'pink' }}>
-      <React.Fragment>
+    <HomeContainer>
         <TimeInRangeRow bgData={bgData} />
         <BGValueRow
           prevBgData={latestPrevBgSample}
@@ -127,7 +126,6 @@ const Home: React.FC = () => {
           onGoForward={getNextDate}
           resetToCurrentDate={() => setCurrentDate(new Date())}
         />
-      </React.Fragment>
     </HomeContainer>
   );
 };

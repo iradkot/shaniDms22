@@ -10,13 +10,13 @@
 import React from 'react';
 import ErrorBoundary from 'app/components/ErrorBoundary';
 import {LogBox} from 'react-native';
-import {SafeAreaView, StatusBar} from 'react-native';
+import {StatusBar} from 'react-native';
 import Login from './containers/Login';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import AppInitScreen from './containers/initScreen';
 import {QueryClient, QueryClientProvider} from 'react-query';
-import {SafeAreaProvider} from 'react-native-safe-area-context';
+import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {
   ADD_FOOD_ITEM_SCREEN,
   ADD_NOTIFICATION_SCREEN,
