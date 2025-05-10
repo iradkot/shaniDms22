@@ -76,46 +76,61 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
   };
 
   return (
-    <Pressable onPress={onPress}>
-      <View>
-        <NotificationCardContainer onPress={onPress} activeOpacity={1}>
-          <NotificationCardDetails>
-            <NotificationCardRow>
-              <NotificationTitle>{notification.name}</NotificationTitle>
-            </NotificationCardRow>
-            <NotificationCardRow>
-              {/*  Display the hour_from_in_minutes and hour_to_in_minutes in a more readable format*/}
-              <NotificationCardText>Notification hour:</NotificationCardText>
-              <NotificationCardText>
-                {formatMinutesToLocaleTimeString(
-                  notification.hour_from_in_minutes,
-                )}{' '}
-                -{' '}
-                {formatMinutesToLocaleTimeString(
-                  notification.hour_to_in_minutes,
-                )}
-              </NotificationCardText>
-            </NotificationCardRow>
-            <NotificationCardRow>
-              <NotificationCardText>Range:</NotificationCardText>
-              <NotificationCardText>
-                {notification.range_start} - {notification.range_end}
-              </NotificationCardText>
-            </NotificationCardRow>
-          </NotificationCardDetails>
-          <NotificationSwitchContainer>
-            {isLoading ? (
-              <Loader />
-            ) : (
-              <NotificationEnableSwitch
-                value={isEnabled}
-                onValueChange={handleToggle}
-              />
-            )}
-          </NotificationSwitchContainer>
-        </NotificationCardContainer>
-      </View>
-      {renderDeleteButton()}
-    </Pressable>
+    <NotificationCardContainer
+      onTouchEnd={onPress}
+      activeOpacity={0.9}
+      style={{ flex: 1 }}
+    >
+      <NotificationCardDetails>
+        <NotificationCardRow>
+          <NotificationTitle numberOfLines={1} ellipsizeMode="tail">
+            {notification.name}
+          </NotificationTitle>
+        </NotificationCardRow>
+        <NotificationCardRow>
+          <NotificationCardText>Time:</NotificationCardText>
+          <NotificationCardText>
+            {formatMinutesToLocaleTimeString(notification.hour_from_in_minutes)}
+            {' - '}
+            {formatMinutesToLocaleTimeString(notification.hour_to_in_minutes)}
+          </NotificationCardText>
+        </NotificationCardRow>
+        <NotificationCardRow>
+          <NotificationCardText>Range:</NotificationCardText>
+          <NotificationCardText>
+            {notification.range_start} - {notification.range_end}
+          </NotificationCardText>
+        </NotificationCardRow>
+        <NotificationCardRow>
+          <NotificationCardText>Trend:</NotificationCardText>
+          <NotificationCardText>
+            {require('app/components/DirectionArrows').default ? (
+              React.createElement(require('app/components/DirectionArrows').default, {
+                trendDirection: notification.trend,
+                size: 24,
+                color: '#1976d2',
+              })
+            ) : null}
+          </NotificationCardText>
+        </NotificationCardRow>
+      </NotificationCardDetails>
+      <NotificationSwitchContainer>
+        {isLoading ? (
+          <Loader />
+        ) : (
+          <NotificationEnableSwitch
+            value={isEnabled}
+            onValueChange={handleToggle}
+          />
+        )}
+      </NotificationSwitchContainer>
+      <DeleteButtonContainer>
+        <DeleteButton onPress={openDeleteAlert} accessibilityLabel="Delete notification">
+          <DeleteButtonText>
+            <Icon name="trash" size={20} color="red" />
+          </DeleteButtonText>
+        </DeleteButton>
+      </DeleteButtonContainer>
+    </NotificationCardContainer>
   );
 };

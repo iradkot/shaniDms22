@@ -23,7 +23,8 @@ import {NotificationsCard} from './components/NotificationCard';
 
 const NotificationsManagerContainer = styled.View`
   flex: 1;
-  background-color: #fff;
+  background-color: #f2f2f2;
+  padding: 8px;
 `;
 
 // create dummy home component with typescript
@@ -70,6 +71,8 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
         keyExtractor={getKeyExtractor}
         refreshing={isLoading}
         onRefresh={getNotificationsData}
+        contentContainerStyle={{ paddingBottom: 80 }}
+        style={{ flex: 1 }}
       />
     );
   };
