@@ -86,6 +86,8 @@ export const TextInput = styled.TextInput`
   padding: 10px 12px;
   background-color: #f7f8fa;
   font-size: 16px;
+  color: #222;
+  ${({theme}) => theme && theme.textColor ? `color: ${theme.textColor};` : ''}
 `;
 
 export const Button = styled.TouchableOpacity`
