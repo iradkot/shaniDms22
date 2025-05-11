@@ -31,12 +31,16 @@ const FoodItemForm = ({
 }: FoodItemFormProps) => {
   const isEditMode = !!foodItem;
   const navigation = useNavigation<NavigationProp<any>>();
-  const [photo, setPhoto] = React.useState<
-    PhotoFile | undefined | {uri: PhotoFile}
-  >(foodItem?.image ? {uri: foodItem.image} : undefined);
-  const [date, setDate] = React.useState<Date | number | undefined>(
-    foodItem?.timestamp ?? new Date(),
+  const [photo, setPhoto] = React.useState<PhotoFile | {uri: string} | undefined>(
+    foodItem?.image ? {uri: foodItem.image} : undefined
   );
+  const [date, setDate] = React.useState<Date>(() => {
+    if (foodItem?.timestamp) {
+      const d = new Date(foodItem.timestamp);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return new Date();
+  });
 
   const {
     control,
@@ -62,10 +66,12 @@ const FoodItemForm = ({
         return;
       }
       let timestamp: number;
-      if (isDate(date)) {
+      if (isDate(date) && !isNaN(date.getTime())) {
         timestamp = date.getTime();
-      } else {
+      } else if (typeof date === 'number') {
         timestamp = date;
+      } else {
+        timestamp = Date.now();
       }
 
       const newData = {
@@ -91,9 +97,9 @@ const FoodItemForm = ({
     }
   }, [foodItem, navigation]);
 
-  const nameRef = React.useRef<TextInput>(null);
-  const carbsRef = React.useRef<TextInput>(null);
-  const notesRef = React.useRef<TextInput>(null);
+  const nameRef = React.useRef<TextInput>(null!);
+  const carbsRef = React.useRef<TextInput>(null!);
+  const notesRef = React.useRef<TextInput>(null!);
 
   const InputComponents: InputControllerProps[] = [
     {
@@ -117,8 +123,9 @@ const FoodItemForm = ({
     },
   ];
 
-  const onTakePhoto = (photo: PhotoFile | undefined | {uri: PhotoFile}) => {
-    setPhoto(photo);
+  // Handler invoked when a photo is taken; always a PhotoFile
+  const onTakePhoto = (picture: PhotoFile) => {
+    setPhoto(picture);
   };
 
   const logLayout = (e: LayoutChangeEvent, componentName: string) => {
@@ -141,10 +148,21 @@ const FoodItemForm = ({
             onTakePhoto={onTakePhoto}
             initialSource={foodItem?.image && {uri: foodItem.image}}
           />
+          {/* Log the date value before passing to DateTimePickerCard */}
+          {(() => { console.log('FoodItemForm: date state before DateTimePickerCard', date); return null; })()}
           <DateTimePickerCard
-            initialTimestamp={date ? (isDate(date) ? date.getTime() : date) : 0}
+            initialTimestamp={(() => {
+              if (date && isDate(date) && !isNaN(date.getTime())) return date.getTime();
+              if (typeof date === 'number' && !isNaN(date)) return date;
+              return Date.now();
+            })()}
             onTimestampChange={timestamp => {
-              setDate(new Date(timestamp));
+              const d = new Date(timestamp);
+              if (!isNaN(d.getTime())) {
+                setDate(d);
+              } else {
+                console.warn('FoodItemForm: Invalid timestamp received from DateTimePickerCard', timestamp);
+              }
             }}
           />
           {InputComponents.map((input, i) => (
@@ -168,7 +186,7 @@ const FoodItemForm = ({
                     }}
                     onSubmitEditing={input.onSubmitEditing}
                     selectTextOnFocus={input.selectTextOnFocus}
-                    onLayout={e => logLayout(e, `Input ${input.name}`)}
+                    onLayout={(e: LayoutChangeEvent) => logLayout(e, `Input ${input.name}`)}
                   />
                 </View>
               )}
@@ -182,7 +200,7 @@ const FoodItemForm = ({
             </S.FormErrorText>
           )}
           <S.ButtonContainer>
-            <S.SubmitButton onPress={handleSubmit(onSubmit)}>
+            <S.SubmitButton onPress={() => submitHandlerRef.current?.()}>
               <S.SubmitButtonText>Submit</S.SubmitButtonText>
             </S.SubmitButton>
           </S.ButtonContainer>

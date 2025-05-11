@@ -1,4 +1,4 @@
-import {Theme} from 'app/types/theme';
+// Theme is available via DefaultTheme extension; remove explicit import
 import {formatDateToDateAndTimeString} from 'app/utils/datetime.utils';
 import React, {useState} from 'react';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
@@ -21,9 +21,11 @@ const DateTimePickerCard = ({
 }: Props) => {
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
   const [isTimePickerVisible, setTimePickerVisibility] = useState(false);
-  const [pickedTimestamp, setPickedTimestamp] = useState<number | undefined>(
-    initialTimestamp || Date.now(),
-  );
+  // Always ensure pickedTimestamp is a valid number
+  const safeInitialTimestamp = typeof initialTimestamp === 'number' && !isNaN(initialTimestamp) && initialTimestamp > 0
+    ? initialTimestamp
+    : Date.now();
+  const [pickedTimestamp, setPickedTimestamp] = useState<number>(safeInitialTimestamp);
 
   const showDatePicker = () => {
     setDatePickerVisibility(true);
@@ -41,8 +43,12 @@ const DateTimePickerCard = ({
       date.getMonth(),
       date.getDate(),
     );
-    setPickedTimestamp(newTimestamp.getTime());
-    onTimestampChange(newTimestamp.getTime());
+    if (newTimestamp instanceof Date && !isNaN(newTimestamp.getTime())) {
+      setPickedTimestamp(newTimestamp.getTime());
+      onTimestampChange(newTimestamp.getTime());
+    } else {
+      console.warn('DateTimePickerCard: Invalid date in handleConfirmDate', date, newTimestamp);
+    }
   };
 
   const showTimePicker = () => {
@@ -57,8 +63,12 @@ const DateTimePickerCard = ({
     hideTimePicker();
     const newTimestamp = new Date(pickedTimestamp);
     newTimestamp.setHours(time.getHours(), time.getMinutes());
-    setPickedTimestamp(newTimestamp.getTime());
-    onTimestampChange(newTimestamp.getTime());
+    if (newTimestamp instanceof Date && !isNaN(newTimestamp.getTime())) {
+      setPickedTimestamp(newTimestamp.getTime());
+      onTimestampChange(newTimestamp.getTime());
+    } else {
+      console.warn('DateTimePickerCard: Invalid time in handleConfirmTime', time, newTimestamp);
+    }
   };
 
   return (
@@ -86,17 +96,20 @@ const DateTimePickerCard = ({
           <StyledPickedDateTimeText style={textStyles ?? {}}>
             {label ? `${label}: ` : 'Picked Date & Time: '}
             {formatDateToDateAndTimeString(pickedTimestamp)}
+            {(() => { console.log('DateTimePickerCard: pickedTimestamp', pickedTimestamp); return null; })()}
           </StyledPickedDateTimeText>
         </StyledCard>
       </DropShadow>
       <DateTimePickerModal
         isVisible={isDatePickerVisible}
+        date={new Date(pickedTimestamp)}
         mode="date"
         onConfirm={handleConfirmDate}
         onCancel={hideDatePicker}
       />
       <DateTimePickerModal
         isVisible={isTimePickerVisible}
+        date={new Date(pickedTimestamp)}
         mode="time"
         onConfirm={handleConfirmTime}
         onCancel={hideTimePicker}
@@ -105,37 +118,37 @@ const DateTimePickerCard = ({
   );
 };
 
-const StyledContainer = styled.View<{theme: Theme}>`
+const StyledContainer = styled.View`
   flex: 1;
   justify-content: center;
   align-items: center;
 `;
 
-const StyledPickedDateTimeText = styled.Text<{theme: Theme}>`
+const StyledPickedDateTimeText = styled.Text`
   font-size: ${props => props.theme.textSize};
   color: ${props => props.theme.textColor};
   margin: 10px 0;
 `;
 
-const StyledButtonGroup = styled.View<{theme: Theme}>`
+const StyledButtonGroup = styled.View`
   flex-direction: row;
   justify-content: center;
   align-items: center;
 `;
 
-const StyledButton = styled.TouchableOpacity<{theme: Theme}>`
+const StyledButton = styled.TouchableOpacity`
   background-color: ${props => props.theme.buttonBackgroundColor};
   padding: 10px 20px;
   border-radius: 5px;
   margin: 0 5px;
 `;
 
-const StyledButtonText = styled.Text<{theme: Theme}>`
+const StyledButtonText = styled.Text`
   font-size: ${props => props.theme.textSize};
   color: ${props => props.theme.buttonTextColor};
 `;
 
-const StyledCard = styled.View<{theme: Theme}>`
+const StyledCard = styled.View`
   background-color: ${({theme}) => addOpacity(theme.backgroundColor, 0.9)};
   padding: 10px;
   border-radius: 5px;

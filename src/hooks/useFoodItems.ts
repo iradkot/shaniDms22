@@ -7,16 +7,37 @@ export const useFoodItems = (currentDate: Date) => {
   const [foodItems, setFoodItems] = useState<formattedFoodItemDTO[]>([]);
 
   useEffect(() => {
-    const date = new Date(currentDate);
-    FirebaseService.getFoodItemsForSingleDay(date).then(items => {
-      // Updated to use getFoodItemsForSingleDay
-      Promise.all(
-        items.map((item: FoodItemDTO) => formatFoodItem(item)), // This might need adjustment if formatFoodItem specifically needs a FoodService instance
-      ).then(formattedItems => {
-        setFoodItems(formattedItems);
-      });
-    });
-  }, [currentDate]); // Added currentDate as a dependency to useEffect
+    // Track this effect's active status to prevent updates after cancellation
+    let isActive = true;
+    (async () => {
+      // Validate date
+      if (!currentDate || !(currentDate instanceof Date) || isNaN(currentDate.getTime())) {
+        if (isActive) {
+          setFoodItems([]);
+        }
+        return;
+      }
+      const date = new Date(currentDate);
+      try {
+        const items = await FirebaseService.getFoodItemsForSingleDay(date);
+        const formattedItems = await Promise.all(
+          items.map((item: FoodItemDTO) => formatFoodItem(item)),
+        );
+        if (isActive) {
+          setFoodItems(prev =>
+            JSON.stringify(prev) === JSON.stringify(formattedItems)
+              ? prev
+              : formattedItems,
+          );
+        }
+      } catch (err: any) {
+        console.warn('useFoodItems: Failed to fetch items', err);
+      }
+    })();
+    return () => {
+      isActive = false;
+    };
+  }, [currentDate]);
 
   return {
     foodItems,
