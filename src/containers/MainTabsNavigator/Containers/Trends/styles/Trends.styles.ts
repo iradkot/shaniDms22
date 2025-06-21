@@ -136,3 +136,34 @@ export const OverallStatsItem = styled.View`
   shadow-radius: 3px;
   elevation: 2;
 `;
+
+export const Subtle = styled.Text`
+  font-size: 12px;
+  color: #888;
+`;
+
+export const ComparisonTitle = styled.Text`
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 5px;
+`;
+
+export const ComparisonSubtitle = styled.Text`
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 10px;
+`;
+
+export const ComparisonDateRange = styled.Text`
+  font-size: 12px;
+  color: #777;
+  margin-bottom: 15px;
+  font-style: italic;
+`;
+
+export const StatChange = styled.Text<{color?: string}>`
+  font-size: 14px;
+  font-weight: bold;
+  color: ${({color}) => color || '#000'};
+`;
