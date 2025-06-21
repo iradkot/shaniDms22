@@ -10,13 +10,31 @@ import '@react-native-firebase/app';
 import {AppRegistry} from 'react-native';
 import { getApp } from '@react-native-firebase/app';
 import { getMessaging } from '@react-native-firebase/messaging';
+import notifee, { AndroidImportance } from '@notifee/react-native';
 
-// Setup crash-proof background message handler via modular API
+// Setup crash-proof background message handler with notification display
 const messagingBG = getMessaging(getApp());
 messagingBG.setBackgroundMessageHandler(remoteMessage => {
-  setImmediate(() => {
+  setImmediate(async () => {
     console.log('index.js: background message handler, msgID=', remoteMessage.messageId);
-    // TODO: add actual background handling logic here
+    try {
+      // Ensure Android channel
+      const channelId = await notifee.createChannel({
+        id: 'default',
+        name: 'Default Channel',
+        importance: AndroidImportance.HIGH,
+      });
+      console.log('index.js: notifee channelId=', channelId);
+      // Display the notification
+      await notifee.displayNotification({
+        title: remoteMessage.notification?.title,
+        body: remoteMessage.notification?.body,
+        android: { channelId },
+      });
+      console.log('index.js: displayed background notification');
+    } catch (err) {
+      console.error('index.js: error displaying background notification', err);
+    }
   });
 });
 import App from './src/App';

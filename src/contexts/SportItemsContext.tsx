@@ -21,7 +21,8 @@ export const useSportItems = () => {
   return useContext(SportItemsContext);
 };
 
-export const SportItemsProvider: React.FC = ({ children }) => {
+// Provide sport items context to children
+export const SportItemsProvider = ({ children }: { children: React.ReactNode }) => {
   const [sportItems, setSportItems] = useState<SportItemDTO[]>([]);
   const {
     sportItems: fetchedSportItems,

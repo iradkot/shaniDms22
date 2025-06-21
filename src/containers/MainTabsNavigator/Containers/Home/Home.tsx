@@ -81,9 +81,8 @@ const Home: React.FC = () => {
 
   const memoizedBgSamples = useMemo(() => {
     return cloneDeep(bgData).sort(bgSortFunction(true));
-  });
+  }, [bgData]);
 
-  console.log('Home: render', { bgDataLen: bgData.length, insulinDataLen: insulinData.length, foodItemsLen: foodItems.length });
   return (
     <HomeContainer>
         <TimeInRangeRow bgData={bgData} />

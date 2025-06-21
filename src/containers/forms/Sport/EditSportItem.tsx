@@ -10,11 +10,9 @@ import runningImage from 'app/assets/woman_running_strong.png';
 import useEditSportItem from 'app/hooks/sport/useEditSportItem';
 import {Container, sportTypeBackground} from './styles';
 
-interface EditSportItemProps {
-  sportItem: SportItemDTO;
-}
-
-const EditSportItem: React.FC<EditSportItemProps> = ({sportItem}) => {
+// Accept sportItem via navigation params
+const EditSportItem: React.FC = (props: any) => {
+  const sportItem: SportItemDTO = props.route.params;
   const navigation = useNavigation();
   const [selectedSportType, setSelectedSportType] = React.useState<
     SPORT_TYPES | SPORT_TYPES.AEROBIC
