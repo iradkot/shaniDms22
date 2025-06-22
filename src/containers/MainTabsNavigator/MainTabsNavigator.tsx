@@ -1,4 +1,5 @@
 import React from 'react';
+import {View} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import Home from './Containers/Home/Home';
 import NotificationsManager from './Containers/NotificationsManager/NotificationsManager';
@@ -9,17 +10,16 @@ import {theme} from 'app/style/theme';
 import FoodTracker from 'app/containers/MainTabsNavigator/Containers/FoodTracker/FoodTracker';
 import {SPORT_TRACKING_TAB_SCREEN} from 'app/constants/SCREEN_NAMES';
 import SportTracker from './Containers/SportTracker/SportTracker';
-import Trends from "app/containers/MainTabsNavigator/Containers/Trends/Trends";
+import Trends from "app/containers/MainTabsNavigator/Containers/Trends";
 
 const Tab = createBottomTabNavigator();
 
 const MainTabsNavigator: React.FC = () => {
+  console.log('MainTabsNavigator: render');
   return (
     <Tab.Navigator
       initialRouteName={SCREEN_NAMES.HOME_TAB_SCREEN}
-      sceneContainerStyle={{
-        height: 30,
-      }}
+      // removed contentStyle, let each screen/container handle its own flex
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -30,7 +30,8 @@ const MainTabsNavigator: React.FC = () => {
           color: theme.textColor,
         },
         tabBarActiveTintColor: theme.accentColor,
-      }}>
+      }}
+    >
       <Tab.Screen
         name={SCREEN_NAMES.HOME_TAB_SCREEN}
         component={Home}
@@ -43,7 +44,7 @@ const MainTabsNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen
-        name="TRENDS_TAB_SCREEN"
+        name="TRENDS"
         component={Trends}
         options={{
           tabBarIcon: ({color, size}) => (

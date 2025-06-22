@@ -1,8 +1,5 @@
-import {
-  GoogleSignin,
-  statusCodes,
-} from '@react-native-google-signin/google-signin';
-import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import auth, {FirebaseAuthTypes, GoogleAuthProvider} from '@react-native-firebase/auth';
 
 /** types */
 export type GoogleSignInResult = {
@@ -20,36 +17,43 @@ class GoogleSignIn {
     this.isSignedIn = false;
   }
 
+  /** track sign-in state if needed */
   isSignedIn: boolean;
 
+  /**
+   * Attempts silent sign-in to determine if a user is already signed in.
+   */
   getIsSignedIn: () => Promise<boolean> = async () => {
-    const isSignedIn = await GoogleSignin.isSignedIn();
-    this.isSignedIn = isSignedIn;
-    return isSignedIn;
+    try {
+      // silent sign-in will throw if not signed in
+      await GoogleSignin.signInSilently();
+      this.isSignedIn = true;
+      return true;
+    } catch {
+      this.isSignedIn = false;
+      return false;
+    }
   };
   signIn = async (): Promise<GoogleSignInResult> => {
     try {
-      await GoogleSignin.hasPlayServices();
-      const response = await GoogleSignin.signIn();
-      const {idToken} = response;
-      const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-      // setup web client id
-      const user = await auth().signInWithCredential(googleCredential);
-      this.isSignedIn = true;
-      return {user, error: null};
-    } catch (error: any) {
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        return {user: null, error: new Error('UserTypes Cancelled the Login Flow')};
-      } else if (error.code === statusCodes.IN_PROGRESS) {
-        return {user: null, error: new Error('Signing In')};
-      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        return {
-          user: null,
-          error: new Error('Play Services Not Available or Outdated'),
-        };
-      } else {
-        return {user: null, error};
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      // trigger Google sign-in UI
+      await GoogleSignin.signIn();
+      // retrieve tokens (idToken is required for Firebase auth)
+      const { idToken, accessToken } = await GoogleSignin.getTokens();
+      if (!idToken) {
+        return { user: null, error: new Error('Missing idToken from Google sign-in') };
       }
+      // create Firebase credential
+      const credential = GoogleAuthProvider.credential(idToken, accessToken);
+      const user = await auth().signInWithCredential(credential);
+      this.isSignedIn = true;
+      return { user, error: null };
+    } catch (err: any) {
+      console.error('GoogleSignIn.signIn exception:', err);
+      // wrap and propagate error
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      return { user: null, error: new Error(errorMsg) };
     }
   };
   getTokens: () => any = async () => {

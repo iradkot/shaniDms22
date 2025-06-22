@@ -14,11 +14,6 @@ const Container = styled.View<{theme: Theme}>`
   align-items: center;
   border-radius: 10px;
   background-color: rgba(255, 255, 255, 0);
-  shadow-color: #000;
-  shadow-offset: 0px 4px;
-  shadow-opacity: 0.3;
-  shadow-radius: 4px;
-  elevation: 2;
   margin: 10px 0;
 `;
 

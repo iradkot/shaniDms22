@@ -22,14 +22,20 @@ import {
 } from './AddNotificationScreen.style';
 
 const AddNotificationScreen: FC = () => {
+
   const navigation = useNavigation<NavigationProp<any>>();
   const {addNotification} = useAddNotification();
   const goBack = () => {
+    // Reset to MAIN_TAB_NAVIGATOR and set the initial tab to NotificationTabScreen
     navigation.reset({
-      index: 1,
-      routes: [{name: HOME_TAB_SCREEN}, {name: NOTIFICATION_TAB_SCREEN}],
+      index: 0,
+      routes: [
+        {
+          name: 'HomeScreen',
+          params: { screen: 'NotificationTabScreen' },
+        },
+      ],
     });
-    navigation.goBack();
   };
 
   const onSubmit = async (notification: NotificationRequest) => {

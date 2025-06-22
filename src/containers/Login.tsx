@@ -8,19 +8,26 @@ import {MAIN_TAB_NAVIGATOR} from '../constants/SCREEN_NAMES';
 
 const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
   const [userInfo, setUserInfo] = useState<GoogleSignInResult | null>(null);
-  const googleSignIn = useMemo(() => {
-    return new GoogleSignIn();
-  }, []);
-  const getUserInfo: () => void = async () => {
-    const gUserInfo = await googleSignIn.signIn();
-    if (gUserInfo.error) {
-      console.log(gUserInfo.error);
-    } else {
-      setUserInfo(gUserInfo);
+  const [loading, setLoading] = useState(false);
+  const googleSignIn = useMemo(() => new GoogleSignIn(), []);
+  const getUserInfo = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const result = await googleSignIn.signIn();
+      if (result.error) {
+        console.error('Google sign-in error:', result.error);
+        return;
+      }
+      setUserInfo(result);
       navigation.reset({
         index: 0,
         routes: [{name: MAIN_TAB_NAVIGATOR}],
       });
+    } catch (err) {
+      console.error('Unhandled sign-in error:', err);
+    } finally {
+      setLoading(false);
     }
   };
   return (
@@ -32,7 +39,7 @@ const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
           size={GoogleSigninButton.Size.Wide}
           color={GoogleSigninButton.Color.Dark}
           onPress={getUserInfo}
-          disabled={false}
+          disabled={loading}
         />
         <Text>{userInfo?.user?.user.email}</Text>
       </View>

@@ -1,3 +1,4 @@
+// FIX: Hooks must be called inside a function component, not at the top level
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import {Controller, useForm} from 'react-hook-form';
 import * as S from 'app/components/forms/NotificationForm/NotificationForm.styles';
@@ -26,6 +27,7 @@ const NotificationForm = ({
   onSubmit,
   submitHandlerRef,
 }: Props) => {
+  const [showTrendInfo, setShowTrendInfo] = React.useState(false);
   const {
     control,
     handleSubmit,
@@ -56,9 +58,9 @@ const NotificationForm = ({
 
   // define refs to access the form values
   // ref type is MutableRefObject<any>
-  const nameRef = React.useRef<TextInput>(null);
-  const range_start_ref = React.useRef<TextInput>(null);
-  const range_end_ref = React.useRef<TextInput>(null);
+  const nameRef = React.useRef<any>(null);
+  const range_start_ref = React.useRef<any>(null);
+  const range_end_ref = React.useRef<any>(null);
 
   interface InputControllerProps {
     ref: React.RefObject<TextInput>;
@@ -70,11 +72,12 @@ const NotificationForm = ({
     rules: any;
   }
 
-  const InputComponents: InputControllerProps[] = [
+  const InputComponents: Array<InputControllerProps & { label: string }> = [
     {
       ref: nameRef,
       name: 'name',
-      placeholder: 'Name',
+      label: 'Notification Name',
+      placeholder: 'Enter name',
       keyboardType: 'default',
       returnKeyType: 'next',
       onSubmitEditing: () => range_start_ref.current?.focus(),
@@ -83,7 +86,8 @@ const NotificationForm = ({
     {
       ref: range_start_ref,
       name: 'range_start',
-      placeholder: 'Range start',
+      label: 'Range Start',
+      placeholder: 'e.g. 80',
       keyboardType: 'number-pad',
       returnKeyType: 'next',
       onSubmitEditing: () => range_end_ref.current?.focus(),
@@ -92,7 +96,8 @@ const NotificationForm = ({
     {
       ref: range_end_ref,
       name: 'range_end',
-      placeholder: 'Range end',
+      label: 'Range End',
+      placeholder: 'e.g. 180',
       keyboardType: 'number-pad',
       returnKeyType: 'done',
       onSubmitEditing: () => range_end_ref?.current?.blur(),
@@ -101,8 +106,26 @@ const NotificationForm = ({
   ];
   return (
     <S.Container>
+      {/* Toggle enabled/disabled */}
+      <Controller
+        control={control}
+        name="enabled"
+        render={({ field: { value, onChange } }) => (
+          <S.ToggleContainer>
+            <S.ToggleButton
+              selected={value}
+              onPress={() => onChange(!value)}
+            >
+              <S.ToggleButtonText selected={value}>
+                {value ? 'Enabled' : 'Disabled'}
+              </S.ToggleButtonText>
+            </S.ToggleButton>
+          </S.ToggleContainer>
+        )}
+      />
       {InputComponents.map(input => (
-        <React.Fragment key={input.name}>
+        <S.InputWrapper key={input.name}>
+          <S.InputLabel>{input.label}</S.InputLabel>
           <Controller
             key={input.name}
             control={control}
@@ -124,20 +147,20 @@ const NotificationForm = ({
           {errors?.[input.name] && (
             <S.ErrorText>
               {errors?.[input.name]?.type === 'required' &&
-                `${input.name} is required`}
+                `${input.label} is required`}
               {errors?.[input.name]?.type === 'minLength' &&
-                `${input.name} must be at least 3 characters`}
+                `${input.label} must be at least 3 characters`}
               {errors?.[input.name]?.type === 'maxLength' &&
-                `${input.name} must be at most 50 characters`}
+                `${input.label} must be at most 50 characters`}
               {errors?.[input.name]?.type === 'min' &&
-                `${input.name} must be at least 1`}
+                `${input.label} must be at least 1`}
               {errors?.[input.name]?.type === 'max' &&
-                `${input.name} must be at most 1000`}
+                `${input.label} must be at most 1000`}
               {errors?.[input.name]?.type === 'pattern' &&
-                `${input.name} must be a number`}
+                `${input.label} must be a number`}
             </S.ErrorText>
           )}
-        </React.Fragment>
+        </S.InputWrapper>
       ))}
       {errors.hour_from_in_minutes && (
         <S.ErrorText>Hour From is required.</S.ErrorText>
@@ -204,55 +227,63 @@ const NotificationForm = ({
         rules={rules.timeInMinutes}
         defaultValue={0}
       />
-      <Controller
-        control={control}
-        render={({
-          field: {onChange, onBlur, value},
-          fieldState: {invalid, isTouched, isDirty, error},
-        }) => {
-          return (
-            <S.Select
-              onBlur={onBlur}
-              onValueChange={(value: TrendDirectionString) => onChange(value)}
-              selectedValue={value}
-              placeholder="Trend">
-              <S.SelectItem
-                label="Flat"
-                value="Flat"
-                onPress={() => onChange('Flat')}
-                selected={value === 'Flat'}
-              />
-              <S.SelectItem
-                label="Up"
-                value="SingleUp"
-                onPress={() => onChange('SingleUp')}
-                selected={value === 'SingleUp'}
-              />
-              <S.SelectItem
-                label="Down"
-                value="SingleDown"
-                onPress={() => onChange('SingleDown')}
-                selected={value === 'SingleDown'}
-              />
-              <S.SelectItem
-                label="Double Up"
-                value="DoubleUp"
-                onPress={() => onChange('DoubleUp')}
-                selected={value === 'DoubleUp'}
-              />
-              <S.SelectItem
-                label="Double Down"
-                value="DoubleDown"
-                onPress={() => onChange('DoubleDown')}
-                selected={value === 'DoubleDown'}
-              />
-            </S.Select>
-          );
-        }}
-        name="trend"
-        rules={rules.trend}
-        defaultValue="Flat"
-      />
+      {/* Trend selector with info icon and description */}
+      <S.InputWrapper>
+        <S.InputLabel style={{flexDirection: 'row', alignItems: 'center'}}>
+          Trend
+          <S.InfoIconTouchable onPress={() => setShowTrendInfo(prev => !prev)}>
+            <S.InfoIcon>i</S.InfoIcon>
+          </S.InfoIconTouchable>
+        </S.InputLabel>
+        {showTrendInfo && (
+          <S.TrendInfoBox>
+            <S.TrendInfoText>
+              The trend determines when this notification will trigger:
+              {'\n'}
+              <S.TrendInfoBullet>•</S.TrendInfoBullet> <S.Bold>Down</S.Bold>: Only when glucose is falling fast or slow.
+              {'\n'}
+              <S.TrendInfoBullet>•</S.TrendInfoBullet> <S.Bold>Up</S.Bold>: Only when glucose is rising fast or slow.
+              {'\n'}
+              <S.TrendInfoBullet>•</S.TrendInfoBullet> <S.Bold>Flat</S.Bold>: Trend is ignored, triggers at any direction.
+            </S.TrendInfoText>
+          </S.TrendInfoBox>
+        )}
+        <Controller
+          control={control}
+          name="trend"
+          rules={rules.trend}
+          defaultValue="Flat"
+          render={({ field: { onChange, value } }) => (
+            <S.TrendSelectorScroll horizontal showsHorizontalScrollIndicator={false}>
+              {[
+                { label: 'Double Down', value: 'DoubleDown' },
+                { label: 'Single Down', value: 'SingleDown' },
+                { label: 'FortyFive Down', value: 'FortyFiveDown' },
+                { label: 'Flat', value: 'Flat' },
+                { label: 'FortyFive Up', value: 'FortyFiveUp' },
+                { label: 'Single Up', value: 'SingleUp' },
+                { label: 'Double Up', value: 'DoubleUp' },
+              ].map(opt => (
+                <S.TrendOptionButton
+                  key={opt.value}
+                  selected={value === opt.value}
+                  onPress={() => onChange(opt.value as TrendDirectionString)}
+                >
+                  <S.TrendIconWrapper>
+                    {require('app/components/DirectionArrows').default ? (
+                      React.createElement(require('app/components/DirectionArrows').default, {
+                        trendDirection: opt.value,
+                        size: 32,
+                        color: value === opt.value ? '#1976d2' : '#888',
+                      })
+                    ) : null}
+                  </S.TrendIconWrapper>
+                </S.TrendOptionButton>
+              ))}
+            </S.TrendSelectorScroll>
+          )}
+        />
+      </S.InputWrapper>
       {errors.trend && <S.ErrorText>Trend is required.</S.ErrorText>}
     </S.Container>
   );

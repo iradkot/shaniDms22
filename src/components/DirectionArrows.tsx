@@ -1,5 +1,6 @@
 import React, {useMemo} from 'react';
 import styled from 'styled-components/native';
+import DropShadow from 'react-native-drop-shadow';
 import Icon from 'react-native-vector-icons/Ionicons';
 import PropTypes from 'prop-types';
 import {TrendDirectionString} from 'app/types/notifications';
@@ -22,18 +23,10 @@ const IconTypes = {
   HEART: 'heart',
 };
 
-const ShadowStyle = ({theme}: {theme: ThemeType}) =>
-  `
-    ${theme.shadow.default};
-    shadow-color: ${theme.textColor};
-    shadow-offset: 0px 0px;
-    shadow-opacity: 0.5;
-    shadow-radius: 3px;
-  `;
 
+// ArrowIcon only handles rotation; shadow is applied via DropShadow wrapper
 const ArrowIcon = styled(Icon)<{rotation: number}>`
   transform: ${({rotation}) => `rotate(${rotation}deg)`};
-  ${({theme}) => ShadowStyle({theme})};
 `;
 
 const ArrowsContainer = styled.View`
@@ -77,13 +70,21 @@ const DirectionArrows: React.FC<DirectionArrowsProps> = ({
   return (
     <ArrowsContainer>
       {Array.from({length: iconCount}, (_, index) => (
-        <ArrowIcon
+        <DropShadow
           key={index}
-          name={iconName}
-          size={size}
-          color={color}
-          rotation={rotation}
-        />
+          style={{
+            shadowColor: color,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.5,
+            shadowRadius: 3,
+          }}>
+          <ArrowIcon
+            name={iconName}
+            size={size}
+            color={color}
+            rotation={rotation}
+          />
+        </DropShadow>
       ))}
     </ArrowsContainer>
   );

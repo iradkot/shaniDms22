@@ -16,10 +16,15 @@ export const fetchBgDataForDateRange = async (
   const startIso = startDate.toISOString();
   const endIso = endDate.toISOString();
   const cacheKey: string = `bgData-${startIso}-${endIso}`;
-  const cachedData: string | null = await AsyncStorage.getItem(cacheKey);
-
-  if (cachedData) {
-    return JSON.parse(cachedData);
+  // Attempt to read from cache
+  let cachedData: string | null = null;
+  try {
+    cachedData = await AsyncStorage.getItem(cacheKey);
+    if (cachedData) {
+      return JSON.parse(cachedData);
+    }
+  } catch (e) {
+    console.warn('fetchBgDataForDateRange: Failed reading cache', e);
   }
   const apiUrl: string = `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=1000`;
   try {
@@ -27,9 +32,28 @@ export const fetchBgDataForDateRange = async (
     const bgData: BgSample[] = response.data;
     const sortedBgData: BgSample[] = bgData.sort(bgSortFunction(false));
 
-    await AsyncStorage.setItem(cacheKey, JSON.stringify(sortedBgData));
+    // Attempt to cache results, with graceful handling if storage is full
+    try {
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(sortedBgData));
+    } catch (e: any) {
+      console.warn('fetchBgDataForDateRange: Failed caching BG data', e);
+      // If storage is full, purge old BG cache entries
+      const errMsg = e.message || e;
+      if (errMsg.includes('SQLITE_FULL') || errMsg.includes('database or disk is full')) {
+        try {
+          const allKeys = await AsyncStorage.getAllKeys();
+          const bgKeys = allKeys.filter(key => key.startsWith('bgData-'));
+          if (bgKeys.length) {
+            await AsyncStorage.multiRemove(bgKeys);
+            console.info('fetchBgDataForDateRange: Cleared old BG cache entries');
+          }
+        } catch (purgeErr) {
+          console.error('fetchBgDataForDateRange: Failed to purge old cache', purgeErr);
+        }
+      }
+    }
     return sortedBgData;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching BG data from Nightscout:', error);
     throw error;
   }
@@ -42,7 +66,12 @@ export const fetchBgDataForDate = async (date: Date): Promise<BgSample[]> => {
   const startDate = new Date(formattedStartDate);
   const endDate = new Date(formattedEndDate);
 
-  return fetchBgDataForDateRange(startDate, endDate);
+  try {
+    return await fetchBgDataForDateRange(startDate, endDate);
+  } catch (error: any) {
+    console.warn('fetchBgDataForDate: Failed to fetch daily BG data', error);
+    return [];
+  }
 };
 
 export const getInsulinData = async (
@@ -94,9 +123,9 @@ export const getUserProfileFromNightscout = async (
     }
     // Assuming the response data directly matches the ProfileDataType structure
     return response.data as ProfileDataType;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching basal profile data from Nightscout:', error);
-    throw error; // Propagate the error for handling elsewhere
+    throw error;
   }
 };
 

@@ -1,4 +1,5 @@
-import GoogleSignIn from '../api/GoogleSignIn';
+import { getAuth } from '@react-native-firebase/auth';
+import { getApp } from '@react-native-firebase/app';
 import React, {useEffect} from 'react';
 import {NavigationProp} from '@react-navigation/native';
 
@@ -8,26 +9,17 @@ import {MAIN_TAB_NAVIGATOR, LOGIN_SCREEN} from '../constants/SCREEN_NAMES';
 const AppInitScreen: React.FC<{navigation: NavigationProp<any>}> = ({
   navigation,
 }) => {
-  // check if user is logged in
-  // if logged in, navigate to home screen
-  // else navigate to login screen
-  const runInit: () => void = async () => {
-    const googleSignIn = new GoogleSignIn();
-    const isLoggedIn = await googleSignIn.getIsSignedIn();
-    if (isLoggedIn) {
-      navigation.reset({
-        index: 0,
-        routes: [{name: MAIN_TAB_NAVIGATOR}],
-      });
-    } else {
-      navigation.reset({
-        index: 0,
-        routes: [{name: LOGIN_SCREEN}],
-      });
-    }
-  };
+  // navigate based on Firebase auth state
   useEffect(() => {
-    runInit();
+    const authInstance = getAuth(getApp());
+    const unsubscribe = authInstance.onAuthStateChanged(user => {
+      console.log('AppInitScreen: Auth UID=', user?.uid);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: user ? MAIN_TAB_NAVIGATOR : LOGIN_SCREEN }],
+      });
+    });
+    return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

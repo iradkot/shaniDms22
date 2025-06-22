@@ -69,14 +69,14 @@ const SectionIcon = styled(Icon)`
 `;
 
 const SectionTitle = styled(Text)`
-  font-size: 16px;
+  font-size: 16;
   font-weight: bold;
   color: #333;
   text-transform: capitalize;
 `;
 
 const SectionText = styled(Text)`
-  font-size: 16px;
+  font-size: 16;
   color: #666;
 `;
 

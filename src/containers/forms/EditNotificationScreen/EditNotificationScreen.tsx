@@ -26,16 +26,22 @@ import {
 import NotificationForm from 'app/components/forms/NotificationForm/NotificationForm';
 
 const EditNotificationScreen: FC = (props: any) => {
+
   const navigation = useNavigation<NavigationProp<any>>();
   // get the notification from the navigation params
   const notification = props.route.params as NotificationResponse;
   const {updateNotification} = useUpdateNotification();
   const goBack = () => {
+    // Reset to MAIN_TAB_NAVIGATOR and set the initial tab to NotificationTabScreen
     navigation.reset({
-      index: 1,
-      routes: [{name: HOME_TAB_SCREEN}, {name: NOTIFICATION_TAB_SCREEN}],
+      index: 0,
+      routes: [
+        {
+          name: 'HomeScreen',
+          params: { screen: 'NotificationTabScreen' },
+        },
+      ],
     });
-    navigation.goBack();
   };
 
   const onSubmit = async (updatedNotification: NotificationRequest) => {

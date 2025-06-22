@@ -1,4 +1,5 @@
 import React, {useEffect, useMemo} from 'react';
+
 import styled from 'styled-components/native';
 import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
@@ -10,7 +11,7 @@ import BGValueRow from 'app/containers/MainTabsNavigator/Containers/Home/compone
 import BgGraph from 'app/components/CgmGraph/CgmGraph';
 import {cloneDeep} from 'lodash';
 import {Theme} from 'app/types/theme';
-import {Dimensions} from 'react-native';
+import {Dimensions, SafeAreaView, Text} from 'react-native';
 import {useBgData} from 'app/hooks/useBgData';
 import {useFoodItems} from 'app/hooks/useFoodItems';
 import {bgSortFunction} from 'app/utils/bg.utils';
@@ -25,6 +26,10 @@ const HomeContainer = styled.View<{theme: Theme}>`
 // create dummy home component with typescript
 const Home: React.FC = () => {
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
+  // Debug: log when Home mounts
+  useEffect(() => {
+    console.log('Home component mounted');
+  }, []);
   const isShowingToday = useMemo(() => {
     const today = new Date();
     return (
@@ -76,57 +81,50 @@ const Home: React.FC = () => {
 
   const memoizedBgSamples = useMemo(() => {
     return cloneDeep(bgData).sort(bgSortFunction(true));
-  });
+  }, [bgData]);
 
   return (
     <HomeContainer>
-      <TimeInRangeRow bgData={bgData} />
-      <BGValueRow
-        prevBgData={latestPrevBgSample}
-        bgData={latestBgSample}
-        getUpdatedBgDataCallback={getUpdatedBgData}
-      />
-      <Collapsable title={'Stats'}>
-        <StatsRow bgData={bgData} />
-      </Collapsable>
-      <Collapsable title={'Insulin stats'}>
-        {/*<InsulinStatsRow insulinData={generateDummyInsulinData(10)} />*/}
-        <InsulinStatsRow
-          insulinData={insulinData}
-          basalProfileData={basalProfileData}
-          startDate={startOfDay}
-          endDate={endOfDay}
+        <TimeInRangeRow bgData={bgData} />
+        <BGValueRow
+          prevBgData={latestPrevBgSample}
+          bgData={latestBgSample}
+          getUpdatedBgDataCallback={getUpdatedBgData}
         />
-      </Collapsable>
-      {/*<BgGraph*/}
-      {/*  bgSamples={cloneDeep(bgData).sort(bgSortFunction(true))}*/}
-      {/*  width={Dimensions.get('window').width}*/}
-      {/*  height={200}*/}
-      {/*  foodItems={foodItems}*/}
-      {/*/>*/}
-      <Collapsable title={'chart'}>
-        <BgGraph
-          bgSamples={memoizedBgSamples}
-          width={Dimensions.get('window').width}
-          height={200}
-          foodItems={foodItems}
+        <Collapsable title={'Stats'}>
+          <StatsRow bgData={bgData} />
+        </Collapsable>
+        <Collapsable title={'Insulin stats'}>
+          <InsulinStatsRow
+            insulinData={insulinData}
+            basalProfileData={basalProfileData}
+            startDate={startOfDay}
+            endDate={endOfDay}
+          />
+        </Collapsable>
+        <Collapsable title={'chart'}>
+          <BgGraph
+            bgSamples={memoizedBgSamples}
+            width={Dimensions.get('window').width}
+            height={200}
+            foodItems={foodItems}
+          />
+        </Collapsable>
+        <CgmRows
+          onPullToRefreshRefresh={getUpdatedBgData}
+          isLoading={isLoading}
+          bgData={bgData}
+          isToday={isShowingToday}
         />
-      </Collapsable>
-      <CgmRows
-        onPullToRefreshRefresh={getUpdatedBgData}
-        isLoading={isLoading}
-        bgData={bgData}
-        isToday={isShowingToday}
-      />
-      <DateNavigatorRow
-        isLoading={isLoading || currentDate !== debouncedCurrentDate}
-        date={currentDate}
-        isToday={isShowingToday}
-        setCustomDate={setCustomDate}
-        onGoBack={getPreviousDate}
-        onGoForward={getNextDate}
-        resetToCurrentDate={() => setCurrentDate(new Date())}
-      />
+        <DateNavigatorRow
+          isLoading={isLoading || currentDate !== debouncedCurrentDate}
+          date={currentDate}
+          isToday={isShowingToday}
+          setCustomDate={setCustomDate}
+          onGoBack={getPreviousDate}
+          onGoForward={getNextDate}
+          resetToCurrentDate={() => setCurrentDate(new Date())}
+        />
     </HomeContainer>
   );
 };
