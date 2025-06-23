@@ -50,8 +50,8 @@ export const CHART_COLORS = {
   surface: colors.gray[50],
   
   // Grid & Borders  
-  gridMajor: colors.gray[300],        // Was: '#D0D0D0'
-  gridMinor: colors.gray[200],        // Was: '#E8E8E8' 
+  gridMajor: colors.gray[600],        // Was: '#D0D0D0'
+  gridMinor: colors.gray[400],        // Was: '#E8E8E8' 
   border: colors.gray[400],           // Was: '#BBBBBB'
   
   // Text
@@ -113,8 +113,8 @@ export const getGlucoseRangeColor = (glucoseValue: number): string => {
  * Used by both AGP and CGM components
  */
 export const GLUCOSE_GRID = {
-  major: [40, 70, 100, 140, 180, 250, 300], // Major grid lines
-  minor: [60, 80, 120, 160, 200, 220],      // Minor grid lines
+  major: [50, 100, 150, 200, 250, 300],     // Major grid lines (gaps of 50)
+  minor: [75, 125, 175, 225, 275],          // Minor grid lines (halfway between majors)
   yAxisMax: 350,                             // Maximum Y value
   yAxisMin: 30                               // Minimum Y value
 };

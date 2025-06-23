@@ -79,26 +79,6 @@ const AGPChart: React.FC<AGPChartProps> = ({
       height
     }}>      
     <Svg width={width} height={height}>
-        <G>
-          {gridLines.major.map(glucose => {
-            const yPos = yScale(glucose) + margin.top;
-            return (
-              <SvgText
-                key={`ylabel-${glucose}`}
-                x={margin.left - 10}
-                y={yPos}
-                textAnchor="end"
-                alignmentBaseline="middle"
-                fontSize={11}
-                fill={CHART_COLORS.text}
-                fontWeight="500"
-              >
-                {glucose}
-              </SvgText>
-            );
-          })}
-        </G>
-        
         <G transform={`translate(${margin.left}, ${margin.top})`}>          
             <ChartFoundation
             width={chartWidth}

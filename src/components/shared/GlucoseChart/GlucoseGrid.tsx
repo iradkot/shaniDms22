@@ -34,7 +34,7 @@ export const GlucoseGrid: React.FC<GlucoseGridProps> = ({
         
         return (
           <G key={`major-${glucoseValue}`}>
-            {/* Grid Line */}
+            {/* Grid Line */}            
             <Line
               x1={0}
               y1={y}
@@ -42,15 +42,14 @@ export const GlucoseGrid: React.FC<GlucoseGridProps> = ({
               y2={y}
               stroke={CHART_COLORS.gridMajor}
               strokeWidth={1}
-              opacity={CHART_OPACITY.light}
+              opacity={CHART_OPACITY.strong}
             />
-            
-            {/* Label */}
+              {/* Label */}
             {showLabels && (
               <SvgText
                 x={labelOffset}
                 y={y + 4} // Slight offset for better alignment
-                fontSize={12}
+                fontSize={11}
                 fill={CHART_COLORS.textSecondary}
                 textAnchor="end"
                 opacity={CHART_OPACITY.strong}
@@ -69,8 +68,8 @@ export const GlucoseGrid: React.FC<GlucoseGridProps> = ({
         // Skip if outside chart bounds
         if (y < 0 || y > height) return null;
         
-        return (
-          <Line
+        return (          
+        <Line
             key={`minor-${glucoseValue}`}
             x1={0}
             y1={y}
@@ -78,7 +77,7 @@ export const GlucoseGrid: React.FC<GlucoseGridProps> = ({
             y2={y}
             stroke={CHART_COLORS.gridMinor}
             strokeWidth={0.5}
-            opacity={CHART_OPACITY.subtle}
+            opacity={CHART_OPACITY.medium}
           />
         );
       })}
@@ -115,7 +114,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
         
         return (
           <G key={`time-${timeMinutes}`}>
-            {/* Grid Line */}
+            {/* Grid Line */}            
             <Line
               x1={x}
               y1={0}
@@ -123,7 +122,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
               y2={height}
               stroke={CHART_COLORS.gridMinor}
               strokeWidth={0.5}
-              opacity={CHART_OPACITY.subtle}
+              opacity={CHART_OPACITY.medium}
             />
             
             {/* Label */}

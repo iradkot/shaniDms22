@@ -18,7 +18,6 @@ const YGridAndAxis = ({
     const ratio = (highestBgThreshold - glucoseValue) / highestBgThreshold;
     return ratio * graphHeight;
   };
-
   return (
     <GlucoseGrid
       width={graphWidth}
@@ -26,7 +25,7 @@ const YGridAndAxis = ({
       yScale={yScale}
       showLabels={true}
       showMinorGrid={true}
-      labelOffset={-5}
+      labelOffset={-10}
     />
   );
 };export default YGridAndAxis;

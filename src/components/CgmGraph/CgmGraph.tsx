@@ -78,16 +78,17 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
           onTouchEnd={handleTouchEnd}
           width={width}
           height={height}
-          viewBox={`0 0 ${width} ${height}`}>
-          <G
-            x={graphStyleContextValue.margin?.left}
-            y={graphStyleContextValue.margin?.top}>
+          viewBox={`0 0 ${width} ${height}`}>            
+          <G transform={`translate(${graphStyleContextValue.margin?.left}, ${graphStyleContextValue.margin?.top})`}>
+            {/* Render grid FIRST so it appears behind data */}
+            <XGridAndAxis />
+            <YGridAndAxis highestBgThreshold={300} />
+            
+            {/* Then render data on top of grid */}
             <GraphDateDisplay />
             <CGMSamplesRenderer
               focusedSampleDateString={closestBgSample?.dateString}
             />
-            <XGridAndAxis />
-            <YGridAndAxis highestBgThreshold={300} />
             <FoodItemsRenderer foodItems={foodItems} />
             {isTouchActive && closestBgSample && (
               <>
