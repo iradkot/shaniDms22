@@ -55,9 +55,21 @@ const AGPChart: React.FC<AGPChartProps> = ({
       </View>
     );
   }
-    const { margin, xScale, yScale } = chartConfig;
+  const { margin, xScale, yScale } = chartConfig;
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
+  
+  // Debug centering calculation
+  const marginDifference = margin.left - margin.right;
+  const centeringOffset = -Math.round(marginDifference / 2);
+  console.log('[AGPChart] Centering calculation:', {
+    width,
+    leftMargin: margin.left,
+    rightMargin: margin.right,
+    marginDifference,
+    centeringOffset,
+    actualChartWidth: chartWidth
+  });
   
   // Debug chart dimensions
   console.log('[AGPChart] Chart dimensions:', {
@@ -66,10 +78,11 @@ const AGPChart: React.FC<AGPChartProps> = ({
     margin,
     actualChartWidth: chartWidth,
     actualChartHeight: chartHeight
-  });
-  
-  return (
-    <View style={{ width, height }}>
+  });  return (
+    <View style={{ 
+      width, 
+      height
+    }}>
       <Svg width={width} height={height}>
         <ChartGradients />
         

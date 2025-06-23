@@ -3,11 +3,14 @@
 export { default } from './AGPGraph';
 export { default as AGPGraph } from './AGPGraph';
 export { default as EnhancedAGPGraph } from './EnhancedAGPGraph';
+export { default as AGPSummary } from './components/AGPSummary';
 
 // Components
 export { default as AGPChart } from './components/AGPChart';
 export { default as AGPStatistics } from './components/AGPStatistics';
 export { default as AGPLegend } from './components/AGPLegend';
+export { default as AGPKeyMetrics } from './components/AGPKeyMetrics';
+export { default as AGPInsights } from './components/AGPInsights';
 
 // Hooks
 export { useAGPData } from './hooks/useAGPData';
@@ -27,7 +30,6 @@ export type {
 // Utils
 export {
   calculateAGPPercentiles,
-  calculateAGPStatistics,
   validateGlucoseValues
 } from './utils/percentile.utils';
 export { 

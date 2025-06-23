@@ -16,6 +16,7 @@ export function useComparison({ start, rangeDays }: UseComparisonProps) {
   const [showComparison, setShowComparison] = useState(false);
   const [comparing, setComparing] = useState(false);
   const [previousMetrics, setPreviousMetrics] = useState<ReturnType<typeof calculateTrendsMetrics> | null>(null);
+  const [previousBgData, setPreviousBgData] = useState<BgSample[]>([]);
   const [comparisonOffset, setComparisonOffset] = useState(rangeDays);
   const [comparisonDateRange, setComparisonDateRange] = useState<DateRange | null>(null);
 
@@ -48,10 +49,9 @@ export function useComparison({ start, rangeDays }: UseComparisonProps) {
 
         const dataChunk = await fetchBgDataForDateRange(chunkStart, chunkEnd);
         previousBgData = previousBgData.concat(dataChunk);
-      }
-
-      const metrics = calculateTrendsMetrics(previousBgData);
+      }      const metrics = calculateTrendsMetrics(previousBgData);
       setPreviousMetrics(metrics);
+      setPreviousBgData(previousBgData);
       setShowComparison(true);
     } catch (e: any) {
       console.log('Failed to compare previous period:', e.message);
@@ -70,12 +70,15 @@ export function useComparison({ start, rangeDays }: UseComparisonProps) {
     handleCompare(newOffset);
   };
 
-  const hideComparison = () => setShowComparison(false);
-
+  const hideComparison = () => {
+    setShowComparison(false);
+    setPreviousBgData([]);
+  };
   return {
     showComparison,
     comparing,
     previousMetrics,
+    previousBgData,
     comparisonOffset,
     comparisonDateRange,
     handleCompare,

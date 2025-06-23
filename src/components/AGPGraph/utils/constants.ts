@@ -57,12 +57,11 @@ export const AGP_DEFAULT_CONFIG = {
   smoothing: true,              // Apply smoothing
   targetRange: { min: 70, max: 180 }, // Standard target range  // Chart dimensions - optimized for better width utilization
   defaultWidth: 350,
-  defaultHeight: 250,
-  margin: {
+  defaultHeight: 250,  margin: {
     top: 20,
-    right: 15,   // Reduced from 20
+    right: 35,   // Increased to balance with left margin
     bottom: 50,  // More space for X-axis labels
-    left: 50     // Reduced from 70 for better width utilization
+    left: 65     // Slightly reduced while maintaining Y-axis label space
   }
 };
 

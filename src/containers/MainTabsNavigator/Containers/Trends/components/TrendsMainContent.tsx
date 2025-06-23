@@ -9,7 +9,7 @@ import { MetricType, DateRange } from '../types/trends.types';
 // Components
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
-import AGPGraph, { EnhancedAGPGraph } from 'app/components/AGPGraph';
+import AGPGraph, { AGPSummary } from 'app/components/AGPGraph';
 import Collapsable from 'app/components/Collapsable';
 import { DayInsights } from '../TrendsUI';
 import { CompareSection } from './CompareSection';
@@ -34,6 +34,7 @@ interface TrendsMainContentProps {
   handleCompare: () => void;
   rangeDays: number;
   previousMetrics: ReturnType<typeof calculateTrendsMetrics> | null;
+  previousBgData: BgSample[];
   comparisonDateRange: DateRange | null;
   changeComparisonPeriod: (direction: 'back' | 'forward') => void;
   hideComparison: () => void;
@@ -53,10 +54,11 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
   handleCompare,
   rangeDays,
   previousMetrics,
+  previousBgData,
   comparisonDateRange,
   changeComparisonPeriod,
   hideComparison
-}) => {  // Get screen width for charts
+}) => {// Get screen width for charts
   const screenWidth = Dimensions.get('window').width;
   const chartWidth = Math.max(screenWidth - 10, 350); // Almost full width, minimum 350
   const chartHeight = 220; // Increased height for better visibility
@@ -82,10 +84,13 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
       <View style={{ marginBottom: 15 }}>
         <SectionTitle>Quick Stats</SectionTitle>
         <StatsRow bgData={bgData} />
-      </View>              
+      </View>                  
       {/* (c) AGP Graph - Ambulatory Glucose Profile */}
       <Collapsable title="Ambulatory Glucose Profile (AGP)">
-        <View style={{ alignItems: 'center', paddingHorizontal: 5 }}>
+        <View style={{ 
+          alignItems: 'center', 
+          paddingHorizontal: 5
+        }}>
           <AGPGraph 
             bgData={bgData} 
             showStatistics={false}
@@ -94,20 +99,39 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
             height={chartHeight}
           />
         </View>
-      </Collapsable>
-
-      {/* (d) Enhanced AGP Graph with Statistics */}
-      <Collapsable title="Enhanced AGP Analysis">
-        <View style={{ alignItems: 'center', paddingHorizontal: 5 }}>
-          <EnhancedAGPGraph 
+      </Collapsable>     
+      <View style={{ marginTop: 15, marginBottom: 15 }}>
+        <SectionTitle>AGP Analytics & Statistics</SectionTitle>
+        <View style={{ 
+          alignItems: 'center', 
+          paddingHorizontal: 5
+        }}>
+          <AGPSummary 
             bgData={bgData}
-            showStatistics={true}
-            showLegend={true}
             width={chartWidth}
-            height={chartHeight + 20}
+            height={chartHeight + 40}
           />
+          
+          {/* Show AGP comparison when comparing */}
+          {showComparison && previousBgData.length > 0 && (
+            <View style={{ marginTop: 20 }}>
+              <SectionTitle>Previous Period Comparison</SectionTitle>
+              <View style={{
+                backgroundColor: '#F8F9FA',
+                borderRadius: 12,
+                padding: 12,
+                marginBottom: 12
+              }}>
+                <AGPSummary 
+                  bgData={previousBgData}
+                  width={chartWidth}
+                  height={chartHeight + 40}
+                />
+              </View>
+            </View>
+          )}
         </View>
-      </Collapsable>
+      </View>
 
       {/* (e) Best/Worst Day Selection */}
       <Collapsable title="Select Metric for Best/Worst Day">

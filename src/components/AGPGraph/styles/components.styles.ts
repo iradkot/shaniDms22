@@ -92,6 +92,7 @@ export const ChartContainer = styled.View`
   elevation: 3;
   align-items: center;
   justify-content: center;
+  overflow: visible;  /* Ensure labels aren't clipped */
 `;
 
 export const ChartTitle = styled.Text`

@@ -25,7 +25,14 @@ export const ChartAxes: React.FC<ChartAxesProps> = ({
   yScale,
   chartHeight,
   chartWidth = 300
-}) => {
+}) => {  // Debug Y-axis labels
+  console.log('[ChartAxes] Debug info:', {
+    majorGridLines: gridLines.major,
+    chartHeight,
+    chartWidth,
+    sampleYScale: gridLines.major.length > 0 ? yScale(gridLines.major[0]) : 'no major lines'
+  });
+
   return (
     <G>
       {/* X-axis line */}
@@ -46,23 +53,26 @@ export const ChartAxes: React.FC<ChartAxesProps> = ({
         y2={chartHeight}
         stroke={AGP_COLORS.border}
         strokeWidth={1.5}
-      />
-        {/* Y-axis labels - positioned outside chart area */}
+      />        
+      {/* Y-axis labels - positioned outside chart area */}
       <G>        
-        {gridLines.major.map(glucose => (
-          <SvgText
-            key={`ylabel-${glucose}`}
-            x={-12}  // Adjusted for reduced margin
-            y={yScale(glucose)}
-            textAnchor="end"
-            alignmentBaseline="central"
-            fontSize={12}
-            fill={AGP_COLORS.text}
-            fontWeight="600"
-          >
-            {glucose}
-          </SvgText>
-        ))}
+        {gridLines.major.map(glucose => {
+          const yPos = yScale(glucose);
+          console.log(`[ChartAxes] Y-label ${glucose}: yPos=${yPos}, chartHeight=${chartHeight}`);
+          return (            <SvgText
+              key={`ylabel-${glucose}`}
+              x={-20}  // Adjusted for the new 65px left margin
+              y={yPos}
+              textAnchor="end"
+              alignmentBaseline="central"
+              fontSize={14}  // Readable font size
+              fill="#333333"  // Dark gray for good contrast
+              fontWeight="600"
+            >
+              {glucose}
+            </SvgText>
+          );
+        })}
       </G>
       
       {/* X-axis labels - positioned below chart area */}

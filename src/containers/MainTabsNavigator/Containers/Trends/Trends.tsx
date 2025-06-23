@@ -95,8 +95,7 @@ const Trends: React.FC = () => {
       )}
 
       {/* Main content if data is present */}
-      {hasData && (
-        <TrendsMainContent
+      {hasData && (        <TrendsMainContent
           bgData={bgData}
           finalMetrics={finalMetrics}
           selectedMetric={bestWorstDays.selectedMetric}
@@ -110,6 +109,7 @@ const Trends: React.FC = () => {
           handleCompare={() => comparison.handleCompare(comparison.comparisonOffset)}
           rangeDays={rangeDays}
           previousMetrics={comparison.previousMetrics}
+          previousBgData={comparison.previousBgData}
           comparisonDateRange={comparison.comparisonDateRange}
           changeComparisonPeriod={comparison.changeComparisonPeriod}
           hideComparison={comparison.hideComparison}
