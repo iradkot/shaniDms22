@@ -83,13 +83,15 @@ export const LegendLabel = styled.Text`
 export const ChartContainer = styled.View`
   background-color: #FFFFFF;
   border-radius: 8px;
-  padding: 16px;
+  padding: 12px 8px;  /* Reduced horizontal padding */
   margin: 8px 0;
   shadow-color: #000;
   shadow-offset: 0px 2px;
   shadow-opacity: 0.1;
   shadow-radius: 4px;
   elevation: 3;
+  align-items: center;
+  justify-content: center;
 `;
 
 export const ChartTitle = styled.Text`

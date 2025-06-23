@@ -55,10 +55,18 @@ const AGPChart: React.FC<AGPChartProps> = ({
       </View>
     );
   }
-  
-  const { margin, xScale, yScale } = chartConfig;
+    const { margin, xScale, yScale } = chartConfig;
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
+  
+  // Debug chart dimensions
+  console.log('[AGPChart] Chart dimensions:', {
+    totalWidth: width,
+    totalHeight: height,
+    margin,
+    actualChartWidth: chartWidth,
+    actualChartHeight: chartHeight
+  });
   
   return (
     <View style={{ width, height }}>
@@ -99,14 +107,14 @@ const AGPChart: React.FC<AGPChartProps> = ({
             percentileLines={percentileLines} 
             agpData={agpData}
           />
-          
-          <ChartAxes
+            <ChartAxes
             gridLines={gridLines}
             timeLabels={timeLabels}
             timePoints={chartConfig.timePoints}
             xScale={xScale}
             yScale={yScale}
             chartHeight={chartHeight}
+            chartWidth={chartWidth}
           />
         </G>
         

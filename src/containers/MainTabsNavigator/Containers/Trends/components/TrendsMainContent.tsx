@@ -1,7 +1,7 @@
 // Main content area for Trends screen
 
 import React from 'react';
-import { View, ScrollView } from 'react-native';
+import { View, ScrollView, Dimensions } from 'react-native';
 import { BgSample } from 'app/types/day_bgs.types';
 import { DayDetail, calculateTrendsMetrics } from '../utils/trendsCalculations';
 import { MetricType, DateRange } from '../types/trends.types';
@@ -56,7 +56,20 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
   comparisonDateRange,
   changeComparisonPeriod,
   hideComparison
-}) => {
+}) => {  // Get screen width for charts
+  const screenWidth = Dimensions.get('window').width;
+  const chartWidth = Math.max(screenWidth - 10, 350); // Almost full width, minimum 350
+  const chartHeight = 220; // Increased height for better visibility
+  
+  // Add debugging for data flow
+  console.log('[TrendsMainContent] Rendering with data:', {
+    bgDataCount: bgData.length,
+    firstSample: bgData.length > 0 ? new Date(bgData[0].date).toISOString() : null,
+    lastSample: bgData.length > 0 ? new Date(bgData[bgData.length - 1].date).toISOString() : null,
+    rangeDays,
+    chartWidth,
+    screenWidth
+  });
   return (
     <ScrollView>
       {/* (a) Time In Range */}
@@ -69,27 +82,31 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
       <View style={{ marginBottom: 15 }}>
         <SectionTitle>Quick Stats</SectionTitle>
         <StatsRow bgData={bgData} />
-      </View>        
+      </View>              
       {/* (c) AGP Graph - Ambulatory Glucose Profile */}
       <Collapsable title="Ambulatory Glucose Profile (AGP)">
-        <AGPGraph 
-          bgData={bgData} 
-          showStatistics={false}
-          showLegend={false}
-          width={320}
-          height={200}
-        />
+        <View style={{ alignItems: 'center', paddingHorizontal: 5 }}>
+          <AGPGraph 
+            bgData={bgData} 
+            showStatistics={false}
+            showLegend={false}
+            width={chartWidth}
+            height={chartHeight}
+          />
+        </View>
       </Collapsable>
 
       {/* (d) Enhanced AGP Graph with Statistics */}
       <Collapsable title="Enhanced AGP Analysis">
-        <EnhancedAGPGraph 
-          bgData={bgData}
-          showStatistics={true}
-          showLegend={true}
-          width={320}
-          height={220}
-        />
+        <View style={{ alignItems: 'center', paddingHorizontal: 5 }}>
+          <EnhancedAGPGraph 
+            bgData={bgData}
+            showStatistics={true}
+            showLegend={true}
+            width={chartWidth}
+            height={chartHeight + 20}
+          />
+        </View>
       </Collapsable>
 
       {/* (e) Best/Worst Day Selection */}

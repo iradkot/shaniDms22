@@ -1,14 +1,14 @@
 // Main AGP Graph Component
 
 import React from 'react';
-import { View, ScrollView } from 'react-native';
+import { View } from 'react-native';
 import { AGPGraphProps } from './types/agp.types';
 import { useAGPData } from './hooks/useAGPData';
 import AGPChart from './components/AGPChart';
 import AGPStatistics from './components/AGPStatistics';
 import AGPLegend from './components/AGPLegend';
 import { AGP_GLUCOSE_RANGES, AGP_DEFAULT_CONFIG } from './utils/constants';
-import { colors } from '../../style/colors';
+import { colors } from 'app/style/colors';
 import { 
   ChartContainer, 
   ChartTitle, 
@@ -29,6 +29,18 @@ const AGPGraph: React.FC<AGPGraphProps> = ({
   targetRange = AGP_DEFAULT_CONFIG.targetRange
 }) => {
   const { agpData, isLoading, error, warnings, dataQuality } = useAGPData(bgData);
+  
+  // Add debugging logs
+  console.log('[AGPGraph] Processing data...', { 
+    sampleCount: bgData.length, 
+    dataQuality,
+    hasValidData: !!agpData,
+    dateRange: agpData?.dateRange || null,
+    firstSample: bgData.length > 0 ? new Date(bgData[0].date).toISOString() : null,
+    lastSample: bgData.length > 0 ? new Date(bgData[bgData.length - 1].date).toISOString() : null,
+    spanDays: agpData?.dateRange.days || 0,
+    statistics: agpData?.statistics || null
+  });
   
   // Data quality color mapping using existing color palette
   const getDataQualityColor = (quality: string): string => {
@@ -63,10 +75,11 @@ const AGPGraph: React.FC<AGPGraphProps> = ({
           {error || 'Unable to generate AGP. Please check your data and try again.'}
         </ErrorText>
       </ErrorContainer>
-    );
-  }
-    return (
-    <ScrollView showsVerticalScrollIndicator={false}>
+    );  }
+  
+  // Render AGP chart
+  return (
+    <View style={{ width }}>
       {warnings.length > 0 && (
         <WarningContainer>
           {warnings.map((warning, index) => (
@@ -115,10 +128,9 @@ const AGPGraph: React.FC<AGPGraphProps> = ({
           <AGPStatistics 
             statistics={agpData.statistics}
             showDetailed={true}
-          />
-        </ChartContainer>
+          />        </ChartContainer>
       )}
-    </ScrollView>
+    </View>
   );
 };
 

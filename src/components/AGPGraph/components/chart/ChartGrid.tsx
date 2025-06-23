@@ -25,7 +25,8 @@ export const ChartGrid: React.FC<ChartGridProps> = ({
   chartHeight
 }) => {
   return (
-    <G>
+    <G>      
+        {/* Horizontal grid lines - Major glucose levels */}
       {gridLines.major.map(glucose => (
         <Line
           key={`major-${glucose}`}
@@ -35,9 +36,11 @@ export const ChartGrid: React.FC<ChartGridProps> = ({
           y2={yScale(glucose)}
           stroke={AGP_COLORS.gridMajor}
           strokeWidth={1}
+          opacity={0.8}
         />
       ))}
       
+      {/* Horizontal grid lines - Minor glucose levels */}
       {gridLines.minor.map(glucose => (
         <Line
           key={`minor-${glucose}`}
@@ -47,9 +50,11 @@ export const ChartGrid: React.FC<ChartGridProps> = ({
           y2={yScale(glucose)}
           stroke={AGP_COLORS.gridMinor}
           strokeWidth={0.5}
+          opacity={0.6}
         />
       ))}
       
+      {/* Vertical grid lines - Time points */}
       {timePoints.map(minutes => (
         <Line
           key={`time-${minutes}`}
@@ -59,6 +64,7 @@ export const ChartGrid: React.FC<ChartGridProps> = ({
           y2={chartHeight}
           stroke={AGP_COLORS.gridMinor}
           strokeWidth={0.5}
+          opacity={0.6}
         />
       ))}
     </G>

@@ -209,7 +209,27 @@ export const getDateRange = (bgSamples: BgSample[]) => {
   const dates = bgSamples.map(sample => sample.date).sort((a, b) => a - b);
   const start = new Date(dates[0]);
   const end = new Date(dates[dates.length - 1]);
-  const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  
+  // Calculate days spanning based on unique calendar days
+  const uniqueDays = new Set(bgSamples.map(s => {
+    const d = new Date(s.date);
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  }));
+  
+  const days = uniqueDays.size;
+  
+  // Add debugging for date range calculation
+  console.log('[getDateRange] Date calculation:', {
+    sampleCount: bgSamples.length,
+    firstTimestamp: dates[0],
+    lastTimestamp: dates[dates.length - 1],
+    startDate: start.toISOString(),
+    endDate: end.toISOString(),
+    timeDiffMs: end.getTime() - start.getTime(),
+    timeDiffDays: (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
+    uniqueCalendarDays: days,
+    uniqueDaysList: Array.from(uniqueDays).sort()
+  });
   
   return { start, end, days };
 };

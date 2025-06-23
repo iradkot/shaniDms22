@@ -67,9 +67,18 @@ export const validateBgSamples = (bgSamples: BgSample[]): ValidationResult => {
   if (dataQuality === 'poor') {
     warnings.push('Limited data coverage may affect AGP accuracy');
   }
-  
-  // Check time span
+    // Check time span
   const timeSpan = getTimeSpanDays(validSamples);
+  console.log('[validateBgSamples] Time span analysis:', {
+    originalSampleCount: bgSamples.length,
+    validSampleCount: validSamples.length,
+    invalidCount,
+    timeSpanDays: timeSpan,
+    minRequiredDays: AGP_VALIDATION.minDays,
+    firstSample: validSamples.length > 0 ? new Date(validSamples[0].date).toISOString() : null,
+    lastSample: validSamples.length > 0 ? new Date(validSamples[validSamples.length - 1].date).toISOString() : null
+  });
+  
   if (timeSpan < AGP_VALIDATION.minDays) {
     errors.push(`Insufficient time coverage. Need at least ${AGP_VALIDATION.minDays} day(s), got ${timeSpan.toFixed(1)} day(s)`);
   }
@@ -116,7 +125,20 @@ export const getTimeSpanDays = (bgSamples: BgSample[]): number => {
   const firstDate = dates[0];
   const lastDate = dates[dates.length - 1];
   
-  return (lastDate - firstDate) / (1000 * 60 * 60 * 24);
+  const spanDays = (lastDate - firstDate) / (1000 * 60 * 60 * 24);
+  
+  // Add debugging
+  console.log('[getTimeSpanDays] Time span calculation:', {
+    sampleCount: bgSamples.length,
+    firstTimestamp: firstDate,
+    lastTimestamp: lastDate,
+    firstDate: new Date(firstDate).toISOString(),
+    lastDate: new Date(lastDate).toISOString(),
+    timeDiffMs: lastDate - firstDate,
+    calculatedSpanDays: spanDays
+  });
+  
+  return spanDays;
 };
 
 /**

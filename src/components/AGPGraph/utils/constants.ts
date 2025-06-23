@@ -55,15 +55,14 @@ export const AGP_DEFAULT_CONFIG = {
   intervalMinutes: 5,           // 5-minute intervals
   minReadingsPerInterval: 3,    // Minimum 3 readings per interval
   smoothing: true,              // Apply smoothing
-  targetRange: { min: 70, max: 180 }, // Standard target range
-    // Chart dimensions
+  targetRange: { min: 70, max: 180 }, // Standard target range  // Chart dimensions - optimized for better width utilization
   defaultWidth: 350,
   defaultHeight: 250,
   margin: {
-    top: 10,
-    right: 10,
-    bottom: 30,
-    left: 45
+    top: 20,
+    right: 15,   // Reduced from 20
+    bottom: 50,  // More space for X-axis labels
+    left: 50     // Reduced from 70 for better width utilization
   }
 };
 
@@ -71,11 +70,10 @@ export const AGP_DEFAULT_CONFIG = {
  * Time axis configuration (24-hour format)
  */
 export const AGP_TIME_CONFIG = {
-  tickInterval: 120,        // Major ticks every 2 hours (120 minutes)
-  minorTickInterval: 60,    // Minor ticks every hour
+  tickInterval: 240,        // Major ticks every 4 hours (240 minutes) for cleaner display
+  minorTickInterval: 120,   // Minor ticks every 2 hours
   timeLabels: [
-    '12 AM', '2 AM', '4 AM', '6 AM', '8 AM', '10 AM',
-    '12 PM', '2 PM', '4 PM', '6 PM', '8 PM', '10 PM'
+    '12 AM', '4 AM', '8 AM', '12 PM', '4 PM', '8 PM'
   ],
   totalMinutes: 1440        // 24 hours = 1440 minutes
 };
