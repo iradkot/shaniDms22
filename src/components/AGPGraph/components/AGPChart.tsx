@@ -13,15 +13,10 @@ import {
   useTargetRangeArea
 } from '../hooks/useChartConfig';
 import { AGP_COLORS } from '../utils/constants';
+import { CHART_COLORS } from 'app/components/shared/GlucoseChart';
 import {
-  ChartBackground,
-  ChartGrid,
-  ChartGradients,
-  ChartAxes,
-  ChartBorder,
-  TargetRange,
-  PercentileBands,
-  PercentileLines
+  ChartFoundation,
+  ChartData
 } from './chart';
 
 interface AGPChartProps {
@@ -84,8 +79,6 @@ const AGPChart: React.FC<AGPChartProps> = ({
       height
     }}>      
     <Svg width={width} height={height}>
-        <ChartGradients />
-        
         <G>
           {gridLines.major.map(glucose => {
             const yPos = yScale(glucose) + margin.top;
@@ -97,7 +90,7 @@ const AGPChart: React.FC<AGPChartProps> = ({
                 textAnchor="end"
                 alignmentBaseline="middle"
                 fontSize={11}
-                fill="#666666"
+                fill={CHART_COLORS.text}
                 fontWeight="500"
               >
                 {glucose}
@@ -106,57 +99,28 @@ const AGPChart: React.FC<AGPChartProps> = ({
           })}
         </G>
         
-        <G transform={`translate(${margin.left}, ${margin.top})`}>
-          <ChartBackground 
-            width={chartWidth} 
-            height={chartHeight} 
-          />
-          
-          {showTargetRange && (
-            <TargetRange
-              targetRangeArea={targetRangeArea}
-              targetRange={targetRange}
-              yScale={yScale}
-              chartWidth={chartWidth}
-            />
-          )}
-          
-          {showGrid && (
-            <ChartGrid
-              gridLines={gridLines}
-              timePoints={chartConfig.timePoints}
-              xScale={xScale}
-              yScale={yScale}
-              chartWidth={chartWidth}
-              chartHeight={chartHeight}
-            />
-          )}
-            <PercentileBands 
-            percentileBands={percentileBands}
-            agpData={agpData}
-          />
-          
-          <PercentileLines 
-            percentileLines={percentileLines} 
-            agpData={agpData}
-          />
-            <ChartAxes
+        <G transform={`translate(${margin.left}, ${margin.top})`}>          
+            <ChartFoundation
+            width={chartWidth}
+            height={chartHeight}
             gridLines={gridLines}
-            timeLabels={timeLabels}
             timePoints={chartConfig.timePoints}
+            timeLabels={timeLabels}
             xScale={xScale}
             yScale={yScale}
-            chartHeight={chartHeight}
+            showGrid={showGrid}
+          />
+            <ChartData
+            targetRangeArea={targetRangeArea}
+            targetRange={targetRange}
+            percentileLines={percentileLines}
+            percentileBands={percentileBands}
+            yScale={yScale}
             chartWidth={chartWidth}
+            agpData={agpData}
+            showTargetRange={showTargetRange}
           />
         </G>
-        
-        <ChartBorder
-          x={margin.left}
-          y={margin.top}
-          width={chartWidth}
-          height={chartHeight}
-        />
       </Svg>
     </View>
   );

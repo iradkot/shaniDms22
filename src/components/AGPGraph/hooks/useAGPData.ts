@@ -11,7 +11,7 @@ import {
   getDateRange
 } from '../utils/percentile.utils';
 import { calculateAGPStatistics } from '../utils/statistics.utils';
-import { validateBgSamples } from '../utils/validation.utils';
+import { validateBgSamples } from 'app/components/shared/GlucoseChart';
 import { AGP_DEFAULT_CONFIG } from '../utils/constants';
 
 /**

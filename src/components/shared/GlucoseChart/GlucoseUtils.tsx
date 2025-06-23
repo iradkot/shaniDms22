@@ -31,19 +31,19 @@ export const validateBgSamples = (bgSamples: BgSample[]): {
   errors: string[];
   warnings: string[];
   validSamples: BgSample[];
+  dataQuality: 'excellent' | 'good' | 'fair' | 'poor';
 } => {
   const errors: string[] = [];
   const warnings: string[] = [];
-  
-  // Check if data exists
+    // Check if data exists
   if (!bgSamples || !Array.isArray(bgSamples)) {
     errors.push('No glucose data provided');
-    return { isValid: false, errors, warnings, validSamples: [] };
+    return { isValid: false, errors, warnings, validSamples: [], dataQuality: 'poor' };
   }
   
   if (bgSamples.length === 0) {
     errors.push('Empty glucose data array');
-    return { isValid: false, errors, warnings, validSamples: [] };
+    return { isValid: false, errors, warnings, validSamples: [], dataQuality: 'poor' };
   }
   
   // Filter valid samples
@@ -72,9 +72,26 @@ export const validateBgSamples = (bgSamples: BgSample[]): {
   if (validSamples.length > 0) {
     const dates = validSamples.map(s => new Date(s.date).getTime()).sort();
     const spanDays = (dates[dates.length - 1] - dates[0]) / (1000 * 60 * 60 * 24);
-    
-    if (spanDays < GLUCOSE_VALIDATION.minDays) {
+      if (spanDays < GLUCOSE_VALIDATION.minDays) {
       warnings.push(`Data span is only ${spanDays.toFixed(1)} days`);
+    }
+  }
+  
+  // Calculate data quality based on valid sample percentage and span
+  let dataQuality: 'excellent' | 'good' | 'fair' | 'poor' = 'poor';
+  if (validSamples.length > 0) {
+    const validPercentage = (validSamples.length / bgSamples.length) * 100;
+    const dates = validSamples.map(s => new Date(s.date).getTime()).sort();
+    const spanDays = dates.length > 1 ? (dates[dates.length - 1] - dates[0]) / (1000 * 60 * 60 * 24) : 0;
+    
+    if (validPercentage >= 95 && spanDays >= 7) {
+      dataQuality = 'excellent';
+    } else if (validPercentage >= 85 && spanDays >= 3) {
+      dataQuality = 'good';
+    } else if (validPercentage >= 70 && spanDays >= 1) {
+      dataQuality = 'fair';
+    } else {
+      dataQuality = 'poor';
     }
   }
   
@@ -82,7 +99,8 @@ export const validateBgSamples = (bgSamples: BgSample[]): {
     isValid: errors.length === 0,
     errors,
     warnings,
-    validSamples
+    validSamples,
+    dataQuality
   };
 };
 

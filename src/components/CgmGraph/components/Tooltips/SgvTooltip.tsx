@@ -1,6 +1,5 @@
 import React from 'react';
-import {Rect, Text} from 'react-native-svg';
-import Tooltip from './Tooltip';
+import {G, Rect, Text} from 'react-native-svg';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {BgSample} from 'app/types/day_bgs.types';
 import {ThemeType} from 'app/types/theme';
@@ -12,9 +11,10 @@ interface SgvTooltipProps {
   x: number;
   y: number;
   bgSample: BgSample;
+  chartWidth?: number; // Add chart width for proper bounds checking
 }
 
-const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
+const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample, chartWidth = 350}) => {
   const theme = useTheme() as ThemeType;
 
   const tooltipWidth = 160;
@@ -22,17 +22,16 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
   let tooltipX = x - tooltipWidth / 2;
 
   const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
-
   tooltipX = Math.max(0, tooltipX);
-  if (tooltipX + tooltipWidth > window.innerWidth) {
-    tooltipX = window.innerWidth - tooltipWidth;
+  if (tooltipX + tooltipWidth > chartWidth) {
+    tooltipX = chartWidth - tooltipWidth;
   }
   // Use theme colors for tooltip styling
   const shadowColor = CHART_COLORS.textSecondary;
   const shadowOffset = 0.5;
-
   return (
-    <Tooltip x={tooltipX} y={y}>      <Rect
+    <G x={tooltipX - tooltipWidth / 2} y={y - tooltipHeight - 10}>      
+    <Rect
         width={tooltipWidth}
         height={tooltipHeight}
         fill={CHART_COLORS.background}
@@ -50,7 +49,6 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
         textAnchor="start">
         BG: {`${bgSample.sgv} mg/dL`}
       </Text>
-      {/* Glucose value text */}
       <Text
         x={20}
         y={20}
@@ -70,7 +68,7 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
         textAnchor="start">
         Time: {formatDateToLocaleTimeString(bgSample.date)}
       </Text>
-    </Tooltip>
+    </G>
   );
 };
 

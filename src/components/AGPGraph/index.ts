@@ -37,7 +37,8 @@ export {
   calculateGMI,
   calculateCV
 } from './utils/statistics.utils';
-export { validateBgSamples } from './utils/validation.utils';
+// Validation utilities now come from shared components
+export { validateBgSamples } from 'app/components/shared/GlucoseChart';
 
 // Constants
 export {

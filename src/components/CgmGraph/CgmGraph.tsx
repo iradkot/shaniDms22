@@ -8,13 +8,12 @@ import YGridAndAxis from './components/YGridAndAxis';
 import CGMSamplesRenderer from './components/CGMSamplesRenderer';
 import GraphDateDisplay from './components/GraphDateDisplay';
 import FoodItemsRenderer from './components/Food/FoodItemsRenderer';
-import Tooltip from './components/Tooltips/Tooltip';
 import {
   GraphStyleContext,
   useGraphStyleContext,
 } from './contextStores/GraphStyleContext';
 import {TouchProvider, useTouchContext} from './contextStores/TouchContext';
-import {formattedFoodItemDTO} from 'app/types/food.types';
+import {FormattedFoodItemDTO} from 'app/types/food.types';
 import {findClosestBgSample} from 'app/components/CgmGraph/utils';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import SgvTooltip from 'app/components/CgmGraph/components/Tooltips/SgvTooltip';
@@ -23,7 +22,7 @@ import { CHART_COLORS, CHART_OPACITY } from 'app/components/shared/GlucoseChart'
 
 interface Props {
   bgSamples: BgSample[];
-  foodItems: formattedFoodItemDTO[] | null;
+  foodItems: FormattedFoodItemDTO[] | null;
   width: number;
   height: number;
 }
@@ -89,7 +88,8 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
             />
             <XGridAndAxis />
             <YGridAndAxis highestBgThreshold={300} />
-            <FoodItemsRenderer foodItems={foodItems} />            {isTouchActive && closestBgSample && (
+            <FoodItemsRenderer foodItems={foodItems} />
+            {isTouchActive && closestBgSample && (
               <>
                 <Line
                   x1={xTouchPosition}
