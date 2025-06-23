@@ -1,52 +1,23 @@
 // AGP Constants and Configuration
+// Updated to use shared glucose chart theme
 
 import { AGPRanges } from '../types/agp.types';
+import { 
+  GLUCOSE_RANGES, 
+  CHART_COLORS, 
+  PERCENTILE_COLORS,
+  GLUCOSE_GRID as SHARED_GLUCOSE_GRID 
+} from 'app/components/shared/GlucoseChart';
 
 /**
- * Standard AGP glucose ranges (mg/dL) following medical guidelines
+ * Standard AGP glucose ranges - now using shared theme colors
  */
-export const AGP_GLUCOSE_RANGES: AGPRanges = {
-  veryLow: {
-    min: 0,
-    max: 54,
-    color: '#8B0000', // Dark red
-    label: 'Very Low (<54)'
-  },
-  low: {
-    min: 54,
-    max: 69,
-    color: '#FF4444', // Red
-    label: 'Low (54-69)'
-  },
-  target: {
-    min: 70,
-    max: 180,
-    color: '#4CAF50', // Green
-    label: 'Target (70-180)'
-  },
-  high: {
-    min: 181,
-    max: 250,
-    color: '#FFA726', // Orange
-    label: 'High (181-250)'
-  },
-  veryHigh: {
-    min: 251,
-    max: 999,
-    color: '#FF5722', // Deep orange/red
-    label: 'Very High (>250)'
-  }
-};
+export const AGP_GLUCOSE_RANGES: AGPRanges = GLUCOSE_RANGES;
 
 /**
- * AGP Percentile colors with opacity
+ * AGP Percentile colors - now using shared theme
  */
-export const AGP_PERCENTILE_COLORS = {
-  p5_p95: 'rgba(158, 158, 158, 0.3)',   // Light gray with transparency
-  p25_p75: 'rgba(78, 78, 78, 0.4)',     // Darker gray with transparency
-  median: '#2196F3',                     // Blue for median line
-  target: 'rgba(76, 175, 80, 0.2)'      // Light green for target range
-};
+export const AGP_PERCENTILE_COLORS = PERCENTILE_COLORS;
 
 /**
  * Default AGP processing configuration
@@ -78,14 +49,14 @@ export const AGP_TIME_CONFIG = {
 };
 
 /**
- * Y-axis glucose levels for grid lines
+ * Y-axis glucose levels for grid lines - now using shared grid
  */
-export const AGP_GLUCOSE_GRID = {
-  major: [40, 70, 100, 140, 180, 250, 300], // Major grid lines
-  minor: [60, 80, 120, 160, 200, 220],      // Minor grid lines
-  yAxisMax: 350,                             // Maximum Y value
-  yAxisMin: 30                               // Minimum Y value
-};
+export const AGP_GLUCOSE_GRID = SHARED_GLUCOSE_GRID;
+
+/**
+ * Colors for different elements - now using shared theme
+ */
+export const AGP_COLORS = CHART_COLORS;
 
 /**
  * AGP Statistics formatting
@@ -102,18 +73,6 @@ export const AGP_STATS_FORMAT = {
  * Percentiles to calculate and display
  */
 export const AGP_PERCENTILES = [5, 25, 50, 75, 95] as const;
-
-/**
- * Colors for different elements
- */
-export const AGP_COLORS = {
-  background: '#FFFFFF',
-  gridMajor: '#D0D0D0',
-  gridMinor: '#E8E8E8',
-  text: '#333333',
-  textSecondary: '#666666',
-  border: '#BBBBBB'
-};
 
 /**
  * Animation configuration

@@ -19,6 +19,7 @@ import {findClosestBgSample} from 'app/components/CgmGraph/utils';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import SgvTooltip from 'app/components/CgmGraph/components/Tooltips/SgvTooltip';
 import {useClosestBgSample} from 'app/components/CgmGraph/hooks/useClosestBgSample';
+import { CHART_COLORS, CHART_OPACITY } from 'app/components/shared/GlucoseChart';
 
 interface Props {
   bgSamples: BgSample[];
@@ -88,26 +89,25 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
             />
             <XGridAndAxis />
             <YGridAndAxis highestBgThreshold={300} />
-            <FoodItemsRenderer foodItems={foodItems} />
-            {isTouchActive && closestBgSample && (
+            <FoodItemsRenderer foodItems={foodItems} />            {isTouchActive && closestBgSample && (
               <>
                 <Line
                   x1={xTouchPosition}
                   y1="0"
                   x2={xTouchPosition}
                   y2={height}
-                  stroke="black"
+                  stroke={CHART_COLORS.textSecondary}
                   strokeWidth={1}
-                  opacity={0.2}
+                  opacity={CHART_OPACITY.light}
                 />
                 <Line
                   x1="0"
                   y1={yTouchPosition}
                   x2={width}
                   y2={yTouchPosition}
-                  stroke="grey"
+                  stroke={CHART_COLORS.textSecondary}
                   strokeWidth={1}
-                  opacity={0.5}
+                  opacity={CHART_OPACITY.medium}
                 />
                 <SgvTooltip
                   x={xTouchPosition}

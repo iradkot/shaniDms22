@@ -2,7 +2,6 @@
 
 export { default } from './AGPGraph';
 export { default as AGPGraph } from './AGPGraph';
-export { default as EnhancedAGPGraph } from './EnhancedAGPGraph';
 export { default as AGPSummary } from './components/AGPSummary';
 
 // Components

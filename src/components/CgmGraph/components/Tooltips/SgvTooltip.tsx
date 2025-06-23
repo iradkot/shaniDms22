@@ -6,6 +6,7 @@ import {BgSample} from 'app/types/day_bgs.types';
 import {ThemeType} from 'app/types/theme';
 import {determineBgColorByGlucoseValue} from 'app/style/styling.utils';
 import {useTheme} from 'styled-components/native';
+import { CHART_COLORS, CHART_OPACITY } from 'app/components/shared/GlucoseChart';
 
 interface SgvTooltipProps {
   x: number;
@@ -26,18 +27,16 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
   if (tooltipX + tooltipWidth > window.innerWidth) {
     tooltipX = window.innerWidth - tooltipWidth;
   }
-
-  // More subtle shadow settings
-  const shadowColor = '#676767'; // Slightly darker shadow for subtlety
-  const shadowOffset = 0.5; // Reduced offset for a minimalistic look
+  // Use theme colors for tooltip styling
+  const shadowColor = CHART_COLORS.textSecondary;
+  const shadowOffset = 0.5;
 
   return (
-    <Tooltip x={tooltipX} y={y}>
-      <Rect
+    <Tooltip x={tooltipX} y={y}>      <Rect
         width={tooltipWidth}
         height={tooltipHeight}
-        fill="#f0f0f0"
-        stroke="#cccccc"
+        fill={CHART_COLORS.background}
+        stroke={CHART_COLORS.border}
         strokeWidth={1}
         rx={8}
       />
