@@ -90,15 +90,10 @@ const AGPChart: React.FC<AGPChartProps> = ({
               chartHeight={chartHeight}
             />
           )}
-            <PercentileBands 
-            percentileBands={percentileBands}
-            agpData={agpData}
-          />
           
-          <PercentileLines 
-            percentileLines={percentileLines} 
-            agpData={agpData}
-          />
+          <PercentileBands percentileBands={percentileBands} />
+          
+          <PercentileLines percentileLines={percentileLines} />
           
           <ChartAxes
             gridLines={gridLines}

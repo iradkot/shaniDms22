@@ -9,7 +9,7 @@ import { MetricType, DateRange } from '../types/trends.types';
 // Components
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
-// import AGPGraph, { EnhancedAGPGraph } from 'app/components/AGPGraph';
+import AGPGraph, { EnhancedAGPGraph } from 'app/components/AGPGraph';
 import Collapsable from 'app/components/Collapsable';
 import { DayInsights } from '../TrendsUI';
 import { CompareSection } from './CompareSection';
@@ -69,20 +69,28 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
       <View style={{ marginBottom: 15 }}>
         <SectionTitle>Quick Stats</SectionTitle>
         <StatsRow bgData={bgData} />
-      </View>      
+      </View>        
       {/* (c) AGP Graph - Ambulatory Glucose Profile */}
-      {/*
       <Collapsable title="Ambulatory Glucose Profile (AGP)">
-        <AGPGraph bgData={bgData} />
+        <AGPGraph 
+          bgData={bgData} 
+          showStatistics={false}
+          showLegend={false}
+          width={320}
+          height={200}
+        />
       </Collapsable>
-      */}
 
       {/* (d) Enhanced AGP Graph with Statistics */}
-      {/*
       <Collapsable title="Enhanced AGP Analysis">
-        <EnhancedAGPGraph bgData={bgData} />
+        <EnhancedAGPGraph 
+          bgData={bgData}
+          showStatistics={true}
+          showLegend={true}
+          width={320}
+          height={220}
+        />
       </Collapsable>
-      */}
 
       {/* (e) Best/Worst Day Selection */}
       <Collapsable title="Select Metric for Best/Worst Day">
