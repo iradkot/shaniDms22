@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { View, Text } from 'react-native';
-import Svg, { G } from 'react-native-svg';
+import Svg, { G, Text as SvgText } from 'react-native-svg';
 import { AGPData } from '../types/agp.types';
 import { 
   useChartConfig, 
@@ -82,9 +82,29 @@ const AGPChart: React.FC<AGPChartProps> = ({
     <View style={{ 
       width, 
       height
-    }}>
-      <Svg width={width} height={height}>
+    }}>      
+    <Svg width={width} height={height}>
         <ChartGradients />
+        
+        <G>
+          {gridLines.major.map(glucose => {
+            const yPos = yScale(glucose) + margin.top;
+            return (
+              <SvgText
+                key={`ylabel-${glucose}`}
+                x={margin.left - 10}
+                y={yPos}
+                textAnchor="end"
+                alignmentBaseline="middle"
+                fontSize={11}
+                fill="#666666"
+                fontWeight="500"
+              >
+                {glucose}
+              </SvgText>
+            );
+          })}
+        </G>
         
         <G transform={`translate(${margin.left}, ${margin.top})`}>
           <ChartBackground 

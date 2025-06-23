@@ -9,7 +9,7 @@ import { MetricType, DateRange } from '../types/trends.types';
 // Components
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
-import AGPGraph, { AGPSummary } from 'app/components/AGPGraph';
+import { AGPSummary } from 'app/components/AGPGraph';
 import Collapsable from 'app/components/Collapsable';
 import { DayInsights } from '../TrendsUI';
 import { CompareSection } from './CompareSection';
@@ -86,20 +86,7 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
         <StatsRow bgData={bgData} />
       </View>                  
       {/* (c) AGP Graph - Ambulatory Glucose Profile */}
-      <Collapsable title="Ambulatory Glucose Profile (AGP)">
-        <View style={{ 
-          alignItems: 'center', 
-          paddingHorizontal: 5
-        }}>
-          <AGPGraph 
-            bgData={bgData} 
-            showStatistics={false}
-            showLegend={false}
-            width={chartWidth}
-            height={chartHeight}
-          />
-        </View>
-      </Collapsable>     
+         
       <View style={{ marginTop: 15, marginBottom: 15 }}>
         <SectionTitle>AGP Analytics & Statistics</SectionTitle>
         <View style={{ 
