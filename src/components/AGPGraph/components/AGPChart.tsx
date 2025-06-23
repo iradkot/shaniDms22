@@ -18,6 +18,7 @@ import {
   ChartFoundation,
   ChartData
 } from './chart';
+import { AGPTouchOverlay } from './AGPTouchOverlay';
 
 interface AGPChartProps {
   agpData: AGPData;
@@ -26,6 +27,7 @@ interface AGPChartProps {
   showGrid?: boolean;
   showTargetRange?: boolean;
   targetRange?: { min: number; max: number };
+  showTooltip?: boolean;
 }
 
 const AGPChart: React.FC<AGPChartProps> = ({
@@ -34,7 +36,8 @@ const AGPChart: React.FC<AGPChartProps> = ({
   height = 250,
   showGrid = true,
   showTargetRange = true,
-  targetRange = { min: 70, max: 180 }
+  targetRange = { min: 70, max: 180 },
+  showTooltip = true
 }) => {
   const chartConfig = useChartConfig({ width, height, agpData });
   const timeLabels = useTimeAxisLabels(chartConfig);
@@ -72,36 +75,71 @@ const AGPChart: React.FC<AGPChartProps> = ({
     totalHeight: height,
     margin,
     actualChartWidth: chartWidth,
-    actualChartHeight: chartHeight
-  });  return (
+    actualChartHeight: chartHeight  });  return (
     <View style={{ 
       width, 
       height
-    }}>      
-    <Svg width={width} height={height}>
-        <G transform={`translate(${margin.left}, ${margin.top})`}>          
+    }}>
+      {showTooltip ? (
+        <AGPTouchOverlay
+          chartWidth={chartWidth}
+          chartHeight={chartHeight}
+          marginLeft={margin.left}
+          marginTop={margin.top}
+          percentileData={agpData.percentiles}
+          xScale={xScale}
+        >
+          <Svg width={width} height={height}>
+            <G transform={`translate(${margin.left}, ${margin.top})`}>          
+              <ChartFoundation
+                width={chartWidth}
+                height={chartHeight}
+                gridLines={gridLines}
+                timePoints={chartConfig.timePoints}
+                timeLabels={timeLabels}
+                xScale={xScale}
+                yScale={yScale}
+                showGrid={showGrid}
+              />
+              <ChartData
+                targetRangeArea={targetRangeArea}
+                targetRange={targetRange}
+                percentileLines={percentileLines}
+                percentileBands={percentileBands}
+                yScale={yScale}
+                chartWidth={chartWidth}
+                agpData={agpData}
+                showTargetRange={showTargetRange}
+              />
+            </G>
+          </Svg>
+        </AGPTouchOverlay>
+      ) : (
+        <Svg width={width} height={height}>
+          <G transform={`translate(${margin.left}, ${margin.top})`}>          
             <ChartFoundation
-            width={chartWidth}
-            height={chartHeight}
-            gridLines={gridLines}
-            timePoints={chartConfig.timePoints}
-            timeLabels={timeLabels}
-            xScale={xScale}
-            yScale={yScale}
-            showGrid={showGrid}
-          />
+              width={chartWidth}
+              height={chartHeight}
+              gridLines={gridLines}
+              timePoints={chartConfig.timePoints}
+              timeLabels={timeLabels}
+              xScale={xScale}
+              yScale={yScale}
+              showGrid={showGrid}
+            />
             <ChartData
-            targetRangeArea={targetRangeArea}
-            targetRange={targetRange}
-            percentileLines={percentileLines}
-            percentileBands={percentileBands}
-            yScale={yScale}
-            chartWidth={chartWidth}
-            agpData={agpData}
-            showTargetRange={showTargetRange}
-          />
-        </G>
-      </Svg>
+              targetRangeArea={targetRangeArea}
+              targetRange={targetRange}
+              percentileLines={percentileLines}
+              percentileBands={percentileBands}
+              yScale={yScale}
+              chartWidth={chartWidth}
+              agpData={agpData}
+              showTargetRange={showTargetRange}
+            />
+          </G>
+        </Svg>
+      )}
     </View>
   );
 };

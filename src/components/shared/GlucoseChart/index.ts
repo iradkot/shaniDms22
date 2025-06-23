@@ -7,6 +7,7 @@ export {
   PERCENTILE_COLORS,
   CHART_OPACITY,
   GLUCOSE_GRID,
+  TOOLTIP_STYLES,
   withOpacity,
   getGlucoseRangeColor 
 } from './GlucoseTheme';

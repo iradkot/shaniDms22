@@ -118,3 +118,20 @@ export const GLUCOSE_GRID = {
   yAxisMax: 350,                             // Maximum Y value
   yAxisMin: 30                               // Minimum Y value
 };
+
+/**
+ * Tooltip styling for glucose charts
+ * Used by AGP and CGM tooltips
+ */
+export const TOOLTIP_STYLES = {
+  backgroundColor: colors.gray[900],          // Dark background
+  borderColor: colors.gray[700],              // Subtle border
+  textColor: colors.white,                    // White text
+  shadowColor: colors.black,                  // Drop shadow
+  borderRadius: 8,                            // Rounded corners
+  padding: 12,                                // Internal spacing
+  maxWidth: 220,                              // Maximum width
+  fontSize: 12,                               // Text size
+  lineHeight: 16,                             // Line spacing
+  backdropOpacity: 0.3                       // Background overlay
+};
