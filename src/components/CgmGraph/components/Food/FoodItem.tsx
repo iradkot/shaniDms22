@@ -5,7 +5,7 @@ import {Text, Rect} from 'react-native-svg';
 // Import statements for other dependencies
 import React, {useContext, useState} from 'react';
 import styled, {useTheme} from 'styled-components/native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons as Icon } from '@expo/vector-icons';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 // Adjusted import for XTick if it's an SVG-based component or ensure correct prop forwarding if custom
 import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';

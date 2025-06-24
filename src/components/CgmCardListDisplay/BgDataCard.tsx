@@ -3,7 +3,7 @@ import styled, {useTheme} from 'styled-components/native';
 import DirectionArrows from 'app/components/DirectionArrows';
 import {BgSample} from 'app/types/day_bgs.types';
 import {ThemeType} from 'app/types/theme';
-import DropShadow from 'react-native-drop-shadow';
+import { BoxShadow as DropShadow } from 'expo-react-native-shadow';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import BgGradient from 'app/components/BgGradient';
 import {FlexAlignType} from 'react-native';

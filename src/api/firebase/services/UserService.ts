@@ -1,8 +1,8 @@
 // UserService.ts
-import { getApp } from '@react-native-firebase/app';
-import { getFirestore, FieldValue } from '@react-native-firebase/firestore';
-import messaging from '@react-native-firebase/messaging';
-import { getAuth } from '@react-native-firebase/auth';
+import { firebaseApp } from 'app/firebase';
+import { getFirestore, FieldValue, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { getMessaging, getToken } from 'firebase/messaging';
 import {FSUser} from 'app/types/user.types';
 
 export class UserService {
@@ -18,16 +18,14 @@ export class UserService {
    */
   async getCurrentUserFSData(): Promise<FSUser | null> {
     try {
-      const firebaseUser = getAuth(getApp()).currentUser;
+      const firebaseUser = getAuth(firebaseApp).currentUser;
       if (!firebaseUser) return null;
 
       const userId = firebaseUser.uid;
-      const userDoc = await getFirestore(getApp())
-        .collection('users')
-        .doc(userId)
-        .get();
+      const userDocRef = doc(getFirestore(firebaseApp), 'users', userId);
+      const userDoc = await getDoc(userDocRef);
 
-      const phoneToken = await messaging().getToken();
+      const phoneToken = await getToken(getMessaging(firebaseApp));
       const email = firebaseUser.email ?? ''; // Assuming you'd want to use an empty string if email is null or undefined
 
       if (userDoc.exists) {
@@ -42,11 +40,7 @@ export class UserService {
         // User does not exist, so we attempt to create a new user record.
         await this.createUserFSData(userId, phoneToken, email);
 
-        // Fetch the newly created user data.
-        const newUserDoc = await getFirestore(getApp())
-          .collection('users')
-          .doc(userId)
-          .get();
+        const newUserDoc = await getDoc(doc(getFirestore(firebaseApp), 'users', userId));
         return newUserDoc.data() as FSUser;
       }
     } catch (error) {
@@ -62,13 +56,10 @@ export class UserService {
    */
   async updateUserPhoneToken(userId: string, phoneToken: string) {
     try {
-      await getFirestore(getApp())
-        .collection('users')
-        .doc(userId)
-        .update({
-          phoneToken,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
+      await updateDoc(doc(getFirestore(firebaseApp), 'users', userId), {
+        phoneToken,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     } catch (error) {
       console.error('Failed to update user phone token in Firestore:', error);
       // Handle the error as per your application's requirements
@@ -83,15 +74,12 @@ export class UserService {
    */
   async createUserFSData(userId: string, phoneToken: string, email: string) {
     try {
-      await getFirestore(getApp())
-        .collection('users')
-        .doc(userId)
-        .set({
-          userId,
-          createdAt: FieldValue.serverTimestamp(),
-          phoneToken,
-          email,
-        });
+      await setDoc(doc(getFirestore(firebaseApp), 'users', userId), {
+        userId,
+        createdAt: FieldValue.serverTimestamp(),
+        phoneToken,
+        email,
+      });
     } catch (error) {
       console.error('Failed to create user data in Firestore:', error);
       // Handle the error as per your application's requirements

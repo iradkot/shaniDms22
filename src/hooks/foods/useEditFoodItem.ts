@@ -3,11 +3,11 @@ import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import {FoodItemDTO} from 'app/types/food.types';
 import {useGetUser} from 'app/hooks/useGetUser';
-import {PhotoFile} from 'react-native-vision-camera';
+import { CameraCapturedPicture } from 'expo-camera';
 import {imagePathToUri} from 'app/utils/image.utils';
 
 export interface EditFoodItem extends Omit<FoodItemDTO, 'image'> {
-  image: PhotoFile;
+  image: CameraCapturedPicture;
 }
 
 export const useEditFoodItem: () => {

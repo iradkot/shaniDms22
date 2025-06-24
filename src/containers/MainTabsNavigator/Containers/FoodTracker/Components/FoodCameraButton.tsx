@@ -3,7 +3,7 @@ import {View, Text} from 'react-native';
 import styled from 'styled-components/native';
 import {ADD_FOOD_ITEM_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {NavigationProp} from '@react-navigation/native';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 import {Theme} from 'app/types/theme';
 import Button from 'app/components/Button/Button';
 import {formattedFoodItemDTO} from 'app/types/food.types';
