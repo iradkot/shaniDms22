@@ -3,7 +3,7 @@ import {formatDateToDateAndTimeString} from 'app/utils/datetime.utils';
 import React, {useState} from 'react';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import styled from 'styled-components/native';
-import DropShadow from 'react-native-drop-shadow';
+import { BoxShadow as DropShadow } from 'expo-react-native-shadow';
 import {addOpacity} from 'app/style/styling.utils';
 
 interface Props {

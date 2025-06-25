@@ -1,6 +1,6 @@
 import React, {FC} from 'react';
 import {Alert, Pressable, View} from 'react-native';
-import Icon from 'react-native-vector-icons/FontAwesome';
+import { FontAwesome as Icon } from '@expo/vector-icons';
 import {useToggleNotification} from 'app/hooks/notifications/useToggleNotification';
 import {NotificationResponse} from 'app/types/notifications';
 import {formatMinutesToLocaleTimeString} from 'app/utils/datetime.utils';

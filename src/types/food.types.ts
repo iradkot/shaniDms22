@@ -1,6 +1,6 @@
 // src/types/food.types.ts
 
-import {PhotoFile} from 'react-native-vision-camera';
+import { CameraCapturedPicture } from 'expo-camera';
 import {CommonFormattedEvent} from 'app/types/commonEvent.types';
 import {KeyboardType, ReturnKeyType, TextInput} from 'react-native';
 
@@ -27,7 +27,7 @@ export interface GroupedMeal {
 }
 
 export interface AddFoodItem extends Omit<FoodItemDTO, 'id' | 'image'> {
-  image: PhotoFile;
+  image: CameraCapturedPicture;
 }
 
 export interface FoodItemFormProps {

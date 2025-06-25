@@ -1,7 +1,7 @@
 import React, {FC, useEffect, useRef} from 'react';
 import {Animated, Easing} from 'react-native';
 import styled, {useTheme} from 'styled-components/native';
-import MAIcon from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons as MAIcon } from '@expo/vector-icons';
 import {theme} from 'app/style/theme';
 import {ThemeTypes} from 'app/style/theme.types';
 

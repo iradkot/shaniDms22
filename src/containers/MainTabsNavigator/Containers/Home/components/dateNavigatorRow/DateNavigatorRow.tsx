@@ -1,6 +1,6 @@
 import React, {FC, useState} from 'react';
-import Icon from 'react-native-vector-icons/Ionicons';
-import LinearGradient from 'react-native-linear-gradient';
+import { Ionicons as Icon } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import {ButtonContainer, Container, DateButton, DateText, IconContainer,} from './DateNavigatorRow.style';
 import LoadingIcon from '../../../../../../components/LoadingIcon';

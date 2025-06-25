@@ -1,12 +1,12 @@
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 import React, {useEffect, useRef, useState} from 'react';
-import {Text} from 'react-native';
-import {Camera, PhotoFile, useCameraDevices} from 'react-native-vision-camera';
+import { Text } from 'react-native';
+import { Camera, CameraType, CameraCapturedPicture } from 'expo-camera';
 import styled from 'styled-components/native';
 import {RouteProp, useNavigation, useRoute} from '@react-navigation/native';
 
 type CameraScreenNavigationProp = RouteProp<{
-  CameraScreen: {onTakePhoto: (photo: PhotoFile | undefined) => void};
+  CameraScreen: { onTakePhoto: (photo: CameraCapturedPicture | undefined) => void };
 }>;
 
 type Props = {
@@ -14,8 +14,6 @@ type Props = {
 };
 
 const CameraScreen: React.FC<Props> = () => {
-  const devices = useCameraDevices();
-  const device: any = devices.back;
   const camera = useRef<Camera>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState(false);
   const navigation = useNavigation();
@@ -50,7 +48,7 @@ const CameraScreen: React.FC<Props> = () => {
     getCameraPermission();
   }, []);
 
-  if (hasCameraPermission === null || !device) {
+  if (hasCameraPermission === null) {
     return <Text>No permission or not supported device</Text>;
   }
   if (hasCameraPermission === false) {
@@ -58,9 +56,7 @@ const CameraScreen: React.FC<Props> = () => {
   }
 
   const takePicture = async () => {
-    const photo = await camera?.current?.takePhoto({
-      flash: 'on',
-    });
+    const photo = await camera.current?.takePictureAsync({ quality: 0.8 });
     onTakePhoto && onTakePhoto(photo);
     navigation.goBack();
   };
@@ -69,10 +65,8 @@ const CameraScreen: React.FC<Props> = () => {
     <Container>
       <Camera
         style={{flex: 1}}
-        device={device}
-        isActive={true}
+        type={CameraType.back}
         ref={camera}
-        photo={true}
       />
       <CameraControls>
         <TakePictureButton onPress={takePicture}>

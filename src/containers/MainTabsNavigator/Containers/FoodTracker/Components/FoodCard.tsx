@@ -6,9 +6,9 @@ import BgGraph from 'app/components/CgmGraph/CgmGraph';
 import {BgSample} from 'app/types/day_bgs.types';
 import {Dimensions, ImageBackground, Text, View} from 'react-native';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { Ionicons as Icon } from '@expo/vector-icons';
 import {formattedFoodItemDTO} from 'app/types/food.types';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface FoodCardProps {
   imageUri: string;

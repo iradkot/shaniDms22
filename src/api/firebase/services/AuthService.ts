@@ -1,10 +1,9 @@
-import { getApp } from '@react-native-firebase/app';
-import { getAuth, FirebaseAuthTypes } from '@react-native-firebase/auth';
+import { firebaseApp } from 'app/firebase';
+import { getAuth, User } from 'firebase/auth';
 
 export class AuthService {
-  getCurrentUser: () => Promise<FirebaseAuthTypes.User | null> = async () => {
-    // Use modular Auth API
-    const authInstance = getAuth(getApp());
+  getCurrentUser: () => Promise<User | null> = async () => {
+    const authInstance = getAuth(firebaseApp);
     return authInstance.currentUser;
   };
 }

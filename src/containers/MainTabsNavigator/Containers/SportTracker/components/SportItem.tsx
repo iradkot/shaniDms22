@@ -1,7 +1,7 @@
 import React from 'react';
 import {Animated, Text, View} from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
-import LinearGradient from 'react-native-linear-gradient';
+import { Ionicons as Icon } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import {SportItemDTO} from 'app/types/sport.types';
 import styled, {useTheme} from 'styled-components/native';
 import {Theme} from 'app/types/theme';
