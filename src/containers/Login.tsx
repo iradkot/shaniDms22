@@ -1,7 +1,6 @@
 import * as React from 'react';
 import {useMemo, useState} from 'react';
-import {ScrollView, Text, View} from 'react-native';
-import {GoogleSigninButton} from '@react-native-google-signin/google-signin';
+import {ScrollView, Text, View, Button} from 'react-native';
 import {NavigationProp} from '@react-navigation/native';
 import GoogleSignIn, {GoogleSignInResult} from '../api/GoogleSignIn';
 import {MAIN_TAB_NAVIGATOR} from '../constants/SCREEN_NAMES';
@@ -34,10 +33,8 @@ const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
     <ScrollView contentInsetAdjustmentBehavior="automatic">
       <View>
         <Text onPress={googleSignIn.getTokens}>Get tokens</Text>
-        <GoogleSigninButton
-          style={{width: 192, height: 48}}
-          size={GoogleSigninButton.Size.Wide}
-          color={GoogleSigninButton.Color.Dark}
+        <Button
+          title="Sign In with Google"
           onPress={getUserInfo}
           disabled={loading}
         />
