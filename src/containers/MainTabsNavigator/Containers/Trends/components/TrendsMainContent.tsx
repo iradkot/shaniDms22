@@ -11,10 +11,18 @@ import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/com
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import { AGPSummary } from 'app/components/AGPGraph';
 import Collapsable from 'app/components/Collapsable';
-import { DayInsights } from '../TrendsUI';
 import { CompareSection } from './CompareSection';
 import MetricSelector from './MetricSelector';
-import { SectionTitle } from '../styles/Trends.styles';
+import { 
+  SectionTitle,
+  HighlightBox,
+  BoldText,
+  StatRow,
+  StatLabel,
+  StatValue,
+  ExplanationText,
+  Row
+} from '../styles/Trends.styles';
 
 interface TrendsMainContentProps {
   bgData: BgSample[];
@@ -40,6 +48,133 @@ interface TrendsMainContentProps {
   hideComparison: () => void;
 }
 
+/**
+ * Integrated Day Insights component (previously from TrendsUI.tsx)
+ * Renders collapsable sections for best/worst day analysis
+ */
+const DayInsights: React.FC<{
+  bestDayDetail: DayDetail | null;
+  worstDayDetail: DayDetail | null;
+  bestDay: string;
+  worstDay: string;
+  selectedMetric: string;
+}> = ({ bestDayDetail, worstDayDetail, bestDay, worstDay, selectedMetric }) => {
+  if (!bestDayDetail && !worstDayDetail) return null;
+
+  // Label text for "best" and "worst" day, depending on selected metric
+  const bestMetricLabel = selectedMetric === 'tir' ? 'Highest TIR'
+    : selectedMetric === 'hypos' ? 'Fewest Hypos'
+      : 'Fewest Hypers';
+
+  const worstMetricLabel = selectedMetric === 'tir' ? 'Lowest TIR'
+    : selectedMetric === 'hypos' ? 'Most Hypos'
+      : 'Most Hypers';
+
+  return (
+    <Collapsable title="Day Quality & Patterns">
+      {/* Best Day Section */}
+      {!!bestDayDetail && (
+        <HighlightBox>
+          <Row>
+            <BoldText>Best Day ({bestMetricLabel}): </BoldText>
+            <StatLabel>{bestDay || "N/A"}</StatLabel>
+          </Row>
+          <ExplanationText>
+            TIR: {(bestDayDetail.tir * 100).toFixed(1)}% | Hypos: {bestDayDetail.seriousHypos} | Hypers: {bestDayDetail.seriousHypers}
+          </ExplanationText>
+        </HighlightBox>
+      )}
+
+      {/* Worst Day Section */}
+      {!!worstDayDetail && (
+        <HighlightBox style={{ backgroundColor: "#fff1f0", borderLeftColor: "#ff4d4f" }}>
+          <Row>
+            <BoldText>Worst Day ({worstMetricLabel}): </BoldText>
+            <StatLabel>{worstDay || "N/A"}</StatLabel>
+          </Row>
+          <ExplanationText>
+            TIR: {(worstDayDetail.tir * 100).toFixed(1)}% | Hypos: {worstDayDetail.seriousHypos} | Hypers: {worstDayDetail.seriousHypers}
+          </ExplanationText>
+        </HighlightBox>
+      )}
+
+      {/* Best Day Insights */}
+      {!!bestDayDetail && (
+        <Collapsable title="Best Day Insights">
+          <StatRow>
+            <StatLabel>Date:</StatLabel>
+            <StatValue>{bestDayDetail.dateString}</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>Avg BG:</StatLabel>
+            <StatValue>{bestDayDetail.avg.toFixed(1)} mg/dL</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>TIR (%):</StatLabel>
+            <StatValue>{(bestDayDetail.tir * 100).toFixed(1)}%</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>Min BG:</StatLabel>
+            <StatValue>{bestDayDetail.minBg} mg/dL</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>Max BG:</StatLabel>
+            <StatValue>{bestDayDetail.maxBg} mg/dL</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>Time Below Range:</StatLabel>
+            <StatValue color="red">{bestDayDetail.timeBelowRange.toFixed(1)}%</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>Time Above Range:</StatLabel>
+            <StatValue color="orange">{bestDayDetail.timeAboveRange.toFixed(1)}%</StatValue>
+          </StatRow>
+          <ExplanationText>
+            Stable overnight? Good meal timing? Learn from this pattern.
+          </ExplanationText>
+        </Collapsable>
+      )}
+
+      {/* Worst Day Insights */}
+      {!!worstDayDetail && (
+        <Collapsable title="Worst Day Insights">
+          <StatRow>
+            <StatLabel>Date:</StatLabel>
+            <StatValue>{worstDayDetail.dateString}</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>Avg BG:</StatLabel>
+            <StatValue>{worstDayDetail.avg.toFixed(1)} mg/dL</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>TIR (%):</StatLabel>
+            <StatValue>{(worstDayDetail.tir * 100).toFixed(1)}%</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>Min BG:</StatLabel>
+            <StatValue>{worstDayDetail.minBg} mg/dL</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>Max BG:</StatLabel>
+            <StatValue>{worstDayDetail.maxBg} mg/dL</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>Time Below Range:</StatLabel>
+            <StatValue color="red">{worstDayDetail.timeBelowRange.toFixed(1)}%</StatValue>
+          </StatRow>
+          <StatRow>
+            <StatLabel>Time Above Range:</StatLabel>
+            <StatValue color="orange">{worstDayDetail.timeAboveRange.toFixed(1)}%</StatValue>
+          </StatRow>
+          <ExplanationText>
+            Identify causes: Late meals? Missed bolus? Stress?
+          </ExplanationText>
+        </Collapsable>
+      )}
+    </Collapsable>
+  );
+};
+
 const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
   bgData,
   finalMetrics,
@@ -58,7 +193,8 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
   comparisonDateRange,
   changeComparisonPeriod,
   hideComparison
-}) => {// Get screen width for charts
+}) => {
+  // Get screen width for charts
   const screenWidth = Dimensions.get('window').width;
   const chartWidth = Math.max(screenWidth - 10, 350); // Almost full width, minimum 350
   const chartHeight = 220; // Increased height for better visibility
@@ -72,6 +208,7 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
     chartWidth,
     screenWidth
   });
+  
   return (
     <ScrollView>
       {/* (a) Time In Range */}
@@ -85,8 +222,8 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
         <SectionTitle>Quick Stats</SectionTitle>
         <StatsRow bgData={bgData} />
       </View>                  
+      
       {/* (c) AGP Graph - Ambulatory Glucose Profile */}
-         
       <View style={{ marginTop: 15, marginBottom: 15 }}>
         <SectionTitle>AGP Analytics & Statistics</SectionTitle>
         <View style={{ 
@@ -128,7 +265,7 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
         />
       </Collapsable>
 
-      {/* (f) Best/Worst day details */}
+      {/* (f) Best/Worst day details - Now integrated */}
       <DayInsights
         bestDayDetail={bestDayDetail || null}
         worstDayDetail={worstDayDetail || null}
