@@ -2,13 +2,13 @@ import {interpolateRgb} from 'd3';
 import {DetermineBgColorByGlucoseValue, Theme} from 'app/types/theme';
 import {Platform} from 'react-native';
 //
-const SEVERE_HYPO_THRESHOLD = 55;
-const HYPO_THRESHOLD = 70;
-const TARGET_FROM = 90;
-const TARGET_TO = 110;
-const TARGET_MIDDLE = (TARGET_TO + TARGET_FROM) / 2;
-const HYPER_THRESHOLD = 180;
-const SEVERE_HYPER_THRESHOLD = 250;
+export const SEVERE_HYPO_THRESHOLD = 55;
+export const HYPO_THRESHOLD = 70;
+export const TARGET_FROM = 90;
+export const TARGET_TO = 110;
+export const TARGET_MIDDLE = (TARGET_TO + TARGET_FROM) / 2;
+export const HYPER_THRESHOLD = 180;
+export const SEVERE_HYPER_THRESHOLD = 250;
 
 // props are bgValue and theme, theme defaults to theme
 export const determineBgColorByGlucoseValue: DetermineBgColorByGlucoseValue = (

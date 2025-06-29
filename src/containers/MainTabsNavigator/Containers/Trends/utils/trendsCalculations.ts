@@ -2,12 +2,13 @@
 
 import { BgSample } from 'app/types/day_bgs.types';
 import { format } from 'date-fns';
+import {
+  SEVERE_HYPO_THRESHOLD,
+  SEVERE_HYPER_THRESHOLD,
+  HYPO_THRESHOLD,
+  HYPER_THRESHOLD,
+} from 'app/style/styling.utils';
 
-// Import consistent glucose thresholds from app styling utils
-const SEVERE_HYPO_THRESHOLD = 55;
-const SEVERE_HYPER_THRESHOLD = 250;
-const HYPO_THRESHOLD = 70;
-const HYPER_THRESHOLD = 180;
 
 // Keep consistent naming for internal use
 const SERIOUS_HYPO_THRESHOLD = SEVERE_HYPO_THRESHOLD;
