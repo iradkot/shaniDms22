@@ -8,21 +8,21 @@ import YGridAndAxis from './components/YGridAndAxis';
 import CGMSamplesRenderer from './components/CGMSamplesRenderer';
 import GraphDateDisplay from './components/GraphDateDisplay';
 import FoodItemsRenderer from './components/Food/FoodItemsRenderer';
-import Tooltip from './components/Tooltips/Tooltip';
 import {
   GraphStyleContext,
   useGraphStyleContext,
 } from './contextStores/GraphStyleContext';
 import {TouchProvider, useTouchContext} from './contextStores/TouchContext';
-import {formattedFoodItemDTO} from 'app/types/food.types';
+import {FormattedFoodItemDTO} from 'app/types/food.types';
 import {findClosestBgSample} from 'app/components/CgmGraph/utils';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import SgvTooltip from 'app/components/CgmGraph/components/Tooltips/SgvTooltip';
 import {useClosestBgSample} from 'app/components/CgmGraph/hooks/useClosestBgSample';
+import { CHART_COLORS, CHART_OPACITY } from 'app/components/shared/GlucoseChart';
 
 interface Props {
   bgSamples: BgSample[];
-  foodItems: formattedFoodItemDTO[] | null;
+  foodItems: FormattedFoodItemDTO[] | null;
   width: number;
   height: number;
 }
@@ -78,16 +78,17 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
           onTouchEnd={handleTouchEnd}
           width={width}
           height={height}
-          viewBox={`0 0 ${width} ${height}`}>
-          <G
-            x={graphStyleContextValue.margin?.left}
-            y={graphStyleContextValue.margin?.top}>
+          viewBox={`0 0 ${width} ${height}`}>            
+          <G transform={`translate(${graphStyleContextValue.margin?.left}, ${graphStyleContextValue.margin?.top})`}>
+            {/* Render grid FIRST so it appears behind data */}
+            <XGridAndAxis />
+            <YGridAndAxis highestBgThreshold={300} />
+            
+            {/* Then render data on top of grid */}
             <GraphDateDisplay />
             <CGMSamplesRenderer
               focusedSampleDateString={closestBgSample?.dateString}
             />
-            <XGridAndAxis />
-            <YGridAndAxis highestBgThreshold={300} />
             <FoodItemsRenderer foodItems={foodItems} />
             {isTouchActive && closestBgSample && (
               <>
@@ -96,18 +97,18 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
                   y1="0"
                   x2={xTouchPosition}
                   y2={height}
-                  stroke="black"
+                  stroke={CHART_COLORS.textSecondary}
                   strokeWidth={1}
-                  opacity={0.2}
+                  opacity={CHART_OPACITY.light}
                 />
                 <Line
                   x1="0"
                   y1={yTouchPosition}
                   x2={width}
                   y2={yTouchPosition}
-                  stroke="grey"
+                  stroke={CHART_COLORS.textSecondary}
                   strokeWidth={1}
-                  opacity={0.5}
+                  opacity={CHART_OPACITY.medium}
                 />
                 <SgvTooltip
                   x={xTouchPosition}

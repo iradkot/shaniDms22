@@ -3,10 +3,17 @@
 import { BgSample } from 'app/types/day_bgs.types';
 import { format } from 'date-fns';
 
-const SERIOUS_HYPO_THRESHOLD = 56;
-const SERIOUS_HYPER_THRESHOLD = 220;
-const LOW_THRESHOLD = 70;
-const HIGH_THRESHOLD = 180;
+// Import consistent glucose thresholds from app styling utils
+const SEVERE_HYPO_THRESHOLD = 55;
+const SEVERE_HYPER_THRESHOLD = 250;
+const HYPO_THRESHOLD = 70;
+const HYPER_THRESHOLD = 180;
+
+// Keep consistent naming for internal use
+const SERIOUS_HYPO_THRESHOLD = SEVERE_HYPO_THRESHOLD;
+const SERIOUS_HYPER_THRESHOLD = SEVERE_HYPER_THRESHOLD;
+const LOW_THRESHOLD = HYPO_THRESHOLD;
+const HIGH_THRESHOLD = HYPER_THRESHOLD;
 
 export interface DayDetail {
   dateString: string;

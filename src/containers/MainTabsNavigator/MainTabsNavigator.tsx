@@ -1,5 +1,5 @@
-import React from 'react';
-import {View} from 'react-native';
+import React, {Suspense} from 'react';
+import {View, Text, ActivityIndicator} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import Home from './Containers/Home/Home';
 import NotificationsManager from './Containers/NotificationsManager/NotificationsManager';
@@ -10,7 +10,35 @@ import {theme} from 'app/style/theme';
 import FoodTracker from 'app/containers/MainTabsNavigator/Containers/FoodTracker/FoodTracker';
 import {SPORT_TRACKING_TAB_SCREEN} from 'app/constants/SCREEN_NAMES';
 import SportTracker from './Containers/SportTracker/SportTracker';
-import Trends from "app/containers/MainTabsNavigator/Containers/Trends";
+
+// Lazy load the Trends component to improve initial bundle load time
+const Trends = React.lazy(() => import("app/containers/MainTabsNavigator/Containers/Trends"));
+
+// Loading fallback component for Trends
+const TrendsLoadingFallback = () => (
+  <View style={{
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.backgroundColor
+  }}>
+    <ActivityIndicator size="large" color={theme.primaryColor} />
+    <Text style={{
+      marginTop: 16,
+      color: theme.textColor,
+      fontSize: 16
+    }}>
+      Loading Trends...
+    </Text>
+  </View>
+);
+
+// Wrapped component with Suspense for lazy loading
+const LazyTrends = () => (
+  <Suspense fallback={<TrendsLoadingFallback />}>
+    <Trends />
+  </Suspense>
+);
 
 const Tab = createBottomTabNavigator();
 
@@ -45,7 +73,7 @@ const MainTabsNavigator: React.FC = () => {
       />
       <Tab.Screen
         name="TRENDS"
-        component={Trends}
+        component={LazyTrends}
         options={{
           tabBarIcon: ({color, size}) => (
             <MaterialIcons name="timeline" color={color} size={size} />

@@ -4,9 +4,9 @@ import styled from 'styled-components/native';
 import {TouchableOpacity} from 'react-native';
 import {ThemeType} from 'app/types/theme';
 
-export const TrendsContainer = styled.View<{theme: ThemeType}>`
+export const TrendsContainer = styled.View`
   flex: 1;
-  background-color: ${({theme}) => theme.backgroundColor};
+  background-color: ${({theme}: {theme: ThemeType}) => theme.backgroundColor};
   padding: 10px;
 `;
 
@@ -19,48 +19,50 @@ export const DateRangeSelector = styled.View`
 export const SectionTitle = styled.Text`
   font-size: 20px;
   font-weight: 700;
-  color: #333;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
   margin: 10px 0;
 `;
 
 export const StatRow = styled.View`
   margin-vertical: 5px;
   padding: 10px;
-  background-color: #fafafa;
+  background-color: ${({theme}: {theme: ThemeType}) => theme.backgroundColor};
   border-radius: 5px;
+  border-width: 1px;
+  border-color: ${({theme}: {theme: ThemeType}) => theme.borderColor};
 `;
 
 export const StatLabel = styled.Text`
   font-size: 16px;
   font-weight: 600;
-  color: #444;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
 
 export const StatValue = styled.Text<{color?: string}>`
   font-size: 16px;
   font-weight: bold;
-  color: ${({color}) => color || '#000'};
+  color: ${({color, theme}: {color?: string; theme: ThemeType}) => color || theme.textColor};
 `;
 
 export const ExplanationText = styled.Text`
   font-size: 14px;
-  color: #666;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor}88;
   margin-top: 2px;
 `;
 
 export const HighlightBox = styled.View`
-  background-color: #e6f7ff;
+  background-color: ${({theme}: {theme: ThemeType}) => theme.primaryColor + '20'};
   border-left-width: 4px;
-  border-left-color: #1890ff;
+  border-left-color: ${({theme}: {theme: ThemeType}) => theme.primaryColor};
   padding: 10px;
   border-radius: 5px;
   margin-vertical: 5px;
 `;
 
 export const CompareBox = styled.View`
-  background-color: #f0f5ff;
+  background-color: ${({theme}: {theme: ThemeType}) => theme.accentColor + '20'};
   border-left-width: 4px;
-  border-left-color: #91d5ff;
+  border-left-color: ${({theme}: {theme: ThemeType}) => theme.accentColor};
   padding: 10px;
   border-radius: 5px;
   margin-vertical: 5px;
@@ -68,28 +70,26 @@ export const CompareBox = styled.View`
 
 export const BoldText = styled.Text`
   font-weight: bold;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
 
 export const InteractiveRow = styled(TouchableOpacity)`
   padding: 10px;
-  background-color: #eee;
+  background-color: ${({theme}: {theme: ThemeType}) => theme.backgroundColor};
   margin-vertical: 5px;
   border-radius: 5px;
+  border-width: 1px;
+  border-color: ${({theme}: {theme: ThemeType}) => theme.borderColor};
 `;
 
 export const InteractiveRowText = styled.Text`
   font-size: 16px;
-  color: #333;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
 
 export const Emoji = styled.Text`
   font-size: 16px;
 `;
-
-interface StyledViewProps {
-  alignItems?: 'flex-start' | 'flex-end' | 'center' | 'stretch' | 'baseline';
-  marginBottom?: number;
-}
 
 export const Row = styled.View`
   flex-direction: row;
@@ -106,11 +106,15 @@ export const MetricButton = styled.TouchableOpacity<{selected?: boolean}>`
   padding: 8px 12px;
   border-radius: 5px;
   margin: 0 5px;
-  background-color: ${({selected}) => (selected ? '#1890ff' : '#ddd')};
+  background-color: ${({selected, theme}: {selected?: boolean; theme: ThemeType}) => 
+    selected ? theme.primaryColor : theme.backgroundColor};
+  border-width: 1px;
+  border-color: ${({theme}: {theme: ThemeType}) => theme.primaryColor};
 `;
 
-export const MetricButtonText = styled.Text`
-  color: #fff;
+export const MetricButtonText = styled.Text<{selected?: boolean}>`
+  color: ${({selected, theme}: {selected?: boolean; theme: ThemeType}) => 
+    selected ? theme.white : theme.primaryColor};
   font-weight: bold;
 `;
 
@@ -126,38 +130,40 @@ export const OverallStatsGrid = styled.View`
 
 export const OverallStatsItem = styled.View`
   width: 48%;
-  background-color: #fff;
+  background-color: ${({theme}: {theme: ThemeType}) => theme.backgroundColor};
   padding: 10px;
   border-radius: 6px;
   margin-bottom: 10px;
-  shadow-color: #000;
+  shadow-color: ${({theme}: {theme: ThemeType}) => theme.shadowColor};
   shadow-offset: 0px 2px;
   shadow-opacity: 0.1;
   shadow-radius: 3px;
   elevation: 2;
+  border-width: 1px;
+  border-color: ${({theme}: {theme: ThemeType}) => theme.borderColor};
 `;
 
 export const Subtle = styled.Text`
   font-size: 12px;
-  color: #888;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor}88;
 `;
 
 export const ComparisonTitle = styled.Text`
   font-size: 18px;
   font-weight: bold;
-  color: #333;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
   margin-bottom: 5px;
 `;
 
 export const ComparisonSubtitle = styled.Text`
   font-size: 14px;
-  color: #555;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
   margin-bottom: 10px;
 `;
 
 export const ComparisonDateRange = styled.Text`
   font-size: 12px;
-  color: #777;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor}88;
   margin-bottom: 15px;
   font-style: italic;
 `;
@@ -165,5 +171,5 @@ export const ComparisonDateRange = styled.Text`
 export const StatChange = styled.Text<{color?: string}>`
   font-size: 14px;
   font-weight: bold;
-  color: ${({color}) => color || '#000'};
+  color: ${({color, theme}: {color?: string; theme: ThemeType}) => color || theme.textColor};
 `;
