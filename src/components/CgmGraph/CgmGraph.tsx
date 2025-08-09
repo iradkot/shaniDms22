@@ -17,12 +17,21 @@ import {FormattedFoodItemDTO} from 'app/types/food.types';
 import {findClosestBgSample} from 'app/components/CgmGraph/utils';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import SgvTooltip from 'app/components/CgmGraph/components/Tooltips/SgvTooltip';
+import BolusTooltip from 'app/components/CgmGraph/components/Tooltips/BolusTooltip';
+import CombinedBgBolusTooltip from 'app/components/CgmGraph/components/Tooltips/CombinedBgBolusTooltip';
+import MultiBolusTooltip from 'app/components/CgmGraph/components/Tooltips/MultiBolusTooltip';
+import CombinedBgMultiBolusTooltip from 'app/components/CgmGraph/components/Tooltips/CombinedBgMultiBolusTooltip';
+import BolusRenderer from './components/Bolus/BolusRenderer';
 import {useClosestBgSample} from 'app/components/CgmGraph/hooks/useClosestBgSample';
 import { CHART_COLORS, CHART_OPACITY } from 'app/components/shared/GlucoseChart';
+import { InsulinDataEntry } from 'app/types/insulin.types';
+import { findClosestBolus, findClosestBolusWithSpatialProximity, findBolusEventsInWindow } from './utils/bolusUtils';
+import { BG_COMBINATION_WINDOW_MS } from './constants/bolusHoverConfig';
 
 interface Props {
   bgSamples: BgSample[];
   foodItems: FormattedFoodItemDTO[] | null;
+  insulinData?: InsulinDataEntry[];
   width: number;
   height: number;
 }
@@ -32,7 +41,7 @@ const StyledSvg = styled(Svg)`
   width: 100%;
 `;
 
-const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
+const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulinData = []}) => {
   const containerRef = useRef<View>(null);
   const [graphStyleContextValue, setGraphStyleContextValue] =
     useGraphStyleContext(width, height, bgSamples);
@@ -61,12 +70,56 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
 
   const xTouchPosition = touchPosition.x - graphStyleContextValue.margin.left;
   const yTouchPosition = touchPosition.y - graphStyleContextValue.margin.top;
+  
+  // Find closest BG sample and bolus for hover
+  const touchTime = graphStyleContextValue.xScale.invert(xTouchPosition).getTime();
+  
   const closestBgSample = isTouchActive
-    ? findClosestBgSample(
-        graphStyleContextValue.xScale.invert(xTouchPosition),
-        bgSamples,
-      )
+    ? findClosestBgSample(touchTime, bgSamples)
     : null;
+    
+  // Find all bolus events within the configurable detection window (5 minutes by default)
+  const nearbyBolusEvents = isTouchActive && insulinData.length > 0
+    ? findBolusEventsInWindow(
+        xTouchPosition,
+        yTouchPosition, 
+        touchTime,
+        insulinData,
+        graphStyleContextValue.xScale,
+        graphStyleContextValue.yScale
+      )
+    : [];
+    
+  // Get closest single bolus for legacy compatibility
+  const closestBolus = nearbyBolusEvents.length > 0 ? nearbyBolusEvents[0] : null;
+  
+  // Determine which tooltip to show based on proximity and available data
+  let showBgTooltip = false;
+  let showBolusTooltip = false;
+  let showCombinedTooltip = false;
+  let showMultiBolusTooltip = false;
+  let showCombinedMultiBolusTooltip = false;
+  
+  if (closestBgSample && nearbyBolusEvents.length > 0) {
+    // Both BG and bolus events available - ALWAYS show them together
+    // User wants to see BG + bolus events combined, not hidden
+    if (nearbyBolusEvents.length > 1) {
+      // Multiple bolus events - show BG + multi-bolus
+      showCombinedMultiBolusTooltip = true;
+    } else {
+      // Single bolus event - show BG + single bolus  
+      showCombinedTooltip = true;
+    }
+  } else if (closestBgSample && nearbyBolusEvents.length === 0) {
+    // Only BG available
+    showBgTooltip = true;
+  } else if (nearbyBolusEvents.length > 1) {
+    // Multiple bolus events, no BG
+    showMultiBolusTooltip = true;
+  } else if (nearbyBolusEvents.length === 1) {
+    // Single bolus event, no BG
+    showBolusTooltip = true;
+  }
 
   return (
     <GraphStyleContext.Provider
@@ -90,7 +143,13 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
               focusedSampleDateString={closestBgSample?.dateString}
             />
             <FoodItemsRenderer foodItems={foodItems} />
-            {isTouchActive && closestBgSample && (
+            
+            {/* Render bolus events */}
+            {insulinData && insulinData.length > 0 && (
+              <BolusRenderer insulinData={insulinData} />
+            )}
+            
+            {isTouchActive && (closestBgSample || nearbyBolusEvents.length > 0) && (
               <>
                 <Line
                   x1={xTouchPosition}
@@ -110,11 +169,52 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
                   strokeWidth={1}
                   opacity={CHART_OPACITY.medium}
                 />
-                <SgvTooltip
-                  x={xTouchPosition}
-                  y={yTouchPosition}
-                  bgSample={closestBgSample}
-                />
+                
+                {/* Show tooltips based on proximity and available data */}
+                {showCombinedMultiBolusTooltip && (
+                  <CombinedBgMultiBolusTooltip
+                    x={xTouchPosition}
+                    y={yTouchPosition}
+                    bgSample={closestBgSample!}
+                    bolusEvents={nearbyBolusEvents}
+                    chartWidth={graphStyleContextValue.width}
+                  />
+                )}
+                
+                {showMultiBolusTooltip && (
+                  <MultiBolusTooltip
+                    x={xTouchPosition}
+                    y={yTouchPosition}
+                    bolusEvents={nearbyBolusEvents}
+                    chartWidth={graphStyleContextValue.width}
+                  />
+                )}
+                
+                {showCombinedTooltip && (
+                  <CombinedBgBolusTooltip
+                    x={xTouchPosition}
+                    y={yTouchPosition}
+                    bgSample={closestBgSample!}
+                    bolusEvent={closestBolus!}
+                    chartWidth={graphStyleContextValue.width}
+                  />
+                )}
+                
+                {showBgTooltip && (
+                  <SgvTooltip
+                    x={xTouchPosition}
+                    y={yTouchPosition}
+                    bgSample={closestBgSample!}
+                  />
+                )}
+                
+                {showBolusTooltip && (
+                  <BolusTooltip
+                    x={xTouchPosition}
+                    y={yTouchPosition}
+                    bolusEvent={closestBolus!}
+                  />
+                )}
               </>
             )}
           </G>

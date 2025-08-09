@@ -122,6 +122,7 @@ const Home: React.FC = () => {
             width={Dimensions.get('window').width}
             height={200}
             foodItems={foodItems}
+            insulinData={insulinData}
           />
         </Collapsable>
         <CgmRows
