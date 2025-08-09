@@ -3,12 +3,14 @@ import { Text, Rect, G, Line } from 'react-native-svg';
 import { InsulinDataEntry } from 'app/types/insulin.types';
 import { formatDateToLocaleTimeString } from 'app/utils/datetime.utils';
 import { CHART_COLORS, TOOLTIP_STYLES } from 'app/components/shared/GlucoseChart';
+import { calculateSmartTooltipPosition } from '../../utils/tooltipPositioning';
 
 interface MultiBolusTooltipProps {
   x: number;
   y: number;
   bolusEvents: InsulinDataEntry[];
   chartWidth?: number;
+  chartHeight?: number;
 }
 
 /**
@@ -19,7 +21,8 @@ const MultiBolusTooltip: React.FC<MultiBolusTooltipProps> = ({
   x, 
   y, 
   bolusEvents, 
-  chartWidth = 350 
+  chartWidth = 350,
+  chartHeight = 200
 }) => {
   if (!bolusEvents || bolusEvents.length === 0) {
     return null;
@@ -34,20 +37,19 @@ const MultiBolusTooltip: React.FC<MultiBolusTooltipProps> = ({
   const totalHeight = baseHeight + (bolusEvents.length * itemHeight);
   const tooltipWidth = 200;
   
-  // Position tooltip to avoid going off screen
-  let tooltipX = x - tooltipWidth / 2;
-  tooltipX = Math.max(5, tooltipX);
-  if (tooltipX + tooltipWidth > chartWidth - 5) {
-    tooltipX = chartWidth - tooltipWidth - 5;
-  }
-  const tooltipY = Math.max(5, y - totalHeight - 20);
+  // Calculate smart position to avoid finger occlusion and bounds overflow
+  const position = calculateSmartTooltipPosition(
+    { x, y },
+    { width: tooltipWidth, height: totalHeight },
+    { width: chartWidth, height: chartHeight }
+  );
   
   return (
     <G>
       {/* Semi-transparent background overlay for better visibility */}
       <Rect
-        x={tooltipX - 2}
-        y={tooltipY - 2}
+        x={position.x - 2}
+        y={position.y - 2}
         width={tooltipWidth + 4}
         height={totalHeight + 4}
         fill="rgba(0,0,0,0.3)"
@@ -56,8 +58,8 @@ const MultiBolusTooltip: React.FC<MultiBolusTooltipProps> = ({
       
       {/* Tooltip background with rounded corners */}
       <Rect
-        x={tooltipX}
-        y={tooltipY}
+        x={position.x}
+        y={position.y}
         width={tooltipWidth}
         height={totalHeight}
         fill={TOOLTIP_STYLES.backgroundColor}
@@ -68,8 +70,8 @@ const MultiBolusTooltip: React.FC<MultiBolusTooltipProps> = ({
       
       {/* Header with total insulin amount */}
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 16}
+        x={position.x + 8}
+        y={position.y + 16}
         fontSize="12"
         fill={TOOLTIP_STYLES.textColor}
         textAnchor="start"
@@ -79,8 +81,8 @@ const MultiBolusTooltip: React.FC<MultiBolusTooltipProps> = ({
       </Text>
       
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 32}
+        x={position.x + 8}
+        y={position.y + 32}
         fontSize="14"
         fill="#FFB74D" // Orange for emphasis
         textAnchor="start"
@@ -92,10 +94,10 @@ const MultiBolusTooltip: React.FC<MultiBolusTooltipProps> = ({
       {/* Separator line if multiple events */}
       {bolusEvents.length > 1 && (
         <Line
-          x1={tooltipX + 8}
-          y1={tooltipY + 40}
-          x2={tooltipX + tooltipWidth - 8}
-          y2={tooltipY + 40}
+          x1={position.x + 8}
+          y1={position.y + 40}
+          x2={position.x + tooltipWidth - 8}
+          y2={position.y + 40}
           stroke={CHART_COLORS.textSecondary}
           strokeWidth={0.5}
           opacity={0.5}
@@ -104,13 +106,13 @@ const MultiBolusTooltip: React.FC<MultiBolusTooltipProps> = ({
       
       {/* Individual bolus events */}
       {bolusEvents.map((bolus, index) => {
-        const itemY = tooltipY + 50 + (index * itemHeight);
+        const itemY = position.y + 50 + (index * itemHeight);
         const timestamp = new Date(bolus.timestamp!);
         
         return (
           <G key={`${bolus.timestamp}-${index}`}>
             <Text
-              x={tooltipX + 12}
+              x={position.x + 12}
               y={itemY}
               fontSize="10"
               fill={TOOLTIP_STYLES.textColor}
@@ -125,8 +127,8 @@ const MultiBolusTooltip: React.FC<MultiBolusTooltipProps> = ({
       {/* Time range if multiple events */}
       {bolusEvents.length > 1 && (
         <Text
-          x={tooltipX + 8}
-          y={tooltipY + totalHeight - 8}
+          x={position.x + 8}
+          y={position.y + totalHeight - 8}
           fontSize="9"
           fill={CHART_COLORS.textSecondary}
           textAnchor="start"

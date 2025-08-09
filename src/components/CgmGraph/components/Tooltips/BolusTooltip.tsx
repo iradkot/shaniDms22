@@ -3,24 +3,36 @@ import { Text, Rect, G } from 'react-native-svg';
 import { InsulinDataEntry } from 'app/types/insulin.types';
 import { formatDateToLocaleTimeString } from 'app/utils/datetime.utils';
 import { CHART_COLORS, TOOLTIP_STYLES } from 'app/components/shared/GlucoseChart';
+import { calculateSmartTooltipPosition } from '../../utils/tooltipPositioning';
 
 interface BolusTooltipProps {
   x: number;
   y: number;
   bolusEvent: InsulinDataEntry;
+  chartWidth?: number;
+  chartHeight?: number;
 }
 
 /**
  * Tooltip showing bolus details on hover/touch
  * Similar to SgvTooltip but for insulin data
  */
-const BolusTooltip: React.FC<BolusTooltipProps> = ({ x, y, bolusEvent }) => {
+const BolusTooltip: React.FC<BolusTooltipProps> = ({ 
+  x, 
+  y, 
+  bolusEvent,
+  chartWidth = 350,
+  chartHeight = 200
+}) => {
   const tooltipWidth = 140;
   const tooltipHeight = 55;
   
-  // Position tooltip to avoid going off screen - position above the bolus marker
-  const tooltipX = Math.max(5, Math.min(x - tooltipWidth / 2, 350 - tooltipWidth));
-  const tooltipY = Math.max(5, y - tooltipHeight - 20); // Well above the point
+  // Calculate smart position to avoid finger occlusion and bounds overflow
+  const position = calculateSmartTooltipPosition(
+    { x, y },
+    { width: tooltipWidth, height: tooltipHeight },
+    { width: chartWidth, height: chartHeight }
+  );
   
   // Parse timestamp for display
   const timestamp = new Date(bolusEvent.timestamp!);
@@ -29,8 +41,8 @@ const BolusTooltip: React.FC<BolusTooltipProps> = ({ x, y, bolusEvent }) => {
     <G>
       {/* Semi-transparent background overlay for better visibility */}
       <Rect
-        x={tooltipX - 2}
-        y={tooltipY - 2}
+        x={position.x - 2}
+        y={position.y - 2}
         width={tooltipWidth + 4}
         height={tooltipHeight + 4}
         fill="rgba(0,0,0,0.3)"
@@ -39,8 +51,8 @@ const BolusTooltip: React.FC<BolusTooltipProps> = ({ x, y, bolusEvent }) => {
       
       {/* Tooltip background with rounded corners */}
       <Rect
-        x={tooltipX}
-        y={tooltipY}
+        x={position.x}
+        y={position.y}
         width={tooltipWidth}
         height={tooltipHeight}
         fill={TOOLTIP_STYLES.backgroundColor}
@@ -51,8 +63,8 @@ const BolusTooltip: React.FC<BolusTooltipProps> = ({ x, y, bolusEvent }) => {
       
       {/* Insulin icon and title */}
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 16}
+        x={position.x + 8}
+        y={position.y + 16}
         fontSize="11"
         fill={TOOLTIP_STYLES.textColor}
         textAnchor="start"
@@ -63,8 +75,8 @@ const BolusTooltip: React.FC<BolusTooltipProps> = ({ x, y, bolusEvent }) => {
       
       {/* Amount with larger emphasis */}
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 32}
+        x={position.x + 8}
+        y={position.y + 32}
         fontSize="13"
         fill="#FFB74D" // Lighter orange for emphasis
         textAnchor="start"
@@ -75,8 +87,8 @@ const BolusTooltip: React.FC<BolusTooltipProps> = ({ x, y, bolusEvent }) => {
       
       {/* Time */}
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 47}
+        x={position.x + 8}
+        y={position.y + 47}
         fontSize="10"
         fill={TOOLTIP_STYLES.textColor}
         textAnchor="start"

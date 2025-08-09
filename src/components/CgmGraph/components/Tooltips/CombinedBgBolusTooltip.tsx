@@ -7,6 +7,7 @@ import { determineBgColorByGlucoseValue } from 'app/style/styling.utils';
 import { useTheme } from 'styled-components/native';
 import { ThemeType } from 'app/types/theme';
 import { CHART_COLORS, TOOLTIP_STYLES } from 'app/components/shared/GlucoseChart';
+import { calculateSmartTooltipPosition } from '../../utils/tooltipPositioning';
 
 interface CombinedBgBolusTooltipProps {
   x: number;
@@ -14,6 +15,7 @@ interface CombinedBgBolusTooltipProps {
   bgSample: BgSample;
   bolusEvent: InsulinDataEntry;
   chartWidth?: number;
+  chartHeight?: number;
 }
 
 /**
@@ -25,20 +27,20 @@ const CombinedBgBolusTooltip: React.FC<CombinedBgBolusTooltipProps> = ({
   y, 
   bgSample, 
   bolusEvent, 
-  chartWidth = 350 
+  chartWidth = 350,
+  chartHeight = 200
 }) => {
   const theme = useTheme() as ThemeType;
   
   const tooltipWidth = 180;
   const tooltipHeight = 95; // Taller to accommodate both pieces of info
   
-  // Position tooltip to avoid going off screen
-  let tooltipX = x - tooltipWidth / 2;
-  tooltipX = Math.max(5, tooltipX);
-  if (tooltipX + tooltipWidth > chartWidth - 5) {
-    tooltipX = chartWidth - tooltipWidth - 5;
-  }
-  const tooltipY = Math.max(5, y - tooltipHeight - 20);
+  // Calculate smart position to avoid finger occlusion and bounds overflow
+  const position = calculateSmartTooltipPosition(
+    { x, y },
+    { width: tooltipWidth, height: tooltipHeight },
+    { width: chartWidth, height: chartHeight }
+  );
   
   // Get BG color for styling
   const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
@@ -51,8 +53,8 @@ const CombinedBgBolusTooltip: React.FC<CombinedBgBolusTooltipProps> = ({
     <G>
       {/* Semi-transparent background overlay for better visibility */}
       <Rect
-        x={tooltipX - 2}
-        y={tooltipY - 2}
+        x={position.x - 2}
+        y={position.y - 2}
         width={tooltipWidth + 4}
         height={tooltipHeight + 4}
         fill="rgba(0,0,0,0.3)"
@@ -61,8 +63,8 @@ const CombinedBgBolusTooltip: React.FC<CombinedBgBolusTooltipProps> = ({
       
       {/* Tooltip background with rounded corners */}
       <Rect
-        x={tooltipX}
-        y={tooltipY}
+        x={position.x}
+        y={position.y}
         width={tooltipWidth}
         height={tooltipHeight}
         fill={TOOLTIP_STYLES.backgroundColor}
@@ -73,8 +75,8 @@ const CombinedBgBolusTooltip: React.FC<CombinedBgBolusTooltipProps> = ({
       
       {/* BG Section */}
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 16}
+        x={position.x + 8}
+        y={position.y + 16}
         fontSize="12"
         fill={bgColor}
         textAnchor="start"
@@ -84,8 +86,8 @@ const CombinedBgBolusTooltip: React.FC<CombinedBgBolusTooltipProps> = ({
       </Text>
       
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 30}
+        x={position.x + 8}
+        y={position.y + 30}
         fontSize="10"
         fill={TOOLTIP_STYLES.textColor}
         textAnchor="start"
@@ -95,10 +97,10 @@ const CombinedBgBolusTooltip: React.FC<CombinedBgBolusTooltipProps> = ({
       
       {/* Separator line */}
       <Line
-        x1={tooltipX + 8}
-        y1={tooltipY + 38}
-        x2={tooltipX + tooltipWidth - 8}
-        y2={tooltipY + 38}
+        x1={position.x + 8}
+        y1={position.y + 38}
+        x2={position.x + tooltipWidth - 8}
+        y2={position.y + 38}
         stroke={CHART_COLORS.textSecondary}
         strokeWidth={0.5}
         opacity={0.5}
@@ -106,8 +108,8 @@ const CombinedBgBolusTooltip: React.FC<CombinedBgBolusTooltipProps> = ({
       
       {/* Bolus Section */}
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 52}
+        x={position.x + 8}
+        y={position.y + 52}
         fontSize="11"
         fill={TOOLTIP_STYLES.textColor}
         textAnchor="start"
@@ -117,8 +119,8 @@ const CombinedBgBolusTooltip: React.FC<CombinedBgBolusTooltipProps> = ({
       </Text>
       
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 67}
+        x={position.x + 8}
+        y={position.y + 67}
         fontSize="10"
         fill="#FFB74D" // Orange for insulin
         textAnchor="start"
@@ -129,8 +131,8 @@ const CombinedBgBolusTooltip: React.FC<CombinedBgBolusTooltipProps> = ({
       {/* Time difference if different */}
       {Math.abs(bgTimestamp.getTime() - bolusTimestamp.getTime()) > 10000 && (
         <Text
-          x={tooltipX + 8}
-          y={tooltipY + 81}
+          x={position.x + 8}
+          y={position.y + 81}
           fontSize="9"
           fill={CHART_COLORS.textSecondary}
           textAnchor="start"

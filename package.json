@@ -9,7 +9,8 @@
     "start": "react-native start",
     "test": "jest",
     "lint": "eslint .",
-    "publish_testflight": "cd ios && fastlane beta --verbose",
+    "publish_testflight": "echo 'Use GitHub Actions for iOS deployment: gh workflow run ios-testflight.yml' && echo 'Or visit: https://github.com/iradkot/shaniDms22/actions'",
+    "publish_testflight_local": "cd ios && fastlane beta --verbose",
     "log-android": "adb logcat *:S ReactNative:V ReactNativeJS:V ReactNativeJNI:V com.shanidms22:D System.err:W"
   },
   "dependencies": {

@@ -178,6 +178,7 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
                     bgSample={closestBgSample!}
                     bolusEvents={nearbyBolusEvents}
                     chartWidth={graphStyleContextValue.width}
+                    chartHeight={graphStyleContextValue.height}
                   />
                 )}
                 
@@ -187,6 +188,7 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
                     y={yTouchPosition}
                     bolusEvents={nearbyBolusEvents}
                     chartWidth={graphStyleContextValue.width}
+                    chartHeight={graphStyleContextValue.height}
                   />
                 )}
                 
@@ -197,6 +199,7 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
                     bgSample={closestBgSample!}
                     bolusEvent={closestBolus!}
                     chartWidth={graphStyleContextValue.width}
+                    chartHeight={graphStyleContextValue.height}
                   />
                 )}
                 
@@ -205,6 +208,8 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
                     x={xTouchPosition}
                     y={yTouchPosition}
                     bgSample={closestBgSample!}
+                    chartWidth={graphStyleContextValue.width}
+                    chartHeight={graphStyleContextValue.height}
                   />
                 )}
                 
@@ -213,6 +218,8 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
                     x={xTouchPosition}
                     y={yTouchPosition}
                     bolusEvent={closestBolus!}
+                    chartWidth={graphStyleContextValue.width}
+                    chartHeight={graphStyleContextValue.height}
                   />
                 )}
               </>

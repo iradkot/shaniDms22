@@ -1,53 +1,71 @@
-# Context for Bolus Events on Home Chart
+# Context for Chart Tooltip Positioning Fix
 
 ## User Intent
-- **Original request:** Add bolus events to the chart in the Home tab with hover functionality
-- **Underlying problem:** Currently, the Home tab chart only shows BG/CGM data and food items, but doesn't display insulin bolus events, which are critical for diabetes management correlation
+- **Original request:** Fix chart tooltip issues where finger hides tooltip and tooltip goes out of bounds
+- **Underlying problem:** Poor UX in touch interfaces due to finger occlusion and overflow issues  
 - **Success criteria:** 
-  - Bolus events appear as markers/points on the chart
-  - Hover/touch shows bolus details (amount, time, type)
-  - Visually distinct from BG data points
-  - Integration works with existing chart infrastructure
+  1. Tooltip positioned to avoid finger occlusion
+  2. Tooltip stays within container boundaries
+  3. Smart positioning based on touch location and container size
 
 ## Related Code
 
 ### Components:
-- **Home Tab:** `src/containers/MainTabsNavigator/Containers/Home/Home.tsx` (main integration point)
-- **Chart Component:** `src/components/CgmGraph/CgmGraph.tsx` (main chart container)
-- **CGM Renderer:** `src/components/CgmGraph/components/CGMSamplesRenderer.tsx` (handles BG points)
-- **Food Renderer:** `src/components/CgmGraph/components/Food/FoodItemsRenderer.tsx` (existing hover example)
+- **Tooltip Components:** 
+  - `src/components/CgmGraph/components/Tooltips/CombinedBgBolusTooltip.tsx`
+  - `src/components/CgmGraph/components/Tooltips/MultiBolusTooltip.tsx`
+  - `src/components/CgmGraph/components/Tooltips/CombinedBgMultiBolusTooltip.tsx`
+  - `src/components/CgmGraph/components/Tooltips/SgvTooltip.tsx` (likely exists)
+  - `src/components/CgmGraph/components/Tooltips/BolusTooltip.tsx` (likely exists)
+
+- **Chart Integration:** `src/components/CgmGraph/CgmGraph.tsx` (main graph component that shows tooltips)
 
 ### Hooks:
-- **useInsulinData:** `src/hooks/useInsulinData.ts` (already provides bolus data)
-- **useTouchContext:** `src/components/CgmGraph/contextStores/TouchContext.tsx` (handles touch/hover)
+- **Touch Handling:** `src/components/CgmGraph/hooks/useTouchHandler.ts` - handles touch events
 
 ### Utils:
-- **findClosestBgSample:** `src/components/CgmGraph/utils.ts` (pattern for closest item detection)
-
+- **Proximity:** `src/components/CgmGraph/utils/bolusUtils.ts` - proximity calculations
+  
 ### Constants: 
-- **PLAN_CONFIG:** `src/constants/PLAN_CONFIG.ts` (glucose thresholds)
-- **Chart Colors:** `src/components/shared/GlucoseChart.ts` (color constants)
-
+- **Styling:** `src/components/shared/GlucoseChart/GlucoseTheme.tsx` (TOOLTIP_STYLES usage)
+  
 ### Integration points:
-- **Home Screen:** Chart is in collapsible "chart" section
-- **Data Flow:** Home → BgGraph → (new) BolusRenderer
-- **Existing hover:** SgvTooltip pattern for BG data
+- **Home Screen:** Chart in collapsible section
+- **Trends Screen:** Various chart components  
+- **AGP Components:** May use similar tooltips
 
 ### Existing tests:
-- Need to identify existing chart component tests to extend
+- **Tooltip Tests:** `src/components/CgmGraph/components/Tooltips/CombinedBgBolusTooltip.test.tsx`
+
+## Current Issues Identified
+1. **Finger Occlusion:** All tooltips position above the touch point (`y - height - 20`), but finger covers this area
+2. **Out of Bounds:** Only basic horizontal bounds checking, no smart repositioning
+3. **Fixed Positioning:** No dynamic positioning based on available space
+4. **Touch Area:** No consideration of finger size/touch area
+
+## Current Positioning Logic
+- **Horizontal:** Center on touch point, then clamp to container bounds
+- **Vertical:** Always above touch point with fixed 20px offset
+- **No consideration** for finger position or available space
 
 ## Design Decisions
 
-### Why this approach:
-- **Follow existing patterns:** Used same rendering approach as FoodItemsRenderer for consistency  
-- **Leverage existing infrastructure:** Touch detection, tooltip system, GraphStyleContext already work
-- **Medical safety:** Used clear visual distinction for insulin vs BG data (orange diamonds vs green circles)
-- **Performance:** Reused existing scales and hit detection logic
+### Why smart positioning is needed:
+- **Touch UX:** Mobile diabetes management requires finger-friendly interactions
+- **Critical data:** Glucose readings must be clearly visible without obstruction
+- **Container bounds:** Tooltips must stay visible within chart boundaries
+- **Consistent behavior:** All tooltip types should use same positioning logic
 
 ### Alternatives considered:
-- **Option A:** Add bolus as overlay diamonds (CHOSEN) - clean, follows food item pattern
-- **Option B:** Show as vertical lines - less clear for precise amounts
-- **Option C:** Integrated into existing BG renderer - too complex, different data types
+- **Option A:** Smart quadrant-based positioning (CHOSEN) - positions away from finger
+- **Option B:** Always show above - current broken behavior
+- **Option C:** Floating overlay outside chart - breaks existing UX patterns
+
+## Medical/Safety Considerations
+- **Glucose thresholds** from PLAN_CONFIG.ts must remain accurate
+- **Tooltip content accuracy** is critical for diabetes management
+- **Visual positioning** should not compromise medical data readability
+- **Touch responsiveness** is important for emergency glucose readings
 
 ### User feedback incorporated:
 - User wanted boluses visible on chart

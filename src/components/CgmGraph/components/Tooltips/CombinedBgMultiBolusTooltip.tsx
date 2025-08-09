@@ -7,6 +7,7 @@ import { determineBgColorByGlucoseValue } from 'app/style/styling.utils';
 import { useTheme } from 'styled-components/native';
 import { ThemeType } from 'app/types/theme';
 import { CHART_COLORS, TOOLTIP_STYLES } from 'app/components/shared/GlucoseChart';
+import { calculateSmartTooltipPosition } from '../../utils/tooltipPositioning';
 
 interface CombinedBgMultiBolusTooltipProps {
   x: number;
@@ -14,6 +15,7 @@ interface CombinedBgMultiBolusTooltipProps {
   bgSample: BgSample;
   bolusEvents: InsulinDataEntry[];
   chartWidth?: number;
+  chartHeight?: number;
 }
 
 /**
@@ -25,7 +27,8 @@ const CombinedBgMultiBolusTooltip: React.FC<CombinedBgMultiBolusTooltipProps> = 
   y, 
   bgSample, 
   bolusEvents, 
-  chartWidth = 350 
+  chartWidth = 350,
+  chartHeight = 200
 }) => {
   const theme = useTheme() as ThemeType;
   
@@ -38,13 +41,12 @@ const CombinedBgMultiBolusTooltip: React.FC<CombinedBgMultiBolusTooltipProps> = 
   const totalHeight = baseHeight + (bolusEvents.length * itemHeight);
   const tooltipWidth = 200;
   
-  // Position tooltip to avoid going off screen
-  let tooltipX = x - tooltipWidth / 2;
-  tooltipX = Math.max(5, tooltipX);
-  if (tooltipX + tooltipWidth > chartWidth - 5) {
-    tooltipX = chartWidth - tooltipWidth - 5;
-  }
-  const tooltipY = Math.max(5, y - totalHeight - 20);
+  // Calculate smart position to avoid finger occlusion and bounds overflow
+  const position = calculateSmartTooltipPosition(
+    { x, y },
+    { width: tooltipWidth, height: totalHeight },
+    { width: chartWidth, height: chartHeight }
+  );
   
   // Get BG color for styling
   const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
@@ -56,8 +58,8 @@ const CombinedBgMultiBolusTooltip: React.FC<CombinedBgMultiBolusTooltipProps> = 
     <G>
       {/* Semi-transparent background overlay for better visibility */}
       <Rect
-        x={tooltipX - 2}
-        y={tooltipY - 2}
+        x={position.x - 2}
+        y={position.y - 2}
         width={tooltipWidth + 4}
         height={totalHeight + 4}
         fill="rgba(0,0,0,0.3)"
@@ -66,8 +68,8 @@ const CombinedBgMultiBolusTooltip: React.FC<CombinedBgMultiBolusTooltipProps> = 
       
       {/* Tooltip background with rounded corners */}
       <Rect
-        x={tooltipX}
-        y={tooltipY}
+        x={position.x}
+        y={position.y}
         width={tooltipWidth}
         height={totalHeight}
         fill={TOOLTIP_STYLES.backgroundColor}
@@ -78,8 +80,8 @@ const CombinedBgMultiBolusTooltip: React.FC<CombinedBgMultiBolusTooltipProps> = 
       
       {/* BG Section */}
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 16}
+        x={position.x + 8}
+        y={position.y + 16}
         fontSize="12"
         fill={bgColor}
         textAnchor="start"
@@ -89,8 +91,8 @@ const CombinedBgMultiBolusTooltip: React.FC<CombinedBgMultiBolusTooltipProps> = 
       </Text>
       
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 30}
+        x={position.x + 8}
+        y={position.y + 30}
         fontSize="10"
         fill={TOOLTIP_STYLES.textColor}
         textAnchor="start"
@@ -100,10 +102,10 @@ const CombinedBgMultiBolusTooltip: React.FC<CombinedBgMultiBolusTooltipProps> = 
       
       {/* Separator line */}
       <Line
-        x1={tooltipX + 8}
-        y1={tooltipY + 38}
-        x2={tooltipX + tooltipWidth - 8}
-        y2={tooltipY + 38}
+        x1={position.x + 8}
+        y1={position.y + 38}
+        x2={position.x + tooltipWidth - 8}
+        y2={position.y + 38}
         stroke={CHART_COLORS.textSecondary}
         strokeWidth={0.5}
         opacity={0.5}
@@ -111,8 +113,8 @@ const CombinedBgMultiBolusTooltip: React.FC<CombinedBgMultiBolusTooltipProps> = 
       
       {/* Insulin Section Header */}
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 52}
+        x={position.x + 8}
+        y={position.y + 52}
         fontSize="11"
         fill={TOOLTIP_STYLES.textColor}
         textAnchor="start"
@@ -122,8 +124,8 @@ const CombinedBgMultiBolusTooltip: React.FC<CombinedBgMultiBolusTooltipProps> = 
       </Text>
       
       <Text
-        x={tooltipX + 8}
-        y={tooltipY + 66}
+        x={position.x + 8}
+        y={position.y + 66}
         fontSize="12"
         fill="#FFB74D" // Orange for insulin
         textAnchor="start"
@@ -134,13 +136,13 @@ const CombinedBgMultiBolusTooltip: React.FC<CombinedBgMultiBolusTooltipProps> = 
       
       {/* Individual bolus events */}
       {bolusEvents.map((bolus, index) => {
-        const itemY = tooltipY + 80 + (index * itemHeight);
+        const itemY = position.y + 80 + (index * itemHeight);
         const timestamp = new Date(bolus.timestamp!);
         
         return (
           <Text
             key={`${bolus.timestamp}-${index}`}
-            x={tooltipX + 12}
+            x={position.x + 12}
             y={itemY}
             fontSize="9"
             fill={TOOLTIP_STYLES.textColor}
