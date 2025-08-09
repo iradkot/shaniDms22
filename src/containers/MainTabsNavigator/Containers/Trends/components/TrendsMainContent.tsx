@@ -11,6 +11,7 @@ import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/com
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import { AGPSummary } from 'app/components/AGPGraph';
 import Collapsable from 'app/components/Collapsable';
+import CustomGlucoseRangeSlider from 'app/components/CustomGlucoseRangeSlider/CustomGlucoseRangeSlider';
 import { CompareSection } from './CompareSection';
 import MetricSelector from './MetricSelector';
 import { 
@@ -222,8 +223,18 @@ const TrendsMainContent: React.FC<TrendsMainContentProps> = ({
         <SectionTitle>Quick Stats</SectionTitle>
         <StatsRow bgData={bgData} />
       </View>                  
+
+      {/* (c) Custom Range Analysis */}
+      <Collapsable title="Custom Range Analysis">
+        <CustomGlucoseRangeSlider
+          bgData={bgData}
+          onRangeChange={(min, max, percentage) => {
+            console.log(`Custom Range: ${percentage}% of time between ${min}-${max} mg/dL`);
+          }}
+        />
+      </Collapsable>
       
-      {/* (c) AGP Graph - Ambulatory Glucose Profile */}
+      {/* (d) AGP Graph - Ambulatory Glucose Profile */}
       <View style={{ marginTop: 15, marginBottom: 15 }}>
         <SectionTitle>AGP Analytics & Statistics</SectionTitle>
         <View style={{ 

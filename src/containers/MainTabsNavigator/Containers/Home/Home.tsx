@@ -10,17 +10,18 @@ import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import BGValueRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestBgValueRow';
 import BgGraph from 'app/components/CgmGraph/CgmGraph';
 import {cloneDeep} from 'lodash';
-import {Theme} from 'app/types/theme';
+import {ThemeType} from 'app/types/theme';
 import {Dimensions, SafeAreaView, Text} from 'react-native';
 import {useBgData} from 'app/hooks/useBgData';
 import {useFoodItems} from 'app/hooks/useFoodItems';
 import {bgSortFunction} from 'app/utils/bg.utils';
 import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
 import {useInsulinData} from 'app/hooks/useInsulinData';
+import CustomGlucoseRangeSlider from 'app/components/CustomGlucoseRangeSlider';
 
-const HomeContainer = styled.View<{theme: Theme}>`
+const HomeContainer = styled.View<{theme: ThemeType}>`
   flex: 1;
-  background-color: ${({theme}) => theme.backgroundColor};
+  background-color: ${({theme}: {theme: ThemeType}) => theme.backgroundColor};
 `;
 
 // create dummy home component with typescript
@@ -83,9 +84,22 @@ const Home: React.FC = () => {
     return cloneDeep(bgData).sort(bgSortFunction(true));
   }, [bgData]);
 
+  // Handler for custom range slider changes
+  const handleCustomRangeChange = (minValue: number, maxValue: number, percentage: number) => {
+    console.log(`Custom range: ${minValue}-${maxValue} mg/dL, ${percentage}% time in range`);
+  };
+
   return (
     <HomeContainer>
         <TimeInRangeRow bgData={bgData} />
+        
+        <Collapsable title={'Custom Range Analysis'}>
+          <CustomGlucoseRangeSlider
+            bgData={bgData}
+            onRangeChange={handleCustomRangeChange}
+          />
+        </Collapsable>
+        
         <BGValueRow
           prevBgData={latestPrevBgSample}
           bgData={latestBgSample}
