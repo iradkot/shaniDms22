@@ -2,41 +2,42 @@
 // Replaces hardcoded colors in both AGP and CGM components
 
 import { colors } from 'app/style/colors';
+import { GLUCOSE_THRESHOLDS } from 'app/constants/PLAN_CONFIG';
 
 /**
  * Standard glucose ranges with theme-based colors
- * Replaces AGP_GLUCOSE_RANGES hardcoded colors
+ * Uses PLAN_CONFIG.ts as single source of truth - NO HARDCODED VALUES
  */
 export const GLUCOSE_RANGES = {
   veryLow: {
     min: 0,
-    max: 54,
-    color: colors.darkRed[700],    // Was: '#8B0000' 
-    label: 'Very Low (<54)'
+    max: GLUCOSE_THRESHOLDS.SEVERE_HYPO,  // 55 from PLAN_CONFIG
+    color: colors.darkRed[700],
+    label: `Very Low (<${GLUCOSE_THRESHOLDS.SEVERE_HYPO})`
   },
   low: {
-    min: 54,
-    max: 69,
-    color: colors.red[500],        // Was: '#FF4444'
-    label: 'Low (54-69)'
+    min: GLUCOSE_THRESHOLDS.SEVERE_HYPO,  // 55 from PLAN_CONFIG
+    max: GLUCOSE_THRESHOLDS.HYPO - 1,     // 69 (70-1) from PLAN_CONFIG
+    color: colors.red[500],
+    label: `Low (${GLUCOSE_THRESHOLDS.SEVERE_HYPO}-${GLUCOSE_THRESHOLDS.HYPO - 1})`
   },
   target: {
-    min: 70,
-    max: 180,
-    color: colors.green[500],      // Was: '#4CAF50'
-    label: 'Target (70-180)'
+    min: GLUCOSE_THRESHOLDS.TARGET_RANGE.EXTENDED.min,  // 70 from PLAN_CONFIG
+    max: GLUCOSE_THRESHOLDS.TARGET_RANGE.EXTENDED.max,  // 180 from PLAN_CONFIG
+    color: colors.green[500],
+    label: `Target (${GLUCOSE_THRESHOLDS.TARGET_RANGE.EXTENDED.min}-${GLUCOSE_THRESHOLDS.TARGET_RANGE.EXTENDED.max})`
   },
   high: {
-    min: 181,
-    max: 250,
-    color: colors.orange[500],     // Was: '#FFA726'
-    label: 'High (181-250)'
+    min: GLUCOSE_THRESHOLDS.HYPER + 1,    // 181 (180+1) from PLAN_CONFIG
+    max: GLUCOSE_THRESHOLDS.SEVERE_HYPER, // 250 from PLAN_CONFIG
+    color: colors.orange[500],
+    label: `High (${GLUCOSE_THRESHOLDS.HYPER + 1}-${GLUCOSE_THRESHOLDS.SEVERE_HYPER})`
   },
   veryHigh: {
-    min: 251,
-    max: 999,
-    color: colors.deepOrange[600], // Was: '#FF5722'
-    label: 'Very High (>250)'
+    min: GLUCOSE_THRESHOLDS.SEVERE_HYPER + 1,  // 251 (250+1) from PLAN_CONFIG
+    max: 999,  // Keep high max for extreme values
+    color: colors.deepOrange[600],
+    label: `Very High (>${GLUCOSE_THRESHOLDS.SEVERE_HYPER})`
   }
 };
 
@@ -99,24 +100,33 @@ export const withOpacity = (color: string, opacity: number): string => {
 
 /**
  * Get glucose range color based on value
+ * Uses PLAN_CONFIG thresholds for consistency
  */
 export const getGlucoseRangeColor = (glucoseValue: number): string => {
-  if (glucoseValue < GLUCOSE_RANGES.veryLow.max) return GLUCOSE_RANGES.veryLow.color;
-  if (glucoseValue < GLUCOSE_RANGES.low.max) return GLUCOSE_RANGES.low.color;
-  if (glucoseValue <= GLUCOSE_RANGES.target.max) return GLUCOSE_RANGES.target.color;
-  if (glucoseValue <= GLUCOSE_RANGES.high.max) return GLUCOSE_RANGES.high.color;
+  if (glucoseValue < GLUCOSE_THRESHOLDS.SEVERE_HYPO) return GLUCOSE_RANGES.veryLow.color;
+  if (glucoseValue < GLUCOSE_THRESHOLDS.HYPO) return GLUCOSE_RANGES.low.color;
+  if (glucoseValue <= GLUCOSE_THRESHOLDS.TARGET_RANGE.EXTENDED.max) return GLUCOSE_RANGES.target.color;
+  if (glucoseValue <= GLUCOSE_THRESHOLDS.SEVERE_HYPER) return GLUCOSE_RANGES.high.color;
   return GLUCOSE_RANGES.veryHigh.color;
 };
 
 /**
  * Standard glucose grid values
  * Used by both AGP and CGM components
+ * Based on PLAN_CONFIG thresholds for consistency
  */
 export const GLUCOSE_GRID = {
   major: [50, 100, 150, 200, 250, 300],     // Major grid lines (gaps of 50)
   minor: [75, 125, 175, 225, 275],          // Minor grid lines (halfway between majors)
   yAxisMax: 350,                             // Maximum Y value
-  yAxisMin: 30                               // Minimum Y value
+  yAxisMin: 30,                              // Minimum Y value
+  // Add threshold lines for visual reference
+  thresholds: {
+    severeHypo: GLUCOSE_THRESHOLDS.SEVERE_HYPO,
+    hypo: GLUCOSE_THRESHOLDS.HYPO,
+    hyper: GLUCOSE_THRESHOLDS.HYPER,
+    severeHyper: GLUCOSE_THRESHOLDS.SEVERE_HYPER,
+  }
 };
 
 /**

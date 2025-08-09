@@ -126,3 +126,4 @@ keys/*
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+/shaniDmsMobileApp/

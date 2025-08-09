@@ -14,6 +14,7 @@ import {
   LoadingContainer,
   LoadingText
 } from '../styles/components.styles';
+import {GLUCOSE_THRESHOLDS} from "app/constants/PLAN_CONFIG.ts";
 
 const AGPSummary: React.FC<AGPGraphProps> = ({
   bgData,
@@ -49,25 +50,25 @@ const AGPSummary: React.FC<AGPGraphProps> = ({
       label: 'Time in Range',
       value: keyMetrics.timeInTarget.formatted,
       status: keyMetrics.timeInTarget.status,
-      target: 'Target: >70%'
+      target: `Target: >${GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min}%`
     },
     averageGlucose: {
       label: 'Avg Glucose',
       value: keyMetrics.averageGlucose.formatted,
       status: keyMetrics.averageGlucose.status,
-      target: 'Target: 120-160'
+      target: `Target: ${GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min}-${GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max}`
     },
     gmi: {
       label: 'GMI',
       value: keyMetrics.gmi.formatted,
       status: keyMetrics.gmi.status,
-      target: 'Target: <7.0%'
+      target: `Target: <${GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.middle}%`
     },
     variability: {
       label: 'Variability',
       value: keyMetrics.variability.formatted,
       status: keyMetrics.variability.status,
-      target: 'Target: <36%'
+      target: `Target: <${GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.middle}%`
     }
   };
   return (

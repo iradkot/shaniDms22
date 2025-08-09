@@ -8,6 +8,8 @@ import {
   assessRisk,
   RiskAssessment 
 } from '../utils/statistics.utils';
+import {GLUCOSE_THRESHOLDS} from "app/constants/PLAN_CONFIG.ts";
+;
 
 interface FormattedStatistics extends AGPStatistics {
   formatted: {
@@ -72,16 +74,16 @@ export const useAGPStats = (statistics: AGPStatistics | null): FormattedStatisti
 const generateInsights = (statistics: AGPStatistics, riskAssessment: RiskAssessment): string[] => {
   const insights: string[] = [];
   const { timeInRange, cv, averageGlucose } = statistics;
-  
+
   // Time in Range insights
-  if (timeInRange.target >= 70) {
+  if (timeInRange.target >= GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min) {
     insights.push('🎯 Excellent glucose control - time in range >70%');
-  } else if (timeInRange.target >= 50) {
+  } else if (timeInRange.target >= GLUCOSE_THRESHOLDS.SEVERE_HYPO) {
     insights.push('👍 Good glucose control - room for improvement');
   } else {
     insights.push('⚠️ Time in range below target - discuss with healthcare provider');
   }
-  
+
   // Hypoglycemia insights
   const lowTotal = timeInRange.veryLow + timeInRange.low;
   if (lowTotal < 4) {
@@ -91,7 +93,7 @@ const generateInsights = (statistics: AGPStatistics, riskAssessment: RiskAssessm
   } else {
     insights.push('🚨 High hypoglycemia risk - urgent review needed');
   }
-  
+
   // Variability insights
   if (cv < 36) {
     insights.push('📊 Good glucose stability (CV <36%)');
@@ -132,16 +134,16 @@ export const useKeyMetrics = (statistics: AGPStatistics | null) => {
       timeInTarget: {
         value: statistics.timeInRange.target,
         formatted: formatPercentage(statistics.timeInRange.target),
-        target: 70,
-        status: statistics.timeInRange.target >= 70 ? 'good' : 
-                statistics.timeInRange.target >= 50 ? 'fair' : 'poor'
+        target: GLUCOSE_THRESHOLDS.TARGET_RANGE.TIGHT.middle,
+        status: statistics.timeInRange.target >= GLUCOSE_THRESHOLDS.TARGET_RANGE.TIGHT.min ? 'good' :
+                statistics.timeInRange.target >= GLUCOSE_THRESHOLDS.SEVERE_HYPO ? 'fair' : 'poor'
       },
       averageGlucose: {
         value: statistics.averageGlucose,
         formatted: formatGlucose(statistics.averageGlucose),
-        target: { min: 120, max: 160 },
-        status: statistics.averageGlucose >= 120 && statistics.averageGlucose <= 160 ? 'good' :
-                statistics.averageGlucose < 100 || statistics.averageGlucose > 200 ? 'poor' : 'fair'
+        target: { min: GLUCOSE_THRESHOLDS.TARGET_RANGE.TIGHT.min, max: GLUCOSE_THRESHOLDS.TARGET_RANGE.TIGHT.max },
+        status: statistics.averageGlucose >= GLUCOSE_THRESHOLDS.TARGET_RANGE.TIGHT.max && statistics.averageGlucose <= GLUCOSE_THRESHOLDS.HYPER ? 'good' :
+                statistics.averageGlucose < GLUCOSE_THRESHOLDS.TARGET_RANGE.TIGHT.middle || statistics.averageGlucose > GLUCOSE_THRESHOLDS.HYPER ? 'poor' : 'fair'
       },
       gmi: {
         value: statistics.gmi,
