@@ -22,16 +22,16 @@ export const GLUCOSE_RANGES = {
     label: `Low (${GLUCOSE_THRESHOLDS.SEVERE_HYPO}-${GLUCOSE_THRESHOLDS.HYPO - 1})`
   },
   target: {
-    min: GLUCOSE_THRESHOLDS.TARGET_RANGE.EXTENDED.min,  // 70 from PLAN_CONFIG
-    max: GLUCOSE_THRESHOLDS.TARGET_RANGE.EXTENDED.max,  // 180 from PLAN_CONFIG
+    min: GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min,  // 70 from PLAN_CONFIG
+    max: GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max,  // 140 from PLAN_CONFIG
     color: colors.green[500],
-    label: `Target (${GLUCOSE_THRESHOLDS.TARGET_RANGE.EXTENDED.min}-${GLUCOSE_THRESHOLDS.TARGET_RANGE.EXTENDED.max})`
+    label: `Target (${GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min}-${GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max})`
   },
   high: {
-    min: GLUCOSE_THRESHOLDS.HYPER + 1,    // 181 (180+1) from PLAN_CONFIG
+    min: GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max + 1,    // 141 (140+1) from PLAN_CONFIG
     max: GLUCOSE_THRESHOLDS.SEVERE_HYPER, // 250 from PLAN_CONFIG
     color: colors.orange[500],
-    label: `High (${GLUCOSE_THRESHOLDS.HYPER + 1}-${GLUCOSE_THRESHOLDS.SEVERE_HYPER})`
+    label: `High (${GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max + 1}-${GLUCOSE_THRESHOLDS.SEVERE_HYPER})`
   },
   veryHigh: {
     min: GLUCOSE_THRESHOLDS.SEVERE_HYPER + 1,  // 251 (250+1) from PLAN_CONFIG
@@ -100,12 +100,12 @@ export const withOpacity = (color: string, opacity: number): string => {
 
 /**
  * Get glucose range color based on value
- * Uses PLAN_CONFIG thresholds for consistency
+ * Uses PLAN_CONFIG thresholds for consistency - STANDARD range (70-140)
  */
 export const getGlucoseRangeColor = (glucoseValue: number): string => {
   if (glucoseValue < GLUCOSE_THRESHOLDS.SEVERE_HYPO) return GLUCOSE_RANGES.veryLow.color;
   if (glucoseValue < GLUCOSE_THRESHOLDS.HYPO) return GLUCOSE_RANGES.low.color;
-  if (glucoseValue <= GLUCOSE_THRESHOLDS.TARGET_RANGE.EXTENDED.max) return GLUCOSE_RANGES.target.color;
+  if (glucoseValue <= GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max) return GLUCOSE_RANGES.target.color;
   if (glucoseValue <= GLUCOSE_THRESHOLDS.SEVERE_HYPER) return GLUCOSE_RANGES.high.color;
   return GLUCOSE_RANGES.veryHigh.color;
 };
