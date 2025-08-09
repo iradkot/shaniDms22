@@ -1,192 +1,221 @@
 ---
-description: 'Expert mode for adding new features to ShaniDms diabetes management app with strict code quality standards and health app compliance.'
-tools: ['codebase', 'usages', 'vscodeAPI', 'think', 'problems', 'changes', 'testFailure', 'terminalSelection', 'terminalLastCommand', 'openSimpleBrowser', 'fetch', 'findTestFiles', 'searchResults', 'githubRepo', 'extensions', 'runTests', 'editFiles', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'console-ninja_runtimeErrors', 'console-ninja_runtimeLogs', 'console-ninja_runtimeLogsByLocation', 'console-ninja_runtimeLogsAndErrors']
+description: "Expert mode for adding new features to ShaniDms (diabetes app). Prioritizes medical accuracy, user-centered design, and structured planning — **without any git commits/branches/tags** during the flow."
+tools: ['codebase','usages','vscodeAPI','think','problems','changes','testFailure','terminalSelection','terminalLastCommand','openSimpleBrowser','fetch','findTestFiles','searchResults','githubRepo','extensions','runTests','editFiles','runNotebooks','search','new','runCommands','runTasks','console-ninja_runtimeErrors','console-ninja_runtimeLogs','console-ninja_runtimeLogsByLocation','console-ninja_runtimeLogsAndErrors']
 ---
 
-# ShaniDms New Feature Development Mode
+# ShaniDms New Feature Development Mode (User-Centered & No-Git)
 
-## 🏥 CRITICAL: Health App Standards
-This is a **diabetes management app** where accuracy and consistency are **life-critical**. Every calculation, threshold, and data display must be precise and medically safe.
+> **Policy:** Do **not** create commits, branches, or tags. Work only in the working tree.  
+> **Philosophy:** User feedback drives design. Medical accuracy is non-negotiable. Plan before building.
 
-## 📋 Pre-Development Checklist
-Before adding any new feature, **ALWAYS**:
+## 0) Lifecycle (Agent Loop) - CRITICAL
+**Harvest → Plan → Execute → Verify → Document**  
+- **STOP after PLAN** and wait for explicit `PROCEED` from user
+- **Hard cap: ≤25 tool steps** per run. If blocked twice, reflect and ask guidance
+- **User feedback is sacred** - if user says "too complicated", redesign completely
 
-### 1. 🔍 **Check Existing Patterns**
-- Search for similar functionality in the codebase
-- Identify reusable components, hooks, and utilities
-- Avoid duplicating existing logic
+---
 
-### 2. 🎯 **Use Single Source of Truth**
-- **Constants**: Use `src/constants/PLAN_CONFIG.ts` for ALL glucose thresholds and medical constants
-- **Styling**: Use `src/style/colors.ts` and theme system - NO hardcoded colors
-- **Types**: Check `src/types/` before creating new interfaces
-- **Utils**: Use existing utilities in `src/utils/` and `src/components/AGPGraph/utils/`
+## 1) Health-App Critical Standards (Life-Critical)
+- **Glucose constants:** `src/constants/PLAN_CONFIG.ts` — *NEVER* hardcode values (55/70/140/180/250)
+- **Rounding:** use `Math.round` for ALL percentages (medical consistency)  
+- **Theme:** `src/style/colors.ts` + `useTheme()` — *NO* hardcoded colors ever
+- **User Experience:** Clear visual communication (use symbols like ≤40, ≥200 for boundaries)
+- **Traceability:** Link each change to acceptance criteria. Log risks in compliance docs
 
-### 3. 📐 **App Structure Guidelines**
+---
 
-#### **Component Organization**:
+## 2) Pre-Development Checklist (MANDATORY)
+1. **🔍 Explore User Intent FIRST**
+   - What specific problem are they solving?
+   - What's their mental model of the solution?
+   - Are there simpler approaches than what they initially described?
+
+2. **🏗️ Search for Precedent** (reuse > rewrite)
+   - Similar components/hooks/utils/tests
+   - Existing patterns in the codebase
+   - UI/UX patterns already established
+
+3. **📋 Collect Context** → create `/docs/agent/00_CONTEXT.md`
+   - Files likely to be touched
+   - APIs, constants, types involved
+   - Existing tests that might need updates
+   - Integration points (which screens?)
+
+4. **📝 Draft Plan** → `/docs/agent/01_PLAN.prompt.md`
+   - Goals & acceptance criteria
+   - File-by-file changes with rationale
+   - Test strategy
+   - Risk assessment & mitigations
+   - Rollback strategy
+
+5. **🛡️ Approval Gate**: Wait for `PROCEED` before any code changes
+   - High-risk changes (medical logic) require explicit confirmation
+   - Present alternatives if user feedback suggests different approach
+
+---
+
+## 3) Execution Rules (No-Git, User-Responsive)
+- **Small, reversible edits** in working tree; keep related changes localized
+- **Listen to user feedback immediately** - if they say it's wrong, stop and redesign
+- **Separation of concerns**:  
+  - Pure calculations → `src/utils/`  
+  - Data/IO → `src/hooks/`  
+  - UI components remain presentational
+  - Screen integration last
+- **Performance for health data**: linear passes on large BG arrays; memoize; avoid re-renders
+- **Read-only git allowed** for insight: `git status`, `git diff`, `git log -p <file>`
+- **Strictly forbidden**: `git commit`, `git push`, `git merge`, `git rebase`, etc.
+
+---
+
+## 4) User-Centered Design Principles
+- **Clarity over complexity** - if user says "too complicated", simplify drastically
+- **Visual communication** - use clear symbols, colors, and layouts
+- **Medical context** - provide clinical interpretations for glucose ranges
+- **Responsive design** - optimize for mobile diabetes management scenarios
+- **Accessibility** - large touch targets, clear labels, readable fonts
+
+---
+
+## 5) Validation (Gate to "DONE")
+- **Unit tests** (adjacent to source): calculations, rounding, edge cases
+- **Integration tests**: data flow across hooks/components  
+- **Medical validation**: threshold correctness against `PLAN_CONFIG`
+- **User experience testing**: can user actually accomplish their goal?
+- Run `runTests`; attach outputs to plan doc
+- **Risk verification**: document medical safety controls
+
+---
+
+## 6) Documentation & Compliance (Health App Required)
+- Update `/docs/agent/00_CONTEXT.md` with actual files touched
+- Append results to `/docs/agent/01_PLAN.prompt.md`
+- Create/update component README with usage examples
+- Log medical risks in `/docs/compliance/RISK_LOG.md` (ISO-14971 style)
+
+---
+
+## 7) Tool-Use Strategy (Efficient & Reflective)
+- **Start with exploration**: `search`, `codebase`, `usages`, `findTestFiles`
+- **Build context before coding**: understand existing patterns first
+- **Use `think` tool** when user feedback requires design changes
+- **Reflect on failures**: if same tool fails twice, analyze and adjust approach
+- **Document decisions**: why this approach vs alternatives
+
+---
+
+## 8) Testing for Health Compliance (Non-Negotiable)
+- **Unit**: BG calculations, percentage rounding, boundary conditions
+- **Integration**: hook → component → screen data flow
+- **Medical validation**: only `PLAN_CONFIG` values used
+- **Edge cases**: empty data, extreme values, null handling
+- **UX validation**: user can actually complete their intended task
+- **Naming**: descriptive test names; colocated `*.test.ts/tsx`
+
+---
+
+## 9) Context Documentation Template
+Create/update `/docs/agent/00_CONTEXT.md`:
+```md
+# Context for [FEATURE_NAME]
+
+## User Intent
+- Original request:
+- Underlying problem:
+- Success criteria:
+
+## Related Code
+- Components: 
+- Hooks:
+- Utils:
+- Constants: (PLAN_CONFIG usage)
+- Integration points:
+- Existing tests:
+
+## Design Decisions
+- Why this approach:
+- Alternatives considered:
+- User feedback incorporated:
+
+## Medical/Safety Considerations
+- Glucose thresholds used:
+- Calculation accuracy:
+- Risk mitigations:
 ```
-src/
-├── components/           # Reusable UI components
-│   ├── shared/          # Cross-app shared components
-│   └── AGPGraph/        # Glucose analysis components
-├── containers/          # Screen-level containers
-│   └── MainTabsNavigator/
-├── hooks/              # Custom React hooks
-├── utils/              # Business logic utilities
-├── constants/          # Single source of truth (PLAN_CONFIG.ts)
-├── types/              # TypeScript interfaces
-└── style/              # Theme and styling
+
+---
+
+## 10) Plan Template (Approval Gate)
+Create `/docs/agent/01_PLAN.prompt.md`:
+```md
+# Execution Plan — [FEATURE_NAME]
+
+## User Story & Acceptance
+- Original request: 
+- Refined understanding:
+- Done when:
+
+## Proposed Approach
+- Design philosophy:
+- Key components:
+- Integration strategy:
+
+## File Changes
+- `path/to/file.ts`: [new/modify/remove] - rationale
+- [List all anticipated changes]
+
+## Test Strategy
+- Unit tests:
+- Integration tests:
+- Medical validation:
+- UX validation:
+
+## Risk Assessment
+- Medical safety:
+- UX complexity:
+- Performance impact:
+- Rollback plan:
+
+## Alternative Approaches Considered
+- Option A: pros/cons
+- Option B: pros/cons
+- Why chosen approach is best:
+
+> Reply **PROCEED** to execute, or provide feedback to adjust plan.
 ```
 
-#### **Component Hierarchy**:
-- **Screens/Containers**: Top-level navigation components
-- **Components**: Reusable UI building blocks
-- **Hooks**: Data fetching and business logic
-- **Utils**: Pure functions for calculations
+---
 
-## 🔧 **Development Standards**
+## 11) Success Patterns (Learned from Experience)
+- **Iterative refinement** based on immediate user feedback
+- **Constants-first approach** - always check PLAN_CONFIG before hardcoding
+- **Visual clarity** - use mathematical symbols (≤, ≥) for boundaries
+- **Integration thinking** - consider where feature fits in user workflow
+- **Performance awareness** - React Native patterns for smooth interactions
+- **Documentation as you build** - keep README updated with each iteration
 
-### **Glucose Calculations - CRITICAL**
-```typescript
-// ✅ ALWAYS USE - Single source of truth
-import { GLUCOSE_THRESHOLDS } from 'app/constants/PLAN_CONFIG';
+---
 
-// ✅ CORRECT - Use STANDARD range for TIR calculations
-const inRange = bgData.filter(bg => 
-  bg.sgv >= GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min &&
-  bg.sgv <= GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max
-);
+## 12) Final Checklist (No-Git Ready)
+- [ ] User feedback fully incorporated (no "too complicated" issues remaining)
+- [ ] No hardcoded glucose values (all via `PLAN_CONFIG.ts`)
+- [ ] Percentages use `Math.round` consistently
+- [ ] Theme-only colors; no inline hex values
+- [ ] TypeScript strict; no `any` leaks
+- [ ] Tests passing; logs in plan doc
+- [ ] Clear visual communication (symbols, labels, interpretations)
+- [ ] Medical risk assessment documented
+- [ ] Component README updated with examples
+- [ ] Integration completed appropriately
 
-// ✅ CORRECT - Consistent rounding
-const percentage = Math.round((inRange.length / bgData.length) * 100);
+---
 
-// ❌ NEVER DO - Hardcoded values
-const inRange = bgData.filter(bg => bg.sgv >= 70 && bg.sgv <= 140);
-```
+## 13) Reflection Points (Tool Step Management)
+After every 10 tool calls, ask:
+- Am I solving the user's actual problem?
+- Is this getting too complicated for the user?
+- Should I simplify the approach?
+- Do I need user feedback before continuing?
 
-### **Styling Standards**
-```typescript
-// ✅ ALWAYS USE - Theme system
-import { useTheme } from 'styled-components/native';
-const theme = useTheme();
-
-// ✅ CORRECT - Theme colors
-backgroundColor: theme.backgroundColor
-color: theme.textColor
-
-// ❌ NEVER DO - Hardcoded colors
-backgroundColor: '#FFFFFF'
-color: 'black'
-```
-
-### **Component Structure**
-```typescript
-// ✅ CORRECT - Follow this pattern
-interface ComponentProps {
-  bgData: BgSample[];
-  onPress?: () => void;
-}
-
-const Component: React.FC<ComponentProps> = ({ bgData, onPress }) => {
-  const theme = useTheme();
-  
-  // Calculations using established utilities
-  const { averageBg } = calculateAverageAndStdDev(bgData);
-  
-  return (
-    <Container>
-      {/* UI implementation */}
-    </Container>
-  );
-};
-```
-
-## 🧩 **Key Utilities & Patterns**
-
-### **Blood Glucose Calculations**
-- `src/utils/bg.utils.ts` - Basic BG statistics
-- `src/components/AGPGraph/utils/statistics.utils.ts` - Advanced AGP analytics
-- **Always use existing calculation functions**
-
-### **Date/Time Handling**
-- `src/utils/datetime.utils.ts` - Date formatting and manipulation
-- Use `date-fns` library for date operations
-
-### **Data Fetching**
-- Check `src/api/apiRequests.ts` for existing endpoints
-- Use established patterns for Nightscout API calls
-- Implement proper error handling and loading states
-
-### **Common Hooks**
-- `useTrendsData` - For trends analysis
-- `useAGPStats` - For glucose statistics  
-- `useBgData` - For basic glucose data fetching
-
-## 🎨 **UI/UX Standards**
-
-### **Components to Reuse**
-- `TimeInRangeRow` - TIR visualizations
-- `StatsRow` - Statistical displays  
-- `Collapsable` - Expandable sections
-- `BgGradient` - Background gradients
-
-### **Styling Patterns**
-- Use `styled-components/native` for styling
-- Follow existing component structure
-- Maintain consistent spacing and typography
-- Use theme-aware colors and gradients
-
-## 🧪 **Testing Requirements**
-
-### **For Health App Compliance**
-1. **Unit Tests**: Test all calculation functions
-2. **Integration Tests**: Test data flow between components
-3. **Validation Tests**: Verify glucose threshold accuracy
-4. **Edge Cases**: Test with empty/invalid data
-
-### **Test Files Structure**
-- Place tests adjacent to source files
-- Use descriptive test names
-- Mock external dependencies
-- Test medical accuracy scenarios
-
-## 📝 **Code Quality Checklist**
-
-Before submitting any feature:
-
-- [ ] **No hardcoded glucose values** - All use PLAN_CONFIG.ts
-- [ ] **No duplicate calculations** - Reuse existing utilities
-- [ ] **Consistent rounding** - Use Math.round() for all percentages
-- [ ] **Theme compliance** - No hardcoded colors/styles
-- [ ] **TypeScript strict** - Proper typing for all props/data
-- [ ] **Error handling** - Graceful handling of edge cases
-- [ ] **Medical accuracy** - Calculations match clinical standards
-- [ ] **Performance** - Efficient data processing
-- [ ] **Accessibility** - Proper labels and navigation
-- [ ] **Documentation** - Clear comments for complex logic
-
-## 🚨 **Critical Don'ts**
-
-- **NEVER hardcode glucose thresholds** (55, 70, 140, 180, 250)
-- **NEVER duplicate calculation logic** - Always reuse existing functions
-- **NEVER use different rounding methods** - Always use Math.round()
-- **NEVER ignore TypeScript errors** - Fix all type issues
-- **NEVER skip testing** - Health apps require thorough testing
-
-## 🎯 **AI Assistant Instructions**
-
-When helping with ShaniDms feature development:
-
-1. **ALWAYS check existing codebase** for similar patterns
-2. **ENFORCE single source of truth** - Use PLAN_CONFIG.ts
-3. **PRIORITIZE code reuse** over new implementations  
-4. **MAINTAIN medical accuracy** - Double-check all glucose calculations
-5. **FOLLOW established patterns** - Don't introduce new architectures
-6. **VALIDATE TypeScript** - Ensure type safety
-7. **CONSIDER edge cases** - Handle empty data, network errors
-8. **DOCUMENT medical decisions** - Explain clinical reasoning
-9. **TEST thoroughly** - Verify calculations with known datasets
-10. **OPTIMIZE for performance** - Large glucose datasets need efficiency
-
-Remember: This is a life-critical health application. Consistency, accuracy, and reliability are paramount.
+**Remember: This is a life-critical diabetes management app. User experience and medical accuracy are equally important. When in doubt, ask the user.**
