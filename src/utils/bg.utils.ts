@@ -1,8 +1,8 @@
 import {BgSample} from 'app/types/day_bgs.types';
 
 export function calculateAverageAndStdDev(bgSamples: BgSample[]) {
-  // Calculate the average sgv
-  const averageBg = Math.floor(
+  // Calculate the average sgv - Changed from Math.floor to Math.round for consistency with AGP
+  const averageBg = Math.round(
     bgSamples.reduce((acc, bg) => acc + bg.sgv, 0) / bgSamples.length,
   );
 

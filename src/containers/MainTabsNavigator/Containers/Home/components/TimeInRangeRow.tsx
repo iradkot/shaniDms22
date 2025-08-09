@@ -75,14 +75,14 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
   const timeInRange = bgData.filter(
     bg => bg.sgv >= GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min && bg.sgv <= GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max,
   );
-  const timeInRangePercentage = Math.floor(
+  const timeInRangePercentage = Math.round(
     (timeInRange.length / bgData.length) * 100,
   );
-  const lowPercentage = Math.floor(
+  const lowPercentage = Math.round(
     (bgData.filter(bg => bg.sgv < GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min).length / bgData.length) *
       100,
   );
-  const highPercentage = Math.floor(
+  const highPercentage = Math.round(
     (bgData.filter(bg => bg.sgv > GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max).length / bgData.length) *
       100,
   );

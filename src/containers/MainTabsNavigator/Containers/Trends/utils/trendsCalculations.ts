@@ -7,8 +7,9 @@ import { GLUCOSE_THRESHOLDS } from 'app/constants/PLAN_CONFIG';
 // Use the consolidated glucose thresholds from PLAN_CONFIG
 const SERIOUS_HYPO_THRESHOLD = GLUCOSE_THRESHOLDS.SEVERE_HYPO;
 const SERIOUS_HYPER_THRESHOLD = GLUCOSE_THRESHOLDS.SEVERE_HYPER;
-const LOW_THRESHOLD = GLUCOSE_THRESHOLDS.HYPO;
-const HIGH_THRESHOLD = GLUCOSE_THRESHOLDS.HYPER;
+// Use STANDARD target range for consistency with other components
+const LOW_THRESHOLD = GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min;
+const HIGH_THRESHOLD = GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max;
 
 export interface DayDetail {
   dateString: string;
