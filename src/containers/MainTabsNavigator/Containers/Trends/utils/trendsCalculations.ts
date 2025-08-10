@@ -2,11 +2,14 @@
 
 import { BgSample } from 'app/types/day_bgs.types';
 import { format } from 'date-fns';
+import { GLUCOSE_THRESHOLDS } from 'app/constants/PLAN_CONFIG';
 
-const SERIOUS_HYPO_THRESHOLD = 56;
-const SERIOUS_HYPER_THRESHOLD = 220;
-const LOW_THRESHOLD = 70;
-const HIGH_THRESHOLD = 180;
+// Use the consolidated glucose thresholds from PLAN_CONFIG
+const SERIOUS_HYPO_THRESHOLD = GLUCOSE_THRESHOLDS.SEVERE_HYPO;
+const SERIOUS_HYPER_THRESHOLD = GLUCOSE_THRESHOLDS.SEVERE_HYPER;
+// Use STANDARD target range for consistency with other components
+const LOW_THRESHOLD = GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min;
+const HIGH_THRESHOLD = GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max;
 
 export interface DayDetail {
   dateString: string;

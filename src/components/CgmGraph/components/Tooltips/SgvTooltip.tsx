@@ -1,43 +1,53 @@
 import React from 'react';
-import {Rect, Text} from 'react-native-svg';
-import Tooltip from './Tooltip';
+import {G, Rect, Text} from 'react-native-svg';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {BgSample} from 'app/types/day_bgs.types';
 import {ThemeType} from 'app/types/theme';
 import {determineBgColorByGlucoseValue} from 'app/style/styling.utils';
 import {useTheme} from 'styled-components/native';
+import { CHART_COLORS, CHART_OPACITY } from 'app/components/shared/GlucoseChart';
+import { calculateSmartTooltipPosition } from '../../utils/tooltipPositioning';
 
 interface SgvTooltipProps {
   x: number;
   y: number;
   bgSample: BgSample;
+  chartWidth?: number;
+  chartHeight?: number;
 }
 
-const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
+const SgvTooltip: React.FC<SgvTooltipProps> = ({
+  x, 
+  y, 
+  bgSample, 
+  chartWidth = 350,
+  chartHeight = 200
+}) => {
   const theme = useTheme() as ThemeType;
 
   const tooltipWidth = 160;
   const tooltipHeight = 70;
-  let tooltipX = x - tooltipWidth / 2;
+  
+  // Calculate smart position to avoid finger occlusion and bounds overflow
+  const position = calculateSmartTooltipPosition(
+    { x, y },
+    { width: tooltipWidth, height: tooltipHeight },
+    { width: chartWidth, height: chartHeight }
+  );
 
   const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
-
-  tooltipX = Math.max(0, tooltipX);
-  if (tooltipX + tooltipWidth > window.innerWidth) {
-    tooltipX = window.innerWidth - tooltipWidth;
-  }
-
-  // More subtle shadow settings
-  const shadowColor = '#676767'; // Slightly darker shadow for subtlety
-  const shadowOffset = 0.5; // Reduced offset for a minimalistic look
-
+  
+  // Use theme colors for tooltip styling
+  const shadowColor = CHART_COLORS.textSecondary;
+  const shadowOffset = 0.5;
+  
   return (
-    <Tooltip x={tooltipX} y={y}>
+    <G x={position.x} y={position.y}>      
       <Rect
         width={tooltipWidth}
         height={tooltipHeight}
-        fill="#f0f0f0"
-        stroke="#cccccc"
+        fill={CHART_COLORS.background}
+        stroke={CHART_COLORS.border}
         strokeWidth={1}
         rx={8}
       />
@@ -51,7 +61,6 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
         textAnchor="start">
         BG: {`${bgSample.sgv} mg/dL`}
       </Text>
-      {/* Glucose value text */}
       <Text
         x={20}
         y={20}
@@ -71,7 +80,7 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
         textAnchor="start">
         Time: {formatDateToLocaleTimeString(bgSample.date)}
       </Text>
-    </Tooltip>
+    </G>
   );
 };
 

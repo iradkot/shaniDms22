@@ -1,14 +1,12 @@
-// noinspection CssInvalidPropertyValue
-
 import React, {useEffect, useRef, useState} from 'react';
 import styled from 'styled-components/native';
 import {BgSample} from 'app/types/day_bgs.types';
 import {Animated} from 'react-native';
-import {cgmRange} from 'app/constants/PLAN_CONFIG';
-import {Theme} from 'app/types/theme';
+import {GLUCOSE_THRESHOLDS} from 'app/constants/PLAN_CONFIG';
+import {ThemeType} from 'app/types/theme';
 import DropShadow from 'react-native-drop-shadow';
 
-const Container = styled.View<{theme: Theme}>`
+const Container = styled.View<{theme: ThemeType}>`
   flex-direction: row;
   justify-content: space-around;
   align-items: center;
@@ -22,14 +20,14 @@ const Column = styled(Animated.View)<{
   inRange?: boolean;
   aboveRange?: boolean;
   width?: number;
-  theme: Theme;
+  theme: ThemeType;
 }>`
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  width: ${props => props.width}%;
+  width: ${(props: any) => props.width}%;
   height: 50px;
-  background-color: ${props => {
+  background-color: ${(props: any) => {
     if (props.belowRange) {
       return props.theme.belowRangeColor;
     } else if (props.inRange) {
@@ -46,7 +44,7 @@ const Column = styled(Animated.View)<{
 const PercentageText = styled.Text<{color?: string}>`
   font-size: 18px;
   font-weight: bold;
-  color: ${props => props.color || 'white'};
+  color: ${(props: any) => props.color || 'white'};
 `;
 
 interface TimeInRangeRowProps {
@@ -75,20 +73,17 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
     inTargetPercentageAnimation,
   } = animationValues;
   const timeInRange = bgData.filter(
-    // @ts-ignore
-    bg => bg.sgv >= cgmRange.TARGET.min && bg.sgv <= cgmRange.TARGET.max,
+    bg => bg.sgv >= GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min && bg.sgv <= GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max,
   );
-  const timeInRangePercentage = Math.floor(
+  const timeInRangePercentage = Math.round(
     (timeInRange.length / bgData.length) * 100,
   );
-  const lowPercentage = Math.floor(
-    // @ts-ignore
-    (bgData.filter(bg => bg.sgv < cgmRange.TARGET.min).length / bgData.length) *
+  const lowPercentage = Math.round(
+    (bgData.filter(bg => bg.sgv < GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min).length / bgData.length) *
       100,
   );
-  const highPercentage = Math.floor(
-    // @ts-ignore
-    (bgData.filter(bg => bg.sgv > cgmRange.TARGET.max).length / bgData.length) *
+  const highPercentage = Math.round(
+    (bgData.filter(bg => bg.sgv > GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max).length / bgData.length) *
       100,
   );
 

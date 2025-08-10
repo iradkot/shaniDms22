@@ -1,7 +1,7 @@
 import React, {useContext, useEffect, useRef} from 'react';
 import {Circle, G} from 'react-native-svg';
 import {xAccessor, yAccessor} from 'app/components/CgmGraph/utils';
-import {cgmRange} from 'app/constants/PLAN_CONFIG';
+import {GLUCOSE_THRESHOLDS} from 'app/constants/PLAN_CONFIG';
 import {theme} from 'app/style/theme';
 import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
 import {Animated, Easing} from 'react-native';
@@ -12,7 +12,7 @@ const SAMPLE_RADIUS = 2;
 const FOCUSED_SAMPLE_RADIUS = SAMPLE_RADIUS * 8;
 const ANIMATION_DURATION = 400;
 
-const CGMSamplesRenderer = ({focusedSampleDateString}) => {
+const CGMSamplesRenderer = ({focusedSampleDateString}: {focusedSampleDateString?: string}) => {
   const [{xScale, yScale, bgSamples: data}] = useContext(GraphStyleContext);
 
   // Animation value for the circle radius
@@ -48,9 +48,9 @@ const CGMSamplesRenderer = ({focusedSampleDateString}) => {
         const x = xScale(xAccessor(d));
         const y = yScale(yAccessor(d));
         const color =
-          yAccessor(d) < cgmRange.TARGET.min
+          yAccessor(d) < GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.min
             ? theme.belowRangeColor
-            : yAccessor(d) > cgmRange.TARGET.max
+            : yAccessor(d) > GLUCOSE_THRESHOLDS.TARGET_RANGE.STANDARD.max
               ? theme.aboveRangeColor
               : theme.inRangeColor;
 

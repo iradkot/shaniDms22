@@ -1,41 +1,25 @@
-// /Trends/TrendsContainer.tsx
+// Trends container - Main entry point for trends analysis
 
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text } from 'react-native';
 
+// Hooks
 import { useTrendsData } from './hooks/useTrendsData';
-import { DayDetail, calculateTrendsMetrics } from './utils/trendsCalculations';
-import { fetchBgDataForDateRange } from 'app/api/apiRequests';
-import { CHUNK_SIZE } from './Trends.constants';
-import { BgSample } from 'app/types/day_bgs.types';
+import { useComparison } from './hooks/useComparison';
+import { useBestWorstDays } from './hooks/useBestWorstDays';
 
 // Components
 import { DataFetchStatus } from './components/DataFetchStatus';
 import { DateRangeSelector } from './components/DateRangeSelector';
-import { CompareSection } from './components/CompareSection';
-import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
-import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
-import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
-// (If you have insulin data, pass it in above.)
+import TrendsMainContent from './components/TrendsMainContent';
 
-import Collapsable from 'app/components/Collapsable';
-import { DayInsights } from './TrendsUI'; // <--- Now it exists for real!
-
-import {
-  TrendsContainer,
-  SectionTitle,
-  ExplanationText,
-  MetricButton,
-  MetricButtonText
-} from './styles/Trends.styles';
-
-type MetricType = 'tir' | 'hypos' | 'hypers';
+// Styles
+import { TrendsContainer, SectionTitle } from './styles/Trends.styles';
 
 const Trends: React.FC = () => {
   const [rangeDays, setRangeDays] = useState<number>(7);
-  const [selectedMetric, setSelectedMetric] = useState<MetricType>('tir');
 
-  // 1) Calculate date range
+  // Calculate date range
   const { start, end } = useMemo(() => {
     const end = new Date();
     end.setHours(23, 59, 59, 999);
@@ -45,7 +29,7 @@ const Trends: React.FC = () => {
     return { start, end };
   }, [rangeDays]);
 
-  // 2) Use custom hook for BG data
+  // Fetch trends data
   const {
     bgData,
     isLoading,
@@ -59,90 +43,21 @@ const Trends: React.FC = () => {
     finalMetrics,
   } = useTrendsData({ rangeDays, start, end });
 
-  // 3) Compare logic
-  const [showComparison, setShowComparison] = useState(false);
-  const [comparing, setComparing] = useState(false);
-  const [previousMetrics, setPreviousMetrics] = useState<ReturnType<
-    typeof finalMetrics
-  > | null>(null);
-  const [comparisonOffset, setComparisonOffset] = useState(rangeDays);
-  const [comparisonDateRange, setComparisonDateRange] = useState<{
-    start: Date;
-    end: Date;
-  } | null>(null);
+  // Comparison logic
+  const comparison = useComparison({ start, rangeDays });
 
-  async function handleCompare(offset = rangeDays) {
-    setComparing(true);
-    setPreviousMetrics(null);
+  // Best/worst days logic  
+  const bestWorstDays = useBestWorstDays({ dailyDetails: finalMetrics.dailyDetails });
 
-    try {
-      const previousStart = new Date(start);
-      previousStart.setDate(start.getDate() - offset);
-      previousStart.setHours(0, 0, 0, 0);
-
-      const previousEnd = new Date(previousStart);
-      previousEnd.setHours(23, 59, 59, 999);
-      previousEnd.setDate(previousStart.getDate() + (rangeDays - 1));
-
-      setComparisonDateRange({ start: previousStart, end: previousEnd });
-
-      // We need to fetch data in chunks, similar to useTrendsData
-      const totalChunks = Math.ceil(rangeDays / CHUNK_SIZE);
-      let previousBgData: BgSample[] = [];
-
-      for (let i = 0; i < totalChunks; i++) {
-        const chunkStart = new Date(previousStart);
-        chunkStart.setDate(previousStart.getDate() + i * CHUNK_SIZE);
-
-        const chunkEnd = new Date(chunkStart);
-        chunkEnd.setDate(chunkStart.getDate() + CHUNK_SIZE - 1);
-        if (chunkEnd > previousEnd) chunkEnd.setTime(previousEnd.getTime());
-
-        const dataChunk = await fetchBgDataForDateRange(chunkStart, chunkEnd);
-        previousBgData = previousBgData.concat(dataChunk);
-      }
-
-      const metrics = calculateTrendsMetrics(previousBgData);
-      setPreviousMetrics(metrics);
-      setShowComparison(true);
-    } catch (e: any) {
-      console.log('Failed to compare previous period:', e.message);
-      // Optionally, handle the error in the UI
-    } finally {
-      setComparing(false);
-    }
-  }
-
-  const changeComparisonPeriod = (direction: 'back' | 'forward') => {
-    const newOffset =
-      direction === 'back'
-        ? comparisonOffset + rangeDays
-        : Math.max(rangeDays, comparisonOffset - rangeDays);
-    setComparisonOffset(newOffset);
-    handleCompare(newOffset);
-  };
-
-  // 4) Determine best/worst day based on selected metric
-  let displayDays: DayDetail[] = finalMetrics.dailyDetails;
-  if (selectedMetric === 'tir') {
-    displayDays = [...displayDays].sort((a, b) => b.tir - a.tir);
-  } else if (selectedMetric === 'hypos') {
-    displayDays = [...displayDays].sort((a, b) => a.seriousHypos - b.seriousHypos);
-  } else {
-    displayDays = [...displayDays].sort((a, b) => a.seriousHypers - b.seriousHypers);
-  }
-
-  const bestDayDetail = displayDays[0];
-  const worstDayDetail = displayDays[displayDays.length - 1];
-  const bestDay = bestDayDetail?.dateString || '';
-  const worstDay = worstDayDetail?.dateString || '';
+  const hasData = !isLoading && !fetchError && finalMetrics.dailyDetails.length > 0;
+  const hasPartialData = !isLoading && fetchCancelled && finalMetrics.dailyDetails.length > 0;
 
   return (
     <TrendsContainer>
-      {/* 1. Date Range Buttons */}
-      <DateRangeSelector onRangeChange={days => setRangeDays(days)} />
+      {/* Date Range Selector */}
+      <DateRangeSelector onRangeChange={setRangeDays} />
 
-      {/* 2. Current date range info */}
+      {/* Current date range info */}
       <View style={{ alignItems: "center", marginVertical: 10 }}>
         <SectionTitle>Data Range</SectionTitle>
         <Text style={{ fontSize: 16, fontWeight: "bold" }}>
@@ -150,7 +65,7 @@ const Trends: React.FC = () => {
         </Text>
       </View>
 
-      {/* 3. Loading/Error/No data status */}
+      {/* Loading/Error/No data status */}
       <DataFetchStatus
         isLoading={isLoading}
         fetchError={fetchError}
@@ -163,15 +78,15 @@ const Trends: React.FC = () => {
         showMaxWaitReached={showMaxWaitReached}
       />
 
-      {/* 4. No data case */}
+      {/* No data case */}
       {!isLoading && !fetchError && bgData.length === 0 && !fetchCancelled && (
         <View style={{ alignItems: "center", marginVertical: 10 }}>
           <Text>No BG data available for this period.</Text>
         </View>
       )}
 
-      {/* 5. Partial data if user canceled */}
-      {!isLoading && fetchCancelled && finalMetrics.dailyDetails.length > 0 && (
+      {/* Partial data if user canceled */}
+      {hasPartialData && (
         <View style={{ alignItems: "center", marginVertical: 10 }}>
           <Text>
             Loading cancelled. Showing partial results for {daysFetched}/{rangeDays} days.
@@ -179,90 +94,26 @@ const Trends: React.FC = () => {
         </View>
       )}
 
-      {/* 6. Main content if data is present */}
-      {!isLoading && !fetchError && finalMetrics.dailyDetails.length > 0 && (
-        <ScrollView>
-          {/* (a) Time In Range */}
-          <View style={{ marginBottom: 15 }}>
-            <SectionTitle>Key Glucose Trends</SectionTitle>
-            <TimeInRangeRow bgData={bgData} />
-          </View>
-
-          {/* (b) Quick Stats */}
-          <View style={{ marginBottom: 15 }}>
-            <SectionTitle>Quick Stats</SectionTitle>
-            <StatsRow bgData={bgData} />
-          </View>
-
-          {/* (c) Insulin Stats (optional) */}
-          {/*
-          <InsulinStatsRow
-            insulinData={insulinData}
-            basalProfileData={basalProfileData}
-            startDate={start}
-            endDate={end}
-          />
-          */}
-
-          {/* (d) Overall Stats in a collapsible (optional)
-          <Collapsable title="Overall Stats (Key Indicators)">
-            <OverallStatsSection metrics={finalMetrics} />
-          </Collapsable>
-          */}
-
-          {/* (e) Best/Worst Day Selection */}
-          <Collapsable title="Select Metric for Best/Worst Day">
-            <ExplanationText>Choose how to determine best/worst day:</ExplanationText>
-            <View style={{flexDirection: 'row', justifyContent: 'center', marginVertical: 10}}>
-              <View style={{ marginHorizontal: 5 }}>
-                <MetricButton
-                  selected={selectedMetric === 'tir'}
-                  onPress={() => setSelectedMetric('tir')}
-                >
-                  <MetricButtonText>TIR</MetricButtonText>
-                </MetricButton>
-              </View>
-              <View style={{ marginHorizontal: 5 }}>
-                <MetricButton
-                  selected={selectedMetric === 'hypos'}
-                  onPress={() => setSelectedMetric('hypos')}
-                >
-                  <MetricButtonText>Fewest Hypos</MetricButtonText>
-                </MetricButton>
-              </View>
-              <View style={{ marginHorizontal: 5 }}>
-                <MetricButton
-                  selected={selectedMetric === 'hypers'}
-                  onPress={() => setSelectedMetric('hypers')}
-                >
-                  <MetricButtonText>Fewest Hypers</MetricButtonText>
-                </MetricButton>
-              </View>
-            </View>
-          </Collapsable>
-
-          {/* (f) Best/Worst day details */}
-          <DayInsights
-            bestDayDetail={bestDayDetail}
-            worstDayDetail={worstDayDetail}
-            bestDay={bestDay}
-            worstDay={worstDay}
-            selectedMetric={selectedMetric}
-          />
-
-          {/* (g) Compare with previous period */}
-          <CompareSection
-            showComparison={showComparison}
-            comparing={comparing}
-            handleCompare={() => handleCompare(comparisonOffset)}
-            rangeDays={rangeDays}
-            currentMetrics={finalMetrics}
-            previousMetrics={previousMetrics}
-            comparisonDateRange={comparisonDateRange}
-            changeComparisonPeriod={changeComparisonPeriod}
-            hideComparison={() => setShowComparison(false)}
-          />
-        </ScrollView>
+      {/* Main content if data is present */}
+      {hasData && (        <TrendsMainContent
+          bgData={bgData}
+          finalMetrics={finalMetrics}
+          selectedMetric={bestWorstDays.selectedMetric}
+          onMetricChange={bestWorstDays.setSelectedMetric}
+          bestDayDetail={bestWorstDays.bestDayDetail}
+          worstDayDetail={bestWorstDays.worstDayDetail}
+          bestDay={bestWorstDays.bestDay}
+          worstDay={bestWorstDays.worstDay}
+          showComparison={comparison.showComparison}
+          comparing={comparison.comparing}
+          handleCompare={() => comparison.handleCompare(comparison.comparisonOffset)}
+          rangeDays={rangeDays}
+          previousMetrics={comparison.previousMetrics}
+          previousBgData={comparison.previousBgData}
+          comparisonDateRange={comparison.comparisonDateRange}
+          changeComparisonPeriod={comparison.changeComparisonPeriod}
+          hideComparison={comparison.hideComparison}
+        />
       )}
     </TrendsContainer>
   );

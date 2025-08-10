@@ -1,19 +1,21 @@
 import {interpolateRgb} from 'd3';
-import {DetermineBgColorByGlucoseValue, Theme} from 'app/types/theme';
+import {DetermineBgColorByGlucoseValue, ThemeType} from 'app/types/theme';
 import {Platform} from 'react-native';
-//
-const SEVERE_HYPO_THRESHOLD = 55;
-const HYPO_THRESHOLD = 70;
-const TARGET_FROM = 90;
-const TARGET_TO = 110;
-const TARGET_MIDDLE = (TARGET_TO + TARGET_FROM) / 2;
-const HYPER_THRESHOLD = 180;
-const SEVERE_HYPER_THRESHOLD = 250;
+import { GLUCOSE_THRESHOLDS } from 'app/constants/PLAN_CONFIG';
+
+// Import glucose thresholds from the single source of truth
+export const SEVERE_HYPO_THRESHOLD = GLUCOSE_THRESHOLDS.SEVERE_HYPO;
+export const HYPO_THRESHOLD = GLUCOSE_THRESHOLDS.HYPO;
+export const TARGET_FROM = GLUCOSE_THRESHOLDS.TARGET_RANGE.TIGHT.min;
+export const TARGET_TO = GLUCOSE_THRESHOLDS.TARGET_RANGE.TIGHT.max;
+export const TARGET_MIDDLE = GLUCOSE_THRESHOLDS.TARGET_RANGE.TIGHT.middle;
+export const HYPER_THRESHOLD = GLUCOSE_THRESHOLDS.HYPER;
+export const SEVERE_HYPER_THRESHOLD = GLUCOSE_THRESHOLDS.SEVERE_HYPER;
 
 // props are bgValue and theme, theme defaults to theme
 export const determineBgColorByGlucoseValue: DetermineBgColorByGlucoseValue = (
   bgValue: number,
-  currentTheme: Theme,
+  currentTheme: ThemeType,
 ) => {
   const SEVERE_HYPO_COLOR = currentTheme.severeBelowRange;
   const HYPO_COLOR = currentTheme.belowRangeColor;
@@ -91,7 +93,7 @@ export const shadowStyles = ({
   color,
   elevation,
 }: {
-  theme: Theme;
+  theme: ThemeType;
   color?: string;
   elevation?: number;
 }) => {
