@@ -1,103 +1,148 @@
-# Execution Plan — Chart Tooltip Positioning Fix ✅ COMPLETED
+# Execution Plan — Chart Zoom Feature
 
-## User Story & Acceptance ✅
-- **Original request:** Fix chart tooltip issues where finger hides tooltip and tooltip goes out of bounds
-- **Refined understanding:** Need intelligent tooltip positioning that avoids finger occlusion and stays within container bounds
-- **Done when:**
-  1. ✅ Tooltips position themselves away from finger touch area
-  2. ✅ Tooltips stay within chart container boundaries 
-  3. ✅ Positioning adapts based on available space in all directions
-  4. ✅ All tooltip types use consistent positioning logic
-  5. ✅ Medical data remains clearly visible and accurate
+## User Story & Acceptance
+- Original request: Add zoom functionality to charts with finger gestures and buttons, plus reset capability
+- Refined understanding: Implement modern mobile chart zoom patterns with pinch-to-zoom, zoom buttons, and reset functionality for examining medical glucose data in detail
+- Done when: 
+  ✅ Users can pinch-to-zoom on glucose charts  
+  ✅ Zoom buttons (+/-) provide alternative interaction
+  ✅ Reset button returns to original view
+  ✅ Medical data accuracy preserved during zoom operations
+  ✅ Tooltips work correctly at all zoom levels
+  ✅ Smooth mobile-optimized zoom experience
 
-## Implementation Results ✅
+## Proposed Approach
 
-### Smart Positioning System:
-- **✅ Smart Positioning Utility** - `tooltipPositioning.ts` with quadrant-based algorithm
-- **✅ Finger Occlusion Avoidance** - 44px touch area clearance following iOS HIG
-- **✅ Bounds Checking** - Tooltips never overflow chart container
-- **✅ Quadrant Selection** - Intelligent positioning in best available space
-- **✅ Fallback Logic** - Graceful degradation when no perfect position exists
+### Design Philosophy:
+- **Medical-First**: Preserve glucose data accuracy and medical thresholds during all zoom operations
+- **Mobile-Optimized**: Smooth pinch-to-zoom gestures using react-native-gesture-handler (already available)
+- **Accessibility**: Zoom buttons as alternative for users who struggle with gestures
+- **Performance**: Efficient SVG transforms without re-rendering large datasets
 
-### Components Updated:
-- **✅ SgvTooltip.tsx** - BG reading tooltips with smart positioning
-- **✅ CombinedBgBolusTooltip.tsx** - Combined BG+insulin tooltips  
-- **✅ MultiBolusTooltip.tsx** - Multiple insulin event tooltips
-- **✅ CombinedBgMultiBolusTooltip.tsx** - BG+multiple insulin tooltips
-- **✅ BolusTooltip.tsx** - Individual insulin event tooltips
-- **✅ CgmGraph.tsx** - Updated to pass chart dimensions to all tooltips
+### Key Components:
+1. **Zoom Context** - Manages zoom state (scale, offset, bounds validation)
+2. **Gesture Handler** - Pinch-to-zoom with medical bounds validation
+3. **Zoom Controls** - UI buttons with theme integration (+/- and reset)
+4. **Chart Integration** - SVG transform application to existing charts
+5. **Medical Validation** - Ensure glucose thresholds remain visible and accurate
 
-### Technical Implementation:
-- **Algorithm:** Quadrant-based positioning (top-right → top-left → bottom-right → bottom-left)
-- **Finger Clearance:** 50px minimum distance from touch point
-- **Container Margins:** 8px minimum distance from chart edges
-- **Fallback System:** Legacy positioning preserved as backup
-- **Performance:** Sub-1ms positioning calculations for responsive touch
+### Integration Strategy:
+- **Phase 1**: CGM Graph (Home tab) - primary daily glucose chart
+- **Phase 2**: AGP Chart (Trends tab) - multi-day ambulatory glucose profile
 
-### Test Coverage:
-- **✅ Unit Tests** - `tooltipPositioning.test.ts` with comprehensive scenarios
-- **✅ Edge Cases** - Small containers, large tooltips, corner touches
-- **✅ Boundary Conditions** - Chart edges, extreme coordinates
-- **✅ Medical Safety** - Consistent results, no data corruption
-- **✅ Performance** - Fast calculation validation
-- **✅ Real-world Scenarios** - Reproduces and fixes user's screenshot issue
+## File Changes
 
-## Problem Resolution ✅
+### New Files to Create:
+- `src/components/CgmGraph/hooks/useZoomContext.ts` - Zoom state management hook
+- `src/components/CgmGraph/components/ZoomControls.tsx` - UI buttons for zoom/reset
+- `src/components/CgmGraph/utils/zoomUtils.ts` - Medical bounds validation and transforms
+- `src/components/CgmGraph/constants/zoomConfig.ts` - Zoom limits and medical constraints
 
-### Before (Issues Fixed):
-- **Finger Occlusion** - Tooltips always appeared above touch point, hidden by finger
-- **Out of Bounds** - Tooltips could overflow chart top/edges (as shown in user's image)
-- **Poor UX** - Fixed positioning didn't consider available space
-- **Inconsistent** - Different tooltips had different positioning logic
+### Files to Modify:
+- `src/components/CgmGraph/contextStores/TouchContext.tsx` - Add pinch gesture support
+- `src/components/CgmGraph/CgmGraph.tsx` - Integrate zoom context and controls
+- `src/components/CgmGraph/components/CGMSamplesRenderer.tsx` - Apply zoom transforms to BG points
+- `src/components/CgmGraph/components/YGridAndAxis.tsx` - Apply zoom to Y-axis grid/labels
+- `src/components/CgmGraph/components/XGridAndAxis.tsx` - Apply zoom to X-axis grid/labels
 
-### After (Smart Positioning):
-- **Finger-Aware** - Tooltips position away from 44px touch area
-- **Bounds-Safe** - Never overflow chart container in any direction
-- **Adaptive** - Chooses best quadrant based on available space
-- **Consistent** - All tooltip types use same smart positioning utility
+### Phase 2 (AGP Support):
+- `src/components/AGPGraph/components/AGPChart.tsx` - Add zoom capability to AGP
+- `src/components/AGPGraph/hooks/useChartConfig.ts` - Zoom-aware chart configuration
 
-### Specific Fix for User's Issue:
-The screenshot showed a tooltip overflowing at the top when touching near the chart's top edge. Now:
-- **Smart Detection** - Recognizes insufficient top space
-- **Quadrant Switch** - Automatically positions below touch point (bottom-right quadrant)
-- **Bounds Guarantee** - Ensures tooltip stays within container
-- **Finger Clearance** - Maintains visibility despite finger position
+## Test Strategy
 
-## Medical Safety Validation ✅
+### Unit Tests:
+- **Zoom Bounds Validation**: Test medical range constraints (40-400 mg/dL)
+- **Transform Calculations**: Verify zoom/pan transform accuracy
+- **Medical Data Preservation**: Ensure glucose thresholds remain accurate
+- **Reset Functionality**: Validate return to original view state
 
-### Content Preservation:
-- **✅ No Data Changes** - All glucose/insulin values remain identical
-- **✅ Timestamp Accuracy** - Exact time display preserved  
-- **✅ Theme Consistency** - Uses existing TOOLTIP_STYLES from GlucoseTheme.tsx
-- **✅ Color Coding** - Medical color coding for glucose ranges maintained
+### Integration Tests:
+- **Gesture Recognition**: Pinch-to-zoom responsiveness and bounds
+- **Tooltip Positioning**: Tooltips work correctly at all zoom levels
+- **Chart Performance**: Smooth zoom without rendering lag
+- **Multi-touch**: Zoom + tooltip interaction compatibility
 
-### Visual Clarity:
-- **✅ Enhanced Visibility** - Smart positioning reduces obstruction
-- **✅ Critical Data** - Emergency glucose readings clearly visible
-- **✅ Touch Friendly** - Better mobile UX for diabetes management
-- **✅ Consistent Behavior** - Predictable positioning reduces confusion
+### Medical Validation:
+- **Glucose Threshold Visibility**: Critical values (≤70, ≥180) remain clear
+- **Data Accuracy**: No rounding or precision loss during zoom operations
+- **Time Correlation**: Exact timestamp preservation for medical decisions
+- **Emergency Readability**: Quick glucose assessment at any zoom level
 
-## Performance Impact ✅
+### UX Validation:
+- **Mobile Usability**: Easy pinch gestures on phone screens
+- **Button Accessibility**: Large touch targets for zoom controls
+- **Visual Feedback**: Clear zoom level indication
+- **Reset Discoverability**: Easy return to full view
 
-### Benchmarking Results:
-- **Positioning Calculation:** < 1ms (tested in unit tests)
-- **Touch Response:** No measurable impact on chart interactions
-- **Memory Usage:** Minimal additional overhead
-- **Bundle Size:** ~2KB additional utility code
+## Risk Assessment
 
-### Optimization Features:
-- **Efficient Algorithm** - Single pass quadrant checking
-- **Minimal Dependencies** - Pure calculation functions
-- **No Re-renders** - Position calculated once per touch
-- **Fallback Ready** - Legacy system preserved if needed
+### Medical Safety:
+- **Risk**: Zoom could hide critical glucose values or medical thresholds
+- **Mitigation**: Implement medical bounds validation using PLAN_CONFIG constants
+- **Validation**: Ensure glucose ranges 40-400 mg/dL always partially visible
 
-## Final Status: ✅ SMART POSITIONING ACTIVE
+### UX Complexity:
+- **Risk**: Complex zoom interactions could confuse medical users
+- **Mitigation**: Start with simple pinch + button controls, add visual zoom indicators
+- **Validation**: User testing with diabetes management workflows
 
-**The tooltip positioning issues are now resolved:**
-- **🚫 No More Finger Occlusion** - Tooltips intelligently avoid finger area
-- **🚫 No More Overflow** - Tooltips always stay within chart bounds  
-- **✅ Adaptive Positioning** - Chooses optimal quadrant based on space
-- **✅ Medical Safety** - All glucose/insulin data remains accurate
-- **✅ Consistent UX** - All tooltip types behave predictably
+### Performance Impact:
+- **Risk**: SVG transforms on large datasets could cause lag
+- **Mitigation**: Use efficient transform matrices, avoid re-rendering data points
+- **Validation**: Test with 1000+ glucose readings typical of continuous monitoring
 
-**The user's specific issue (tooltip going off-screen at top) is fixed by smart quadrant selection that positions tooltips below the touch point when top space is insufficient.** 🎯
+### Rollback Plan:
+- **Simple Disable**: Zoom feature controlled by feature flag
+- **Component Isolation**: New zoom components don't affect existing chart functionality
+- **Graceful Degradation**: Charts work normally if zoom components fail
+
+## Alternative Approaches Considered
+
+### Option A: Simple CSS/SVG Scale Transform
+- **Pros**: Easy implementation, minimal code changes
+- **Cons**: May blur medical data, limited control over bounds
+- **Decision**: Rejected due to medical data quality concerns
+
+### Option B: Data Filtering + Re-rendering
+- **Pros**: Perfect data precision, medical accuracy
+- **Cons**: Complex implementation, performance concerns, tooltip complexity
+- **Decision**: Too complex for initial implementation
+
+### Option C: Hybrid Transform + Bounds Validation (CHOSEN)
+- **Pros**: Smooth performance + medical safety, moderate complexity
+- **Cons**: Requires careful bounds validation logic
+- **Decision**: Best balance of UX and medical accuracy
+
+### Option D: External Chart Library with Zoom
+- **Pros**: Feature-complete zoom implementation
+- **Cons**: Major refactoring, loss of custom medical features, large bundle size
+- **Decision**: Rejected due to existing medical customizations
+
+## Success Metrics
+
+### Technical Success:
+✅ **Smooth Zoom Performance**: 60fps pinch-to-zoom gestures on mobile devices
+✅ **Medical Data Preservation**: All glucose values maintain original precision
+✅ **Bounds Validation**: Cannot zoom to "empty" views, medical ranges always accessible
+✅ **Cross-Platform**: Works consistently on iOS and Android devices
+
+### Medical Safety:
+✅ **Glucose Threshold Accuracy**: PLAN_CONFIG values preserved during all operations
+✅ **Critical Value Visibility**: Hypoglycemic (≤70) and hyperglycemic (≥180) ranges accessible
+✅ **Timestamp Precision**: Exact time correlation maintained for medical correlation
+✅ **Emergency Use**: Quick glucose assessment possible at any zoom level
+
+### User Experience:
+✅ **Intuitive Gestures**: Standard mobile pinch-to-zoom behavior
+✅ **Accessible Controls**: Large, discoverable zoom buttons with proper touch targets
+✅ **Visual Feedback**: Clear indication of current zoom level and reset availability
+✅ **Tooltip Integration**: Tooltips remain functional and properly positioned during zoom
+
+### Integration Quality:
+✅ **Theme Consistency**: Zoom controls match app's medical theme system
+✅ **Chart Compatibility**: Works seamlessly with existing CGM and AGP charts
+✅ **Feature Harmony**: Doesn't interfere with food items, insulin markers, or tooltips
+✅ **Performance**: No degradation of existing chart rendering speed
+
+> Reply **PROCEED** to execute, or provide feedback to adjust plan.

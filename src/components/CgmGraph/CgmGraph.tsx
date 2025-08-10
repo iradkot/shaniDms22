@@ -27,6 +27,9 @@ import { CHART_COLORS, CHART_OPACITY } from 'app/components/shared/GlucoseChart'
 import { InsulinDataEntry } from 'app/types/insulin.types';
 import { findClosestBolus, findClosestBolusWithSpatialProximity, findBolusEventsInWindow } from './utils/bolusUtils';
 import { BG_COMBINATION_WINDOW_MS } from './constants/bolusHoverConfig';
+// Zoom functionality imports
+import ZoomControlsSimple from './components/ZoomControlsSimple';
+import { useZoomContext } from './hooks/useZoomContext';
 
 interface Props {
   bgSamples: BgSample[];
@@ -43,9 +46,26 @@ const StyledSvg = styled(Svg)`
 
 const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulinData = []}) => {
   const containerRef = useRef<View>(null);
+  
+  // Add extra height for X-axis labels (25px for labels + 5px buffer)
+  const chartHeight = height;
+  const svgHeight = height + 30;
+  
   const [graphStyleContextValue, setGraphStyleContextValue] =
-    useGraphStyleContext(width, height, bgSamples);
+    useGraphStyleContext(width, chartHeight, bgSamples);
   const touchContext = useTouchContext();
+
+  // Calculate day boundaries from data for time-based zoom
+  const dayStartTime = bgSamples.length > 0 ? Math.min(...bgSamples.map(sample => sample.date)) : Date.now();
+  const dayEndTime = bgSamples.length > 0 ? Math.max(...bgSamples.map(sample => sample.date)) : Date.now();
+
+  // Initialize zoom context for medical chart time-based zoom functionality
+  const zoomContext = useZoomContext(
+    graphStyleContextValue.graphWidth, 
+    bgSamples, 
+    dayStartTime, 
+    dayEndTime
+  );
 
   const {
     isTouchActive,
@@ -55,14 +75,34 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
     handleTouchEnd,
   } = touchContext;
 
+  const {
+    zoomState,
+    timeWindow,
+    filteredData,
+    timeDomain,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    panLeft,
+    panRight,
+    canZoomIn,
+    canZoomOut,
+    canPanLeft,
+    canPanRight,
+    zoomPercentage,
+    timeWindowText,
+  } = zoomContext;
+
   useEffect(() => {
+    // Use filtered data for zoom, or original data if not zoomed
+    const dataToUse = zoomState.isZoomed ? filteredData : bgSamples;
     setGraphStyleContextValue({
       ...graphStyleContextValue,
       width,
-      height,
-      bgSamples,
+      height: chartHeight, // Use chartHeight for internal calculations
+      bgSamples: dataToUse, // This will cause the xScale to be recalculated with filtered data
     });
-  }, [width, height, bgSamples]);
+  }, [width, height, bgSamples, filteredData, zoomState.isZoomed, chartHeight]);
 
   if (!bgSamples || bgSamples.length === 0) {
     return null;
@@ -124,14 +164,14 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
   return (
     <GraphStyleContext.Provider
       value={[graphStyleContextValue, setGraphStyleContextValue]}>
-      <View ref={containerRef} style={{width, height}}>
+      <View ref={containerRef} style={{width, height: svgHeight + 50, paddingBottom: 50}}>
         <StyledSvg
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           width={width}
-          height={height}
-          viewBox={`0 0 ${width} ${height}`}>            
+          height={svgHeight}
+          viewBox={`0 0 ${width} ${svgHeight}`}>            
           <G transform={`translate(${graphStyleContextValue.margin?.left}, ${graphStyleContextValue.margin?.top})`}>
             {/* Render grid FIRST so it appears behind data */}
             <XGridAndAxis />
@@ -226,6 +266,21 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
             )}
           </G>
         </StyledSvg>
+        
+        {/* Time-based Zoom Controls - positioned to avoid tooltip interference */}
+        <ZoomControlsSimple
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onReset={resetZoom}
+          onPanLeft={panLeft}
+          onPanRight={panRight}
+          canZoomIn={canZoomIn}
+          canZoomOut={canZoomOut}
+          canPanLeft={canPanLeft}
+          canPanRight={canPanRight}
+          isZoomed={zoomState.isZoomed}
+          timeWindowText={timeWindowText}
+        />
       </View>
     </GraphStyleContext.Provider>
   );
