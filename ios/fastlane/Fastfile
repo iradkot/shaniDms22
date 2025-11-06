@@ -1,3 +1,6 @@
+require "base64"
+require "fileutils"
+
 # This file contains the fastlane.tools configuration
 # You can find the documentation at https://docs.fastlane.tools
 #
@@ -9,45 +12,149 @@
 #
 #     https://docs.fastlane.tools/plugins/available-plugins
 #
-
 # Uncomment the line if you want fastlane to automatically update itself
 # update_fastlane
+
+def builds_directory
+  File.expand_path("./builds")
+end
+
+def provisioning_profile_path
+  File.join(builds_directory, "provisioning.mobileprovision")
+end
+
+def certificate_path
+  File.join(builds_directory, "certificate.p12")
+end
+
+def decode_secret_to(path:, variable:)
+  value = ENV[variable]
+  UI.user_error!("Missing environment variable #{variable}") if value.to_s.strip.empty?
+  File.binwrite(path, Base64.decode64(value))
+  path
+end
+
+def ensure_keychain(name:, password:)
+  begin
+    delete_keychain(name: name)
+  rescue StandardError
+    UI.message("Keychain #{name} did not exist – continuing")
+  end
+
+  create_keychain(
+    name: name,
+    password: password,
+    default_keychain: true,
+    unlock: true,
+    timeout: 3600,
+    lock_when_sleeps: true
+  )
+end
+
+def configure_signing_for_ci
+  FileUtils.mkdir_p(builds_directory)
+
+  keychain_name = ENV.fetch("CI_KEYCHAIN_NAME", "ci-signing")
+  keychain_password = ENV.fetch("CI_KEYCHAIN_PASSWORD", "ci-signing")
+
+  ensure_keychain(name: keychain_name, password: keychain_password)
+
+  decode_secret_to(path: certificate_path, variable: "APPLE_CERTIFICATE_P12")
+
+  import_certificate(
+    certificate_path: certificate_path,
+    certificate_password: ENV.fetch("APPLE_CERTIFICATE_PASSWORD"),
+    keychain_name: keychain_name,
+    keychain_password: keychain_password
+  )
+
+  decode_secret_to(path: provisioning_profile_path, variable: "APPLE_PROVISIONING_PROFILE")
+end
+
+def configure_signing_for_local
+  FileUtils.mkdir_p(builds_directory)
+
+  get_certificates(
+    output_path: builds_directory
+  )
+
+  get_provisioning_profile(
+    output_path: builds_directory,
+    filename: "provisioning.mobileprovision"
+  )
+end
+
+def provisioning_profile_setup
+  update_project_provisioning(
+    xcodeproj: "shaniDms22.xcodeproj",
+    target_filter: "shaniDms22",
+    profile: provisioning_profile_path,
+    build_configuration: "Release"
+  )
+
+  update_project_team(
+    teamid: CredentialsManager::AppfileConfig.try_fetch_value(:team_id)
+  )
+end
+
+def app_store_api_key
+  key_id = ENV["APP_STORE_CONNECT_KEY_ID"]
+  issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"]
+  private_key = ENV["APP_STORE_CONNECT_PRIVATE_KEY"]
+
+  return nil if [key_id, issuer_id, private_key].any? { |value| value.to_s.strip.empty? }
+
+  app_store_connect_api_key(
+    key_id: key_id,
+    issuer_id: issuer_id,
+    key_content: private_key,
+    is_key_content_base64: true
+  )
+end
 
 default_platform(:ios)
 
 platform :ios do
   desc "Push a new beta build to TestFlight"
   lane :beta do
+    if ENV["CI"]
+      configure_signing_for_ci
+    else
+      configure_signing_for_local
+    end
+
+    provisioning_profile_setup
+
     increment_build_number(xcodeproj: "shaniDms22.xcodeproj")
-    get_certificates( # Create or get certificate, and install it
-      output_path: "./builds" # Download certificate in the build folder (you don't need to create the folder)
-    )
-    get_provisioning_profile( # Create or get provisioning profile
-      output_path: "./builds",  # Download provisioning profile in the build folder
-      filename: "provisioning.mobileprovision" # Rename the local provisioning profile
-    )
-    update_project_provisioning( # Set the project provisioning profile (related in Xcode to the General > Signing Release section)
-      xcodeproj: "shaniDms22.xcodeproj",
-      target_filter: "shaniDms22", # Name of your project
-      profile: "./builds/provisioning.mobileprovision",
-      build_configuration: "Release"
-    )
-    update_project_team( # Set the right team on your project
-      teamid: CredentialsManager::AppfileConfig.try_fetch_value(:team_id)
-    )
+
     build_app(
-        workspace: "shaniDms22.xcworkspace",
-        scheme: "shaniDms22",
-            clean: true,
-            export_method: "app-store",
-            export_options: {
-              provisioningProfiles: {
-                  CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier) => CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier) + " AppStore" # Value of this parameter is the name of the Provisioning Profile. By default, it will be "{bundleId} AppStore"
-              }
-            },
-            build_path: "./builds",
-            output_directory: "./builds"
+      workspace: "shaniDms22.xcworkspace",
+      scheme: "shaniDms22",
+      clean: true,
+      export_method: "app-store",
+      export_options: {
+        provisioningProfiles: {
+          CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier) => CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier) + " AppStore"
+        }
+      },
+      build_path: "./builds",
+      output_directory: "./builds"
     )
-    upload_to_testflight
+
+    upload_to_testflight(
+      api_key: app_store_api_key
+    )
+  end
+
+  after_all do
+    next unless ENV["CI"]
+
+    keychain_name = ENV.fetch("CI_KEYCHAIN_NAME", "ci-signing")
+
+    begin
+      delete_keychain(name: keychain_name)
+    rescue StandardError
+      UI.message("Keychain #{keychain_name} could not be deleted – skipping")
+    end
   end
 end
