@@ -1,0 +1,54 @@
+name: iOS Beta Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: "Fastlane lane to run"
+        required: false
+        default: "beta"
+
+jobs:
+  beta:
+    runs-on: macos-13
+    env:
+      NODE_OPTIONS: --max_old_space_size=4096
+      APPLE_PROVISIONING_PROFILE: ${{ vars.APPLE_PROVISIONING_PROFILE || secrets.APPLE_PROVISIONING_PROFILE }}
+      APPLE_CERTIFICATE_P12: ${{ vars.APPLE_CERTIFICATE_P12 || secrets.APPLE_CERTIFICATE_P12 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ vars.APPLE_CERTIFICATE_PASSWORD || secrets.APPLE_CERTIFICATE_PASSWORD }}
+      CI_KEYCHAIN_NAME: ci-signing
+      CI_KEYCHAIN_PASSWORD: ${{ vars.CI_KEYCHAIN_PASSWORD || secrets.CI_KEYCHAIN_PASSWORD }}
+      APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_PRIVATE_KEY: ${{ vars.APP_STORE_CONNECT_PRIVATE_KEY || secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+          cache: 'yarn'
+
+      - name: Install JavaScript dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '2.7.5'
+          bundler-cache: true
+
+      - name: Install CocoaPods dependencies
+        run: bundle exec pod install --project-directory=ios
+
+      - name: Install fastlane dependencies
+        run: bundle install
+        env:
+          BUNDLE_GEMFILE: ios/Gemfile
+
+      - name: Run fastlane
+        env:
+          BUNDLE_GEMFILE: ios/Gemfile
+        run: bundle exec fastlane ios ${{ github.event.inputs.lane || 'beta' }}
