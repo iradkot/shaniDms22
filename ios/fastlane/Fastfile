@@ -118,6 +118,34 @@ def appfile_team_id
   team_id
 end
 
+def resolved_app_identifier
+  env_identifier = ENV.fetch("APP_IDENTIFIER", ENV["BUNDLE_IDENTIFIER"]).to_s.strip
+  return env_identifier unless env_identifier.empty?
+
+  identifier = CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier).to_s.strip
+  if identifier.empty?
+    appfile_paths = [
+      ENV["FASTLANE_APPFILE_PATH"],
+      File.expand_path("Appfile", __dir__),
+      File.expand_path("../fastlane/Appfile", __dir__)
+    ].compact
+
+    appfile_paths.each do |path|
+      next unless File.exist?(path)
+
+      match = File.read(path).match(/app_identifier\(["'](?<identifier>.+?)["']\)/)
+      if match && !match[:identifier].to_s.strip.empty?
+        identifier = match[:identifier].strip
+        break
+      end
+    end
+  end
+
+  UI.user_error!("No app_identifier configured in Appfile") if identifier.empty?
+  ENV["APP_IDENTIFIER"] ||= identifier
+  identifier
+end
+
 def provisioning_profile_setup
   UI.message("Using Xcode project at #{XCODEPROJ_PATH}")
   UI.user_error!("Could not find Xcode project at #{XCODEPROJ_PATH}") unless File.exist?(XCODEPROJ_PATH)
@@ -169,6 +197,8 @@ platform :ios do
 
     increment_build_number(xcodeproj: XCODEPROJ_PATH)
 
+    app_identifier = resolved_app_identifier
+
     build_app(
       workspace: XCWORKSPACE_PATH,
       scheme: "shaniDms22",
@@ -176,7 +206,7 @@ platform :ios do
       export_method: "app-store",
       export_options: {
         provisioningProfiles: {
-          CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier) => CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier) + " AppStore"
+          app_identifier => app_identifier + " AppStore"
         }
       },
       build_path: "./builds",
