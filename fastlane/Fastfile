@@ -1,3 +1,9 @@
 # This Fastfile delegates to the iOS-specific fastlane setup
 # to allow running `bundle exec fastlane` from the repository root.
+
+# Point fastlane to the Appfile that lives alongside the iOS Fastfile so
+# configuration values (like `team_id`) remain available when invoking from
+# the repository root.
+ENV["FASTLANE_APPFILE_PATH"] ||= File.expand_path("../ios/fastlane/Appfile", __dir__)
+
 import "../ios/fastlane/Fastfile"
