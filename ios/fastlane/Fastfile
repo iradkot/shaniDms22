@@ -4,6 +4,7 @@ require "fileutils"
 PROJECT_ROOT = File.expand_path("..", __dir__)
 XCODEPROJ_PATH = File.join(PROJECT_ROOT, "shaniDms22.xcodeproj")
 XCWORKSPACE_PATH = File.join(PROJECT_ROOT, "shaniDms22.xcworkspace")
+DEFAULT_TEAM_ID = "8KHU9V3DTQ"
 
 # This file contains the fastlane.tools configuration
 # You can find the documentation at https://docs.fastlane.tools
@@ -89,8 +90,31 @@ def configure_signing_for_local
 end
 
 def appfile_team_id
+  env_team_id = ENV.fetch("APPLE_TEAM_ID", ENV["FASTLANE_TEAM_ID"]).to_s.strip
+  return env_team_id unless env_team_id.empty?
+
   team_id = CredentialsManager::AppfileConfig.try_fetch_value(:team_id).to_s.strip
+  if team_id.empty?
+    appfile_paths = [
+      ENV["FASTLANE_APPFILE_PATH"],
+      File.expand_path("Appfile", __dir__),
+      File.expand_path("../fastlane/Appfile", __dir__)
+    ].compact
+
+    appfile_paths.each do |path|
+      next unless File.exist?(path)
+
+      match = File.read(path).match(/team_id\(["'](?<team_id>.+?)["']\)/)
+      if match && !match[:team_id].to_s.strip.empty?
+        team_id = match[:team_id].strip
+        break
+      end
+    end
+  end
+
+  team_id = DEFAULT_TEAM_ID if team_id.empty?
   UI.user_error!("No team_id configured in Appfile") if team_id.empty?
+  ENV["FASTLANE_TEAM_ID"] ||= team_id
   team_id
 end
 
@@ -104,15 +128,14 @@ def provisioning_profile_setup
     xcodeproj: XCODEPROJ_PATH,
     target_filter: "shaniDms22",
     profile: provisioning_profile_path,
-    build_configuration: "Release",
-    teamid: team_id
+    build_configuration: "Release"
   )
 
   ENV["FL_PROJECT_SIGNING_PROJECT_PATH"] = XCODEPROJ_PATH
 
   update_project_team(
     path: XCODEPROJ_PATH,
-    teamid: CredentialsManager::AppfileConfig.try_fetch_value(:team_id)
+    teamid: team_id
   )
 end
 
