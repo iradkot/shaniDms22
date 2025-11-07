@@ -97,6 +97,7 @@ def provisioning_profile_setup
   )
 
   update_project_team(
+    path: XCODEPROJ_PATH,
     teamid: CredentialsManager::AppfileConfig.try_fetch_value(:team_id)
   )
 end
