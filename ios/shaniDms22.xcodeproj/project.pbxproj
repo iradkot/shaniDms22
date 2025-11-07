@@ -475,8 +475,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE = "462f3fc8-ea3b-431f-a47a-bce6ed05934b";
-				PROVISIONING_PROFILE_SPECIFIER = "com.shanidms22 AppStore";
+                                PROVISIONING_PROFILE = "";
+                                PROVISIONING_PROFILE_SPECIFIER = "com.shanidms22 AppStore CI";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/shaniDms22.app/shaniDms22";
 			};
 			name = Release;
@@ -540,9 +540,9 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.shanidms22;
 				PRODUCT_NAME = shaniDms22;
-				PROVISIONING_PROFILE = "462f3fc8-ea3b-431f-a47a-bce6ed05934b";
-				PROVISIONING_PROFILE_SPECIFIER = "com.shanidms22 AppStore";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "com.shanidms22 AppStore";
+                                PROVISIONING_PROFILE = "";
+                                PROVISIONING_PROFILE_SPECIFIER = "com.shanidms22 AppStore CI";
+                                "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "com.shanidms22 AppStore CI";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
