@@ -188,7 +188,8 @@ def provisioning_profile_setup
     xcodeproj: XCODEPROJ_PATH,
     target_filter: "shaniDms22",
     profile: provisioning_profile_path,
-    build_configuration: "Release"
+    build_configuration: "Release",
+    code_signing_identity: "Apple Distribution"
   )
 
   ENV["FL_PROJECT_SIGNING_PROJECT_PATH"] = XCODEPROJ_PATH
