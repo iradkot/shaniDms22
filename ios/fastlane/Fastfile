@@ -128,8 +128,7 @@ def provisioning_profile_setup
     xcodeproj: XCODEPROJ_PATH,
     target_filter: "shaniDms22",
     profile: provisioning_profile_path,
-    build_configuration: "Release",
-    teamid: team_id
+    build_configuration: "Release"
   )
 
   ENV["FL_PROJECT_SIGNING_PROJECT_PATH"] = XCODEPROJ_PATH
