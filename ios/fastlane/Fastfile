@@ -239,7 +239,7 @@ platform :ios do
       export_method: "app-store",
       export_options: {
         provisioningProfiles: {
-          app_identifier => profile_name
+          app_identifier => app_identifier + " AppStore"
         }
       },
       build_path: "./builds",
