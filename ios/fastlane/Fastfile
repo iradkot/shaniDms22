@@ -1,5 +1,6 @@
 require "base64"
 require "fileutils"
+require "plist"
 
 PROJECT_ROOT = File.expand_path("..", __dir__)
 XCODEPROJ_PATH = File.join(PROJECT_ROOT, "shaniDms22.xcodeproj")
@@ -26,6 +27,35 @@ end
 
 def provisioning_profile_path
   File.join(builds_directory, "provisioning.mobileprovision")
+end
+
+def decoded_provisioning_profile
+  @decoded_provisioning_profile ||= begin
+    UI.user_error!("Could not find provisioning profile at #{provisioning_profile_path}") unless File.exist?(provisioning_profile_path)
+
+    profile_xml = sh("security cms -D -i \"#{provisioning_profile_path}\"")
+    UI.user_error!("Failed to decode provisioning profile at #{provisioning_profile_path}") if profile_xml.to_s.strip.empty?
+
+    parsed_profile = Plist.parse_xml(profile_xml)
+    UI.user_error!("Failed to parse provisioning profile at #{provisioning_profile_path}") if parsed_profile.nil?
+
+    parsed_profile
+  end
+end
+
+def provisioning_profile_name
+  @provisioning_profile_name ||= begin
+    name = decoded_provisioning_profile["Name"].to_s.strip
+    UI.user_error!("Provisioning profile name missing in #{provisioning_profile_path}") if name.empty?
+    name
+  end
+end
+
+def provisioning_profile_team_id
+  @provisioning_profile_team_id ||= begin
+    team_ids = decoded_provisioning_profile["TeamIdentifier"]
+    Array(team_ids).map { |value| value.to_s.strip }.reject(&:empty?).first
+  end
 end
 
 def certificate_path
@@ -150,7 +180,7 @@ def provisioning_profile_setup
   UI.message("Using Xcode project at #{XCODEPROJ_PATH}")
   UI.user_error!("Could not find Xcode project at #{XCODEPROJ_PATH}") unless File.exist?(XCODEPROJ_PATH)
 
-  team_id = appfile_team_id
+  team_id = provisioning_profile_team_id || appfile_team_id
 
   update_project_provisioning(
     xcodeproj: XCODEPROJ_PATH,
@@ -165,6 +195,8 @@ def provisioning_profile_setup
     path: XCODEPROJ_PATH,
     teamid: team_id
   )
+
+  ENV["FASTLANE_TEAM_ID"] = team_id if team_id
 end
 
 def app_store_api_key
@@ -198,6 +230,7 @@ platform :ios do
     increment_build_number(xcodeproj: XCODEPROJ_PATH)
 
     app_identifier = resolved_app_identifier
+    profile_name = provisioning_profile_name
 
     build_app(
       workspace: XCWORKSPACE_PATH,
