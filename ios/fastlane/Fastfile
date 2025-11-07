@@ -88,25 +88,32 @@ def configure_signing_for_local
   )
 end
 
+def appfile_team_id
+  team_id = CredentialsManager::AppfileConfig.try_fetch_value(:team_id).to_s.strip
+  UI.user_error!("No team_id configured in Appfile") if team_id.empty?
+  team_id
+end
+
 def provisioning_profile_setup
   UI.message("Using Xcode project at #{XCODEPROJ_PATH}")
   UI.user_error!("Could not find Xcode project at #{XCODEPROJ_PATH}") unless File.exist?(XCODEPROJ_PATH)
+
+  team_id = appfile_team_id
 
   update_project_provisioning(
     xcodeproj: XCODEPROJ_PATH,
     target_filter: "shaniDms22",
     profile: provisioning_profile_path,
-    build_configuration: "Release"
+    build_configuration: "Release",
+    teamid: team_id
   )
 
   ENV["FL_PROJECT_SIGNING_PROJECT_PATH"] = XCODEPROJ_PATH
 
-  team_id = CredentialsManager::AppfileConfig.try_fetch_value(:team_id)
-  team_id = team_id.to_s.strip
-  update_team_params = { path: XCODEPROJ_PATH }
-  update_team_params[:teamid] = team_id unless team_id.empty?
-
-  update_project_team(**update_team_params)
+  update_project_team(
+    path: XCODEPROJ_PATH,
+    teamid: team_id
+  )
 end
 
 def app_store_api_key
