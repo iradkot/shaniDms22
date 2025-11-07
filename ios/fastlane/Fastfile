@@ -1,6 +1,10 @@
 require "base64"
 require "fileutils"
 
+PROJECT_ROOT = File.expand_path("..", __dir__)
+XCODEPROJ_PATH = File.join(PROJECT_ROOT, "shaniDms22.xcodeproj")
+XCWORKSPACE_PATH = File.join(PROJECT_ROOT, "shaniDms22.xcworkspace")
+
 # This file contains the fastlane.tools configuration
 # You can find the documentation at https://docs.fastlane.tools
 #
@@ -85,16 +89,24 @@ def configure_signing_for_local
 end
 
 def provisioning_profile_setup
+  UI.message("Using Xcode project at #{XCODEPROJ_PATH}")
+  UI.user_error!("Could not find Xcode project at #{XCODEPROJ_PATH}") unless File.exist?(XCODEPROJ_PATH)
+
   update_project_provisioning(
-    xcodeproj: "shaniDms22.xcodeproj",
+    xcodeproj: XCODEPROJ_PATH,
     target_filter: "shaniDms22",
     profile: provisioning_profile_path,
     build_configuration: "Release"
   )
 
-  update_project_team(
-    teamid: CredentialsManager::AppfileConfig.try_fetch_value(:team_id)
-  )
+  ENV["FL_PROJECT_SIGNING_PROJECT_PATH"] = XCODEPROJ_PATH
+
+  team_id = CredentialsManager::AppfileConfig.try_fetch_value(:team_id)
+  team_id = team_id.to_s.strip
+  update_team_params = { path: XCODEPROJ_PATH }
+  update_team_params[:teamid] = team_id unless team_id.empty?
+
+  update_project_team(**update_team_params)
 end
 
 def app_store_api_key
@@ -125,10 +137,10 @@ platform :ios do
 
     provisioning_profile_setup
 
-    increment_build_number(xcodeproj: "shaniDms22.xcodeproj")
+    increment_build_number(xcodeproj: XCODEPROJ_PATH)
 
     build_app(
-      workspace: "shaniDms22.xcworkspace",
+      workspace: XCWORKSPACE_PATH,
       scheme: "shaniDms22",
       clean: true,
       export_method: "app-store",

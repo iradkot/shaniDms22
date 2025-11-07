@@ -1,0 +1,3 @@
+# This Fastfile delegates to the iOS-specific fastlane setup
+# to allow running `bundle exec fastlane` from the repository root.
+import "../ios/fastlane/Fastfile"
