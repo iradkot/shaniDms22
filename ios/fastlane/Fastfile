@@ -215,11 +215,15 @@ def enforce_code_sign_identities(project_path:, debug_identity:, release_identit
 
   config_sets = project.targets.map(&:build_configurations) + [project.build_configurations]
   config_sets.flatten.each do |config|
-    desired_identity = case config.name
-      when "Debug" then debug_identity
-      when "Release" then release_identity
-      else next
-    end
+    desired_identity =
+      case config.name
+      when "Debug"
+        debug_identity
+      when "Release"
+        release_identity
+      end
+
+    next unless desired_identity
 
     changed |= assign_identity(config, desired_identity)
   end
