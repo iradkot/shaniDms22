@@ -1,6 +1,7 @@
 require "base64"
 require "fileutils"
 require "plist"
+require "xcodeproj"
 
 PROJECT_ROOT = File.expand_path("..", __dir__)
 XCODEPROJ_PATH = File.join(PROJECT_ROOT, "shaniDms22.xcodeproj")
@@ -200,6 +201,47 @@ def provisioning_profile_setup
   )
 
   ENV["FASTLANE_TEAM_ID"] = team_id if team_id
+
+  enforce_code_sign_identities(
+    project_path: XCODEPROJ_PATH,
+    debug_identity: "Apple Development",
+    release_identity: "Apple Distribution"
+  )
+end
+
+def enforce_code_sign_identities(project_path:, debug_identity:, release_identity:)
+  project = Xcodeproj::Project.open(project_path)
+  changed = false
+
+  config_sets = project.targets.map(&:build_configurations) + [project.build_configurations]
+  config_sets.flatten.each do |config|
+    desired_identity = case config.name
+      when "Debug" then debug_identity
+      when "Release" then release_identity
+      else next
+    end
+
+    changed |= assign_identity(config, desired_identity)
+  end
+
+  project.save if changed
+end
+
+def assign_identity(configuration, identity)
+  settings = configuration.build_settings
+  updated = false
+
+  unless settings["CODE_SIGN_IDENTITY"] == identity
+    settings["CODE_SIGN_IDENTITY"] = identity
+    updated = true
+  end
+
+  unless settings["CODE_SIGN_IDENTITY[sdk=iphoneos*]"] == identity
+    settings["CODE_SIGN_IDENTITY[sdk=iphoneos*]"] = identity
+    updated = true
+  end
+
+  updated
 end
 
 def app_store_api_key
