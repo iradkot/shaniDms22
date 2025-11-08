@@ -1,6 +1,7 @@
 require "base64"
 require "fileutils"
 require "plist"
+require "xcodeproj"
 
 PROJECT_ROOT = File.expand_path("..", __dir__)
 XCODEPROJ_PATH = File.join(PROJECT_ROOT, "shaniDms22.xcodeproj")
@@ -104,6 +105,8 @@ def configure_signing_for_ci
   )
 
   decode_secret_to(path: provisioning_profile_path, variable: "APPLE_PROVISIONING_PROFILE")
+
+  install_provisioning_profile(path: provisioning_profile_path)
 end
 
 def configure_signing_for_local
@@ -186,7 +189,8 @@ def provisioning_profile_setup
     xcodeproj: XCODEPROJ_PATH,
     target_filter: "shaniDms22",
     profile: provisioning_profile_path,
-    build_configuration: "Release"
+    build_configuration: "Release",
+    code_signing_identity: "Apple Distribution"
   )
 
   ENV["FL_PROJECT_SIGNING_PROJECT_PATH"] = XCODEPROJ_PATH
@@ -197,6 +201,47 @@ def provisioning_profile_setup
   )
 
   ENV["FASTLANE_TEAM_ID"] = team_id if team_id
+
+  enforce_code_sign_identities(
+    project_path: XCODEPROJ_PATH,
+    debug_identity: "Apple Development",
+    release_identity: "Apple Distribution"
+  )
+end
+
+def enforce_code_sign_identities(project_path:, debug_identity:, release_identity:)
+  project = Xcodeproj::Project.open(project_path)
+  changed = false
+
+  config_sets = project.targets.map(&:build_configurations) + [project.build_configurations]
+  config_sets.flatten.each do |config|
+    desired_identity = case config.name
+      when "Debug" then debug_identity
+      when "Release" then release_identity
+      else next
+    end
+
+    changed |= assign_identity(config, desired_identity)
+  end
+
+  project.save if changed
+end
+
+def assign_identity(configuration, identity)
+  settings = configuration.build_settings
+  updated = false
+
+  unless settings["CODE_SIGN_IDENTITY"] == identity
+    settings["CODE_SIGN_IDENTITY"] = identity
+    updated = true
+  end
+
+  unless settings["CODE_SIGN_IDENTITY[sdk=iphoneos*]"] == identity
+    settings["CODE_SIGN_IDENTITY[sdk=iphoneos*]"] = identity
+    updated = true
+  end
+
+  updated
 end
 
 def app_store_api_key
@@ -239,7 +284,7 @@ platform :ios do
       export_method: "app-store",
       export_options: {
         provisioningProfiles: {
-          app_identifier => app_identifier + " AppStore"
+          app_identifier => profile_name
         }
       },
       build_path: "./builds",
