@@ -2,7 +2,8 @@
  * This hook is used to update the notification in the firebase database
  */
 import {useState} from 'react';
-import firestore from '@react-native-firebase/firestore';
+import { firebaseApp } from 'app/firebase';
+import { getFirestore, doc, updateDoc } from 'firebase/firestore';
 import {NotificationResponse} from 'src/types/notifications';
 
 export const useUpdateNotification = () => {
@@ -14,10 +15,7 @@ export const useUpdateNotification = () => {
   ): Promise<void> => {
     setIsLoading(true);
     try {
-      await firestore()
-        .collection('notifications')
-        .doc(notification.id)
-        .update(notification);
+      await updateDoc(doc(getFirestore(firebaseApp), 'notifications', notification.id), notification);
       setIsLoading(false);
     } catch (err) {
       setError((err as Error).message);

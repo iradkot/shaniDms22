@@ -1,7 +1,6 @@
 import React, {useMemo} from 'react';
 import styled from 'styled-components/native';
-import DropShadow from 'react-native-drop-shadow';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { Ionicons as Icon } from '@expo/vector-icons';
 import PropTypes from 'prop-types';
 import {TrendDirectionString} from 'app/types/notifications';
 import {ThemeType} from 'app/types/theme';
@@ -28,6 +27,8 @@ const IconTypes = {
 const ArrowIcon = styled(Icon)<{rotation: number}>`
   transform: ${({rotation}) => `rotate(${rotation}deg)`};
 `;
+
+const ArrowWrapper = styled.View``;
 
 const ArrowsContainer = styled.View`
   flex-direction: row;
@@ -70,21 +71,22 @@ const DirectionArrows: React.FC<DirectionArrowsProps> = ({
   return (
     <ArrowsContainer>
       {Array.from({length: iconCount}, (_, index) => (
-        <DropShadow
+        <ArrowWrapper
           key={index}
           style={{
             shadowColor: color,
             shadowOffset: { width: 0, height: 0 },
             shadowOpacity: 0.5,
             shadowRadius: 3,
-          }}>
+          }}
+        >
           <ArrowIcon
             name={iconName}
             size={size}
             color={color}
             rotation={rotation}
           />
-        </DropShadow>
+        </ArrowWrapper>
       ))}
     </ArrowsContainer>
   );

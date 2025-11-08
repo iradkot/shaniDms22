@@ -1,13 +1,13 @@
 // FoodService.ts
 // migrate to modular Firestore API
-import { getApp } from '@react-native-firebase/app';
+import { firebaseApp } from 'app/firebase';
 import {
   getFirestore,
   collection,
   query,
   where,
   getDocs,
-} from '@react-native-firebase/firestore';
+} from 'firebase/firestore';
 import {BgSample} from 'app/types/day_bgs.types';
 import {
   getLocalStartOfTheDay,
@@ -38,7 +38,7 @@ export class FoodService {
     const endTimestamp = end.getTime();
 
     // Initialize Firestore using the default app (modular API)
-    const db = getFirestore(getApp());
+    const db = getFirestore(firebaseApp);
     const q = query(
       collection(db, 'food_items'),
       where('timestamp', '>=', startTimestamp),

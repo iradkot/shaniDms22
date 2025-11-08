@@ -8,7 +8,7 @@ import {
   findBiggestChangesInTimeRange,
 } from 'app/utils/bg.utils';
 import {Theme} from 'app/types/theme';
-import LinearGradient from 'react-native-linear-gradient';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Add background colors to the Container component
 const Container = styled.View<{theme: Theme}>`

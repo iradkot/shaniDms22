@@ -1,19 +1,15 @@
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import auth, {FirebaseAuthTypes, GoogleAuthProvider} from '@react-native-firebase/auth';
+import * as AuthSession from 'expo-auth-session';
+import { getAuth, GoogleAuthProvider, signInWithCredential, UserCredential } from 'firebase/auth';
+import { firebaseApp } from 'app/firebase';
 
 /** types */
 export type GoogleSignInResult = {
-  user: FirebaseAuthTypes.UserCredential | null;
+  user: UserCredential | null;
   error: Error | null;
 };
 
 class GoogleSignIn {
   constructor() {
-    GoogleSignin.configure({
-      webClientId:
-        '77401553924-f22oqdv7gosp4infh5nflrdo7dmn5rho.apps.googleusercontent.com',
-    });
-
     this.isSignedIn = false;
   }
 
@@ -24,44 +20,33 @@ class GoogleSignIn {
    * Attempts silent sign-in to determine if a user is already signed in.
    */
   getIsSignedIn: () => Promise<boolean> = async () => {
-    try {
-      // silent sign-in will throw if not signed in
-      await GoogleSignin.signInSilently();
-      this.isSignedIn = true;
-      return true;
-    } catch {
-      this.isSignedIn = false;
-      return false;
-    }
+    return this.isSignedIn;
   };
+
   signIn = async (): Promise<GoogleSignInResult> => {
     try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      // trigger Google sign-in UI
-      await GoogleSignin.signIn();
-      // retrieve tokens (idToken is required for Firebase auth)
-      const { idToken, accessToken } = await GoogleSignin.getTokens();
-      if (!idToken) {
-        return { user: null, error: new Error('Missing idToken from Google sign-in') };
+      const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
+      const authUrl =
+        `https://accounts.google.com/o/oauth2/v2/auth` +
+        `?client_id=${process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&response_type=token` +
+        `&scope=profile%20email`;
+      const result = await AuthSession.startAsync({ authUrl });
+      if (result.type !== 'success' || !result.params.access_token) {
+        return { user: null, error: new Error('Google sign-in cancelled') };
       }
-      // create Firebase credential
-      const credential = GoogleAuthProvider.credential(idToken, accessToken);
-      const user = await auth().signInWithCredential(credential);
+      const credential = GoogleAuthProvider.credential(null, result.params.access_token);
+      const user = await signInWithCredential(getAuth(firebaseApp), credential);
       this.isSignedIn = true;
       return { user, error: null };
     } catch (err: any) {
-      console.error('GoogleSignIn.signIn exception:', err);
-      // wrap and propagate error
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      return { user: null, error: new Error(errorMsg) };
+      const msg = err instanceof Error ? err.message : String(err);
+      return { user: null, error: new Error(msg) };
     }
   };
   getTokens: () => any = async () => {
-    try {
-      await GoogleSignin.getTokens();
-    } catch (e) {
-      console.log('error getting token', e);
-    }
+    return null;
   };
 }
 

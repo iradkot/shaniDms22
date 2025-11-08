@@ -31,12 +31,7 @@ import {
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 import AddNotificationScreen from './containers/forms/AddNotificationScreen/AddNotificationScreen';
 import EditNotificationScreen from 'app/containers/forms/EditNotificationScreen/EditNotificationScreen';
-import { getApp } from '@react-native-firebase/app';
-import { getMessaging } from '@react-native-firebase/messaging';
-import messaging from '@react-native-firebase/messaging';
-import notifee from '@notifee/react-native';
-import { registerDeviceToken, unregisterDeviceToken, syncTokenIfNeeded } from 'app/services/rebaseService';
-import NotificationModal from 'app/components/NotificationModal';
+import * as Notifications from 'expo-notifications';
 import {ThemeProvider} from 'styled-components';
 import styled from 'styled-components/native';
 import {theme} from 'app/style/theme';
@@ -58,15 +53,6 @@ const Stack = createNativeStackNavigator();
 
 const queryClient = new QueryClient();
 
-// handle notification press with the modular Messaging API
-// https://rnfirebase.io/messaging/usage#handling-messages
-const messagingInstance = getMessaging(getApp());
-messagingInstance.onNotificationOpenedApp(remoteMessage => {
-  console.log(
-    'Notification caused app to open from background state, msgID=',
-    remoteMessage.messageId,
-  );
-});
 
 interface AppContainerProps {
   theme: Theme;
@@ -90,53 +76,11 @@ const App: () => React.ReactElement = () => {
     console.log('App.tsx: App component mounted');
   }, []);  // Register FCM token on start, handle token refresh, and sync daily
   React.useEffect(() => {
-    registerDeviceToken();
-    
-    // Check token sync once per day
-    syncTokenIfNeeded();
-    
-    const unsubscribeRefresh = messaging().onTokenRefresh(async () => {
-      console.log('App: FCM token refreshed, updating server...');
-      await unregisterDeviceToken();
-      await registerDeviceToken();
-    });
-    return unsubscribeRefresh;
-  }, []);
-
-  // Verify and request notification permissions
-  React.useEffect(() => {
-    const checkPermissions = async () => {
-      try {
-        // Notifee iOS/Android permission prompt
-        const settings = await notifee.requestPermission();
-        console.log('App: notifee permission settings:', settings);
-        // Request FCM push permission (iOS & Android)
-        const authorizationStatus = await messaging().requestPermission();
-        console.log('App: FCM permission status:', authorizationStatus);
-      } catch (permErr) {
-        console.error('App: notification permission error', permErr);
-      }
-    };
-    checkPermissions();
+    Notifications.requestPermissionsAsync();
   }, []);
   console.log('App.tsx: App component render');
 
   console.log('App.tsx: App component rendering');
-  // State for in-app notification modal
-  const [notifVisible, setNotifVisible] = React.useState(false);
-  const [notifTitle, setNotifTitle] = React.useState<string | undefined>();
-  const [notifBody, setNotifBody] = React.useState<string | undefined>();
-  // if user is not logged in, show login screen else show home screen
-  // Subscribe to foreground messages
-  React.useEffect(() => {
-    const unsubscribeOnMessage = messaging().onMessage(async remoteMessage => {
-      console.log('App: foreground message received:', remoteMessage);
-      setNotifTitle(remoteMessage.notification?.title);
-      setNotifBody(remoteMessage.notification?.body);
-      setNotifVisible(true);
-    });
-    return unsubscribeOnMessage;
-  }, []);
   return (
     // TODO - move SafeAreaView style outside
       <GestureHandlerRootView style={{flex: 1}}>
@@ -205,13 +149,6 @@ const App: () => React.ReactElement = () => {
         </ThemeProvider>
       </QueryClientProvider>
       
-      {/* In-app notification modal */}
-      <NotificationModal
-        visible={notifVisible}
-        title={notifTitle}
-        body={notifBody}
-        onClose={() => setNotifVisible(false)}
-      />
     </GestureHandlerRootView>
   );
 };

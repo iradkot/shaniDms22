@@ -6,10 +6,10 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import styled from 'styled-components/native';
-import AntDesign from 'react-native-vector-icons/AntDesign';
+import { AntDesign } from '@expo/vector-icons';
 import {useLayout} from '@react-native-community/hooks';
 import {Theme} from 'app/types/theme';
-import DropShadow from 'react-native-drop-shadow';
+import { BoxShadow as DropShadow } from 'expo-react-native-shadow';
 
 const CollapsableContainer = styled.View<{theme: Theme}>`
   width: 100%;
