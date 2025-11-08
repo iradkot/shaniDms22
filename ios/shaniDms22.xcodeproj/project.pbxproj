@@ -475,8 +475,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE = "462f3fc8-ea3b-431f-a47a-bce6ed05934b";
-				PROVISIONING_PROFILE_SPECIFIER = "com.shanidms22 AppStore";
+                                PROVISIONING_PROFILE = "";
+                                PROVISIONING_PROFILE_SPECIFIER = "com.shanidms22 AppStore CI";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/shaniDms22.app/shaniDms22";
 			};
 			name = Release;
@@ -520,8 +520,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 62;
 				DEVELOPMENT_TEAM = 8KHU9V3DTQ;
@@ -540,9 +540,9 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.shanidms22;
 				PRODUCT_NAME = shaniDms22;
-				PROVISIONING_PROFILE = "462f3fc8-ea3b-431f-a47a-bce6ed05934b";
-				PROVISIONING_PROFILE_SPECIFIER = "com.shanidms22 AppStore";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "com.shanidms22 AppStore";
+                                PROVISIONING_PROFILE = "";
+                                PROVISIONING_PROFILE_SPECIFIER = "com.shanidms22 AppStore CI";
+                                "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "com.shanidms22 AppStore CI";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
@@ -581,7 +581,8 @@
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+                                CODE_SIGN_IDENTITY = "Apple Development";
+                                "CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				COPY_PHASE_STRIP = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -670,7 +671,8 @@
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+                                CODE_SIGN_IDENTITY = "Apple Distribution";
+                                "CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";
 				COPY_PHASE_STRIP = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

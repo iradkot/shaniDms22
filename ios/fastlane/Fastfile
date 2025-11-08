@@ -104,6 +104,8 @@ def configure_signing_for_ci
   )
 
   decode_secret_to(path: provisioning_profile_path, variable: "APPLE_PROVISIONING_PROFILE")
+
+  install_provisioning_profile(path: provisioning_profile_path)
 end
 
 def configure_signing_for_local
@@ -186,7 +188,8 @@ def provisioning_profile_setup
     xcodeproj: XCODEPROJ_PATH,
     target_filter: "shaniDms22",
     profile: provisioning_profile_path,
-    build_configuration: "Release"
+    build_configuration: "Release",
+    code_signing_identity: "Apple Distribution"
   )
 
   ENV["FL_PROJECT_SIGNING_PROJECT_PATH"] = XCODEPROJ_PATH
@@ -239,7 +242,7 @@ platform :ios do
       export_method: "app-store",
       export_options: {
         provisioningProfiles: {
-          app_identifier => app_identifier + " AppStore"
+          app_identifier => profile_name
         }
       },
       build_path: "./builds",
