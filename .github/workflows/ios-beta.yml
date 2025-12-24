@@ -10,7 +10,7 @@ on:
 
 jobs:
   beta:
-    runs-on: macos-13
+    runs-on: macos-latest
     env:
       NODE_OPTIONS: --max_old_space_size=4096
       APPLE_PROVISIONING_PROFILE: ${{ vars.APPLE_PROVISIONING_PROFILE || secrets.APPLE_PROVISIONING_PROFILE }}
