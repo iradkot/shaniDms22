@@ -38,11 +38,14 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '2.7.5'
+          ruby-version: '3.2'
           bundler-cache: true
+          working-directory: ios
 
       - name: Install CocoaPods dependencies
-        run: bundle exec pod install --project-directory=ios
+        working-directory: ios
+        run: bundle exec pod install
 
       - name: Run fastlane
+        working-directory: ios
         run: bundle exec fastlane ios ${{ github.event.inputs.lane || 'beta' }}
