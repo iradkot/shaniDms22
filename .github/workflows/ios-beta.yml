@@ -62,6 +62,19 @@ jobs:
         working-directory: ios
         run: bundle exec fastlane ios ${{ github.event.inputs.lane || 'beta' }}
 
+      - name: Dump gym log on failure
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=$(ls -t /Users/runner/Library/Logs/gym/*.log 2>/dev/null | head -n 1 || true)
+          if [ -z "$LOG" ]; then
+            echo "No gym logs found"
+            exit 0
+          fi
+          echo "Gym log: $LOG"
+          tail -n 200 "$LOG"
+
       - name: Debug signing identities
         if: always()
         run: |
