@@ -45,6 +45,19 @@ jobs:
         working-directory: ios
         run: bundle exec pod install
 
+      - name: Sanity check P12 on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "P12 base64 length: ${#APPLE_CERTIFICATE_P12}"
+          echo "Pass length: ${#APPLE_CERTIFICATE_PASSWORD}"
+
+          CERT_P12="$RUNNER_TEMP/cert.p12"
+          printf "%s" "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERT_P12"
+
+          ls -lah "$CERT_P12"
+          openssl pkcs12 -in "$CERT_P12" -passin pass:"$APPLE_CERTIFICATE_PASSWORD" -noout -info
+
       - name: Run fastlane
         working-directory: ios
         run: bundle exec fastlane ios ${{ github.event.inputs.lane || 'beta' }}
