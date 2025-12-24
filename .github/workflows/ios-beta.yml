@@ -12,7 +12,6 @@ jobs:
   beta:
     runs-on: macos-latest
     env:
-      BUNDLE_GEMFILE: ios/Gemfile
       NODE_OPTIONS: --max_old_space_size=4096
       APPLE_PROVISIONING_PROFILE: ${{ vars.APPLE_PROVISIONING_PROFILE || secrets.APPLE_PROVISIONING_PROFILE }}
       APPLE_CERTIFICATE_P12: ${{ vars.APPLE_CERTIFICATE_P12 || secrets.APPLE_CERTIFICATE_P12 }}
