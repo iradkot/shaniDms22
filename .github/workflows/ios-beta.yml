@@ -48,3 +48,9 @@ jobs:
       - name: Run fastlane
         working-directory: ios
         run: bundle exec fastlane ios ${{ github.event.inputs.lane || 'beta' }}
+
+      - name: Debug signing identities
+        if: always()
+        run: |
+          security find-identity -v -p codesigning
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles || true
