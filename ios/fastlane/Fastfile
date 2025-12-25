@@ -95,26 +95,12 @@ def configure_signing_for_ci
   runner_temp = ENV["RUNNER_TEMP"] || "/tmp"
   keychain_path = File.join(runner_temp, "#{keychain_name}.keychain-db")
 
-  begin
-    sh(%(security delete-keychain "#{keychain_path}"))
-  rescue StandardError
-    UI.message("Keychain #{keychain_path} did not exist – continuing")
-  end
-
-  create_keychain(
-    name: keychain_name,
-    password: keychain_password,
-    path: keychain_path,
-    default_keychain: true,
-    unlock: true,
-    timeout: 21600,
-    lock_when_sleeps: false,
-    add_to_search_list: true
-  )
-
+  sh(%(security delete-keychain "#{keychain_path}" || true))
+  sh(%(security create-keychain -p "#{keychain_password}" "#{keychain_path}"))
+  sh(%(security set-keychain-settings -lut 21600 "#{keychain_path}"))
+  sh(%(security unlock-keychain -p "#{keychain_password}" "#{keychain_path}"))
   sh(%(security list-keychains -d user -s "#{keychain_path}"))
   sh(%(security default-keychain -s "#{keychain_path}"))
-  sh(%(security unlock-keychain -p "#{keychain_password}" "#{keychain_path}"))
 
   decode_secret_to(path: certificate_path, variable: "APPLE_CERTIFICATE_P12")
 
