@@ -45,6 +45,20 @@ jobs:
         working-directory: ios
         run: bundle exec pod install
 
+      - name: Prove jsinspector headers/pods exist
+        working-directory: ios
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "== ReactCdp.h locations =="
+          find Pods -name ReactCdp.h -o -name InspectorInterfaces.h || true
+
+          echo "== Public headers folder check =="
+          ls -la Pods/Headers/Public/jsinspector-modern 2>/dev/null || true
+
+          echo "== Podfile.lock contains jsinspector pods? =="
+          grep -n "jsinspector" Podfile.lock || true
+
       - name: Sanity check P12 on runner
         shell: bash
         run: |
