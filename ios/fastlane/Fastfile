@@ -98,17 +98,16 @@ def configure_signing_for_ci
 
   decode_secret_to(path: certificate_path, variable: "APPLE_CERTIFICATE_P12")
 
-  import_certificate(
-    certificate_path: certificate_path,
-    certificate_password: ENV.fetch("APPLE_CERTIFICATE_PASSWORD"),
-    keychain_name: keychain_name,
-    keychain_password: keychain_password
-  )
+  sh(%(security import "#{certificate_path}" -k "#{keychain_path}" -P "#{ENV.fetch("APPLE_CERTIFICATE_PASSWORD")}" -A -t cert -f pkcs12 || { echo "IMPORT FAILED"; security verify-cert -c "#{certificate_path}" || true; exit 1; }))
+
+  sh(%(security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "#{keychain_password}" "#{keychain_path}"))
 
   UI.message("Keychain debug info after certificate import")
   sh("security list-keychains -d user")
   sh("security show-keychain-info \"#{keychain_path}\" || true")
   sh("security find-identity -p codesigning -v \"#{keychain_path}\" || true")
+  sh("security default-keychain || true")
+  sh("security find-identity -v -p codesigning || true")
 
   decode_secret_to(path: provisioning_profile_path, variable: "APPLE_PROVISIONING_PROFILE")
 
@@ -213,6 +212,13 @@ def provisioning_profile_setup
     debug_identity: "Apple Development",
     release_identity: "Apple Distribution"
   )
+
+  expected_profile_name = "com.shanidms22 AppStore"
+  if provisioning_profile_name && provisioning_profile_name != expected_profile_name
+    UI.important("Provisioning profile name (#{provisioning_profile_name}) does not match expected #{expected_profile_name}; export options will use expected name.")
+  end
+
+  ENV["FL_EXPECTED_PROFILE_NAME"] = expected_profile_name
 end
 
 def enforce_code_sign_identities(project_path:, debug_identity:, release_identity:)
@@ -310,7 +316,7 @@ platform :ios do
       export_method: "app-store",
       export_options: {
         provisioningProfiles: {
-          app_identifier => profile_name
+          "com.shanidms22" => (ENV["FL_EXPECTED_PROFILE_NAME"] || profile_name || "com.shanidms22 AppStore")
         }
       },
       build_path: "./builds",

@@ -58,6 +58,53 @@ jobs:
           ls -lah "$CERT_P12"
           openssl pkcs12 -in "$CERT_P12" -passin pass:"$APPLE_CERTIFICATE_PASSWORD" -noout -info
 
+      - name: Codesign import sanity (no fastlane)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CERT_P12="$RUNNER_TEMP/cert.p12"
+          PROFILE="$RUNNER_TEMP/profile.mobileprovision"
+          KEYCHAIN="$RUNNER_TEMP/ci-signing.keychain-db"
+
+          # Decode inputs
+          printf "%s" "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERT_P12"
+          printf "%s" "$APPLE_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE"
+
+          echo "cert.p12 bytes: $(stat -f%z "$CERT_P12")"
+          echo "profile bytes:  $(stat -f%z "$PROFILE")"
+
+          # Create & unlock a fresh keychain
+          security create-keychain -p "$CI_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$CI_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          # Make it the only one in the search list for this step
+          security list-keychains -d user -s "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+
+          echo "== Keychains =="
+          security list-keychains -d user
+          security default-keychain
+
+          echo "== Import cert =="
+          security import "$CERT_P12" \
+            -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 || { echo "IMPORT FAILED"; security verify-cert -c "$CERT_P12" || true; exit 1; }
+
+          # IMPORTANT: allow codesign to use the key non-interactively
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+            -k "$CI_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          echo "== Identities in keychain =="
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+          echo "== Profiles dir =="
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE" "$HOME/Library/MobileDevice/Provisioning Profiles/test.mobileprovision"
+          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles"
+
       - name: Run fastlane
         working-directory: ios
         run: bundle exec fastlane ios ${{ github.event.inputs.lane || 'beta' }}
