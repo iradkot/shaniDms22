@@ -12,7 +12,6 @@ jobs:
   beta:
     runs-on: macos-latest
     env:
-      BUNDLE_GEMFILE: ios/Gemfile
       NODE_OPTIONS: --max_old_space_size=4096
       APPLE_PROVISIONING_PROFILE: ${{ vars.APPLE_PROVISIONING_PROFILE || secrets.APPLE_PROVISIONING_PROFILE }}
       APPLE_CERTIFICATE_P12: ${{ vars.APPLE_CERTIFICATE_P12 || secrets.APPLE_CERTIFICATE_P12 }}
@@ -38,11 +37,93 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '2.7.5'
+          ruby-version: '3.2'
           bundler-cache: true
+          working-directory: ios
 
       - name: Install CocoaPods dependencies
-        run: bundle exec pod install --project-directory=ios
+        working-directory: ios
+        run: bundle exec pod install
+
+      - name: Sanity check P12 on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "P12 base64 length: ${#APPLE_CERTIFICATE_P12}"
+          echo "Pass length: ${#APPLE_CERTIFICATE_PASSWORD}"
+
+          CERT_P12="$RUNNER_TEMP/cert.p12"
+          printf "%s" "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERT_P12"
+
+          ls -lah "$CERT_P12"
+          openssl pkcs12 -in "$CERT_P12" -passin pass:"$APPLE_CERTIFICATE_PASSWORD" -noout -info
+
+      - name: Codesign import sanity (no fastlane)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CERT_P12="$RUNNER_TEMP/cert.p12"
+          PROFILE="$RUNNER_TEMP/profile.mobileprovision"
+          KEYCHAIN="$RUNNER_TEMP/ci-signing.keychain-db"
+
+          # Decode inputs
+          printf "%s" "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERT_P12"
+          printf "%s" "$APPLE_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE"
+
+          echo "cert.p12 bytes: $(stat -f%z "$CERT_P12")"
+          echo "profile bytes:  $(stat -f%z "$PROFILE")"
+
+          # Create & unlock a fresh keychain
+          security create-keychain -p "$CI_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$CI_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          # Make it the only one in the search list for this step
+          security list-keychains -d user -s "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+
+          echo "== Keychains =="
+          security list-keychains -d user
+          security default-keychain
+
+          echo "== Import cert =="
+          security import "$CERT_P12" \
+            -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12
+
+          # IMPORTANT: allow codesign to use the key non-interactively
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+            -k "$CI_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          echo "== Identities in keychain =="
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+          echo "== Profiles dir =="
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE" "$HOME/Library/MobileDevice/Provisioning Profiles/test.mobileprovision"
+          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles"
 
       - name: Run fastlane
+        working-directory: ios
         run: bundle exec fastlane ios ${{ github.event.inputs.lane || 'beta' }}
+
+      - name: Dump gym log on failure
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=$(ls -t /Users/runner/Library/Logs/gym/*.log 2>/dev/null | head -n 1 || true)
+          if [ -z "$LOG" ]; then
+            echo "No gym logs found"
+            exit 0
+          fi
+          echo "Gym log: $LOG"
+          tail -n 200 "$LOG"
+
+      - name: Debug signing identities
+        if: always()
+        run: |
+          security find-identity -v -p codesigning
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles || true
