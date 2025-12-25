@@ -26,7 +26,10 @@ target 'shaniDms22' do
 
   use_react_native!(
     :path => config[:reactNativePath],
-    :hermes_enabled => true,
+    # Disable Hermes on iOS. Hermes headers often cause "jsinspector-modern/ReactCdp.h file not found" or
+    # "hermes/hermes.h file not found" when pods are built as static libs. Using JSC instead makes
+    # debugging easier and avoids the header-not-found error.
+    :hermes_enabled => false,
     # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
