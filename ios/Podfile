@@ -11,28 +11,36 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, '12.0'
 prepare_react_native_project!
 
-# Force static linking for all CocoaPods
-# Dynamic frameworks can prevent certain React Native headers (like hermes/hermes.h)
-# from being discoverable at build time. Setting linkage to :static avoids these
-# issues and is recommended when using React Native with many pods.
-linkage = :static
-Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-use_frameworks! :linkage => linkage
+# Keep the default (static library) setup unless explicitly overridden.
+# If you need frameworks for a specific environment, set USE_FRAMEWORKS to
+# "static" or "dynamic" and the linkage will be applied. Otherwise, no
+# use_frameworks! is enforced, which is the most stable option for React Native.
+linkage_env = ENV['USE_FRAMEWORKS']
+if linkage_env
+  linkage = linkage_env.to_sym
+  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
+  use_frameworks! :linkage => linkage
+else
+  Pod::UI.puts "Configuring Pods without use_frameworks! (default RN setup)".green
+end
 
 target 'shaniDms22' do
   config = use_native_modules!
 
-  # Explicitly disable Hermes for iOS. When Hermes is enabled but not fully
-  # configured, the iOS build may fail with missing header errors such as
-  # 'hermes/hermes.h'. Disabling Hermes falls back to the JSC engine.
   use_react_native!(
     :path => config[:reactNativePath],
-    :hermes_enabled => false,
+    :hermes_enabled => true,
     # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
   post_install do |installer|
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+      end
+    end
+
     # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
     react_native_post_install(
       installer,

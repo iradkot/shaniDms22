@@ -65,6 +65,9 @@ jobs:
           echo "== Podfile.lock contains jsinspector pods? =="
           grep -n "jsinspector" Podfile.lock || true
 
+          echo "== Require ReactCdp.h exists =="
+          test -f Pods/Headers/Public/jsinspector-modern/ReactCdp.h
+
       - name: Sanity check P12 on runner
         shell: bash
         run: |
