@@ -46,7 +46,7 @@ jobs:
 
       - name: Install CocoaPods dependencies
         working-directory: ios
-        run: bundle exec pod install
+        run: bundle exec pod install --repo-update
 
       - name: Prove jsinspector headers/pods exist
         working-directory: ios
