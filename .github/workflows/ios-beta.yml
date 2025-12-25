@@ -91,7 +91,7 @@ jobs:
           security import "$CERT_P12" \
             -k "$KEYCHAIN" \
             -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 || { echo "IMPORT FAILED"; security verify-cert -c "$CERT_P12" || true; exit 1; }
+            -A -t cert -f pkcs12
 
           # IMPORTANT: allow codesign to use the key non-interactively
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s \

@@ -92,13 +92,33 @@ def configure_signing_for_ci
 
   keychain_name = ENV.fetch("CI_KEYCHAIN_NAME", "ci-signing")
   keychain_password = ENV.fetch("CI_KEYCHAIN_PASSWORD", "ci-signing")
-  keychain_path = File.expand_path("~/Library/Keychains/#{keychain_name}.keychain-db")
+  runner_temp = ENV["RUNNER_TEMP"] || "/tmp"
+  keychain_path = File.join(runner_temp, "#{keychain_name}.keychain-db")
 
-  ensure_keychain(name: keychain_name, password: keychain_password)
+  begin
+    sh(%(security delete-keychain "#{keychain_path}"))
+  rescue StandardError
+    UI.message("Keychain #{keychain_path} did not exist – continuing")
+  end
+
+  create_keychain(
+    name: keychain_name,
+    password: keychain_password,
+    path: keychain_path,
+    default_keychain: true,
+    unlock: true,
+    timeout: 21600,
+    lock_when_sleeps: false,
+    add_to_search_list: true
+  )
+
+  sh(%(security list-keychains -d user -s "#{keychain_path}"))
+  sh(%(security default-keychain -s "#{keychain_path}"))
+  sh(%(security unlock-keychain -p "#{keychain_password}" "#{keychain_path}"))
 
   decode_secret_to(path: certificate_path, variable: "APPLE_CERTIFICATE_P12")
 
-  sh(%(security import "#{certificate_path}" -k "#{keychain_path}" -P "#{ENV.fetch("APPLE_CERTIFICATE_PASSWORD")}" -A -t cert -f pkcs12 || { echo "IMPORT FAILED"; security verify-cert -c "#{certificate_path}" || true; exit 1; }))
+  sh(%(security import "#{certificate_path}" -k "#{keychain_path}" -P "#{ENV.fetch("APPLE_CERTIFICATE_PASSWORD")}" -A -t cert -f pkcs12))
 
   sh(%(security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "#{keychain_password}" "#{keychain_path}"))
 
