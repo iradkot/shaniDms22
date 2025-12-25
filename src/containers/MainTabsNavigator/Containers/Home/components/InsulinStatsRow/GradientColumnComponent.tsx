@@ -1,9 +1,9 @@
 // GradientColumnComponent.tsx
 import React from 'react';
 import styled from 'styled-components/native';
-import LinearGradient from 'react-native-linear-gradient';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Theme } from 'app/types/theme';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 import { AnimatedCircularProgress } from 'react-native-circular-progress';
 
 const GradientColumn = styled(LinearGradient)<{ gradientColors: string[] }>`

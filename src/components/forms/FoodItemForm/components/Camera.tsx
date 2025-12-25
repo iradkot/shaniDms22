@@ -1,9 +1,9 @@
 import {NavigationProp, useNavigation} from '@react-navigation/native';
-import {PhotoFile} from 'react-native-vision-camera';
+import { CameraCapturedPicture } from 'expo-camera';
 import {CAMERA_SCREEN} from 'app/constants/SCREEN_NAMES';
 
 interface Props {
-  onTakePhoto: (photo: PhotoFile | undefined) => void;
+  onTakePhoto: (photo: CameraCapturedPicture | undefined) => void;
 }
 
 const Camera = ({onTakePhoto}: Props) => {

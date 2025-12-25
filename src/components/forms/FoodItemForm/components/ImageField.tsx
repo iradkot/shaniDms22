@@ -1,17 +1,17 @@
 import * as S from 'app/components/forms/FoodItemForm/FoodItemForm.styles';
 import React, {useMemo} from 'react';
 import {NavigationProp} from '@react-navigation/native';
-import {PhotoFile} from 'react-native-vision-camera';
+import { CameraCapturedPicture } from 'expo-camera';
 import {CAMERA_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {imagePathToUri} from 'app/utils/image.utils';
 import styled from 'styled-components/native';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 import {ThemeType} from 'app/types/theme';
 
 interface ImageFieldProps {
-  photo: PhotoFile | {uri: string} | undefined;
+  photo: CameraCapturedPicture | {uri: string} | undefined;
   navigation: NavigationProp<any>;
-  onTakePhoto: (photo: PhotoFile) => void;
+  onTakePhoto: (photo: CameraCapturedPicture) => void;
   initialSource?: {uri: string};
 }
 
@@ -27,14 +27,14 @@ const ImageField = ({
     });
   };
 
-  // Type guard to check if the photo is a PhotoFile
+  // Type guard to check if the photo is a CameraCapturedPicture
   const isPhotoFile = (
-    photo: PhotoFile | {uri: string} | undefined,
-  ): photo is PhotoFile => {
-    return (photo as PhotoFile)?.path !== undefined;
+    photo: CameraCapturedPicture | {uri: string} | undefined,
+  ): photo is CameraCapturedPicture => {
+    return (photo as CameraCapturedPicture)?.uri !== undefined;
   };
 
-  const photoPath = isPhotoFile(photo) ? photo.path : undefined;
+  const photoPath = isPhotoFile(photo) ? photo.uri : undefined;
   const source = useMemo(() => {
     return (photoPath && {uri: imagePathToUri(photoPath)}) || initialSource;
   }, [photoPath, initialSource]);

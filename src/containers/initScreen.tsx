@@ -1,5 +1,5 @@
-import { getAuth } from '@react-native-firebase/auth';
-import { getApp } from '@react-native-firebase/app';
+import { firebaseApp } from 'app/firebase';
+import { getAuth } from 'firebase/auth';
 import React, {useEffect} from 'react';
 import {NavigationProp} from '@react-navigation/native';
 
@@ -11,7 +11,7 @@ const AppInitScreen: React.FC<{navigation: NavigationProp<any>}> = ({
 }) => {
   // navigate based on Firebase auth state
   useEffect(() => {
-    const authInstance = getAuth(getApp());
+    const authInstance = getAuth(firebaseApp);
     const unsubscribe = authInstance.onAuthStateChanged(user => {
       console.log('AppInitScreen: Auth UID=', user?.uid);
       navigation.reset({

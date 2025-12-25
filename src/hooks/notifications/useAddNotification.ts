@@ -3,7 +3,8 @@
  */
 
 import {useCallback} from 'react';
-import firestore from '@react-native-firebase/firestore';
+import { firebaseApp } from 'app/firebase';
+import { getFirestore, collection, doc, addDoc } from 'firebase/firestore';
 import {NotificationRequest} from 'src/types/notifications';
 import {useGetUser} from 'app/hooks/useGetUser';
 
@@ -13,9 +14,9 @@ export const useAddNotification = () => {
     async (notification: NotificationRequest) => {
       const notificationRequest = {
         ...notification,
-        related_user: firestore().collection('users').doc(userData?.id),
+        related_user: doc(getFirestore(firebaseApp), 'users', userData?.id || ''),
       };
-      await firestore().collection('notifications').add(notificationRequest);
+      await addDoc(collection(getFirestore(firebaseApp), 'notifications'), notificationRequest);
     },
     [userData?.id],
   );

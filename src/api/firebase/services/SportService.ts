@@ -1,5 +1,5 @@
-import { getFirestore, collection, query, where, getDocs } from '@react-native-firebase/firestore';
-import { getApp } from '@react-native-firebase/app';
+import { firebaseApp } from 'app/firebase';
+import { getFirestore, collection, query, where, getDocs } from 'firebase/firestore';
 import {SportItemDTO} from 'app/types/sport.types';
 import {
   getLocalStartOfTheDay,
@@ -31,7 +31,7 @@ export class SportService {
 
     // Fetch sport items from Firestore
     // Initialize Firestore with the default Firebase app (modular API)
-    const db = getFirestore(getApp());
+    const db = getFirestore(firebaseApp);
     const q = query(
       collection(db, 'sport_items'),
       where('timestamp', '>=', startOfStartDate.getTime()),

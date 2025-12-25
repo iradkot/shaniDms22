@@ -11,7 +11,7 @@ import SportTrackerHeader from 'app/containers/MainTabsNavigator/Containers/Spor
 import * as Styled from 'app/containers/MainTabsNavigator/Containers/SportTracker/styles';
 import SportItem from 'app/containers/MainTabsNavigator/Containers/SportTracker/components/SportItem';
 import Button from 'app/components/Button/Button';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { Ionicons as Icon } from '@expo/vector-icons';
 import {ADD_SPORT_ITEM_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {Animated} from 'react-native';
 import SportItemsContext from 'app/contexts/SportItemsContext';

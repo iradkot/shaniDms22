@@ -1,5 +1,6 @@
 // StorageService.ts
-import storage from '@react-native-firebase/storage';
+import { firebaseApp } from 'app/firebase';
+import { getStorage, ref, getDownloadURL } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export class StorageService {
@@ -25,7 +26,7 @@ export class StorageService {
         return cachedUrl;
       }
       console.log('fullPath', fullPath);
-      const url = await storage().ref(fullPath).getDownloadURL();
+      const url = await getDownloadURL(ref(getStorage(firebaseApp), fullPath));
       await AsyncStorage.setItem(cacheKey, url);
       return url;
     } catch (error) {

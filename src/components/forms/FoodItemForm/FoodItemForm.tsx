@@ -9,7 +9,7 @@ import {
   View,
   LayoutChangeEvent,
 } from 'react-native';
-import {PhotoFile} from 'react-native-vision-camera';
+import { CameraCapturedPicture } from 'expo-camera';
 import {NavigationProp, useNavigation} from '@react-navigation/native';
 import {Controller, useForm} from 'react-hook-form';
 import * as S from 'app/components/forms/FoodItemForm/FoodItemForm.styles';
@@ -31,7 +31,7 @@ const FoodItemForm = ({
 }: FoodItemFormProps) => {
   const isEditMode = !!foodItem;
   const navigation = useNavigation<NavigationProp<any>>();
-  const [photo, setPhoto] = React.useState<PhotoFile | {uri: string} | undefined>(
+  const [photo, setPhoto] = React.useState<CameraCapturedPicture | {uri: string} | undefined>(
     foodItem?.image ? {uri: foodItem.image} : undefined
   );
   const [date, setDate] = React.useState<Date>(() => {
@@ -92,7 +92,7 @@ const FoodItemForm = ({
   useEffect(() => {
     if (!foodItem) {
       navigation.navigate('CameraScreen', {
-        onTakePhoto: (picture: PhotoFile) => setPhoto(picture),
+        onTakePhoto: (picture: CameraCapturedPicture) => setPhoto(picture),
       });
     }
   }, [foodItem, navigation]);
@@ -123,8 +123,8 @@ const FoodItemForm = ({
     },
   ];
 
-  // Handler invoked when a photo is taken; always a PhotoFile
-  const onTakePhoto = (picture: PhotoFile) => {
+  // Handler invoked when a photo is taken
+  const onTakePhoto = (picture: CameraCapturedPicture) => {
     setPhoto(picture);
   };
 
