@@ -6,24 +6,30 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
-# Xcode 16+ supports iOS 12.0 and above. Set an explicit target to avoid
-# outdated defaults when new RN templates change.
+# Set the minimum iOS deployment target to 12.0
+# Xcode 16 requires iOS 12.0 or newer; older deployment targets cause build failures
 platform :ios, '12.0'
 prepare_react_native_project!
 
-linkage_env = ENV['USE_FRAMEWORKS']
-linkage = linkage_env ? linkage_env.to_sym : :static
+# Force static linking for all CocoaPods
+# Dynamic frameworks can prevent certain React Native headers (like hermes/hermes.h)
+# from being discoverable at build time. Setting linkage to :static avoids these
+# issues and is recommended when using React Native with many pods.
+linkage = :static
 Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
 use_frameworks! :linkage => linkage
 
 target 'shaniDms22' do
   config = use_native_modules!
 
+  # Explicitly disable Hermes for iOS. When Hermes is enabled but not fully
+  # configured, the iOS build may fail with missing header errors such as
+  # 'hermes/hermes.h'. Disabling Hermes falls back to the JSC engine.
   use_react_native!(
     :path => config[:reactNativePath],
+    :hermes_enabled => false,
     # An absolute path to your application root.
-    :app_path => "#{Pod::Config.instance.installation_root}/..",
-    :hermes_enabled => true
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
   post_install do |installer|
