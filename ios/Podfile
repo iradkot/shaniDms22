@@ -11,17 +11,14 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, '12.0'
 prepare_react_native_project!
 
-# Keep the default (static library) setup unless explicitly overridden.
-# If you need frameworks for a specific environment, set USE_FRAMEWORKS to
-# "static" or "dynamic" and the linkage will be applied. Otherwise, no
-# use_frameworks! is enforced, which is the most stable option for React Native.
+# Conditionally enable frameworks based on USE_FRAMEWORKS environment variable.
+# By default React Native works best when pods are built as static libraries. Dynamic
+# frameworks can sometimes hide internal headers (e.g., jsinspector-modern or Hermes),
+# leading to file-not-found build errors. Only enable frameworks when explicitly
+# requested via USE_FRAMEWORKS environment variable.
 linkage_env = ENV['USE_FRAMEWORKS']
 if linkage_env
-  linkage = linkage_env.to_sym
-  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-  use_frameworks! :linkage => linkage
-else
-  Pod::UI.puts "Configuring Pods without use_frameworks! (default RN setup)".green
+  use_frameworks! :linkage => linkage_env.to_sym
 end
 
 target 'shaniDms22' do
@@ -35,12 +32,6 @@ target 'shaniDms22' do
   )
 
   post_install do |installer|
-    installer.pods_project.targets.each do |target|
-      target.build_configurations.each do |config|
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
-      end
-    end
-
     # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
     react_native_post_install(
       installer,
@@ -48,5 +39,14 @@ target 'shaniDms22' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Ensure all pods have a deployment target of 12.0 or higher. Without this,
+    # some pods may inherit an older target (e.g. 9.0 or 11.0) which is no longer
+    # supported on Xcode 16+. See build logs warning about deployment target range.
+    installer.pods_project.targets.each do |t|
+      t.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+      end
+    end
   end
 end
