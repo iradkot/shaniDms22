@@ -47,6 +47,16 @@ jobs:
           bundler-cache: true
           working-directory: ios
 
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-cocoapods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cocoapods-
+
       - name: Print env + versions
         shell: bash
         run: |
@@ -58,14 +68,30 @@ jobs:
           bundle exec pod --version
           echo "USE_FRAMEWORKS=${USE_FRAMEWORKS:-<unset>}"
 
-      - name: Pod install (clean + verbose)
+      - name: CocoaPods CDN connectivity check
+        shell: bash
+        run: |
+          set -x
+          curl -I --http2 https://cdn.cocoapods.org/all_pods_versions_0_3_5.txt || true
+          curl -I --http1.1 https://cdn.cocoapods.org/all_pods_versions_0_3_5.txt || true
+          nslookup cdn.cocoapods.org || true
+          ruby -v
+          bundle exec pod --version
+
+      - name: Pod install (retry)
         shell: bash
         run: |
           set -euo pipefail
           cd ios
           rm -rf Pods Podfile.lock
           bundle exec pod repo update
-          bundle exec pod install --repo-update --verbose
+          for i in 1 2 3 4 5; do
+            echo "pod install attempt $i..."
+            bundle exec pod install --repo-update --verbose && exit 0
+            echo "pod install failed. Sleeping then retrying..."
+            sleep $((i*20))
+          done
+          exit 1
 
       - name: Inspect key pods in Podfile.lock
         shell: bash

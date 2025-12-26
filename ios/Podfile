@@ -6,6 +6,9 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
+# Use the CocoaPods Specs git repo to avoid CDN flakiness in CI.
+source 'https://github.com/CocoaPods/Specs.git'
+
 # Set the minimum iOS deployment target to 15.1 to match React Native 0.78+ requirements.
 platform :ios, '15.1'
 use_modular_headers!
