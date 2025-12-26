@@ -45,7 +45,8 @@ jobs:
         with:
           ruby-version: '3.2'
           bundler-cache: true
-          working-directory: ios
+        env:
+          BUNDLE_GEMFILE: ios/Gemfile
 
       - name: Cache CocoaPods
         uses: actions/cache@v4
@@ -57,6 +58,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cocoapods-
 
+      - name: Bundle sanity
+        working-directory: ios
+        env:
+          BUNDLE_GEMFILE: ios/Gemfile
+        run: |
+          set -euo pipefail
+          bundle -v
+          bundle check || bundle install --jobs 4 --retry 3
+          bundle exec ruby -v
+          bundle exec pod --version
+          echo "== Bundler gems =="
+          bundle exec ruby -e 'require "xcodeproj"; puts "xcodeproj=#{Xcodeproj::VERSION}"'
+          bundle exec ruby -e 'require "cocoapods"; puts "cocoapods=#{Pod::VERSION}"'
+          bundle exec ruby -e 'require "fastlane"; puts "fastlane=#{Fastlane::VERSION}"'
+
       - name: Print env + versions
         shell: bash
         run: |
@@ -65,7 +81,7 @@ jobs:
           ruby -v
           bundle -v
           cd ios
-          bundle exec pod --version
+          pod --version
           echo "USE_FRAMEWORKS=${USE_FRAMEWORKS:-<unset>}"
 
       - name: CocoaPods CDN connectivity check
@@ -76,7 +92,7 @@ jobs:
           curl -I --http1.1 https://cdn.cocoapods.org/all_pods_versions_0_3_5.txt || true
           nslookup cdn.cocoapods.org || true
           ruby -v
-          bundle exec pod --version
+          pod --version
 
       - name: Pod install (retry)
         shell: bash
@@ -105,7 +121,17 @@ jobs:
         run: |
           set -euo pipefail
           cd ios
-          grep -R "IPHONEOS_DEPLOYMENT_TARGET" -n "Pods/Target Support Files" | head -n 40
+          ruby - <<'RUBY'
+require "xcodeproj"
+project = Xcodeproj::Project.open("Pods/Pods.xcodeproj")
+bad = project.targets.map do |t|
+  targets = t.build_configurations.map { |c| c.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] }.compact.uniq
+  [t.name, targets]
+end.select { |(_, targets)| targets.any? { |v| v.to_f < 15.1 } }
+puts "Targets with IPHONEOS_DEPLOYMENT_TARGET < 15.1:"
+bad.each { |name, targets| puts "#{name}: #{targets.inspect}" }
+exit(bad.empty? ? 0 : 1)
+RUBY
 
       - name: Prove jsinspector headers/pods exist
         working-directory: ios
