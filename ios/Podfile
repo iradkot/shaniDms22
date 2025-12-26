@@ -6,30 +6,21 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
-# Set the minimum iOS deployment target to 12.0
-# Xcode 16 requires iOS 12.0 or newer; older deployment targets cause build failures
-platform :ios, '12.0'
+# Set the minimum iOS deployment target to 15.1 to match React Native 0.78+ requirements.
+platform :ios, '15.1'
 prepare_react_native_project!
 
-# Conditionally enable frameworks based on USE_FRAMEWORKS environment variable.
-# By default React Native works best when pods are built as static libraries. Dynamic
-# frameworks can sometimes hide internal headers (e.g., jsinspector-modern or Hermes),
-# leading to file-not-found build errors. Only enable frameworks when explicitly
-# requested via USE_FRAMEWORKS environment variable.
+# Default to static libraries (no use_frameworks!) for stability. If you must enable
+# frameworks, set USE_FRAMEWORKS to "static" or "dynamic" in the environment.
 linkage_env = ENV['USE_FRAMEWORKS']
-if linkage_env
-  use_frameworks! :linkage => linkage_env.to_sym
-end
+use_frameworks! :linkage => linkage_env.to_sym if linkage_env
 
 target 'shaniDms22' do
   config = use_native_modules!
 
   use_react_native!(
     :path => config[:reactNativePath],
-    # Disable Hermes on iOS. Hermes headers often cause "jsinspector-modern/ReactCdp.h file not found" or
-    # "hermes/hermes.h file not found" when pods are built as static libs. Using JSC instead makes
-    # debugging easier and avoids the header-not-found error.
-    :hermes_enabled => false,
+    :hermes_enabled => true,
     # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
@@ -43,12 +34,12 @@ target 'shaniDms22' do
       # :ccache_enabled => true
     )
 
-    # Ensure all pods have a deployment target of 12.0 or higher. Without this,
+    # Ensure all pods have a deployment target of 15.1 or higher. Without this,
     # some pods may inherit an older target (e.g. 9.0 or 11.0) which is no longer
-    # supported on Xcode 16+. See build logs warning about deployment target range.
+    # supported on Xcode 16+. React Native 0.78.x requires iOS 15.1+.
     installer.pods_project.targets.each do |t|
       t.build_configurations.each do |config|
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       end
     end
   end
