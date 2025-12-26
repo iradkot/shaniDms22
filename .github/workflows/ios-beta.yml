@@ -143,7 +143,12 @@ jobs:
           echo "Found: $FOUND"
 
           echo "== Verify compiler can resolve <jsinspector-modern/ReactCdp.h> =="
-          clang -E -x objective-c -I"Pods/Headers/Public" -I"Pods/Headers/Private" -I"Pods" - <<'EOF' >/dev/null
+          clang -E -x objective-c \
+            -I"Pods/Headers/Public" \
+            -I"Pods/Headers/Public/React-jsinspector" \
+            -I"Pods/Headers/Public/React-jsinspector/jsinspector-modern" \
+            -I"Pods/Headers/Private" \
+            -I"Pods" - <<'EOF' >/dev/null
             #include <jsinspector-modern/ReactCdp.h>
           EOF
           echo "OK: clang can resolve jsinspector-modern/ReactCdp.h"

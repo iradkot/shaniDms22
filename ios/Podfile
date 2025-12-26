@@ -42,8 +42,15 @@ target 'shaniDms22' do
     # some pods may inherit an older target (e.g. 9.0 or 11.0) which is no longer
     # supported on Xcode 16+. React Native 0.78.x requires iOS 15.1+.
     installer.pods_project.targets.each do |t|
-      t.build_configurations.each do |config|
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+      t.build_configurations.each do |build_config|
+        build_config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+
+        header_search_paths = build_config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
+        header_search_paths = Array(header_search_paths)
+        header_search_paths << '$(PODS_ROOT)/Headers/Public/React-jsinspector'
+        header_search_paths << '$(PODS_ROOT)/Headers/Private/React-jsinspector'
+        header_search_paths << '$(PODS_ROOT)/Headers/Public/React-jsinspector/jsinspector-modern'
+        build_config.build_settings['HEADER_SEARCH_PATHS'] = header_search_paths.uniq
       end
     end
   end
