@@ -8,6 +8,7 @@ require Pod::Executable.execute_command('node', ['-p',
 
 # Set the minimum iOS deployment target to 15.1 to match React Native 0.78+ requirements.
 platform :ios, '15.1'
+use_modular_headers!
 prepare_react_native_project!
 
 # Default to static libraries (no use_frameworks!) for stability. If you must enable

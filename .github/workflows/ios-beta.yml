@@ -47,9 +47,32 @@ jobs:
           bundler-cache: true
           working-directory: ios
 
-      - name: Install CocoaPods dependencies
-        working-directory: ios
-        run: bundle exec pod install --repo-update
+      - name: Print env + versions
+        shell: bash
+        run: |
+          set -e
+          node -v
+          ruby -v
+          bundle -v
+          cd ios
+          bundle exec pod --version
+          echo "USE_FRAMEWORKS=${USE_FRAMEWORKS:-<unset>}"
+
+      - name: Pod install (clean + verbose)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ios
+          rm -rf Pods Podfile.lock
+          bundle exec pod repo update
+          bundle exec pod install --repo-update --verbose
+
+      - name: Verify deployment target in Pods
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ios
+          grep -R "IPHONEOS_DEPLOYMENT_TARGET" -n "Pods/Target Support Files" | head -n 40
 
       - name: Prove jsinspector headers/pods exist
         working-directory: ios
