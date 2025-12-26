@@ -131,14 +131,22 @@ jobs:
           echo "== ReactCdp.h locations =="
           find Pods -name ReactCdp.h -o -name InspectorInterfaces.h || true
 
-          echo "== Public headers folder check =="
-          ls -la Pods/Headers/Public/jsinspector-modern 2>/dev/null || true
-
           echo "== Podfile.lock contains jsinspector pods? =="
           grep -n "jsinspector" Podfile.lock || true
 
-          echo "== Require ReactCdp.h exists =="
-          test -f Pods/Headers/Public/jsinspector-modern/ReactCdp.h
+          echo "== Require ReactCdp.h exists (any path) =="
+          FOUND="$(find Pods/Headers -name ReactCdp.h | head -n 1 || true)"
+          if [ -z "$FOUND" ]; then
+            echo "ReactCdp.h not found anywhere under Pods/Headers"
+            exit 1
+          fi
+          echo "Found: $FOUND"
+
+          echo "== Verify compiler can resolve <jsinspector-modern/ReactCdp.h> =="
+          clang -E -x objective-c -I"Pods/Headers/Public" -I"Pods/Headers/Private" -I"Pods" - <<'EOF' >/dev/null
+#include <jsinspector-modern/ReactCdp.h>
+EOF
+          echo "OK: clang can resolve jsinspector-modern/ReactCdp.h"
 
       - name: Sanity check P12 on runner
         shell: bash
