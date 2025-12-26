@@ -122,16 +122,16 @@ jobs:
           set -euo pipefail
           cd ios
           ruby - <<'RUBY'
-require "xcodeproj"
-project = Xcodeproj::Project.open("Pods/Pods.xcodeproj")
-bad = project.targets.map do |t|
-  targets = t.build_configurations.map { |c| c.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] }.compact.uniq
-  [t.name, targets]
-end.select { |(_, targets)| targets.any? { |v| v.to_f < 15.1 } }
-puts "Targets with IPHONEOS_DEPLOYMENT_TARGET < 15.1:"
-bad.each { |name, targets| puts "#{name}: #{targets.inspect}" }
-exit(bad.empty? ? 0 : 1)
-RUBY
+            require "xcodeproj"
+            project = Xcodeproj::Project.open("Pods/Pods.xcodeproj")
+            bad = project.targets.map do |t|
+              targets = t.build_configurations.map { |c| c.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] }.compact.uniq
+              [t.name, targets]
+            end.select { |(_, targets)| targets.any? { |v| v.to_f < 15.1 } }
+            puts "Targets with IPHONEOS_DEPLOYMENT_TARGET < 15.1:"
+            bad.each { |name, targets| puts "#{name}: #{targets.inspect}" }
+            exit(bad.empty? ? 0 : 1)
+          RUBY
 
       - name: Prove jsinspector headers/pods exist
         working-directory: ios
