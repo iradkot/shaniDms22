@@ -144,8 +144,8 @@ jobs:
 
           echo "== Verify compiler can resolve <jsinspector-modern/ReactCdp.h> =="
           clang -E -x objective-c -I"Pods/Headers/Public" -I"Pods/Headers/Private" -I"Pods" - <<'EOF' >/dev/null
-#include <jsinspector-modern/ReactCdp.h>
-EOF
+            #include <jsinspector-modern/ReactCdp.h>
+          EOF
           echo "OK: clang can resolve jsinspector-modern/ReactCdp.h"
 
       - name: Sanity check P12 on runner
