@@ -67,6 +67,13 @@ jobs:
           bundle exec pod repo update
           bundle exec pod install --repo-update --verbose
 
+      - name: Inspect key pods in Podfile.lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ios
+          ruby -e 'lock = File.read("Podfile.lock"); puts lock.lines.grep(/React-Core|hermes-engine|jsinspector-modern|FirebaseAuth/).join'
+
       - name: Verify deployment target in Pods
         shell: bash
         run: |
