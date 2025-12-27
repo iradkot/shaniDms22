@@ -44,6 +44,8 @@ target 'shaniDms22' do
     installer.pods_project.targets.each do |t|
       t.build_configurations.each do |build_config|
         build_config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+        build_config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
+        build_config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
 
         header_search_paths = build_config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
         header_search_paths = Array(header_search_paths)
