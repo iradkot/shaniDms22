@@ -1,24 +1,26 @@
 ENV['RCT_NEW_ARCH_ENABLED'] = '0'
-# Resolve react_native_pods.rb with node to allow for hoisting
-require Pod::Executable.execute_command('node', ['-p',
-  'require.resolve(
-    "react-native/scripts/react_native_pods.rb",
-    {paths: [process.argv[1]]},
-  )', __dir__]).strip
+# Resolve react_native_pods.rb with a direct relative require (RN 0.78+)
+require_relative '../node_modules/react-native/scripts/react_native_pods'
 
-platform :ios, min_ios_version_supported
+# Use the CocoaPods Specs git repo to avoid CDN flakiness in CI.
+source 'https://github.com/CocoaPods/Specs.git'
+
+# Set the minimum iOS deployment target to 15.1 to match React Native 0.78+ requirements.
+platform :ios, '15.1'
+use_modular_headers!
 prepare_react_native_project!
 
+# Default to static libraries (no use_frameworks!) for stability. If you must enable
+# frameworks, set USE_FRAMEWORKS to "static" or "dynamic" in the environment.
 linkage_env = ENV['USE_FRAMEWORKS']
-linkage = linkage_env ? linkage_env.to_sym : :dynamic
-Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-use_frameworks! :linkage => linkage
+use_frameworks! :linkage => linkage_env.to_sym if linkage_env
 
 target 'shaniDms22' do
   config = use_native_modules!
 
   use_react_native!(
     :path => config[:reactNativePath],
+    :hermes_enabled => true,
     # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
@@ -31,5 +33,25 @@ target 'shaniDms22' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Ensure all pods have a deployment target of 15.1 or higher. Without this,
+    # some pods may inherit an older target (e.g. 9.0 or 11.0) which is no longer
+    # supported on Xcode 16+. React Native 0.78.x requires iOS 15.1+.
+    installer.pods_project.targets.each do |t|
+      t.build_configurations.each do |build_config|
+        build_config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+        build_config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
+        build_config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+
+        header_search_paths = build_config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
+        header_search_paths = Array(header_search_paths)
+        header_search_paths << '$(PODS_ROOT)/Headers/Public/React-jsinspector'
+        header_search_paths << '$(PODS_ROOT)/Headers/Private/React-jsinspector'
+        header_search_paths << '$(PODS_ROOT)/Headers/Public/React-jsinspector/jsinspector-modern'
+        header_search_paths << '$(PODS_ROOT)/Headers/Public/RCT-Folly'
+        header_search_paths << '$(PODS_ROOT)/Headers/Private/RCT-Folly'
+        build_config.build_settings['HEADER_SEARCH_PATHS'] = header_search_paths.uniq
+      end
+    end
   end
 end

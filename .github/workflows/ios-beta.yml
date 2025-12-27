@@ -25,10 +25,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app || sudo xcode-select -s /Applications/Xcode.app
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '16'
+          # Use Node.js 20.x. Newer React Native versions require Node 18 or higher
+          # and Node 20 is recommended for stable EAS builds. Bumping the Node
+          # version resolves bundling/runtime errors.
+          node-version: '20'
           cache: 'yarn'
 
       - name: Install JavaScript dependencies
@@ -39,11 +45,115 @@ jobs:
         with:
           ruby-version: '3.2'
           bundler-cache: true
-          working-directory: ios
+        env:
+          BUNDLE_GEMFILE: ios/Gemfile
 
-      - name: Install CocoaPods dependencies
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-cocoapods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cocoapods-
+
+      - name: Bundle sanity
+        env:
+          BUNDLE_GEMFILE: ios/Gemfile
+        run: |
+          set -euo pipefail
+          bundle -v
+          bundle check || bundle install --jobs 4 --retry 3
+          bundle exec ruby -v
+          bundle exec pod --version
+          echo "== Bundler gems =="
+          bundle exec ruby -e 'require "xcodeproj"; puts "xcodeproj=#{Xcodeproj::VERSION}"'
+          bundle exec ruby -e 'require "cocoapods"; puts "cocoapods=#{Pod::VERSION}"'
+          bundle exec ruby -e 'require "fastlane"; puts "fastlane=#{Fastlane::VERSION}"'
+
+      - name: Print env + versions
+        shell: bash
+        run: |
+          set -e
+          node -v
+          ruby -v
+          bundle -v
+          cd ios
+          pod --version
+          echo "USE_FRAMEWORKS=${USE_FRAMEWORKS:-<unset>}"
+
+      - name: CocoaPods CDN connectivity check
+        shell: bash
+        run: |
+          set -x
+          curl -I --http2 https://cdn.cocoapods.org/all_pods_versions_0_3_5.txt || true
+
+      - name: Pod install (retry)
         working-directory: ios
-        run: bundle exec pod install
+        shell: bash
+        env:
+          COCOAPODS_DISABLE_STATS: "true"
+        run: |
+          set -euo pipefail
+          rm -rf Pods Podfile.lock
+          bundle exec pod repo update
+          for i in 1 2 3 4 5; do
+            echo "pod install attempt $i..."
+            bundle exec pod install --repo-update --verbose && exit 0
+            echo "pod install failed, retrying..."
+            sleep $((i*15))
+          done
+          exit 1
+
+      - name: Inspect key pods in Podfile.lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ios
+          ruby -e 'lock = File.read("Podfile.lock"); puts lock.lines.grep(/React-Core|hermes-engine|jsinspector-modern|FirebaseAuth/).join'
+
+      - name: Verify deployment target in Pods
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ios
+          echo "== Pods deployment targets =="
+          set +e
+          grep -R "IPHONEOS_DEPLOYMENT_TARGET" -n "Pods/Target Support Files" | head -n 80
+          set -e
+
+      - name: Prove jsinspector headers/pods exist
+        working-directory: ios
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "== ReactCdp.h locations =="
+          find Pods -name ReactCdp.h -o -name InspectorInterfaces.h || true
+
+          echo "== Podfile.lock contains jsinspector pods? =="
+          grep -n "jsinspector" Podfile.lock || true
+
+          echo "== Require ReactCdp.h exists (any path) =="
+          FOUND="$(find Pods/Headers -name ReactCdp.h | head -n 1 || true)"
+          if [ -z "$FOUND" ]; then
+            echo "ReactCdp.h not found anywhere under Pods/Headers"
+            exit 1
+          fi
+          echo "Found: $FOUND"
+
+          echo "== Verify compiler can resolve <jsinspector-modern/ReactCdp.h> =="
+          clang++ -std=c++20 -E -x objective-c++ \
+            -I"Pods/Headers/Public" \
+            -I"Pods/Headers/Public/React-jsinspector" \
+            -I"Pods/Headers/Public/React-jsinspector/jsinspector-modern" \
+            -I"Pods/Headers/Public/RCT-Folly" \
+            -I"Pods/Headers/Private/RCT-Folly" \
+            -I"Pods/Headers/Private" \
+            -I"Pods" - <<'EOF' >/dev/null
+            #include <jsinspector-modern/ReactCdp.h>
+          EOF
+          echo "OK: clang can resolve jsinspector-modern/ReactCdp.h"
 
       - name: Sanity check P12 on runner
         shell: bash
