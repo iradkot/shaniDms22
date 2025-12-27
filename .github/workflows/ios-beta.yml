@@ -147,6 +147,8 @@ jobs:
             -I"Pods/Headers/Public" \
             -I"Pods/Headers/Public/React-jsinspector" \
             -I"Pods/Headers/Public/React-jsinspector/jsinspector-modern" \
+            -I"Pods/Headers/Public/RCT-Folly" \
+            -I"Pods/Headers/Private/RCT-Folly" \
             -I"Pods/Headers/Private" \
             -I"Pods" - <<'EOF' >/dev/null
             #include <jsinspector-modern/ReactCdp.h>
