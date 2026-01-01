@@ -186,6 +186,9 @@ target 'shaniDms22' do
       File.open(xcconfig_path, 'w') { |f| f.write(updated) }
     end
 
+    # Firebase iOS SDK 11.x exposes some ObjC surface (e.g., FIRStorage* types)
+    # via the generated Swift compatibility header. Patch RNFBStorageCommon.h to
+    # import the Swift header when needed so builds succeed on SDK 11.x.
     rnfb_storage_common = File.join(
       Pod::Config.instance.installation_root.to_s,
       '..',
