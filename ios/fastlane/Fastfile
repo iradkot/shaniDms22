@@ -288,12 +288,24 @@ end
 def validate_app_store_connect_credentials!
   key_id = ENV["APP_STORE_CONNECT_KEY_ID"].to_s.strip
   issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"].to_s.strip
+  private_key_base64 = ENV["APP_STORE_CONNECT_PRIVATE_KEY"].to_s.strip
+  private_key_plain = ENV["APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64"].to_s.strip
 
   UI.user_error!("APP_STORE_CONNECT_KEY_ID is required for TestFlight upload") if key_id.empty?
   UI.user_error!("APP_STORE_CONNECT_ISSUER_ID is required for TestFlight upload") if issuer_id.empty?
 
+  if private_key_base64.empty? && private_key_plain.empty?
+    UI.user_error!("Provide either APP_STORE_CONNECT_PRIVATE_KEY (base64) or APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 (PEM) for TestFlight upload")
+  end
+
   unless issuer_id.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
-    UI.important("APP_STORE_CONNECT_ISSUER_ID does not look like a UUID; double-check the value in GitHub secrets/vars")
+    UI.user_error!("APP_STORE_CONNECT_ISSUER_ID must be the Issuer ID UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) from App Store Connect → Users and Access → Keys. Do not use a Key ID here.")
+  end
+
+  if !private_key_plain.empty? && private_key_base64.empty?
+    unless private_key_plain.include?("BEGIN PRIVATE KEY") || private_key_plain.include?("BEGIN EC PRIVATE KEY")
+      UI.user_error!("APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 does not look like a PEM private key (missing BEGIN PRIVATE KEY). Paste only the raw PEM contents.")
+    end
   end
 end
 
