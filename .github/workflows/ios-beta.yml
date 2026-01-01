@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '16'
+          node-version: '18'
           cache: 'yarn'
 
       - name: Install JavaScript dependencies
@@ -43,7 +43,7 @@ jobs:
 
       - name: Install CocoaPods dependencies
         working-directory: ios
-        run: bundle exec pod install
+        run: bundle exec pod install --repo-update
 
       - name: Sanity check P12 on runner
         shell: bash

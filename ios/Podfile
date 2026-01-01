@@ -186,18 +186,10 @@ target 'shaniDms22' do
       File.open(xcconfig_path, 'w') { |f| f.write(updated) }
     end
 
-    rnfb_storage_common = File.join(
-      Pod::Config.instance.installation_root.to_s,
-      '..',
-      'node_modules',
-      '@react-native-firebase',
-      'storage',
-      'ios',
-      'RNFBStorage',
-      'RNFBStorageCommon.h'
-    )
-    if File.exist?(rnfb_storage_common)
-      original = File.read(rnfb_storage_common)
+    def ensure_rnfb_storage_imports(file_path)
+      return unless File.exist?(file_path)
+
+      original = File.read(file_path)
       insertion = <<~OBJC
         #if __has_include(<FirebaseStorage/FirebaseStorage.h>)
         #import <FirebaseStorage/FirebaseStorage.h>
@@ -209,21 +201,35 @@ target 'shaniDms22' do
 
       patched = original
 
-      # If an older Swift-only snippet exists, replace it with the new one.
-      if patched.include?('#import <Photos/Photos.h>')
-        patched = patched.gsub(
-          /#if __has_include\("FirebaseStorage-Swift\.h"\)\n#import "FirebaseStorage-Swift\.h"\n#endif\n\n/m,
-          insertion
-        )
-      end
+      # Replace older Swift-only snippet if present.
+      patched = patched.gsub(
+        /#if __has_include\("FirebaseStorage-Swift\.h"\)\n#import "FirebaseStorage-Swift\.h"\n#endif\n\n/m,
+        insertion
+      )
 
-      # Otherwise, insert after the Photos import.
+      # If imports are missing, insert in a stable spot (right after the first #import).
       unless patched.include?('FirebaseStorage/FirebaseStorage.h') || patched.include?('FirebaseStorage-Swift.h')
-        patched = patched.sub('#import <Photos/Photos.h>\n', "#import <Photos/Photos.h>\n\n#{insertion}")
+        if patched.match?(/^#import[^\n]*\n/m)
+          patched = patched.sub(/^(#import[^\n]*\n)/m, "\\1\n#{insertion}")
+        else
+          patched = "#{insertion}\n#{patched}"
+        end
       end
 
-      File.write(rnfb_storage_common, patched) if patched != original
+      File.write(file_path, patched) if patched != original
     end
+
+    rnfb_storage_dir = File.join(
+      Pod::Config.instance.installation_root.to_s,
+      '..',
+      'node_modules',
+      '@react-native-firebase',
+      'storage',
+      'ios',
+      'RNFBStorage'
+    )
+    ensure_rnfb_storage_imports(File.join(rnfb_storage_dir, 'RNFBStorageCommon.h'))
+    ensure_rnfb_storage_imports(File.join(rnfb_storage_dir, 'RNFBStorageCommon.m'))
 
     # RNFBMessaging references FIRAuth behind a __has_include check.
     # With Firebase iOS SDK 11.x, FirebaseAuth's ObjC surface is exposed via the
