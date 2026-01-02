@@ -47,9 +47,11 @@ export function useTrendsData({ rangeDays, start, end }: UseTrendsDataProps) {
 
           const chunkStart = new Date(start);
           chunkStart.setDate(start.getDate() + i * CHUNK_SIZE);
+          chunkStart.setHours(0, 0, 0, 0);
 
           const chunkEnd = new Date(chunkStart);
           chunkEnd.setDate(chunkStart.getDate() + CHUNK_SIZE - 1);
+          chunkEnd.setHours(23, 59, 59, 999);
           if (chunkEnd > end) chunkEnd.setTime(end.getTime());
 
           // Perform the fetch
