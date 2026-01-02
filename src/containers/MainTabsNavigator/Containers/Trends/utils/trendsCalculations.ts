@@ -2,11 +2,13 @@
 
 import { BgSample } from 'app/types/day_bgs.types';
 import { format } from 'date-fns';
+import { cgmRange, CGM_STATUS_CODES } from 'app/constants/PLAN_CONFIG';
 
-const SERIOUS_HYPO_THRESHOLD = 56;
-const SERIOUS_HYPER_THRESHOLD = 220;
-const LOW_THRESHOLD = 70;
-const HIGH_THRESHOLD = 180;
+const LOW_THRESHOLD = cgmRange.TARGET.min;
+const HIGH_THRESHOLD = cgmRange.TARGET.max;
+const SERIOUS_HYPO_THRESHOLD = cgmRange[CGM_STATUS_CODES.SERIOUS_LOW] as number;
+const SERIOUS_HYPER_THRESHOLD =
+  cgmRange[CGM_STATUS_CODES.SERIOUS_HIGH] as number;
 
 export interface DayDetail {
   dateString: string;
