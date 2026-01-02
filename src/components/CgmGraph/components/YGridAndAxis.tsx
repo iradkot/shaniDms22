@@ -1,6 +1,8 @@
 import { G, Line, Text } from "react-native-svg";
 import React, { useContext } from "react";
 import { GraphStyleContext } from "app/components/CgmGraph/contextStores/GraphStyleContext";
+import {useTheme} from 'styled-components/native';
+import {ThemeType} from 'app/types/theme';
 
 interface Props {
   highestBgThreshold: number;
@@ -9,6 +11,7 @@ const YGridAndAxis = ({
   highestBgThreshold, // max y value
 }: Props) => {
   const [{ graphWidth, graphHeight }] = useContext(GraphStyleContext);
+  const theme = useTheme() as ThemeType;
   const ticksAmount = 6;
   const ticks = Array.from({ length: ticksAmount }, (_, i) => i);
   const GridLine = ({ y }: { y: number }) => (
@@ -17,7 +20,7 @@ const YGridAndAxis = ({
       y1={y}
       x2={graphWidth}
       y2={y}
-      stroke="black"
+      stroke={theme.borderColor}
       opacity={0.1}
       strokeWidth={1}
     />
@@ -27,7 +30,7 @@ const YGridAndAxis = ({
       x={0}
       y={y}
       fontSize={12}
-      fill="black"
+      fill={theme.textColor}
       opacity={0.5}
       textAnchor="middle"
     >

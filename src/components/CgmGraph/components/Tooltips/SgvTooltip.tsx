@@ -5,7 +5,10 @@ import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {BgSample} from 'app/types/day_bgs.types';
 import {ThemeType} from 'app/types/theme';
 import {determineBgColorByGlucoseValue} from 'app/style/styling.utils';
+import {addOpacity} from 'app/style/styling.utils';
 import {useTheme} from 'styled-components/native';
+import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
+import {useContext} from 'react';
 
 interface SgvTooltipProps {
   x: number;
@@ -15,29 +18,33 @@ interface SgvTooltipProps {
 
 const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
   const theme = useTheme() as ThemeType;
+  const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
   const tooltipWidth = 160;
   const tooltipHeight = 70;
   let tooltipX = x - tooltipWidth / 2;
+  let tooltipY = y - tooltipHeight - theme.spacing.sm;
 
   const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
 
-  tooltipX = Math.max(0, tooltipX);
-  if (tooltipX + tooltipWidth > window.innerWidth) {
-    tooltipX = window.innerWidth - tooltipWidth;
+  // Clamp tooltip within the graph bounds (coordinates are already inside the chart <G>).
+  tooltipX = Math.max(0, Math.min(tooltipX, Math.max(0, graphWidth - tooltipWidth)));
+  if (tooltipY < 0) {
+    tooltipY = y + theme.spacing.sm;
   }
+  tooltipY = Math.max(0, Math.min(tooltipY, Math.max(0, graphHeight - tooltipHeight)));
 
   // More subtle shadow settings
-  const shadowColor = '#676767'; // Slightly darker shadow for subtlety
+  const shadowColor = addOpacity(theme.shadowColor, 0.35);
   const shadowOffset = 0.5; // Reduced offset for a minimalistic look
 
   return (
-    <Tooltip x={tooltipX} y={y}>
+    <Tooltip x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}>
       <Rect
         width={tooltipWidth}
         height={tooltipHeight}
-        fill="#f0f0f0"
-        stroke="#cccccc"
+        fill={theme.white}
+        stroke={theme.borderColor}
         strokeWidth={1}
         rx={8}
       />
@@ -46,7 +53,7 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
         x={20 + shadowOffset}
         y={20 + shadowOffset}
         fontSize="12"
-        fontFamily="Arial, sans-serif"
+        fontFamily={theme.typography.fontFamily}
         fill={shadowColor} // Shadow with slight offset for minimalistic effect
         textAnchor="start">
         BG: {`${bgSample.sgv} mg/dL`}
@@ -56,7 +63,7 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
         x={20}
         y={20}
         fontSize="12"
-        fontFamily="Arial, sans-serif"
+        fontFamily={theme.typography.fontFamily}
         fill={bgColor}
         textAnchor="start">
         BG: {`${bgSample.sgv} mg/dL`}
@@ -66,8 +73,8 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
         x={20}
         y={40}
         fontSize="12"
-        fontFamily="Arial, sans-serif"
-        fill="black"
+        fontFamily={theme.typography.fontFamily}
+        fill={theme.textColor}
         textAnchor="start">
         Time: {formatDateToLocaleTimeString(bgSample.date)}
       </Text>

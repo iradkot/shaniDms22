@@ -19,10 +19,15 @@ import {findClosestBgSample} from 'app/components/CgmGraph/utils';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import SgvTooltip from 'app/components/CgmGraph/components/Tooltips/SgvTooltip';
 import {useClosestBgSample} from 'app/components/CgmGraph/hooks/useClosestBgSample';
+import {useTheme} from 'styled-components/native';
+import {ThemeType} from 'app/types/theme';
+import {InsulinDataEntry} from 'app/types/insulin.types';
+import BolusItemsRenderer from 'app/components/CgmGraph/components/Bolus/BolusItemsRenderer';
 
 interface Props {
   bgSamples: BgSample[];
   foodItems: formattedFoodItemDTO[] | null;
+  insulinData?: InsulinDataEntry[];
   width: number;
   height: number;
 }
@@ -32,11 +37,12 @@ const StyledSvg = styled(Svg)`
   width: 100%;
 `;
 
-const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
+const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulinData}) => {
   const containerRef = useRef<View>(null);
   const [graphStyleContextValue, setGraphStyleContextValue] =
     useGraphStyleContext(width, height, bgSamples);
   const touchContext = useTouchContext();
+  const theme = useTheme() as ThemeType;
 
   const {
     isTouchActive,
@@ -89,6 +95,7 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
             <XGridAndAxis />
             <YGridAndAxis highestBgThreshold={300} />
             <FoodItemsRenderer foodItems={foodItems} />
+            <BolusItemsRenderer insulinData={insulinData} />
             {isTouchActive && closestBgSample && (
               <>
                 <Line
@@ -96,7 +103,7 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
                   y1="0"
                   x2={xTouchPosition}
                   y2={height}
-                  stroke="black"
+                  stroke={theme.borderColor}
                   strokeWidth={1}
                   opacity={0.2}
                 />
@@ -105,7 +112,7 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems}) => {
                   y1={yTouchPosition}
                   x2={width}
                   y2={yTouchPosition}
-                  stroke="grey"
+                  stroke={theme.borderColor}
                   strokeWidth={1}
                   opacity={0.5}
                 />

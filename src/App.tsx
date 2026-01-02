@@ -138,73 +138,70 @@ const App: () => React.ReactElement = () => {
     return unsubscribeOnMessage;
   }, []);
   return (
-    // TODO - move SafeAreaView style outside
-      <GestureHandlerRootView style={{flex: 1}}>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider theme={extendedTheme}>
+    <GestureHandlerRootView style={{flex: 1}}>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider theme={extendedTheme}>
             <ErrorBoundary>
               <TouchProvider>
-            <StatusBar backgroundColor={theme.backgroundColor} />
-            <AppContainer>
-              <SafeAreaView style={{flex: 1}}>
-                <SafeAreaProvider>
-                  <SportItemsProvider>
-                  <NavigationContainer>
-                      <Stack.Navigator screenOptions={{headerShown: false}}>
-                        <Stack.Screen
-                          name="initScreen"
-                          component={AppInitScreen}
-                        />
-                        <Stack.Screen name={LOGIN_SCREEN} component={Login} />
-                        <Stack.Screen
-                          name={MAIN_TAB_NAVIGATOR}
-                          component={MainTabsNavigator}
-                        />
-                        <Stack.Screen
-                          options={{headerShown: true, headerTitle: ''}}
-                          name={ADD_NOTIFICATION_SCREEN}
-                          component={AddNotificationScreen}
-                        />
-                        <Stack.Screen
-                          options={{headerShown: true, headerTitle: ''}}
-                          name={EDIT_NOTIFICATION_SCREEN}
-                          component={EditNotificationScreen}
-                        />
-                        <Stack.Screen
-                          options={{headerShown: true, headerTitle: ''}}
-                          name={ADD_FOOD_ITEM_SCREEN}
-                          component={AddFoodItemScreen}
-                        />
-                        <Stack.Screen
-                          options={{headerShown: true, headerTitle: ''}}
-                          name={CAMERA_SCREEN}
-                          component={CameraScreen}
-                        />
-                        <Stack.Screen
-                          options={{headerShown: true, headerTitle: ''}}
-                          name={ADD_SPORT_ITEM_SCREEN}
-                          component={AddSportItem}
-                        />
-                        <Stack.Screen
-                          options={{headerShown: true, headerTitle: ''}}
-                          name={EDIT_SPORT_ITEM_SCREEN}
-                          component={EditSportItem}
-                        />
-                        <Stack.Screen
-                          options={{headerShown: true, headerTitle: ''}}
-                          name={EDIT_FOOD_ITEM_SCREEN}
-                          component={EditFoodItemScreen}                        />
-                      </Stack.Navigator>
-                    </NavigationContainer>
-                  </SportItemsProvider>
-                </SafeAreaProvider>
-              </SafeAreaView>
-            </AppContainer>
+                <StatusBar backgroundColor={theme.backgroundColor} />
+                <AppContainer>
+                  <SafeAreaView style={{flex: 1}}>
+                    <SportItemsProvider>
+                      <NavigationContainer>
+                        <Stack.Navigator screenOptions={{headerShown: false}}>
+                          <Stack.Screen name="initScreen" component={AppInitScreen} />
+                          <Stack.Screen name={LOGIN_SCREEN} component={Login} />
+                          <Stack.Screen
+                            name={MAIN_TAB_NAVIGATOR}
+                            component={MainTabsNavigator}
+                          />
+                          <Stack.Screen
+                            options={{headerShown: true, headerTitle: ''}}
+                            name={ADD_NOTIFICATION_SCREEN}
+                            component={AddNotificationScreen}
+                          />
+                          <Stack.Screen
+                            options={{headerShown: true, headerTitle: ''}}
+                            name={EDIT_NOTIFICATION_SCREEN}
+                            component={EditNotificationScreen}
+                          />
+                          <Stack.Screen
+                            options={{headerShown: true, headerTitle: ''}}
+                            name={ADD_FOOD_ITEM_SCREEN}
+                            component={AddFoodItemScreen}
+                          />
+                          <Stack.Screen
+                            options={{headerShown: true, headerTitle: ''}}
+                            name={CAMERA_SCREEN}
+                            component={CameraScreen}
+                          />
+                          <Stack.Screen
+                            options={{headerShown: true, headerTitle: ''}}
+                            name={ADD_SPORT_ITEM_SCREEN}
+                            component={AddSportItem}
+                          />
+                          <Stack.Screen
+                            options={{headerShown: true, headerTitle: ''}}
+                            name={EDIT_SPORT_ITEM_SCREEN}
+                            component={EditSportItem}
+                          />
+                          <Stack.Screen
+                            options={{headerShown: true, headerTitle: ''}}
+                            name={EDIT_FOOD_ITEM_SCREEN}
+                            component={EditFoodItemScreen}
+                          />
+                        </Stack.Navigator>
+                      </NavigationContainer>
+                    </SportItemsProvider>
+                  </SafeAreaView>
+                </AppContainer>
               </TouchProvider>
             </ErrorBoundary>
-        </ThemeProvider>
-      </QueryClientProvider>
-      
+          </ThemeProvider>
+        </QueryClientProvider>
+      </SafeAreaProvider>
+
       {/* In-app notification modal */}
       <NotificationModal
         visible={notifVisible}
