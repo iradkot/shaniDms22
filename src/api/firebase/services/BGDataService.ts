@@ -4,6 +4,21 @@ import {bgSortFunction} from 'app/utils/bg.utils';
 import {BgSample} from 'app/types/day_bgs.types';
 import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const DEFAULT_BG_COUNT = 1000;
+const MAX_BG_COUNT = 50000;
+const EXPECTED_READINGS_PER_DAY = 288; // 5-minute CGM
+
+const estimateBgCountForRange = (startDate: Date, endDate: Date) => {
+  const days = Math.max(
+    1,
+    Math.floor((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1,
+  );
+
+  const estimate = Math.ceil(days * EXPECTED_READINGS_PER_DAY * 1.2);
+  return Math.min(MAX_BG_COUNT, Math.max(DEFAULT_BG_COUNT, estimate));
+};
+
 class BGDataService {
   static async fetchBgDataForDateRange(
     startDate: Date,
@@ -11,13 +26,14 @@ class BGDataService {
   ): Promise<BgSample[]> {
     const startIso = startDate.toISOString();
     const endIso = endDate.toISOString();
-    const cacheKey: string = `bgData-${startIso}-${endIso}`;
+    const count = estimateBgCountForRange(startDate, endDate);
+    const cacheKey: string = `bgData-${startIso}-${endIso}-v2-count=${count}`;
     const cachedData: string | null = await AsyncStorage.getItem(cacheKey);
 
     if (cachedData) {
       return JSON.parse(cachedData);
     }
-    const apiUrl: string = `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=1000`;
+    const apiUrl: string = `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=${count}`;
     try {
       const response = await nightscoutInstance.get<BgSample[]>(apiUrl);
       const bgData: BgSample[] = response.data;

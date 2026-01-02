@@ -9,13 +9,30 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {BgSample} from 'app/types/day_bgs.types';
 import {bgSortFunction} from 'app/utils/bg.utils';
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const DEFAULT_BG_COUNT = 1000;
+const MAX_BG_COUNT = 50000;
+const EXPECTED_READINGS_PER_DAY = 288; // 5-minute CGM
+
+const estimateBgCountForRange = (startDate: Date, endDate: Date) => {
+  const days = Math.max(
+    1,
+    Math.floor((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1,
+  );
+
+  // Add some slack for devices that report more frequently than 5 minutes.
+  const estimate = Math.ceil(days * EXPECTED_READINGS_PER_DAY * 1.2);
+  return Math.min(MAX_BG_COUNT, Math.max(DEFAULT_BG_COUNT, estimate));
+};
+
 export const fetchBgDataForDateRange = async (
   startDate: Date,
   endDate: Date,
 ): Promise<BgSample[]> => {
   const startIso = startDate.toISOString();
   const endIso = endDate.toISOString();
-  const cacheKey: string = `bgData-${startIso}-${endIso}`;
+  const count = estimateBgCountForRange(startDate, endDate);
+  const cacheKey: string = `bgData-${startIso}-${endIso}-v2-count=${count}`;
   // Attempt to read from cache
   let cachedData: string | null = null;
   try {
@@ -26,7 +43,7 @@ export const fetchBgDataForDateRange = async (
   } catch (e) {
     console.warn('fetchBgDataForDateRange: Failed reading cache', e);
   }
-  const apiUrl: string = `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=1000`;
+  const apiUrl: string = `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=${count}`;
   try {
     const response = await nightscoutInstance.get<BgSample[]>(apiUrl);
     const bgData: BgSample[] = response.data;
