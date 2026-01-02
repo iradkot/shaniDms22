@@ -7,6 +7,7 @@ import {addOpacity} from 'app/style/styling.utils';
 import {AGPPercentilePoint} from '../types';
 import {minutesToTimeLabel} from '../utils/percentiles';
 import {formatGlucose} from '../utils/statistics';
+import {getClampedTooltipPosition} from 'app/components/CgmGraph/components/Tooltips/tooltipPosition';
 
 interface AGPTooltipProps {
   x: number; // point x within chart <G>
@@ -22,12 +23,15 @@ const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHe
   const tooltipWidth = 190;
   const tooltipHeight = 86;
 
-  let tooltipX = x - tooltipWidth / 2;
-  let tooltipY = y - tooltipHeight - theme.spacing.sm;
-
-  tooltipX = Math.max(0, Math.min(tooltipX, Math.max(0, chartWidth - tooltipWidth)));
-  if (tooltipY < 0) tooltipY = y + theme.spacing.sm;
-  tooltipY = Math.max(0, Math.min(tooltipY, Math.max(0, chartHeight - tooltipHeight)));
+  const {x: tooltipX, y: tooltipY} = getClampedTooltipPosition({
+    pointX: x,
+    pointY: y,
+    tooltipWidth,
+    tooltipHeight,
+    containerWidth: chartWidth,
+    containerHeight: chartHeight,
+    offset: theme.spacing.sm,
+  });
 
   const titleColor = theme.textColor;
   const subtle = addOpacity(theme.textColor, 0.75);
@@ -45,9 +49,9 @@ const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHe
       />
 
       <Text
-        x={12}
+        x={20}
         y={18}
-        fontSize={theme.typography.size.xs}
+        fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={titleColor}
       >
@@ -55,9 +59,9 @@ const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHe
       </Text>
 
       <Text
-        x={12}
+        x={20}
         y={38}
-        fontSize={theme.typography.size.xs}
+        fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={medianColor}
       >
@@ -65,9 +69,9 @@ const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHe
       </Text>
 
       <Text
-        x={12}
+        x={20}
         y={56}
-        fontSize={theme.typography.size.xs}
+        fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={subtle}
       >
@@ -75,9 +79,9 @@ const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHe
       </Text>
 
       <Text
-        x={12}
+        x={20}
         y={74}
-        fontSize={theme.typography.size.xs}
+        fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={subtle}
       >

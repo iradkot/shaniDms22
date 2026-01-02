@@ -9,6 +9,7 @@ import {addOpacity} from 'app/style/styling.utils';
 import {useTheme} from 'styled-components/native';
 import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
 import {useContext} from 'react';
+import {getClampedTooltipPosition} from './tooltipPosition';
 
 interface SgvTooltipProps {
   x: number;
@@ -22,17 +23,17 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
 
   const tooltipWidth = 160;
   const tooltipHeight = 70;
-  let tooltipX = x - tooltipWidth / 2;
-  let tooltipY = y - tooltipHeight - theme.spacing.sm;
+  const {x: tooltipX, y: tooltipY} = getClampedTooltipPosition({
+    pointX: x,
+    pointY: y,
+    tooltipWidth,
+    tooltipHeight,
+    containerWidth: graphWidth,
+    containerHeight: graphHeight,
+    offset: theme.spacing.sm,
+  });
 
   const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
-
-  // Clamp tooltip within the graph bounds (coordinates are already inside the chart <G>).
-  tooltipX = Math.max(0, Math.min(tooltipX, Math.max(0, graphWidth - tooltipWidth)));
-  if (tooltipY < 0) {
-    tooltipY = y + theme.spacing.sm;
-  }
-  tooltipY = Math.max(0, Math.min(tooltipY, Math.max(0, graphHeight - tooltipHeight)));
 
   // More subtle shadow settings
   const shadowColor = addOpacity(theme.shadowColor, 0.35);
@@ -52,7 +53,7 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
       <Text
         x={20 + shadowOffset}
         y={20 + shadowOffset}
-        fontSize="12"
+        fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={shadowColor} // Shadow with slight offset for minimalistic effect
         textAnchor="start">
@@ -62,7 +63,7 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
       <Text
         x={20}
         y={20}
-        fontSize="12"
+        fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={bgColor}
         textAnchor="start">
@@ -72,7 +73,7 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
       <Text
         x={20}
         y={40}
-        fontSize="12"
+        fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={theme.textColor}
         textAnchor="start">

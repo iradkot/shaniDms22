@@ -115,6 +115,7 @@ const AGPChart: React.FC<AGPChartProps> = ({
 
   const [activePoint, setActivePoint] = useState<AGPPercentilePoint | null>(null);
   const [activeX, setActiveX] = useState<number | null>(null);
+  const [isTouchActive, setIsTouchActive] = useState(false);
 
   const margin = useMemo(
     () => ({
@@ -244,31 +245,32 @@ const AGPChart: React.FC<AGPChartProps> = ({
 
       const snappedX = xScale(point.timeOfDay);
 
-      // Tap near the existing crosshair toggles it off.
-      if (activeX !== null && Math.abs(snappedX - activeX) < 8) {
-        setActivePoint(null);
-        setActiveX(null);
-        return;
-      }
-
       setActivePoint(point);
       setActiveX(snappedX);
     },
-    [activeX, agpData.percentiles, innerWidth, margin.left, xScale],
+    [agpData.percentiles, innerWidth, margin.left, xScale],
   );
 
   const activeY = activePoint ? yScale(activePoint.p50) : null;
 
   return (
-    <View
-      style={{width, height}}
-      onStartShouldSetResponder={() => true}
-      onMoveShouldSetResponder={() => true}
-      onResponderGrant={e => handleTouch(e.nativeEvent.locationX)}
-      onResponderMove={e => handleTouch(e.nativeEvent.locationX)}
-      onResponderTerminationRequest={() => true}
-    >
-      <Svg width={width} height={height}>
+    <View style={{width, height}}>
+      <Svg
+        width={width}
+        height={height}
+        onTouchStart={e => {
+          setIsTouchActive(true);
+          handleTouch(e.nativeEvent.locationX);
+        }}
+        onTouchMove={e => {
+          handleTouch(e.nativeEvent.locationX);
+        }}
+        onTouchEnd={() => {
+          setIsTouchActive(false);
+          setActivePoint(null);
+          setActiveX(null);
+        }}
+      >
         <G transform={`translate(${margin.left}, ${margin.top})`}>
         {/* Background + border */}
         <Rect
@@ -388,7 +390,7 @@ const AGPChart: React.FC<AGPChartProps> = ({
         />
 
         {/* Touch overlay: crosshair + marker + tooltip */}
-        {activePoint && activeX !== null && activeY !== null && (
+        {isTouchActive && activePoint && activeX !== null && activeY !== null && (
           <>
             <Line
               x1={activeX}

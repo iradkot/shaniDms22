@@ -5,6 +5,7 @@ import {ThemeType} from 'app/types/theme';
 import Tooltip from 'app/components/CgmGraph/components/Tooltips/Tooltip';
 import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
+import {getClampedTooltipPosition} from 'app/components/CgmGraph/components/Tooltips/tooltipPosition';
 
 type Props = {
   x: number;
@@ -20,14 +21,15 @@ const BolusTooltip: React.FC<Props> = ({x, y, timestamp, amount}) => {
   const tooltipWidth = 160;
   const tooltipHeight = 60;
 
-  let tooltipX = x - tooltipWidth / 2;
-  let tooltipY = y - tooltipHeight - theme.spacing.sm;
-
-  tooltipX = Math.max(0, Math.min(tooltipX, Math.max(0, graphWidth - tooltipWidth)));
-  if (tooltipY < 0) {
-    tooltipY = y + theme.spacing.sm;
-  }
-  tooltipY = Math.max(0, Math.min(tooltipY, Math.max(0, graphHeight - tooltipHeight)));
+  const {x: tooltipX, y: tooltipY} = getClampedTooltipPosition({
+    pointX: x,
+    pointY: y,
+    tooltipWidth,
+    tooltipHeight,
+    containerWidth: graphWidth,
+    containerHeight: graphHeight,
+    offset: theme.spacing.sm,
+  });
 
   return (
     <Tooltip x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}>
