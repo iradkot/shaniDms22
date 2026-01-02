@@ -4,6 +4,8 @@ import React from 'react';
 import { View, Dimensions } from 'react-native';
 import Collapsable from 'app/components/Collapsable';
 import { DayDetail } from './utils/trendsCalculations';
+import {useTheme} from 'styled-components/native';
+import {addOpacity} from 'app/style/styling.utils';
 
 // OPTIONAL: If you have a BG graph component
 // import BgGraph from 'app/components/CgmGraph/CgmGraph';
@@ -41,6 +43,8 @@ export const DayInsights: React.FC<DayInsightsProps> = ({
                                                         }) => {
   if (!bestDayDetail && !worstDayDetail) return null;
 
+  const theme = useTheme();
+
   // Label text for "best" and "worst" day, depending on selected metric
   const bestMetricLabel = selectedMetric === 'tir' ? 'Highest TIR'
     : selectedMetric === 'hypos' ? 'Fewest Hypos'
@@ -67,7 +71,12 @@ export const DayInsights: React.FC<DayInsightsProps> = ({
 
       {/* Worst Day Section */}
       {!!worstDayDetail && (
-        <HighlightBox style={{ backgroundColor: "#fff1f0", borderLeftColor: "#ff4d4f" }}>
+        <HighlightBox
+          style={{
+            backgroundColor: addOpacity(theme.belowRangeColor, 0.12),
+            borderLeftColor: theme.belowRangeColor,
+          }}
+        >
           <Row>
             <BoldText>Worst Day ({worstMetricLabel}): </BoldText>
             <StatLabel>{worstDay || "N/A"}</StatLabel>
@@ -103,11 +112,11 @@ export const DayInsights: React.FC<DayInsightsProps> = ({
           </StatRow>
           <StatRow>
             <StatLabel>Time Below Range:</StatLabel>
-            <StatValue color="red">{bestDayDetail.timeBelowRange.toFixed(1)}%</StatValue>
+            <StatValue color={theme.belowRangeColor}>{bestDayDetail.timeBelowRange.toFixed(1)}%</StatValue>
           </StatRow>
           <StatRow>
             <StatLabel>Time Above Range:</StatLabel>
-            <StatValue color="orange">{bestDayDetail.timeAboveRange.toFixed(1)}%</StatValue>
+            <StatValue color={theme.aboveRangeColor}>{bestDayDetail.timeAboveRange.toFixed(1)}%</StatValue>
           </StatRow>
           <ExplanationText>
             Stable overnight? Good meal timing? Learn from this pattern.
@@ -151,11 +160,11 @@ export const DayInsights: React.FC<DayInsightsProps> = ({
           </StatRow>
           <StatRow>
             <StatLabel>Time Below Range:</StatLabel>
-            <StatValue color="red">{worstDayDetail.timeBelowRange.toFixed(1)}%</StatValue>
+            <StatValue color={theme.belowRangeColor}>{worstDayDetail.timeBelowRange.toFixed(1)}%</StatValue>
           </StatRow>
           <StatRow>
             <StatLabel>Time Above Range:</StatLabel>
-            <StatValue color="orange">{worstDayDetail.timeAboveRange.toFixed(1)}%</StatValue>
+            <StatValue color={theme.aboveRangeColor}>{worstDayDetail.timeAboveRange.toFixed(1)}%</StatValue>
           </StatRow>
           <ExplanationText>
             Identify causes: Late meals? Missed bolus? Stress?

@@ -19,21 +19,21 @@ export const DateRangeSelector = styled.View`
 export const SectionTitle = styled.Text`
   font-size: 20px;
   font-weight: 700;
-  color: #333;
+  color: ${({theme}) => theme.textColor};
   margin: 10px 0;
 `;
 
 export const StatRow = styled.View`
   margin-vertical: 5px;
   padding: 10px;
-  background-color: #fafafa;
+  background-color: ${({theme}) => theme.white};
   border-radius: 5px;
 `;
 
 export const StatLabel = styled.Text`
   font-size: 16px;
   font-weight: 600;
-  color: #444;
+  color: ${({theme}) => theme.textColor};
 `;
 
 export const StatValue = styled.Text<{color?: string}>`
@@ -44,14 +44,14 @@ export const StatValue = styled.Text<{color?: string}>`
 
 export const ExplanationText = styled.Text`
   font-size: 14px;
-  color: #666;
+  color: ${({theme}) => theme.textColor};
   margin-top: 2px;
 `;
 
 export const HighlightBox = styled.View`
-  background-color: #e6f7ff;
+  background-color: ${({theme}) => theme.white};
   border-left-width: 4px;
-  border-left-color: #1890ff;
+  border-left-color: ${({theme}) => theme.accentColor};
   padding: 10px;
   border-radius: 5px;
   margin-vertical: 5px;
@@ -106,7 +106,8 @@ export const MetricButton = styled.TouchableOpacity<{selected?: boolean}>`
   padding: 8px 12px;
   border-radius: 5px;
   margin: 0 5px;
-  background-color: ${({selected}) => (selected ? '#1890ff' : '#ddd')};
+  background-color: ${({selected, theme}) =>
+    selected ? theme.accentColor : theme.secondaryColor};
 `;
 
 export const MetricButtonText = styled.Text`
