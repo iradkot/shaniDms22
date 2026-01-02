@@ -42,6 +42,49 @@ jobs:
           bundler-cache: true
           working-directory: ios
 
+      - name: Preflight App Store Connect token
+        working-directory: ios
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Fail if both are set (only one should be used)
+          if [[ -n "${APP_STORE_CONNECT_PRIVATE_KEY:-}" && -n "${APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64:-}" ]]; then
+            echo "::error::Both base64 and PEM key vars are set. Keep ONLY APP_STORE_CONNECT_PRIVATE_KEY (recommended)."
+            exit 1
+          fi
+
+          if [[ -z "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ]]; then
+            echo "::error::Missing APP_STORE_CONNECT_PRIVATE_KEY (base64 .p8) for ASC token preflight"
+            exit 1
+          fi
+
+          echo "Generating JWT via fastlane/spaceship..."
+          JWT="$(bundle exec ruby -e '
+          require "spaceship"
+          key_b64 = ENV.fetch("APP_STORE_CONNECT_PRIVATE_KEY").gsub(/\s+/, "")
+          t = Spaceship::ConnectAPI::Token.create(
+            key_id: ENV.fetch("APP_STORE_CONNECT_KEY_ID"),
+            issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+            key: key_b64,
+            is_key_content_base64: true,
+            duration: 600
+          )
+          puts t.text
+          ')"
+
+          echo "Calling App Store Connect API..."
+          STATUS="$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${JWT}" \
+            "https://api.appstoreconnect.apple.com/v1/apps?limit=1")"
+
+          if [[ "${STATUS}" == "200" ]]; then
+            echo "ASC token OK"
+          else
+            echo "::error::ASC token FAILED (HTTP ${STATUS}). Most common cause: KEY_ID / ISSUER_ID / .p8 do not belong to the same key."
+            exit 1
+          fi
+
       - name: Install CocoaPods dependencies
         working-directory: ios
         run: bundle exec pod install --repo-update
