@@ -493,6 +493,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 62;
+				MARKETING_VERSION = 1.0.0;
 				DEVELOPMENT_TEAM = 8KHU9V3DTQ;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = shaniDms22/Info.plist;
@@ -525,6 +526,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 62;
+				MARKETING_VERSION = 1.0.0;
 				DEVELOPMENT_TEAM = 8KHU9V3DTQ;
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 8KHU9V3DTQ;
 				INFOPLIST_FILE = shaniDms22/Info.plist;
