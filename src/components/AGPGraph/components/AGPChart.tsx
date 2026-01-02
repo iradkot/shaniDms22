@@ -117,8 +117,15 @@ const AGPChart: React.FC<AGPChartProps> = ({
     const dataMin = Math.min(...allValues);
     const dataMax = Math.max(...allValues);
 
-    const yMin = Math.max(40, Math.floor(dataMin / 10) * 10 - 20);
-    const yMax = Math.min(400, Math.ceil(dataMax / 10) * 10 + 20);
+    // AGP typically reads best with a familiar glucose range; keep a baseline
+    // around 40–250 and expand if data exceeds it.
+    const paddedMin = Math.floor(dataMin / 10) * 10 - 20;
+    const paddedMax = Math.ceil(dataMax / 10) * 10 + 20;
+    const baselineMin = 40;
+    const baselineMax = 250;
+
+    const yMin = Math.max(20, Math.min(baselineMin, paddedMin));
+    const yMax = Math.min(400, Math.max(baselineMax, paddedMax));
 
     const yScale = createLinearScale([yMax, yMin], [0, innerHeight]);
 
@@ -153,6 +160,30 @@ const AGPChart: React.FC<AGPChartProps> = ({
     yScale,
   );
 
+  const p25Line = generateLinePath(
+    agpData.percentiles.map(p => ({timeOfDay: p.timeOfDay, value: p.p25})),
+    xScale,
+    yScale,
+  );
+
+  const p75Line = generateLinePath(
+    agpData.percentiles.map(p => ({timeOfDay: p.timeOfDay, value: p.p75})),
+    xScale,
+    yScale,
+  );
+
+  const p5Line = generateLinePath(
+    agpData.percentiles.map(p => ({timeOfDay: p.timeOfDay, value: p.p5})),
+    xScale,
+    yScale,
+  );
+
+  const p95Line = generateLinePath(
+    agpData.percentiles.map(p => ({timeOfDay: p.timeOfDay, value: p.p95})),
+    xScale,
+    yScale,
+  );
+
   const targetArea = generateAreaPath(
     [
       {timeOfDay: 0, lower: targetRange.min, upper: targetRange.max},
@@ -162,12 +193,17 @@ const AGPChart: React.FC<AGPChartProps> = ({
     yScale,
   );
 
-  const gridColor = addOpacity(theme.borderColor, 0.6);
-  const labelColor = addOpacity(theme.textColor, 0.8);
+  const gridColor = addOpacity(theme.borderColor, 0.55);
+  const labelColor = addOpacity(theme.textColor, 0.75);
 
-  const bandOuterFill = addOpacity(theme.borderColor, 0.18);
-  const bandInnerFill = addOpacity(theme.borderColor, 0.28);
-  const targetFill = addOpacity(theme.inRangeColor, 0.12);
+  // Use textColor-derived neutrals so it's readable in light/dark themes.
+  const bandOuterFill = addOpacity(theme.textColor, 0.08);
+  const bandInnerFill = addOpacity(theme.textColor, 0.14);
+  const targetFill = addOpacity(theme.inRangeColor, 0.16);
+
+  const outerLine = addOpacity(theme.textColor, 0.35);
+  const innerLine = addOpacity(theme.textColor, 0.55);
+  const medianLine = theme.accentColor;
 
   return (
     <Svg width={width} height={height}>
@@ -178,7 +214,7 @@ const AGPChart: React.FC<AGPChartProps> = ({
           y={0}
           width={innerWidth}
           height={innerHeight}
-          fill={theme.backgroundColor}
+          fill={theme.white}
           stroke={theme.borderColor}
           strokeWidth={1}
         />
@@ -240,9 +276,33 @@ const AGPChart: React.FC<AGPChartProps> = ({
         {!!p5p95Area && <Path d={p5p95Area} fill={bandOuterFill} />}
         {!!p25p75Area && <Path d={p25p75Area} fill={bandInnerFill} />}
 
-        {/* Median line */}
+        {/* Percentile lines */}
+        {!!p5Line && (
+          <Path
+            d={p5Line}
+            stroke={outerLine}
+            strokeWidth={1}
+            fill="none"
+            strokeDasharray="4,4"
+          />
+        )}
+        {!!p95Line && (
+          <Path
+            d={p95Line}
+            stroke={outerLine}
+            strokeWidth={1}
+            fill="none"
+            strokeDasharray="4,4"
+          />
+        )}
+        {!!p25Line && (
+          <Path d={p25Line} stroke={innerLine} strokeWidth={1.25} fill="none" />
+        )}
+        {!!p75Line && (
+          <Path d={p75Line} stroke={innerLine} strokeWidth={1.25} fill="none" />
+        )}
         {!!p50Line && (
-          <Path d={p50Line} stroke={theme.textColor} strokeWidth={2} fill="none" />
+          <Path d={p50Line} stroke={medianLine} strokeWidth={2} fill="none" />
         )}
 
         {/* Target range borders */}
