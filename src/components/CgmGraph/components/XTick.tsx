@@ -14,14 +14,14 @@ interface TickProps {
 }
 
 const StyledLine = styled(Line)`
-  stroke: #666;
+  stroke: ${({theme}) => theme.borderColor};
   opacity: 0.4;
   strokeWidth: 1;
 `;
 const StyledText = styled(Text)`
-  fill: #333;
+  fill: ${({theme}) => theme.textColor};
   opacity: 0.8;
-  fontFamily: 'Helvetica';
+  fontFamily: ${({theme}) => theme.fontFamily};
 `;
 
 const XTick = ({ x, withDate, lineStyle, textStyle, roundTicks }: TickProps) => {

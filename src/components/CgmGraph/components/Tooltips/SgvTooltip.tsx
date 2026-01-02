@@ -1,11 +1,17 @@
 import React from 'react';
-import {Rect, Text} from 'react-native-svg';
+import {Text} from 'react-native-svg';
 import Tooltip from './Tooltip';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {BgSample} from 'app/types/day_bgs.types';
 import {ThemeType} from 'app/types/theme';
 import {determineBgColorByGlucoseValue} from 'app/style/styling.utils';
+import {addOpacity} from 'app/style/styling.utils';
 import {useTheme} from 'styled-components/native';
+import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
+import {useContext} from 'react';
+import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
+import {getSvgTooltipTextLayout} from 'app/components/charts/svgTooltipLayout';
+import SvgTooltipBox from 'app/components/charts/SvgTooltipBox';
 
 interface SgvTooltipProps {
   x: number;
@@ -15,59 +21,65 @@ interface SgvTooltipProps {
 
 const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
   const theme = useTheme() as ThemeType;
+  const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
   const tooltipWidth = 160;
-  const tooltipHeight = 70;
-  let tooltipX = x - tooltipWidth / 2;
+  const fontSize = theme.typography.size.xs;
+  const {textX, rowYs, height: tooltipHeight} = getSvgTooltipTextLayout({
+    rows: 2,
+    fontSize,
+    lineHeightMultiplier: theme.typography.lineHeight.normal,
+    paddingX: theme.spacing.md,
+    paddingY: theme.spacing.sm,
+  });
+  const {x: tooltipX, y: tooltipY} = getClampedTooltipPosition({
+    pointX: x,
+    pointY: y,
+    tooltipWidth,
+    tooltipHeight,
+    containerWidth: graphWidth,
+    containerHeight: graphHeight,
+    // Keep it at the top so the finger doesn't cover the tooltip.
+    offset: theme.spacing.md,
+    placement: 'top',
+  });
 
   const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
 
-  tooltipX = Math.max(0, tooltipX);
-  if (tooltipX + tooltipWidth > window.innerWidth) {
-    tooltipX = window.innerWidth - tooltipWidth;
-  }
-
   // More subtle shadow settings
-  const shadowColor = '#676767'; // Slightly darker shadow for subtlety
+  const shadowColor = addOpacity(theme.shadowColor, 0.35);
   const shadowOffset = 0.5; // Reduced offset for a minimalistic look
 
   return (
-    <Tooltip x={tooltipX} y={y}>
-      <Rect
-        width={tooltipWidth}
-        height={tooltipHeight}
-        fill="#f0f0f0"
-        stroke="#cccccc"
-        strokeWidth={1}
-        rx={8}
-      />
+    <Tooltip x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}>
+      <SvgTooltipBox width={tooltipWidth} height={tooltipHeight} />
       {/* Subtle shadow for the glucose value text */}
       <Text
-        x={20 + shadowOffset}
-        y={20 + shadowOffset}
-        fontSize="12"
-        fontFamily="Arial, sans-serif"
+        x={textX + shadowOffset}
+        y={rowYs[0] + shadowOffset}
+        fontSize={String(theme.typography.size.xs)}
+        fontFamily={theme.typography.fontFamily}
         fill={shadowColor} // Shadow with slight offset for minimalistic effect
         textAnchor="start">
         BG: {`${bgSample.sgv} mg/dL`}
       </Text>
       {/* Glucose value text */}
       <Text
-        x={20}
-        y={20}
-        fontSize="12"
-        fontFamily="Arial, sans-serif"
+        x={textX}
+        y={rowYs[0]}
+        fontSize={String(theme.typography.size.xs)}
+        fontFamily={theme.typography.fontFamily}
         fill={bgColor}
         textAnchor="start">
         BG: {`${bgSample.sgv} mg/dL`}
       </Text>
       {/* Time text without shadow */}
       <Text
-        x={20}
-        y={40}
-        fontSize="12"
-        fontFamily="Arial, sans-serif"
-        fill="black"
+        x={textX}
+        y={rowYs[1]}
+        fontSize={String(theme.typography.size.xs)}
+        fontFamily={theme.typography.fontFamily}
+        fill={theme.textColor}
         textAnchor="start">
         Time: {formatDateToLocaleTimeString(bgSample.date)}
       </Text>

@@ -40,6 +40,33 @@ export type ThemeType = {
   lineHeight: number;
   textSize: number;
   borderRadius: number;
+
+  spacing: {
+    xs: number;
+    sm: number;
+    md: number;
+    lg: number;
+    xl: number;
+    xxl: number;
+  };
+
+  typography: {
+    fontFamily: string;
+    size: {
+      xs: number;
+      sm: number;
+      md: number;
+      lg: number;
+      xl: number;
+      xxl: number;
+    };
+    lineHeight: {
+      tight: number;
+      normal: number;
+      relaxed: number;
+    };
+  };
+
   determineBgColorByGlucoseValue: (bgValue: number) => string;
   getShadowStyles: (elevation: number, color?: string) => string;
 

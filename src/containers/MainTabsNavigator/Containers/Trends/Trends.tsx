@@ -20,6 +20,7 @@ import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/co
 
 import Collapsable from 'app/components/Collapsable';
 import { DayInsights } from './TrendsUI'; // <--- Now it exists for real!
+import {AGPSummary} from 'app/components/AGPGraph';
 
 import {
   TrendsContainer,
@@ -192,6 +193,12 @@ const Trends: React.FC = () => {
           <View style={{ marginBottom: 15 }}>
             <SectionTitle>Quick Stats</SectionTitle>
             <StatsRow bgData={bgData} />
+          </View>
+
+          {/* (c) AGP Summary */}
+          <View style={{ marginBottom: 15 }}>
+            <SectionTitle>AGP</SectionTitle>
+            <AGPSummary bgData={bgData} />
           </View>
 
           {/* (c) Insulin Stats (optional) */}
