@@ -13,14 +13,15 @@ jobs:
     runs-on: macos-latest
     env:
       NODE_OPTIONS: --max_old_space_size=4096
-      APPLE_PROVISIONING_PROFILE: ${{ vars.APPLE_PROVISIONING_PROFILE || secrets.APPLE_PROVISIONING_PROFILE }}
-      APPLE_CERTIFICATE_P12: ${{ vars.APPLE_CERTIFICATE_P12 || secrets.APPLE_CERTIFICATE_P12 }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ vars.APPLE_CERTIFICATE_PASSWORD || secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE || vars.APPLE_PROVISIONING_PROFILE }}
+      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 || vars.APPLE_CERTIFICATE_P12 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD || vars.APPLE_CERTIFICATE_PASSWORD }}
       CI_KEYCHAIN_NAME: ci-signing
-      CI_KEYCHAIN_PASSWORD: ${{ vars.CI_KEYCHAIN_PASSWORD || secrets.CI_KEYCHAIN_PASSWORD }}
-      APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
-      APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
-      APP_STORE_CONNECT_PRIVATE_KEY: ${{ vars.APP_STORE_CONNECT_PRIVATE_KEY || secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      CI_KEYCHAIN_PASSWORD: ${{ secrets.CI_KEYCHAIN_PASSWORD || vars.CI_KEYCHAIN_PASSWORD }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || vars.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || vars.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || vars.APP_STORE_CONNECT_PRIVATE_KEY }}
+      APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 || vars.APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,7 +29,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '16'
+          node-version: '18'
           cache: 'yarn'
 
       - name: Install JavaScript dependencies
@@ -41,9 +42,76 @@ jobs:
           bundler-cache: true
           working-directory: ios
 
+      - name: Preflight App Store Connect token
+        working-directory: ios
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Fail if both are set (only one should be used)
+          if [[ -n "${APP_STORE_CONNECT_PRIVATE_KEY:-}" && -n "${APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64:-}" ]]; then
+            echo "::error::Both base64 and PEM key vars are set. Keep ONLY APP_STORE_CONNECT_PRIVATE_KEY (recommended)."
+            exit 1
+          fi
+
+          if [[ -z "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ]]; then
+            echo "::error::Missing APP_STORE_CONNECT_PRIVATE_KEY (base64 .p8) for ASC token preflight"
+            exit 1
+          fi
+
+          echo "Generating JWT via fastlane/spaceship..."
+          JWT="$(bundle exec ruby -e '
+          require "spaceship"
+          key_b64 = ENV.fetch("APP_STORE_CONNECT_PRIVATE_KEY").gsub(/\s+/, "")
+          t = Spaceship::ConnectAPI::Token.create(
+            key_id: ENV.fetch("APP_STORE_CONNECT_KEY_ID"),
+            issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+            key: key_b64,
+            is_key_content_base64: true,
+            duration: 600
+          )
+          puts t.text
+          ')"
+
+          echo "Calling App Store Connect API..."
+          STATUS="$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${JWT}" \
+            "https://api.appstoreconnect.apple.com/v1/apps?limit=1")"
+
+          if [[ "${STATUS}" == "200" ]]; then
+            echo "ASC token OK"
+          else
+            echo "::error::ASC token FAILED (HTTP ${STATUS}). Most common cause: KEY_ID / ISSUER_ID / .p8 do not belong to the same key."
+            exit 1
+          fi
+
       - name: Install CocoaPods dependencies
         working-directory: ios
-        run: bundle exec pod install
+        run: bundle exec pod install --repo-update
+
+      - name: Sanity check App Store Connect env (no secret output)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "APP_STORE_CONNECT_KEY_ID length: ${#APP_STORE_CONNECT_KEY_ID}"
+          echo "APP_STORE_CONNECT_ISSUER_ID length: ${#APP_STORE_CONNECT_ISSUER_ID}"
+          echo "APP_STORE_CONNECT_PRIVATE_KEY length: ${#APP_STORE_CONNECT_PRIVATE_KEY}"
+          echo "APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 length: ${#APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64}"
+
+          if [ -z "${APP_STORE_CONNECT_KEY_ID:-}" ]; then
+            echo "::error::Missing APP_STORE_CONNECT_KEY_ID (required for TestFlight upload)"
+            exit 1
+          fi
+
+          if [ -z "${APP_STORE_CONNECT_ISSUER_ID:-}" ]; then
+            echo "::error::Missing APP_STORE_CONNECT_ISSUER_ID (required for TestFlight upload)"
+            exit 1
+          fi
+
+          if [ -z "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ] && [ -z "${APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64:-}" ]; then
+            echo "::error::Missing App Store Connect private key (provide APP_STORE_CONNECT_PRIVATE_KEY or APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64)"
+            exit 1
+          fi
 
       - name: Sanity check P12 on runner
         shell: bash
@@ -51,6 +119,16 @@ jobs:
           set -euo pipefail
           echo "P12 base64 length: ${#APPLE_CERTIFICATE_P12}"
           echo "Pass length: ${#APPLE_CERTIFICATE_PASSWORD}"
+
+          if [ -z "${APPLE_CERTIFICATE_P12:-}" ]; then
+            echo "::error::Missing APPLE_CERTIFICATE_P12 (base64 .p12)"
+            exit 1
+          fi
+
+          if [ -z "${APPLE_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "::error::Missing APPLE_CERTIFICATE_PASSWORD"
+            exit 1
+          fi
 
           CERT_P12="$RUNNER_TEMP/cert.p12"
           printf "%s" "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERT_P12"
@@ -62,6 +140,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          if [ -z "${APPLE_PROVISIONING_PROFILE:-}" ]; then
+            echo "::error::Missing APPLE_PROVISIONING_PROFILE (base64 .mobileprovision)"
+            exit 1
+          fi
+
+          if [ -z "${CI_KEYCHAIN_PASSWORD:-}" ]; then
+            echo "::error::Missing CI_KEYCHAIN_PASSWORD"
+            exit 1
+          fi
 
           CERT_P12="$RUNNER_TEMP/cert.p12"
           PROFILE="$RUNNER_TEMP/profile.mobileprovision"

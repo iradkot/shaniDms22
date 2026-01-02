@@ -10,9 +10,19 @@ platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
 linkage_env = ENV['USE_FRAMEWORKS']
-linkage = linkage_env ? linkage_env.to_sym : :dynamic
-Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-use_frameworks! :linkage => linkage
+if linkage_env
+  linkage = linkage_env.to_sym
+  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
+  use_frameworks! :linkage => linkage
+
+  # Required by RNFirebase when CocoaPods uses frameworks.
+  $RNFirebaseAsStaticFramework = true
+else
+  Pod::UI.puts 'Configuring Pods without use_frameworks! (default)'.green
+  # CocoaPods may integrate Swift pods as static libraries in this mode; enabling
+  # modular headers ensures required module maps are generated.
+  use_modular_headers!
+end
 
 target 'shaniDms22' do
   config = use_native_modules!
@@ -31,5 +41,330 @@ target 'shaniDms22' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Firebase's umbrella header conditionally includes *-Swift.h when it sees the
+    # corresponding CocoaPods-generated *-umbrella.h. With static-library pods,
+    # the generated Swift header may not exist at compile time, which breaks
+    # any target that imports <Firebase/Firebase.h>.
+    firebase_header = File.join(installer.sandbox.root.to_s, 'Headers', 'Private', 'Firebase', 'Firebase.h')
+    if File.exist?(firebase_header)
+      require 'fileutils'
+      real_firebase_header = File.realpath(firebase_header)
+      FileUtils.chmod('u+w', real_firebase_header) if File.exist?(real_firebase_header)
+
+      original = File.read(real_firebase_header)
+      patched = original.gsub(/^(\s*)#import\s+<([^>]+-Swift\.h)>\s*$/) do
+        indent = Regexp.last_match(1)
+        swift_header = Regexp.last_match(2)
+        "#{indent}#if __has_include(<#{swift_header}>)\n#{indent}#import <#{swift_header}>\n#{indent}#endif"
+      end
+      File.write(real_firebase_header, patched) if patched != original
+    end
+
+    # Expose Swift-to-ObjC compatibility headers for Swift-heavy Firebase pods.
+    # These headers are generated under PODS_CONFIGURATION_BUILD_DIR in a folder with spaces,
+    # so ensure the path is quoted (otherwise clang splits it into multiple -I args).
+    installer.pods_project.targets.each do |target|
+      next unless ['RNFBStorage', 'RNFBMessaging', 'RNFBAuth'].include?(target.name)
+
+      target.build_configurations.each do |build_config|
+        existing = build_config.build_settings['HEADER_SEARCH_PATHS']
+        header_search_paths = existing ? Array(existing) : ['$(inherited)']
+
+        # Clean up any previously-added unquoted paths (spaces break clang -I)
+        # and any older BUILT_PRODUCTS_DIR-based paths (wrong expansion for pod targets).
+        header_search_paths.delete('$(BUILT_PRODUCTS_DIR)/FirebaseStorage/Swift Compatibility Header')
+        header_search_paths.delete('$(BUILT_PRODUCTS_DIR)/FirebaseAuth/Swift Compatibility Header')
+        header_search_paths.delete('$(PODS_CONFIGURATION_BUILD_DIR)/FirebaseStorage/Swift Compatibility Header')
+        header_search_paths.delete('$(PODS_CONFIGURATION_BUILD_DIR)/FirebaseAuth/Swift Compatibility Header')
+
+        header_search_paths.delete('"$(BUILT_PRODUCTS_DIR)/FirebaseStorage/Swift Compatibility Header"')
+        header_search_paths.delete('"$(BUILT_PRODUCTS_DIR)/FirebaseAuth/Swift Compatibility Header"')
+        header_search_paths.delete('"$(PODS_CONFIGURATION_BUILD_DIR)/FirebaseStorage/Swift Compatibility Header"')
+        header_search_paths.delete('"$(PODS_CONFIGURATION_BUILD_DIR)/FirebaseAuth/Swift Compatibility Header"')
+
+        if target.name == 'RNFBStorage'
+          swift_compat = '"$(PODS_CONFIGURATION_BUILD_DIR)/FirebaseStorage/Swift Compatibility Header"'
+          header_search_paths << swift_compat unless header_search_paths.include?(swift_compat)
+        end
+
+        if ['RNFBMessaging', 'RNFBAuth'].include?(target.name)
+          swift_compat = '"$(PODS_CONFIGURATION_BUILD_DIR)/FirebaseAuth/Swift Compatibility Header"'
+          header_search_paths << swift_compat unless header_search_paths.include?(swift_compat)
+        end
+
+        build_config.build_settings['HEADER_SEARCH_PATHS'] = header_search_paths
+      end
+    end
+
+    # ReactCommon modulemap duplication workaround:
+    # CocoaPods can surface ReactCommon.modulemap both as a real file under
+    # Pods/Target Support Files and as a symlink under Pods/Headers/Public.
+    # Some build configurations end up passing modulemaps in a way that causes
+    # clang to see the same module defined twice ("Redefinition of module 'ReactCommon'").
+    #
+    # Canonicalize all references to the Target Support Files path; then we can
+    # safely remove the Headers/Public symlink in post_integrate.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |build_config|
+        modulemap_file = build_config.build_settings['MODULEMAP_FILE']
+        if modulemap_file == 'Headers/Public/ReactCommon/ReactCommon.modulemap'
+          build_config.build_settings['MODULEMAP_FILE'] = 'Target Support Files/ReactCommon/ReactCommon.modulemap'
+        end
+
+        %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_SWIFT_FLAGS].each do |flags_key|
+          flags = build_config.build_settings[flags_key]
+          next if flags.nil?
+
+          updated = flags.to_s.gsub(
+            '/Headers/Public/ReactCommon/ReactCommon.modulemap',
+            '/Target Support Files/ReactCommon/ReactCommon.modulemap'
+          )
+
+          # React-RuntimeApple.modulemap also defines `module ReactCommon`.
+          # Remove it from flags to avoid `module ReactCommon` redefinition.
+          updated = updated.gsub(
+            ' -fmodule-map-file="${PODS_ROOT}/Headers/Public/ReactCommon/React-RuntimeApple.modulemap"',
+            ''
+          )
+          updated = updated.gsub(
+            ' -Xcc -fmodule-map-file="${PODS_ROOT}/Headers/Public/ReactCommon/React-RuntimeApple.modulemap"',
+            ''
+          )
+
+          # Some generated Swift flags can end up with a duplicated "-Xcc" token,
+          # which makes swiftc treat "-fmodule-map-file" as a Swift driver flag.
+          updated = updated.gsub(/-Xcc\s+-Xcc\s+-fmodule-map-file=/m, '-Xcc -fmodule-map-file=')
+          build_config.build_settings[flags_key] = updated
+        end
+      end
+    end
+
+    # Ensure CocoaPods-generated xcconfig files don't pass ReactCommon modulemaps in a way that
+    # breaks Swift compilation (SwiftDriver rejects `-fmodule-map-file` unless it's wrapped by -Xcc)
+    # and avoid duplicate `module ReactCommon` definitions.
+    sandbox_root = installer.sandbox.root.to_s
+    xcconfigs = Dir.glob(File.join(sandbox_root, 'Target Support Files', '**', '*.xcconfig'))
+    xcconfigs.each do |xcconfig_path|
+      next unless File.file?(xcconfig_path)
+      contents = File.read(xcconfig_path)
+      updated = contents
+
+      # Canonicalize ReactCommon.modulemap path to Target Support Files.
+      updated = updated.gsub(
+        '${PODS_ROOT}/Headers/Public/ReactCommon/ReactCommon.modulemap',
+        '${PODS_ROOT}/Target Support Files/ReactCommon/ReactCommon.modulemap'
+      )
+
+      # React-RuntimeApple.modulemap also defines `module ReactCommon`.
+      updated = updated.gsub(
+        ' -fmodule-map-file="${PODS_ROOT}/Headers/Public/ReactCommon/React-RuntimeApple.modulemap"',
+        ''
+      )
+      updated = updated.gsub(
+        ' -Xcc -fmodule-map-file="${PODS_ROOT}/Headers/Public/ReactCommon/React-RuntimeApple.modulemap"',
+        ''
+      )
+
+      # If we remove a modulemap argument but leave an orphan `-Xcc`, we can end up with
+      # `-Xcc -Xcc -fmodule-map-file=...` which breaks swiftc.
+      updated = updated.gsub(/-Xcc\s+-Xcc\s+-fmodule-map-file="([^"]*ReactCommon[^"]*)"/m) do
+        ' -Xcc -fmodule-map-file="' + Regexp.last_match(1) + '"'
+      end
+
+      # CocoaPods sometimes ends up emitting an incorrect weak framework link flag for
+      # FirebaseFirestoreInternal, even though it is built as a static library
+      # (libFirebaseFirestoreInternal.a). This causes:
+      #   ld: framework 'FirebaseFirestoreInternal' not found
+      # Strip the framework flag and keep the static lib link.
+      updated = updated.gsub(' -weak_framework "FirebaseFirestoreInternal"', '')
+      updated = updated.gsub(' -weak_framework FirebaseFirestoreInternal', '')
+      updated = updated.gsub(' -framework "FirebaseFirestoreInternal"', '')
+      updated = updated.gsub(' -framework FirebaseFirestoreInternal', '')
+
+      next if updated == contents
+      File.open(xcconfig_path, 'w') { |f| f.write(updated) }
+    end
+
+    def ensure_rnfb_storage_imports(file_path)
+      return unless File.exist?(file_path)
+
+      original = File.read(file_path)
+      insertion = <<~OBJC
+        #if __has_include(<FirebaseStorage/FirebaseStorage.h>)
+        #import <FirebaseStorage/FirebaseStorage.h>
+        #elif __has_include("FirebaseStorage-Swift.h")
+        #import "FirebaseStorage-Swift.h"
+        #endif
+
+      OBJC
+
+      patched = original
+
+      # Replace older Swift-only snippet if present.
+      patched = patched.gsub(
+        /#if __has_include\("FirebaseStorage-Swift\.h"\)\n#import "FirebaseStorage-Swift\.h"\n#endif\n\n/m,
+        insertion
+      )
+
+      # If imports are missing, insert in a stable spot (right after the first #import).
+      unless patched.include?('FirebaseStorage/FirebaseStorage.h') || patched.include?('FirebaseStorage-Swift.h')
+        if patched.match?(/^#import[^\n]*\n/m)
+          patched = patched.sub(/^(#import[^\n]*\n)/m, "\\1\n#{insertion}")
+        else
+          patched = "#{insertion}\n#{patched}"
+        end
+      end
+
+      File.write(file_path, patched) if patched != original
+    end
+
+    rnfb_storage_dir = File.join(
+      Pod::Config.instance.installation_root.to_s,
+      '..',
+      'node_modules',
+      '@react-native-firebase',
+      'storage',
+      'ios',
+      'RNFBStorage'
+    )
+    ensure_rnfb_storage_imports(File.join(rnfb_storage_dir, 'RNFBStorageCommon.h'))
+    ensure_rnfb_storage_imports(File.join(rnfb_storage_dir, 'RNFBStorageCommon.m'))
+
+    # RNFBMessaging references FIRAuth behind a __has_include check.
+    # With Firebase iOS SDK 11.x, FirebaseAuth's ObjC surface is exposed via the
+    # generated Swift compatibility header (FirebaseAuth-Swift.h). Make the import
+    # robust and gate FIRAuth usage on that header being present.
+    rnfb_messaging_appdelegate = File.join(
+      Pod::Config.instance.installation_root.to_s,
+      '..',
+      'node_modules',
+      '@react-native-firebase',
+      'messaging',
+      'ios',
+      'RNFBMessaging',
+      'RNFBMessaging+AppDelegate.m'
+    )
+    if File.exist?(rnfb_messaging_appdelegate)
+      original = File.read(rnfb_messaging_appdelegate)
+      insertion = <<~OBJC
+        #if __has_include("FirebaseAuth-Swift.h")
+        #import "FirebaseAuth-Swift.h"
+        #elif __has_include(<FirebaseAuth/FirebaseAuth.h>)
+        #import <FirebaseAuth/FirebaseAuth.h>
+        #endif
+
+      OBJC
+
+      patched = original
+
+      # Ensure the guarded import exists (replace older FirebaseAuth-only insertion if present).
+      if patched.include?('#import <Firebase/Firebase.h>') && !patched.include?('FirebaseAuth-Swift.h')
+        patched = patched.sub(
+          "#import <Firebase/Firebase.h>\n\n#if __has_include(<FirebaseAuth/FirebaseAuth.h>)\n#import <FirebaseAuth/FirebaseAuth.h>\n#endif\n\n",
+          "#import <Firebase/Firebase.h>\n\n#{insertion}"
+        )
+        patched = patched.sub(
+          "#import <Firebase/Firebase.h>\n",
+          "#import <Firebase/Firebase.h>\n\n#{insertion}"
+        ) unless patched.include?('FirebaseAuth-Swift.h')
+      end
+
+      # Gate FIRAuth usage on the Swift compatibility header (FirebaseAuth.h alone is not enough
+      # for Firebase iOS SDK 11.x).
+      patched = patched.gsub(
+        '#if __has_include(<FirebaseAuth/FirebaseAuth.h>)',
+        '#if __has_include("FirebaseAuth-Swift.h")'
+      )
+
+      File.write(rnfb_messaging_appdelegate, patched) if patched != original
+    end
+
+    # RNFBAuth relies on FIRAuthErrorCode* constants which are declared in
+    # FirebaseAuth headers. With our modular/static pods setup, importing
+    # <Firebase/Firebase.h> alone may not expose those identifiers.
+    rnfb_auth_module_h = File.join(
+      Pod::Config.instance.installation_root.to_s,
+      '..',
+      'node_modules',
+      '@react-native-firebase',
+      'auth',
+      'ios',
+      'RNFBAuth',
+      'RNFBAuthModule.h'
+    )
+    if File.exist?(rnfb_auth_module_h)
+      original = File.read(rnfb_auth_module_h)
+      previous_insertion = <<~OBJC
+        // FirebaseAuth error codes are declared in FirebaseAuth headers; depending on
+        // CocoaPods integration mode, <Firebase/Firebase.h> may not expose them.
+        //
+        // Important: FirebaseAuth.h does not always re-export FIRAuthErrors.h.
+        #if __has_include(<FirebaseAuth/FirebaseAuth.h>)
+        #import <FirebaseAuth/FirebaseAuth.h>
+        #endif
+        #if __has_include(<FirebaseAuth/FIRAuthErrors.h>)
+        #import <FirebaseAuth/FIRAuthErrors.h>
+        #endif
+
+      OBJC
+
+      insertion = <<~OBJC
+        // FirebaseAuth error codes are declared in FirebaseAuth headers; depending on
+        // CocoaPods integration mode, <Firebase/Firebase.h> may not expose them.
+        //
+        // In Firebase iOS SDK 11.x, FIRAuthErrorCode and its enumerators are declared
+        // in the generated Swift compatibility header.
+        #if __has_include("FirebaseAuth-Swift.h")
+        #import "FirebaseAuth-Swift.h"
+        #endif
+        #if __has_include(<FirebaseAuth/FirebaseAuth.h>)
+        #import <FirebaseAuth/FirebaseAuth.h>
+        #endif
+        #if __has_include(<FirebaseAuth/FIRAuthErrors.h>)
+        #import <FirebaseAuth/FIRAuthErrors.h>
+        #endif
+
+      OBJC
+
+      patched = original
+
+      # Replace the previous insertion (without FirebaseAuth-Swift.h) if present.
+      patched = patched.gsub(previous_insertion, insertion)
+
+      # If a previous insertion exists (older elif-based variant), replace it.
+      if patched.include?('FirebaseAuth error codes are declared in FirebaseAuth headers') && patched.include?('#elif __has_include(<FirebaseAuth/FIRAuthErrors.h>)')
+        patched = patched.gsub(
+          /\/\/ FirebaseAuth error codes are declared in FirebaseAuth headers; depending on\n\/\/ CocoaPods integration mode, <Firebase\/Firebase\.h> may not expose them\.\n\#if __has_include\(<FirebaseAuth\/FirebaseAuth\.h>\)\n\#import <FirebaseAuth\/FirebaseAuth\.h>\n\#elif __has_include\(<FirebaseAuth\/FIRAuthErrors\.h>\)\n\#import <FirebaseAuth\/FIRAuthErrors\.h>\n\#endif\n\n/m,
+          insertion
+        )
+      end
+
+      # Otherwise, ensure the guarded imports exist right after Firebase umbrella import.
+      if patched.include?('#import <Firebase/Firebase.h>') && !patched.include?('FirebaseAuth/FirebaseAuth.h') && !patched.include?('FirebaseAuth/FIRAuthErrors.h')
+        patched = patched.sub(
+          "#import <Firebase/Firebase.h>\n",
+          "#import <Firebase/Firebase.h>\n\n#{insertion}"
+        )
+      end
+
+      File.write(rnfb_auth_module_h, patched) if patched != original
+    end
   end
+end
+
+post_integrate do |installer|
+  # Some pod targets may reference gRPC-Core's modulemap via a legacy path under
+  # Pods/Headers/Private/grpc, but CocoaPods generates the modulemap under
+  # Pods/Target Support Files. Create the expected symlink after integration.
+  require 'fileutils'
+  sandbox_root = installer.sandbox.root.to_s
+  grpc_modulemap_src = File.join(sandbox_root, 'Target Support Files', 'gRPC-Core', 'gRPC-Core.modulemap')
+  grpc_modulemap_dest_dir = File.join(sandbox_root, 'Headers', 'Private', 'grpc')
+  grpc_modulemap_dest = File.join(grpc_modulemap_dest_dir, 'gRPC-Core.modulemap')
+  FileUtils.mkdir_p(grpc_modulemap_dest_dir)
+  FileUtils.ln_sf(grpc_modulemap_src, grpc_modulemap_dest)
+
+  reactcommon_public_modulemap = File.join(sandbox_root, 'Headers', 'Public', 'ReactCommon', 'ReactCommon.modulemap')
+  FileUtils.rm_f(reactcommon_public_modulemap)
 end

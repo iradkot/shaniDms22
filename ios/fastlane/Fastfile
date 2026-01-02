@@ -267,13 +267,17 @@ def assign_identity(configuration, identity)
 end
 
 def app_store_api_key
-  key_id = ENV["APP_STORE_CONNECT_KEY_ID"]
-  issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"]
-  private_key = ENV["APP_STORE_CONNECT_PRIVATE_KEY"]
-  unencoded_private_key = ENV["APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64"]
+  key_id = ENV["APP_STORE_CONNECT_KEY_ID"].to_s.strip
+  issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"].to_s.strip
+  private_key_base64 = ENV["APP_STORE_CONNECT_PRIVATE_KEY"].to_s
+  private_key_plain = ENV["APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64"].to_s
 
-  key_is_base64 = !private_key.to_s.strip.empty?
-  key_content = key_is_base64 ? private_key : unencoded_private_key
+  key_is_base64 = !private_key_base64.strip.empty?
+  key_content = if key_is_base64
+                  private_key_base64.gsub(/\s+/, "")
+                else
+                  private_key_plain.strip
+                end
 
   return nil if [key_id, issuer_id, key_content].any? { |value| value.to_s.strip.empty? }
 
@@ -288,12 +292,54 @@ end
 def validate_app_store_connect_credentials!
   key_id = ENV["APP_STORE_CONNECT_KEY_ID"].to_s.strip
   issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"].to_s.strip
+  private_key_base64 = ENV["APP_STORE_CONNECT_PRIVATE_KEY"].to_s.strip
+  private_key_plain = ENV["APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64"].to_s.strip
+
+  if !private_key_base64.empty? && !private_key_plain.empty?
+    UI.important("Both APP_STORE_CONNECT_PRIVATE_KEY (base64) and APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 (PEM) are set. Fastlane will use the base64 value; consider clearing the PEM variable to avoid confusion.")
+  end
+
+  if !private_key_plain.empty? && !private_key_plain.include?("BEGIN PRIVATE KEY") && !private_key_plain.include?("BEGIN EC PRIVATE KEY")
+    UI.important("APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 contains extra text (does not start with a PEM header). If you intend to use PEM mode, store only the raw key block (BEGIN/END lines + base64 body).")
+  end
 
   UI.user_error!("APP_STORE_CONNECT_KEY_ID is required for TestFlight upload") if key_id.empty?
   UI.user_error!("APP_STORE_CONNECT_ISSUER_ID is required for TestFlight upload") if issuer_id.empty?
 
+  unless key_id.match?(/\A[A-Z0-9]{10}\z/i)
+    UI.user_error!("APP_STORE_CONNECT_KEY_ID must be the 10-character Key ID from App Store Connect → Users and Access → Keys (example: ABCDE12345).")
+  end
+
+  if private_key_base64.empty? && private_key_plain.empty?
+    UI.user_error!("Provide either APP_STORE_CONNECT_PRIVATE_KEY (base64) or APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 (PEM) for TestFlight upload")
+  end
+
   unless issuer_id.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
-    UI.important("APP_STORE_CONNECT_ISSUER_ID does not look like a UUID; double-check the value in GitHub secrets/vars")
+    UI.user_error!("APP_STORE_CONNECT_ISSUER_ID must be the Issuer ID UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) from App Store Connect → Users and Access → Keys. Do not use a Key ID here.")
+  end
+
+  unless private_key_base64.empty?
+    sanitized_base64 = private_key_base64.gsub(/\s+/, "")
+
+    decoded = begin
+      Base64.decode64(sanitized_base64)
+    rescue StandardError
+      nil
+    end
+
+    if decoded.to_s.strip.empty?
+      UI.user_error!("APP_STORE_CONNECT_PRIVATE_KEY is not valid base64. Base64-encode the full contents of the downloaded .p8 file and paste it without extra text.")
+    end
+
+    unless decoded.include?("BEGIN PRIVATE KEY") || decoded.include?("BEGIN EC PRIVATE KEY")
+      UI.user_error!("APP_STORE_CONNECT_PRIVATE_KEY does not decode to a PEM private key. Base64-encode the raw .p8 file contents (including BEGIN/END PRIVATE KEY lines).")
+    end
+  end
+
+  if !private_key_plain.empty? && private_key_base64.empty?
+    unless private_key_plain.include?("BEGIN PRIVATE KEY") || private_key_plain.include?("BEGIN EC PRIVATE KEY")
+      UI.user_error!("APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 does not look like a PEM private key (missing BEGIN PRIVATE KEY). Paste only the raw PEM contents.")
+    end
   end
 end
 
