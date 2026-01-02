@@ -1,3 +1,5 @@
+export type TooltipPlacement = 'auto' | 'top';
+
 type TooltipPositionArgs = {
   pointX: number;
   pointY: number;
@@ -6,6 +8,7 @@ type TooltipPositionArgs = {
   containerWidth: number;
   containerHeight: number;
   offset: number;
+  placement?: TooltipPlacement;
 };
 
 const clamp = (value: number, min: number, max: number) => {
@@ -20,20 +23,23 @@ export const getClampedTooltipPosition = ({
   containerWidth,
   containerHeight,
   offset,
+  placement = 'auto',
 }: TooltipPositionArgs) => {
   const maxX = Math.max(0, containerWidth - tooltipWidth);
   const maxY = Math.max(0, containerHeight - tooltipHeight);
 
-  let tooltipX = pointX - tooltipWidth / 2;
-  let tooltipY = pointY - tooltipHeight - offset;
+  let tooltipX = clamp(pointX - tooltipWidth / 2, 0, maxX);
 
-  tooltipX = clamp(tooltipX, 0, maxX);
-
-  if (tooltipY < 0) {
-    tooltipY = pointY + offset;
+  let tooltipY: number;
+  if (placement === 'top') {
+    tooltipY = clamp(offset, 0, maxY);
+  } else {
+    tooltipY = pointY - tooltipHeight - offset;
+    if (tooltipY < 0) {
+      tooltipY = pointY + offset;
+    }
+    tooltipY = clamp(tooltipY, 0, maxY);
   }
-
-  tooltipY = clamp(tooltipY, 0, maxY);
 
   return {x: tooltipX, y: tooltipY};
 };

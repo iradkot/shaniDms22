@@ -9,7 +9,8 @@ import {addOpacity} from 'app/style/styling.utils';
 import {useTheme} from 'styled-components/native';
 import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
 import {useContext} from 'react';
-import {getClampedTooltipPosition} from './tooltipPosition';
+import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
+import {getSvgTooltipTextLayout} from 'app/components/charts/svgTooltipLayout';
 
 interface SgvTooltipProps {
   x: number;
@@ -22,7 +23,14 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
   const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
   const tooltipWidth = 160;
-  const tooltipHeight = 70;
+  const fontSize = theme.typography.size.xs;
+  const {textX, rowYs, height: tooltipHeight} = getSvgTooltipTextLayout({
+    rows: 2,
+    fontSize,
+    lineHeightMultiplier: theme.typography.lineHeight.normal,
+    paddingX: theme.spacing.md,
+    paddingY: theme.spacing.sm,
+  });
   const {x: tooltipX, y: tooltipY} = getClampedTooltipPosition({
     pointX: x,
     pointY: y,
@@ -30,7 +38,9 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
     tooltipHeight,
     containerWidth: graphWidth,
     containerHeight: graphHeight,
-    offset: theme.spacing.sm,
+    // Keep it at the top so the finger doesn't cover the tooltip.
+    offset: theme.spacing.md,
+    placement: 'top',
   });
 
   const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
@@ -51,8 +61,8 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
       />
       {/* Subtle shadow for the glucose value text */}
       <Text
-        x={20 + shadowOffset}
-        y={20 + shadowOffset}
+        x={textX + shadowOffset}
+        y={rowYs[0] + shadowOffset}
         fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={shadowColor} // Shadow with slight offset for minimalistic effect
@@ -61,8 +71,8 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
       </Text>
       {/* Glucose value text */}
       <Text
-        x={20}
-        y={20}
+        x={textX}
+        y={rowYs[0]}
         fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={bgColor}
@@ -71,8 +81,8 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
       </Text>
       {/* Time text without shadow */}
       <Text
-        x={20}
-        y={40}
+        x={textX}
+        y={rowYs[1]}
         fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={theme.textColor}

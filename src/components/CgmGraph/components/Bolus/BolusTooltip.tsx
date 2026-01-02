@@ -5,7 +5,7 @@ import {ThemeType} from 'app/types/theme';
 import Tooltip from 'app/components/CgmGraph/components/Tooltips/Tooltip';
 import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
-import {getClampedTooltipPosition} from 'app/components/CgmGraph/components/Tooltips/tooltipPosition';
+import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
 
 type Props = {
   x: number;
