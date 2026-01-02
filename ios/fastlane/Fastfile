@@ -295,6 +295,14 @@ def validate_app_store_connect_credentials!
   private_key_base64 = ENV["APP_STORE_CONNECT_PRIVATE_KEY"].to_s.strip
   private_key_plain = ENV["APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64"].to_s.strip
 
+  if !private_key_base64.empty? && !private_key_plain.empty?
+    UI.important("Both APP_STORE_CONNECT_PRIVATE_KEY (base64) and APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 (PEM) are set. Fastlane will use the base64 value; consider clearing the PEM variable to avoid confusion.")
+  end
+
+  if !private_key_plain.empty? && !private_key_plain.include?("BEGIN PRIVATE KEY") && !private_key_plain.include?("BEGIN EC PRIVATE KEY")
+    UI.important("APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 contains extra text (does not start with a PEM header). If you intend to use PEM mode, store only the raw key block (BEGIN/END lines + base64 body).")
+  end
+
   UI.user_error!("APP_STORE_CONNECT_KEY_ID is required for TestFlight upload") if key_id.empty?
   UI.user_error!("APP_STORE_CONNECT_ISSUER_ID is required for TestFlight upload") if issuer_id.empty?
 
