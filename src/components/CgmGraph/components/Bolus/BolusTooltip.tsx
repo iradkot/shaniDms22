@@ -1,11 +1,12 @@
 import React, {useContext} from 'react';
-import {Rect, Text} from 'react-native-svg';
+import {Text} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import Tooltip from 'app/components/CgmGraph/components/Tooltips/Tooltip';
 import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
+import SvgTooltipBox from 'app/components/charts/SvgTooltipBox';
 
 type Props = {
   x: number;
@@ -33,14 +34,7 @@ const BolusTooltip: React.FC<Props> = ({x, y, timestamp, amount}) => {
 
   return (
     <Tooltip x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}>
-      <Rect
-        width={tooltipWidth}
-        height={tooltipHeight}
-        fill={theme.white}
-        stroke={theme.borderColor}
-        strokeWidth={1}
-        rx={8}
-      />
+      <SvgTooltipBox width={tooltipWidth} height={tooltipHeight} />
       <Text
         x={16}
         y={22}

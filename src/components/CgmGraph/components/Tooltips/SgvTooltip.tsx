@@ -1,5 +1,5 @@
 import React from 'react';
-import {Rect, Text} from 'react-native-svg';
+import {Text} from 'react-native-svg';
 import Tooltip from './Tooltip';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {BgSample} from 'app/types/day_bgs.types';
@@ -11,6 +11,7 @@ import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyl
 import {useContext} from 'react';
 import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
 import {getSvgTooltipTextLayout} from 'app/components/charts/svgTooltipLayout';
+import SvgTooltipBox from 'app/components/charts/SvgTooltipBox';
 
 interface SgvTooltipProps {
   x: number;
@@ -51,14 +52,7 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
 
   return (
     <Tooltip x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}>
-      <Rect
-        width={tooltipWidth}
-        height={tooltipHeight}
-        fill={theme.white}
-        stroke={theme.borderColor}
-        strokeWidth={1}
-        rx={8}
-      />
+      <SvgTooltipBox width={tooltipWidth} height={tooltipHeight} />
       {/* Subtle shadow for the glucose value text */}
       <Text
         x={textX + shadowOffset}

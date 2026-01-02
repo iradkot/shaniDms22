@@ -1,5 +1,5 @@
 import React from 'react';
-import {Rect, Text} from 'react-native-svg';
+import {Text} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import Tooltip from 'app/components/CgmGraph/components/Tooltips/Tooltip';
 import {ThemeType} from 'app/types/theme';
@@ -9,6 +9,7 @@ import {minutesToTimeLabel} from '../utils/percentiles';
 import {formatGlucose} from '../utils/statistics';
 import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
 import {getSvgTooltipTextLayout} from 'app/components/charts/svgTooltipLayout';
+import SvgTooltipBox from 'app/components/charts/SvgTooltipBox';
 
 interface AGPTooltipProps {
   x: number; // point x within chart <G>
@@ -50,14 +51,7 @@ const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHe
 
   return (
     <Tooltip x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}>
-      <Rect
-        width={tooltipWidth}
-        height={tooltipHeight}
-        fill={theme.white}
-        stroke={theme.borderColor}
-        strokeWidth={1}
-        rx={8}
-      />
+      <SvgTooltipBox width={tooltipWidth} height={tooltipHeight} />
 
       <Text
         x={textX}
