@@ -87,9 +87,6 @@
     "react-test-renderer": "19.0.0",
     "typescript": "5.0.4"
   },
-  "jest": {
-    "preset": "react-native"
-  },
   "engines": {
     "node": ">=18"
   }
