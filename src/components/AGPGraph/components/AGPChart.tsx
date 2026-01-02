@@ -1,11 +1,12 @@
-import React, {useMemo} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {View} from 'react-native';
-import Svg, {G, Rect, Line, Path, Text as SvgText} from 'react-native-svg';
+import Svg, {Circle, G, Rect, Line, Path, Text as SvgText} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
 import {addOpacity} from 'app/style/styling.utils';
 import {AGPData, AGPPercentilePoint} from '../types';
 import {minutesToTimeLabel} from '../utils/percentiles';
+import AGPTooltip from './AGPTooltip';
 
 type LinearScale = ((value: number) => number) & {
   domain: () => [number, number];
@@ -76,6 +77,27 @@ const buildYTicks = (yDomain: [number, number]) => {
   return ticks;
 };
 
+const clamp = (value: number, min: number, max: number) => {
+  return Math.max(min, Math.min(value, max));
+};
+
+const findClosestPercentilePoint = (
+  points: AGPPercentilePoint[],
+  minutes: number,
+): AGPPercentilePoint | null => {
+  if (points.length === 0) return null;
+
+  const interval = points.length > 1 ? points[1].timeOfDay - points[0].timeOfDay : 5;
+  const snapped = clamp(Math.round(minutes / interval) * interval, 0, 1440);
+  const exact = points.find(p => p.timeOfDay === snapped);
+  if (exact) return exact;
+
+  // Fallback: nearest by absolute distance
+  return points.reduce((best, p) => {
+    return Math.abs(p.timeOfDay - minutes) < Math.abs(best.timeOfDay - minutes) ? p : best;
+  }, points[0]);
+};
+
 interface AGPChartProps {
   agpData: AGPData;
   width: number;
@@ -90,6 +112,9 @@ const AGPChart: React.FC<AGPChartProps> = ({
   targetRange = cgmRange.TARGET,
 }) => {
   const theme = useTheme();
+
+  const [activePoint, setActivePoint] = useState<AGPPercentilePoint | null>(null);
+  const [activeX, setActiveX] = useState<number | null>(null);
 
   const margin = useMemo(
     () => ({
@@ -205,9 +230,46 @@ const AGPChart: React.FC<AGPChartProps> = ({
   const innerLine = addOpacity(theme.textColor, 0.55);
   const medianLine = theme.accentColor;
 
+  const handleTouch = useCallback(
+    (locationX: number) => {
+      const chartX = clamp(locationX - margin.left, 0, innerWidth);
+      const minutes = (chartX / Math.max(1, innerWidth)) * 1440;
+      const point = findClosestPercentilePoint(agpData.percentiles, minutes);
+
+      if (!point) {
+        setActivePoint(null);
+        setActiveX(null);
+        return;
+      }
+
+      const snappedX = xScale(point.timeOfDay);
+
+      // Tap near the existing crosshair toggles it off.
+      if (activeX !== null && Math.abs(snappedX - activeX) < 8) {
+        setActivePoint(null);
+        setActiveX(null);
+        return;
+      }
+
+      setActivePoint(point);
+      setActiveX(snappedX);
+    },
+    [activeX, agpData.percentiles, innerWidth, margin.left, xScale],
+  );
+
+  const activeY = activePoint ? yScale(activePoint.p50) : null;
+
   return (
-    <Svg width={width} height={height}>
-      <G transform={`translate(${margin.left}, ${margin.top})`}>
+    <View
+      style={{width, height}}
+      onStartShouldSetResponder={() => true}
+      onMoveShouldSetResponder={() => true}
+      onResponderGrant={e => handleTouch(e.nativeEvent.locationX)}
+      onResponderMove={e => handleTouch(e.nativeEvent.locationX)}
+      onResponderTerminationRequest={() => true}
+    >
+      <Svg width={width} height={height}>
+        <G transform={`translate(${margin.left}, ${margin.top})`}>
         {/* Background + border */}
         <Rect
           x={0}
@@ -324,8 +386,38 @@ const AGPChart: React.FC<AGPChartProps> = ({
           strokeWidth={1.5}
           strokeDasharray="6,6"
         />
+
+        {/* Touch overlay: crosshair + marker + tooltip */}
+        {activePoint && activeX !== null && activeY !== null && (
+          <>
+            <Line
+              x1={activeX}
+              y1={0}
+              x2={activeX}
+              y2={innerHeight}
+              stroke={addOpacity(theme.textColor, 0.45)}
+              strokeWidth={1}
+            />
+            <Circle
+              cx={activeX}
+              cy={activeY}
+              r={4}
+              fill={theme.accentColor}
+              stroke={theme.white}
+              strokeWidth={1}
+            />
+            <AGPTooltip
+              x={activeX}
+              y={activeY}
+              point={activePoint}
+              chartWidth={innerWidth}
+              chartHeight={innerHeight}
+            />
+          </>
+        )}
       </G>
-    </Svg>
+      </Svg>
+    </View>
   );
 };
 
