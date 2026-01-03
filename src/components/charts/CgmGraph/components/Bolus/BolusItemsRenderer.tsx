@@ -9,9 +9,10 @@ import {getBolusMarkerYValue} from 'app/components/charts/CgmGraph/utils/bolusUt
 
 type Props = {
   insulinData: InsulinDataEntry[] | undefined;
+  focusedBolusTimestamps?: string[];
 };
 
-const BolusItemsRenderer: React.FC<Props> = ({insulinData}) => {
+const BolusItemsRenderer: React.FC<Props> = ({insulinData, focusedBolusTimestamps}) => {
   const theme = useTheme() as ThemeType;
   const [{xScale, yScale}] = useContext(GraphStyleContext);
 
@@ -42,6 +43,9 @@ const BolusItemsRenderer: React.FC<Props> = ({insulinData}) => {
         const baseRadius = 3;
         const scaledRadius = Math.max(3, Math.min(7, baseRadius + bolus.amount * 0.3));
         const fill = colors.orange[500];
+        const isFocused = Boolean(
+          focusedBolusTimestamps?.some(ts => ts === bolus.timestamp.toISOString()),
+        );
         return (
           <G key={bolus.id}>
             <Circle
@@ -53,6 +57,18 @@ const BolusItemsRenderer: React.FC<Props> = ({insulinData}) => {
               strokeWidth={1}
               transform={`rotate(45 ${x} ${y})`}
             />
+            {isFocused && (
+              <Circle
+                cx={x}
+                cy={y}
+                r={scaledRadius + 2}
+                fill="none"
+                stroke={fill}
+                strokeWidth={1}
+                strokeDasharray="2,2"
+                transform={`rotate(45 ${x} ${y})`}
+              />
+            )}
           </G>
         );
       })}

@@ -8,21 +8,22 @@ import YGridAndAxis from './components/YGridAndAxis';
 import CGMSamplesRenderer from './components/CGMSamplesRenderer';
 import GraphDateDisplay from './components/GraphDateDisplay';
 import FoodItemsRenderer from './components/Food/FoodItemsRenderer';
-import Tooltip from './components/Tooltips/Tooltip';
 import {
   GraphStyleContext,
   useGraphStyleContext,
 } from './contextStores/GraphStyleContext';
-import {TouchProvider, useTouchContext} from './contextStores/TouchContext';
+import {useTouchContext} from './contextStores/TouchContext';
 import {formattedFoodItemDTO} from 'app/types/food.types';
 import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
 import SgvTooltip from 'app/components/charts/CgmGraph/components/Tooltips/SgvTooltip';
-import {useClosestBgSample} from 'app/components/charts/CgmGraph/hooks/useClosestBgSample';
 import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {InsulinDataEntry} from 'app/types/insulin.types';
 import BolusItemsRenderer from 'app/components/charts/CgmGraph/components/Bolus/BolusItemsRenderer';
-import {findBolusEventsInWindow} from 'app/components/charts/CgmGraph/utils/bolusUtils';
+import {
+  findBolusEventsInTooltipWindow,
+  findClosestBolus,
+} from 'app/components/charts/CgmGraph/utils/bolusUtils';
 import MultiBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/MultiBolusTooltip';
 import CombinedBgBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/CombinedBgBolusTooltip';
 import CombinedBgMultiBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/CombinedBgMultiBolusTooltip';
@@ -89,22 +90,23 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
       ? findClosestBgSample(touchTimeMs, bgSamples)
       : null;
 
-  const nearbyBolusEvents =
+  const closestBolus =
     isTouchActive && touchTimeMs != null && insulinData?.length
-      ? findBolusEventsInWindow({
-          touchX: xTouchPosition,
-          touchY: yTouchPosition,
-          touchTimeMs,
+      ? findClosestBolus(touchTimeMs, insulinData)
+      : null;
+
+  const tooltipBolusEvents =
+    closestBolus && insulinData?.length
+      ? findBolusEventsInTooltipWindow({
+          anchorTimeMs: new Date(closestBolus.timestamp).getTime(),
           insulinData,
-          xScale: graphStyleContextValue.xScale,
-          yScale: graphStyleContextValue.yScale,
         })
       : [];
 
-  const showCombined = !!closestBgSample && nearbyBolusEvents.length === 1;
-  const showCombinedMulti = !!closestBgSample && nearbyBolusEvents.length > 1;
-  const showBgOnly = !!closestBgSample && nearbyBolusEvents.length === 0;
-  const showBolusOnly = !closestBgSample && nearbyBolusEvents.length > 0;
+  const showCombined = !!closestBgSample && tooltipBolusEvents.length === 1;
+  const showCombinedMulti = !!closestBgSample && tooltipBolusEvents.length > 1;
+  const showBgOnly = !!closestBgSample && tooltipBolusEvents.length === 0;
+  const showBolusOnly = !closestBgSample && tooltipBolusEvents.length > 0;
 
   return (
     <GraphStyleContext.Provider
@@ -127,8 +129,11 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
               focusedSampleDateString={closestBgSample?.dateString}
             />
             <FoodItemsRenderer foodItems={foodItems} />
-            <BolusItemsRenderer insulinData={insulinData} />
-            {isTouchActive && (closestBgSample || nearbyBolusEvents.length > 0) && (
+            <BolusItemsRenderer
+              insulinData={insulinData}
+              focusedBolusTimestamps={tooltipBolusEvents.map(b => b.timestamp)}
+            />
+            {isTouchActive && (closestBgSample || tooltipBolusEvents.length > 0) && (
               <>
                 <Line
                   x1={xTouchPosition}
@@ -154,7 +159,7 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
                     x={xTouchPosition}
                     y={yTouchPosition}
                     bgSample={closestBgSample!}
-                    bolusEvents={nearbyBolusEvents}
+                    bolusEvents={tooltipBolusEvents}
                   />
                 )}
 
@@ -162,7 +167,7 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
                   <MultiBolusTooltip
                     x={xTouchPosition}
                     y={yTouchPosition}
-                    bolusEvents={nearbyBolusEvents}
+                    bolusEvents={tooltipBolusEvents}
                   />
                 )}
 
@@ -171,7 +176,7 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
                     x={xTouchPosition}
                     y={yTouchPosition}
                     bgSample={closestBgSample!}
-                    bolusEvent={nearbyBolusEvents[0]}
+                    bolusEvent={tooltipBolusEvents[0]}
                   />
                 )}
 
