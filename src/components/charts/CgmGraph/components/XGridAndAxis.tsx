@@ -1,6 +1,6 @@
 import React, {useContext} from 'react';
-import XTick from 'app/components/CgmGraph/components/XTick';
-import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
+import XTick from 'app/components/charts/CgmGraph/components/XTick';
+import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 
 const XGridAndAxis = () => {
   const [{xScale}] = useContext(GraphStyleContext);

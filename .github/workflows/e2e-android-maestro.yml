@@ -65,4 +65,4 @@ jobs:
             APK_PATH=$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)
             echo "Using APK: ${APK_PATH}"
             adb install -r "${APK_PATH}"
-            maestro test e2e/maestro/login-and-tabs.yaml
+            maestro test e2e/maestro

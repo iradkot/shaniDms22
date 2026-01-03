@@ -1,15 +1,16 @@
 appId: com.shanidms22
 ---
-- launchApp
+- launchApp:
+        clearState: true
 
-# If we land on Login, use the deterministic E2E login.
-- runFlow:
-    when:
-      visible:
+# Use the deterministic E2E login.
+- extendedWaitUntil:
+        visible:
+            id: login.e2eButton
+        timeout: 30000
+
+- tapOn:
         id: login.e2eButton
-    commands:
-      - tapOn:
-          id: login.e2eButton
 
 # Wait for tabs to be available
 - extendedWaitUntil:

@@ -8,7 +8,7 @@ import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 // Adjusted import for XTick if it's an SVG-based component or ensure correct prop forwarding if custom
-import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
+import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import {TouchableOpacity} from 'react-native';
 

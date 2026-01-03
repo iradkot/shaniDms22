@@ -52,6 +52,7 @@ Source of truth for selector strings:
 Maestro flows live under `e2e/maestro/`.
 
 - Smoke flow: `e2e/maestro/login-and-tabs.yaml`
+- Charts smoke flow: `e2e/maestro/charts-smoke.yaml`
 
 ## Run Locally (Windows)
 

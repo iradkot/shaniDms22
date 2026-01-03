@@ -1,5 +1,6 @@
 Param(
-  [string]$FlowPath = "e2e/maestro/login-and-tabs.yaml",
+  # Default to the whole suite so new flows (e.g. charts-smoke.yaml) run automatically.
+  [string]$FlowPath = "e2e/maestro",
   [int]$TopSlowestSteps = 10
 )
 

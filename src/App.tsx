@@ -48,7 +48,7 @@ import {SportItemsProvider} from 'app/contexts/SportItemsContext';
 import EditFoodItemScreen from './containers/forms/Food/EditFoodItemScreen';
 import EditSportItem from './containers/forms/Sport/EditSportItem';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
-import {TouchProvider} from './components/CgmGraph/contextStores/TouchContext';
+import {TouchProvider} from './components/charts/CgmGraph/contextStores/TouchContext';
 import {isE2E} from 'app/utils/e2e';
 
 // Suppress deprecation warnings from Firebase React Native v21 with Hermes

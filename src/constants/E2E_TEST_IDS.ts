@@ -42,4 +42,16 @@ export const E2E_TEST_IDS = {
     intensitySlider: 'sport.intensitySlider',
     submitButton: 'sport.submitButton',
   },
+
+  /**
+   * Chart container selectors.
+   *
+   * Prefer putting `testID`s on the *screen-level chart containers* (not individual SVG nodes),
+   * so E2E tests stay stable even if the chart internals change.
+   */
+  charts: {
+    cgmSection: 'chart.cgmSection',
+    cgmGraph: 'chart.cgmGraph',
+    agpSummary: 'chart.agpSummary',
+  },
 } as const;

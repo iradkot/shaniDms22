@@ -46,7 +46,7 @@ jest.mock('app/contexts/SportItemsContext', () => {
   };
 });
 
-jest.mock('app/components/CgmGraph/contextStores/TouchContext', () => {
+jest.mock('app/components/charts/CgmGraph/contextStores/TouchContext', () => {
   const React = require('react');
   return {
     TouchProvider: ({children}) => React.createElement(React.Fragment, null, children),

@@ -15,14 +15,14 @@ import {
 } from './contextStores/GraphStyleContext';
 import {TouchProvider, useTouchContext} from './contextStores/TouchContext';
 import {formattedFoodItemDTO} from 'app/types/food.types';
-import {findClosestBgSample} from 'app/components/CgmGraph/utils';
+import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
-import SgvTooltip from 'app/components/CgmGraph/components/Tooltips/SgvTooltip';
-import {useClosestBgSample} from 'app/components/CgmGraph/hooks/useClosestBgSample';
+import SgvTooltip from 'app/components/charts/CgmGraph/components/Tooltips/SgvTooltip';
+import {useClosestBgSample} from 'app/components/charts/CgmGraph/hooks/useClosestBgSample';
 import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {InsulinDataEntry} from 'app/types/insulin.types';
-import BolusItemsRenderer from 'app/components/CgmGraph/components/Bolus/BolusItemsRenderer';
+import BolusItemsRenderer from 'app/components/charts/CgmGraph/components/Bolus/BolusItemsRenderer';
 
 interface Props {
   bgSamples: BgSample[];
@@ -30,6 +30,13 @@ interface Props {
   insulinData?: InsulinDataEntry[];
   width: number;
   height: number;
+  
+  /**
+   * Optional E2E selector.
+   *
+   * We keep this optional so the chart can be reused in lists/cards without forcing unique IDs.
+   */
+  testID?: string;
 }
 
 const StyledSvg = styled(Svg)`
@@ -37,7 +44,7 @@ const StyledSvg = styled(Svg)`
   width: 100%;
 `;
 
-const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulinData}) => {
+const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulinData, testID}) => {
   const containerRef = useRef<View>(null);
   const [graphStyleContextValue, setGraphStyleContextValue] =
     useGraphStyleContext(width, height, bgSamples);
@@ -62,7 +69,9 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
   }, [width, height, bgSamples]);
 
   if (!bgSamples || bgSamples.length === 0) {
-    return null;
+    // For E2E we still want a stable anchor in the view hierarchy.
+    // Rendering an empty container avoids flakiness when an account has no CGM data.
+    return testID ? <View style={{width, height}} testID={testID} /> : null;
   }
 
   const xTouchPosition = touchPosition.x - graphStyleContextValue.margin.left;
@@ -77,7 +86,7 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
   return (
     <GraphStyleContext.Provider
       value={[graphStyleContextValue, setGraphStyleContextValue]}>
-      <View ref={containerRef} style={{width, height}}>
+      <View ref={containerRef} style={{width, height}} testID={testID}>
         <StyledSvg
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}

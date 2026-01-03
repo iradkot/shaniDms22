@@ -1,6 +1,6 @@
 import React, {useContext} from 'react';
 import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
-import {FoodItem} from 'app/components/CgmGraph/components/Food/FoodItem';
+import {FoodItem} from 'app/components/charts/CgmGraph/components/Food/FoodItem';
 import {GraphStyleContext} from '../../contextStores/GraphStyleContext';
 
 interface Props {

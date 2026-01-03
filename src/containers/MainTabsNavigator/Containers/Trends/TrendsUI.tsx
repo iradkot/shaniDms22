@@ -8,7 +8,7 @@ import {useTheme} from 'styled-components/native';
 import {addOpacity} from 'app/style/styling.utils';
 
 // OPTIONAL: If you have a BG graph component
-// import BgGraph from 'app/components/CgmGraph/CgmGraph';
+// import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
 
 import {
   HighlightBox,

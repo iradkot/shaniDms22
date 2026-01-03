@@ -1,7 +1,7 @@
 import {formatDateToLocaleDateString} from 'app/utils/datetime.utils';
 import React, {useContext} from 'react';
 import {G, Text} from 'react-native-svg';
-import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
+import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 
 interface Props {
   xScale: any;

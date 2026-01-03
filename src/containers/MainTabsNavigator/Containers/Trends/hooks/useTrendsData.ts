@@ -5,6 +5,8 @@ import { BgSample } from 'app/types/day_bgs.types';
 import { fetchBgDataForDateRange } from 'app/api/apiRequests';
 import { calculateTrendsMetrics } from '../utils/trendsCalculations';
 import { loadingSteps, CHUNK_SIZE, WARNING_TIME, MAX_LOADING_TIME } from '../Trends.constants';
+import {isE2E} from 'app/utils/e2e';
+import {makeE2EBgSamplesForRange} from 'app/utils/e2eFixtures';
 
 interface UseTrendsDataProps {
   rangeDays: number;
@@ -28,6 +30,18 @@ export function useTrendsData({ rangeDays, start, end }: UseTrendsDataProps) {
 
   // Main effect to fetch data in CHUNK_SIZE increments
   useEffect(() => {
+    if (isE2E) {
+      setIsLoading(false);
+      setFetchError(null);
+      setFetchCancelled(false);
+      setDaysFetched(rangeDays);
+
+      const fixtureData = makeE2EBgSamplesForRange(start, end);
+      setBgData(fixtureData);
+      setPartialMetrics(calculateTrendsMetrics(fixtureData));
+      return;
+    }
+
     let isMounted = true;
 
     async function fetchInChunks() {

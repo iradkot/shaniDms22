@@ -3,7 +3,7 @@ import {Circle, G} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {InsulinDataEntry} from 'app/types/insulin.types';
-import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
+import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 import BolusTooltip from './BolusTooltip';
 
 type Props = {

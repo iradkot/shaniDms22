@@ -1,6 +1,6 @@
 import { G, Line, Text } from "react-native-svg";
 import React, { useContext } from "react";
-import { GraphStyleContext } from "app/components/CgmGraph/contextStores/GraphStyleContext";
+import { GraphStyleContext } from "app/components/charts/CgmGraph/contextStores/GraphStyleContext";
 import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 

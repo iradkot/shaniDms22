@@ -1,11 +1,11 @@
 import React, {useContext, useEffect, useRef} from 'react';
 import {Circle, G} from 'react-native-svg';
-import {xAccessor, yAccessor} from 'app/components/CgmGraph/utils';
+import {xAccessor, yAccessor} from 'app/components/charts/CgmGraph/utils';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
 import {theme} from 'app/style/theme';
-import {GraphStyleContext} from 'app/components/CgmGraph/contextStores/GraphStyleContext';
+import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 import {Animated, Easing} from 'react-native';
-import {useClosestBgSample} from 'app/components/CgmGraph/hooks/useClosestBgSample';
+import {useClosestBgSample} from 'app/components/charts/CgmGraph/hooks/useClosestBgSample';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const SAMPLE_RADIUS = 2;

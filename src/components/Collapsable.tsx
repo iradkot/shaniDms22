@@ -55,6 +55,7 @@ const ContentOverlay = styled(Animated.View)`
 interface CollapsableProps {
   title: string;
   initialIsCollapsed?: boolean;
+  testID?: string;
   children: React.ReactNode;
 }
 
@@ -64,6 +65,7 @@ const Collapsable: React.FC<CollapsableProps> = ({
   title,
   children,
   initialIsCollapsed = true,
+  testID,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(initialIsCollapsed);
   const contentHeight = useRef(new Animated.Value(0)).current;
@@ -114,7 +116,8 @@ const Collapsable: React.FC<CollapsableProps> = ({
     <CollapsableContainer>
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={() => setIsCollapsed(prevCollapsed => !prevCollapsed)}>
+        onPress={() => setIsCollapsed(prevCollapsed => !prevCollapsed)}
+        testID={testID}>
         <TitleContainer>
           <DropShadow
             style={{
@@ -129,7 +132,7 @@ const Collapsable: React.FC<CollapsableProps> = ({
               height: 48,
               justifyContent: 'center',
             }}>
-            <TitleText>{title}</TitleText>
+            <TitleText testID={testID}>{title}</TitleText>
           </DropShadow>
           <DropShadow
             style={{

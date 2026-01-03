@@ -1,0 +1,78 @@
+appId: com.shanidms22
+---
+# Charts smoke: verify our chart surfaces render in-app.
+#
+# Why IDs (not pixels)?
+# - We validate the *presence* of chart containers via stable `testID` selectors.
+# - This keeps the test resilient even if SVG internals/layout change.
+#
+# Note: The app must be built/installed in E2E mode for deterministic auth.
+# See docs/E2E.md (Build flag: E2E=true).
+
+- launchApp:
+    clearState: true
+
+# Always use the deterministic E2E login.
+- extendedWaitUntil:
+    visible:
+      id: login.e2eButton
+    timeout: 30000
+
+- tapOn:
+    id: login.e2eButton
+
+# Wait for tabs to be available.
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 30000
+
+# --- CGM graph (Home) ---
+- tapOn:
+    id: tab.home
+- extendedWaitUntil:
+    visible:
+      id: screen.home
+    timeout: 15000
+
+# The CGM chart is inside a collapsed section called "chart" by default.
+- scrollUntilVisible:
+    element:
+      id: chart.cgmSection
+    direction: DOWN
+    timeout: 15000
+
+- tapOn:
+    id: chart.cgmSection
+
+# After expanding, the chart might be below the fold (depending on device height).
+- scrollUntilVisible:
+    element:
+      id: chart.cgmGraph
+    direction: DOWN
+    timeout: 20000
+
+- assertVisible:
+    id: chart.cgmGraph
+
+- takeScreenshot: charts-home-cgm
+
+# --- AGP (Trends) ---
+- tapOn:
+    id: tab.trends
+- extendedWaitUntil:
+    visible:
+      id: screen.trends
+    timeout: 15000
+
+# AGP section can be below the fold depending on device size.
+- scrollUntilVisible:
+    element:
+      id: chart.agpSummary
+    direction: DOWN
+    timeout: 20000
+
+- assertVisible:
+    id: chart.agpSummary
+
+- takeScreenshot: charts-trends-agp

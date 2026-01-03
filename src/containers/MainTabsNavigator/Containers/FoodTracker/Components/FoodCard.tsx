@@ -2,7 +2,7 @@ import React from 'react';
 import styled from 'styled-components/native';
 import {Theme} from 'app/types/theme';
 import Collapsable from 'app/components/Collapsable';
-import BgGraph from 'app/components/CgmGraph/CgmGraph';
+import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import {BgSample} from 'app/types/day_bgs.types';
 import {Dimensions, ImageBackground, Text, View} from 'react-native';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';

@@ -8,7 +8,7 @@ import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/component
 import Collapsable from 'app/components/Collapsable';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import BGValueRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestBgValueRow';
-import BgGraph from 'app/components/CgmGraph/CgmGraph';
+import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import {cloneDeep} from 'lodash';
 import {Theme} from 'app/types/theme';
 import {Dimensions, SafeAreaView, Text} from 'react-native';
@@ -18,6 +18,8 @@ import {bgSortFunction} from 'app/utils/bg.utils';
 import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
 import {useInsulinData} from 'app/hooks/useInsulinData';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {isE2E} from 'app/utils/e2e';
+import {makeE2EBgSamplesForDate} from 'app/utils/e2eFixtures';
 
 const HomeContainer = styled.View<{theme: Theme}>`
   flex: 1;
@@ -77,8 +79,13 @@ const Home: React.FC = () => {
   const {foodItems} = useFoodItems(currentDate);
 
   const memoizedBgSamples = useMemo(() => {
-    return cloneDeep(bgData).sort(bgSortFunction(true));
-  }, [bgData]);
+    const effectiveBgData =
+      bgData.length === 0 && isE2E
+        ? makeE2EBgSamplesForDate(debouncedCurrentDate)
+        : bgData;
+
+    return cloneDeep(effectiveBgData).sort(bgSortFunction(true));
+  }, [bgData, debouncedCurrentDate]);
 
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
@@ -99,13 +106,14 @@ const Home: React.FC = () => {
             endDate={endOfDay}
           />
         </Collapsable>
-        <Collapsable title={'chart'}>
+        <Collapsable title={'chart'} testID={E2E_TEST_IDS.charts.cgmSection}>
           <BgGraph
             bgSamples={memoizedBgSamples}
             width={Dimensions.get('window').width}
             height={200}
             foodItems={foodItems}
             insulinData={insulinData}
+            testID={E2E_TEST_IDS.charts.cgmGraph}
           />
         </Collapsable>
         <CgmRows

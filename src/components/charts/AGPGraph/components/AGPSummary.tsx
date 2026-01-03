@@ -28,9 +28,15 @@ interface AGPSummaryProps {
   bgData: BgSample[];
   width?: number;
   height?: number;
+
+  /**
+   * Optional E2E selector for the AGP summary container.
+   * This is intended for Maestro flows to validate chart presence.
+   */
+  testID?: string;
 }
 
-const AGPSummary: React.FC<AGPSummaryProps> = ({bgData, width, height = 260}) => {
+const AGPSummary: React.FC<AGPSummaryProps> = ({bgData, width, height = 260, testID}) => {
   const theme = useTheme();
   const {agpData, isLoading, error} = useAGPData(bgData);
 
@@ -97,7 +103,7 @@ const AGPSummary: React.FC<AGPSummaryProps> = ({bgData, width, height = 260}) =>
   } as const;
 
   return (
-    <Container>
+    <Container testID={testID}>
       <View style={{marginBottom: theme.spacing.md}}>
         <AGPKeyMetrics metrics={keyMetrics} />
       </View>
