@@ -81,3 +81,10 @@ jobs:
           if-no-files-found: error
           path: |
             android/app/build/outputs/apk/**/*.apk
+
+  e2e-maestro-android:
+    name: E2E (Android - Maestro)
+    needs: build-apk
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    uses: ./.github/workflows/e2e-android-maestro.yml
+    secrets: inherit
