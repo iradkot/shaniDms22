@@ -1,10 +1,11 @@
-import React, {useContext, useMemo, useState} from 'react';
+import React, {useContext, useMemo} from 'react';
 import {Circle, G} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {InsulinDataEntry} from 'app/types/insulin.types';
 import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
-import BolusTooltip from './BolusTooltip';
+import {colors} from 'app/style/colors';
+import {getBolusMarkerYValue} from 'app/components/charts/CgmGraph/utils/bolusUtils';
 
 type Props = {
   insulinData: InsulinDataEntry[] | undefined;
@@ -29,8 +30,6 @@ const BolusItemsRenderer: React.FC<Props> = ({insulinData}) => {
       .filter(entry => !Number.isNaN(entry.timestamp.getTime()));
   }, [insulinData]);
 
-  const [focusedBolusId, setFocusedBolusId] = useState<string | null>(null);
-
   if (!boluses.length) {
     return null;
   }
@@ -39,23 +38,21 @@ const BolusItemsRenderer: React.FC<Props> = ({insulinData}) => {
     <>
       {boluses.map(bolus => {
         const x = xScale(bolus.timestamp);
-        const y = yScale(260);
-        const isFocused = focusedBolusId === bolus.id;
-
+        const y = yScale(getBolusMarkerYValue());
+        const baseRadius = 3;
+        const scaledRadius = Math.max(3, Math.min(7, baseRadius + bolus.amount * 0.3));
+        const fill = colors.orange[500];
         return (
           <G key={bolus.id}>
             <Circle
               cx={x}
               cy={y}
-              r={isFocused ? 6 : 4}
-              fill={theme.accentColor}
+              r={scaledRadius}
+              fill={fill}
               stroke={theme.white}
               strokeWidth={1}
-              onPress={() => setFocusedBolusId(prev => (prev === bolus.id ? null : bolus.id))}
+              transform={`rotate(45 ${x} ${y})`}
             />
-            {isFocused && (
-              <BolusTooltip x={x} y={y} timestamp={bolus.timestamp} amount={bolus.amount} />
-            )}
           </G>
         );
       })}
