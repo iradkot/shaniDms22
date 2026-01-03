@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "E2E: Maestro (Android)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& { if (-not (Test-Path '.tools/maestro/maestro/bin/maestro') -and -not (Test-Path '.tools/maestro/maestro/bin/maestro.exe')) { yarn e2e:maestro:install:win }; .\\.tools\\maestro\\maestro\\bin\\maestro test e2e\\maestro\\login-and-tabs.yaml }\"",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "E2E: Maestro (Android) + Summary",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\run-maestro-android.ps1",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

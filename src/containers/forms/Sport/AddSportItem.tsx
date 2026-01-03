@@ -5,6 +5,7 @@ import SportItemForm from 'app/components/forms/SportForm';
 
 import useAddSportItem from 'app/hooks/sport/useAddSportItem';
 import {Container} from './styles';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 interface AddSportItemProps {}
 
@@ -33,7 +34,7 @@ const AddSportItem: React.FC<AddSportItemProps> = () => {
   const submitHandlerRef = React.useRef<null | (() => void)>(null);
 
   return (
-    <Container>
+    <Container testID={E2E_TEST_IDS.screens.sportAdd}>
       <SportItemForm
         onSubmit={handleAddSportItem}
         submitHandlerRef={submitHandlerRef}

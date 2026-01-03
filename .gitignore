@@ -38,6 +38,9 @@ node_modules/
 npm-debug.log
 yarn-error.log
 
+# npm lockfile (repo uses Yarn)
+/package-lock.json
+
 # BUCK
 buck-out/
 \.buckd/
@@ -126,3 +129,10 @@ keys/*
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Local developer tools (downloaded binaries)
+/.tools/
+
+# Maestro generated artifacts
+/e2e/results/
+/e2e/.maestro/

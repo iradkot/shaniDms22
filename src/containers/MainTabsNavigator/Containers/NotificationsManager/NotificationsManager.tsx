@@ -20,6 +20,7 @@ import {
 } from 'app/constants/SCREEN_NAMES';
 import {NotificationResponse} from 'app/types/notifications';
 import {NotificationsCard} from './components/NotificationCard';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 const NotificationsManagerContainer = styled.View`
   flex: 1;
@@ -78,7 +79,7 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
   };
 
   return (
-    <NotificationsManagerContainer>
+    <NotificationsManagerContainer testID={E2E_TEST_IDS.screens.notifications}>
       {renderNotifications()}
       <AddNotificationButton
         callback={() => navigation.navigate(ADD_NOTIFICATION_SCREEN)}
@@ -101,7 +102,9 @@ const AddNotificationButtonText = styled.Text`
 
 const AddNotificationButton: FC<{callback: () => void}> = ({callback}) => {
   return (
-    <AddNotificationButtonContainer onPress={callback}>
+    <AddNotificationButtonContainer
+      testID={E2E_TEST_IDS.notifications.addButton}
+      onPress={callback}>
       <AddNotificationButtonText>Add Notification</AddNotificationButtonText>
     </AddNotificationButtonContainer>
   );

@@ -18,6 +18,7 @@ import SportItemsContext from 'app/contexts/SportItemsContext';
 
 import {fetchSportItems} from 'app/utils/sportItems.utils';
 import {SportItemDTO} from 'app/types/sport.types';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
@@ -60,7 +61,7 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   // @ts-ignore
   // @ts-ignore
   return (
-    <Styled.Container>
+    <Styled.Container testID={E2E_TEST_IDS.screens.sport}>
       <Styled.BackgroundImage
         source={require('app/assets/Franek_woman_in_transparent_sport_bra_futuristic_outfit_cyberpu_1fbf6e84-1ad1-4fb8-8446-d4514d0e8f58.png')}>
         <AnimatedFlatList
@@ -85,6 +86,7 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
       <Button
         onClick={handleAddSportItemPress}
         text="Add Sport Item"
+        testID={E2E_TEST_IDS.sport.addButton}
         icon={<Icon name="add-circle" size={30} color="white" />}
       />
     </Styled.Container>

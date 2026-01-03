@@ -21,6 +21,7 @@ import {NavigationProp} from '@react-navigation/native';
 import Loader from 'app/components/common-ui/Loader/Loader';
 import {EDIT_FOOD_ITEM_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {subDays} from 'date-fns';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 type groupBy = 'day' | 'week' | 'food' | 'exact food';
 
@@ -129,7 +130,7 @@ const FoodTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   }, [foodItems]);
 
   return (
-    <Container>
+    <Container testID={E2E_TEST_IDS.screens.food}>
       {isLoading ? (
         <Loader />
       ) : (

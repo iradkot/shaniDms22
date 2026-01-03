@@ -17,9 +17,15 @@ const SubmitButtonText = styled.Text`
   font-weight: bold;
 `;
 
-export const SubmitButton = ({ onPress }: { onPress: () => void }) => {
+export const SubmitButton = ({
+  onPress,
+  testID,
+}: {
+  onPress: () => void;
+  testID?: string;
+}) => {
   return (
-    <SubmitButtonContainer onPress={onPress}>
+    <SubmitButtonContainer onPress={onPress} testID={testID}>
       <SubmitButtonText>Submit</SubmitButtonText>
     </SubmitButtonContainer>
   );

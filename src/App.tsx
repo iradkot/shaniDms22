@@ -49,6 +49,7 @@ import EditFoodItemScreen from './containers/forms/Food/EditFoodItemScreen';
 import EditSportItem from './containers/forms/Sport/EditSportItem';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TouchProvider} from './components/CgmGraph/contextStores/TouchContext';
+import {isE2E} from 'app/utils/e2e';
 
 // Suppress deprecation warnings from Firebase React Native v21 with Hermes
 LogBox.ignoreLogs([
@@ -90,11 +91,15 @@ const App: () => React.ReactElement = () => {
     console.log('App.tsx: App component mounted');
   }, []);  // Register FCM token on start, handle token refresh, and sync daily
   React.useEffect(() => {
+    if (isE2E) {
+      return;
+    }
+
     registerDeviceToken();
-    
+
     // Check token sync once per day
     syncTokenIfNeeded();
-    
+
     const unsubscribeRefresh = messaging().onTokenRefresh(async () => {
       console.log('App: FCM token refreshed, updating server...');
       await unregisterDeviceToken();
@@ -105,6 +110,10 @@ const App: () => React.ReactElement = () => {
 
   // Verify and request notification permissions
   React.useEffect(() => {
+    if (isE2E) {
+      return;
+    }
+
     const checkPermissions = async () => {
       try {
         // Notifee iOS/Android permission prompt
@@ -129,6 +138,10 @@ const App: () => React.ReactElement = () => {
   // if user is not logged in, show login screen else show home screen
   // Subscribe to foreground messages
   React.useEffect(() => {
+    if (isE2E) {
+      return;
+    }
+
     const unsubscribeOnMessage = messaging().onMessage(async remoteMessage => {
       console.log('App: foreground message received:', remoteMessage);
       setNotifTitle(remoteMessage.notification?.title);

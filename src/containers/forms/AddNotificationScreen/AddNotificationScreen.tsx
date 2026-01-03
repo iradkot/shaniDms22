@@ -20,6 +20,7 @@ import {
   AddNotificationScreenContainer,
   AddNotificationScreenTitle,
 } from './AddNotificationScreen.style';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 const AddNotificationScreen: FC = () => {
 
@@ -48,8 +49,10 @@ const AddNotificationScreen: FC = () => {
   const submitHandlerRef = React.useRef<null | (() => void)>(null);
 
   return (
-    <AddNotificationScreenContainer>
-      <AddNotificationScreenTitle>Add Notification</AddNotificationScreenTitle>
+    <AddNotificationScreenContainer testID={E2E_TEST_IDS.screens.notificationsAdd}>
+      <AddNotificationScreenTitle testID={E2E_TEST_IDS.notifications.addTitle}>
+        Add Notification
+      </AddNotificationScreenTitle>
 
       <NotificationForm
         onSubmit={onSubmit}
@@ -57,6 +60,7 @@ const AddNotificationScreen: FC = () => {
         submitHandlerRef={submitHandlerRef}
       />
       <AddNotificationScreenButton
+        testID={E2E_TEST_IDS.notifications.addSubmit}
         onPress={() => submitHandlerRef?.current?.()}>
         <AddNotificationScreenButtonText>Add</AddNotificationScreenButtonText>
       </AddNotificationScreenButton>

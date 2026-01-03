@@ -17,6 +17,7 @@ import {useFoodItems} from 'app/hooks/useFoodItems';
 import {bgSortFunction} from 'app/utils/bg.utils';
 import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
 import {useInsulinData} from 'app/hooks/useInsulinData';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 const HomeContainer = styled.View<{theme: Theme}>`
   flex: 1;
@@ -26,10 +27,6 @@ const HomeContainer = styled.View<{theme: Theme}>`
 // create dummy home component with typescript
 const Home: React.FC = () => {
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
-  // Debug: log when Home mounts
-  useEffect(() => {
-    console.log('Home component mounted');
-  }, []);
   const isShowingToday = useMemo(() => {
     const today = new Date();
     return (
@@ -84,7 +81,7 @@ const Home: React.FC = () => {
   }, [bgData]);
 
   return (
-    <HomeContainer>
+    <HomeContainer testID={E2E_TEST_IDS.screens.home}>
         <TimeInRangeRow bgData={bgData} />
         <BGValueRow
           prevBgData={latestPrevBgSample}

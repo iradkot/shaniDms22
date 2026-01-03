@@ -1,0 +1,93 @@
+appId: com.shanidms22
+---
+- launchApp
+
+# If we land on Login, use the deterministic E2E login.
+- runFlow:
+    when:
+      visible:
+        id: login.e2eButton
+    commands:
+      - tapOn:
+          id: login.e2eButton
+
+# Wait for tabs to be available
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 30000
+
+# Home
+- tapOn:
+    id: tab.home
+- extendedWaitUntil:
+    visible:
+      id: screen.home
+    timeout: 15000
+
+# Trends
+- tapOn:
+    id: tab.trends
+- extendedWaitUntil:
+    visible:
+      id: screen.trends
+    timeout: 15000
+- assertVisible: "Data Range"
+
+# Food
+- tapOn:
+    id: tab.food
+- extendedWaitUntil:
+    visible:
+      id: screen.food
+    timeout: 15000
+
+# Sport
+- tapOn:
+    id: tab.sport
+- extendedWaitUntil:
+    visible:
+      id: screen.sport
+    timeout: 15000
+- assertVisible:
+    id: sport.addButton
+
+# Notifications
+- tapOn:
+    id: tab.notifications
+- extendedWaitUntil:
+    visible:
+      id: screen.notifications
+    timeout: 15000
+- assertVisible:
+    id: notifications.addButton
+
+# Open Add Notification (fast stack navigation) and go back
+- tapOn:
+    id: notifications.addButton
+- extendedWaitUntil:
+    visible:
+      id: screen.notifications.add
+    timeout: 15000
+- assertVisible:
+    id: screen.notifications.add.title
+- assertVisible:
+    id: screen.notifications.add.submit
+- back
+
+# Open Add Sport Item and go back
+- tapOn:
+    id: tab.sport
+- extendedWaitUntil:
+    visible:
+      id: screen.sport
+    timeout: 15000
+- tapOn:
+    id: sport.addButton
+- extendedWaitUntil:
+    visible:
+      id: screen.sport.add
+    timeout: 15000
+- assertVisible:
+    id: sport.nameInput
+- back

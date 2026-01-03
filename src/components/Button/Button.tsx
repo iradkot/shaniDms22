@@ -8,9 +8,10 @@ const Button: React.FC<{
   isLoading?: boolean;
   icon?: React.ReactNode;
   text: string;
-}> = ({onClick, disabled, isLoading, icon, text}) => {
+  testID?: string;
+}> = ({onClick, disabled, isLoading, icon, text, testID}) => {
   return (
-    <ButtonContainer disabled={disabled} onPress={onClick}>
+    <ButtonContainer testID={testID} disabled={disabled} onPress={onClick}>
       {icon}
       <ButtonText>{text}</ButtonText>
     </ButtonContainer>

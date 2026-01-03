@@ -29,6 +29,7 @@ import {
   MetricButton,
   MetricButtonText
 } from './styles/Trends.styles';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 type MetricType = 'tir' | 'hypos' | 'hypers';
 
@@ -139,7 +140,7 @@ const Trends: React.FC = () => {
   const worstDay = worstDayDetail?.dateString || '';
 
   return (
-    <TrendsContainer>
+    <TrendsContainer testID={E2E_TEST_IDS.screens.trends}>
       {/* 1. Date Range Buttons */}
       <DateRangeSelector onRangeChange={days => setRangeDays(days)} />
 

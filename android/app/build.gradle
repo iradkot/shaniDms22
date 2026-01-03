@@ -93,6 +93,9 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+
+        def e2eEnabled = (System.getenv("E2E") ?: "false").toBoolean()
+        buildConfigField "boolean", "E2E", e2eEnabled ? "true" : "false"
     }
     signingConfigs {
         debug {

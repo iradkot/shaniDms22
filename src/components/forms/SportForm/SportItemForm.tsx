@@ -3,7 +3,8 @@ import styled from 'styled-components/native';
 import React, {MutableRefObject, useEffect, useState} from 'react';
 import {SportItemDTO} from 'app/types/sport.types';
 import {Theme} from 'app/types/theme';
-import {ImageBackground, Slider, Text, TouchableOpacity} from 'react-native';
+import {ImageBackground, Text, TouchableOpacity} from 'react-native';
+import Slider from '@react-native-community/slider';
 import {SubmitButton} from 'app/components/forms/SportForm/components/SubmitButton';
 import {
   SportTypeButton,
@@ -12,6 +13,7 @@ import {
 import DateTimePickerCard from '../DateTimePickerCard';
 import {sportTypeBackground} from 'app/containers/forms/Sport/styles';
 import {SPORT_TYPES} from 'app/constants/SPORT';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 interface SportItemFormProps {
   sportItem?: SportItemDTO;
   onSubmit: (data: SportItemDTO) => void;
@@ -24,7 +26,7 @@ const SportItemForm = ({
   submitHandlerRef,
 }: SportItemFormProps) => {
   const [selectedSportType, setSelectedSportType] = useState<
-    SPORT_TYPES.STRENGTH | SPORT_TYPES.STRENGTH
+    SPORT_TYPES.STRENGTH | SPORT_TYPES.AEROBIC
   >(SPORT_TYPES.STRENGTH);
 
   const {
@@ -90,6 +92,7 @@ const SportItemForm = ({
             rules={rules.name}
             render={({field: {onChange, value}}) => (
               <FormInput
+                testID={E2E_TEST_IDS.sport.nameInput}
                 placeholder="Name"
                 onChangeText={text => onChange(text)}
                 value={value}
@@ -133,6 +136,7 @@ const SportItemForm = ({
               <>
                 <IntensityText>Intensity: {value}</IntensityText>
                 <Slider
+                  testID={E2E_TEST_IDS.sport.intensitySlider}
                   style={styles.slider}
                   minimumValue={1}
                   maximumValue={10}
@@ -142,7 +146,10 @@ const SportItemForm = ({
                   thumbTintColor="white"
                   minimumTrackTintColor="white"
                 />
-                <SubmitButton onPress={handleSubmit(onSubmit)} />
+                <SubmitButton
+                  testID={E2E_TEST_IDS.sport.submitButton}
+                  onPress={handleSubmit(onSubmit)}
+                />
               </>
             )}
           />
