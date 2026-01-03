@@ -1,7 +1,12 @@
 import {useEffect, useReducer, Dispatch} from 'react';
 import {bgSortFunction} from 'app/utils/bg.utils';
 import {BgSample} from 'app/types/day_bgs.types';
-import {fetchBgDataForDate} from 'app/api/apiRequests';
+import {
+  fetchBgDataForDate,
+  fetchDeviceStatusForDateRange,
+} from 'app/api/apiRequests';
+import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
+import {mergeDeviceStatusIntoBgSamples} from 'app/utils/mergeDeviceStatusIntoBgSamples.utils';
 
 interface State {
   todayBgData: BgSample[];
@@ -60,11 +65,21 @@ async function fetchBgDayDataForDate(
   const bgData = await fetchBgDataForDate(date);
   const sortedBgData = bgData.sort(bgSortFunction(false));
 
+  // Optional: enrich BG samples with IOB/COB context from device status.
+  const {formattedStartDate, formattedEndDate} = getFormattedStartEndOfDay(date);
+  const startDate = new Date(formattedStartDate);
+  const endDate = new Date(formattedEndDate);
+  const deviceStatus = await fetchDeviceStatusForDateRange(startDate, endDate);
+  const enrichedBgData = mergeDeviceStatusIntoBgSamples({
+    bgSamples: sortedBgData,
+    deviceStatus,
+  });
+
   const today = new Date();
   const isToday = date.toDateString() === today.toDateString();
 
   setIsLoading(false);
-  dispatch({type: 'setBgData', payload: sortedBgData, isToday: isToday});
+  dispatch({type: 'setBgData', payload: enrichedBgData, isToday: isToday});
 }
 
 export const useBgData = (currentDate: Date) => {

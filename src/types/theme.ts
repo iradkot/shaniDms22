@@ -74,6 +74,21 @@ export type ThemeType = {
     default: string;
     small: string;
   };
+
+  /**
+   * Glucose log load bars (IOB/COB) colors.
+   */
+  loadBars: {
+    iob: {
+      bolusFill: string;
+      autoFill: string;
+      track: string;
+    };
+    cob: {
+      fill: string;
+      track: string;
+    };
+  };
 };
 
 // Extend the DefaultTheme from styled-components

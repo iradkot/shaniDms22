@@ -54,4 +54,23 @@ export const E2E_TEST_IDS = {
     cgmGraph: 'chart.cgmGraph',
     agpSummary: 'chart.agpSummary',
   },
+
+  /**
+   * Glucose log (Home screen list) selectors.
+   */
+  glucoseLog: {
+    list: 'glucoseLog.list',
+  },
+
+  /**
+   * IOB/COB visualization selectors (inside glucose log rows).
+   *
+   * Note: there can be multiple instances on screen; Maestro uses these as
+   * existence checks (any visible match is acceptable).
+   */
+  loadBars: {
+    container: 'loadBars.container',
+    iobText: 'loadBars.iobText',
+    cobText: 'loadBars.cobText',
+  },
 } as const;

@@ -7,19 +7,39 @@ import DropShadow from 'react-native-drop-shadow';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import BgGradient from 'app/components/BgGradient';
 import {FlexAlignType} from 'react-native';
+import LoadBars from 'app/components/LoadBars/LoadBars';
+import {LOAD_BARS_CONSTANTS} from 'app/utils/loadBars.utils';
+
+const BG_DATA_CARD_CONSTANTS = {
+  borderBottomWidth: 1,
+  rowBorderRadius: 1,
+  rowMarginTop: 0.1,
+  timeMarginTop: 2,
+  shadowOffsetWidth: 1,
+  shadowOffsetHeight: 1,
+  shadowOpacity: 0.5,
+  shadowRadius: 2,
+} as const;
 
 interface BgDataCardProps {
   bgData: BgSample;
   prevBgData: BgSample;
+  maxIobReference: number;
+  maxCobReference: number;
 }
 
-const BgDataCard = ({bgData, prevBgData}: BgDataCardProps) => {
+const BgDataCard = ({
+  bgData,
+  prevBgData,
+  maxIobReference,
+  maxCobReference,
+}: BgDataCardProps) => {
   const theme = useTheme() as ThemeType;
 
   const bgStartColor = useMemo(() => {
     return prevBgData
       ? theme.determineBgColorByGlucoseValue(prevBgData.sgv)
-      : '#FFFFFF';
+      : theme.white;
   }, [prevBgData, theme]);
 
   const bgEndColor = useMemo(() => {
@@ -30,31 +50,38 @@ const BgDataCard = ({bgData, prevBgData}: BgDataCardProps) => {
     return formatDateToLocaleTimeString(new Date(bgData.date));
   }, [bgData.date]);
 
+  const delta = useMemo(() => {
+    if (!prevBgData) return '';
+    const diff = bgData.sgv - prevBgData.sgv;
+    return diff === 0 ? '0' : diff > 0 ? `+${diff}` : `${diff}`;
+  }, [bgData.sgv, prevBgData]);
+
   const linearGradientStyle = useMemo(() => {
     return {
       flexDirection: 'row' as const,
-      justifyContent: 'space-around' as const,
+      justifyContent: 'flex-start' as const,
       alignItems: 'center' as FlexAlignType,
-      padding: 10,
-      borderBottomWidth: 1,
+      paddingHorizontal: theme.spacing.md,
+      borderBottomWidth: BG_DATA_CARD_CONSTANTS.borderBottomWidth,
       borderBottomColor: theme.borderColor,
       width: '100%',
-      borderRadius: 1,
-      marginTop: 0.1,
+      borderRadius: BG_DATA_CARD_CONSTANTS.rowBorderRadius,
+      marginTop: BG_DATA_CARD_CONSTANTS.rowMarginTop,
+      height: LOAD_BARS_CONSTANTS.rowHeight,
     };
   }, [theme]);
 
   const dropShadowStyle = useMemo(() => {
     return {
-      shadowColor: '#000',
+      shadowColor: theme.shadowColor,
       shadowOffset: {
-        width: 1,
-        height: 1,
+        width: BG_DATA_CARD_CONSTANTS.shadowOffsetWidth,
+        height: BG_DATA_CARD_CONSTANTS.shadowOffsetHeight,
       },
-      shadowOpacity: 0.5,
-      shadowRadius: 2,
+      shadowOpacity: BG_DATA_CARD_CONSTANTS.shadowOpacity,
+      shadowRadius: BG_DATA_CARD_CONSTANTS.shadowRadius,
     };
-  }, []);
+  }, [theme.shadowColor]);
 
   return (
     <DataRowContainer>
@@ -62,12 +89,30 @@ const BgDataCard = ({bgData, prevBgData}: BgDataCardProps) => {
         startColor={bgStartColor}
         endColor={bgEndColor}
         style={linearGradientStyle}>
-        <DropShadow style={dropShadowStyle}>
-          <DataRowText>{bgData.sgv}</DataRowText>
-        </DropShadow>
-        <DirectionArrows trendDirection={bgData.direction} />
-        <DataRowText>{prevBgData && bgData.sgv - prevBgData.sgv}</DataRowText>
-        <DataRowText>{formattedDate}</DataRowText>
+        <TimeBgSection>
+          <BgAndTrendRow>
+            <DropShadow style={dropShadowStyle}>
+              <BgValueText>{bgData.sgv}</BgValueText>
+            </DropShadow>
+            <DirectionArrows trendDirection={bgData.direction} />
+          </BgAndTrendRow>
+          <TimeText numberOfLines={1}>{formattedDate}</TimeText>
+        </TimeBgSection>
+
+        <DeltaSection>
+          <DeltaText numberOfLines={1}>{delta}</DeltaText>
+        </DeltaSection>
+
+        <BarsSection>
+          <LoadBars
+            iobTotal={bgData.iob}
+            iobBolus={bgData.iobBolus}
+            iobBasal={bgData.iobBasal}
+            cob={bgData.cob}
+            maxIobReference={maxIobReference}
+            maxCobReference={maxCobReference}
+          />
+        </BarsSection>
       </BgGradient>
     </DataRowContainer>
   );
@@ -75,8 +120,9 @@ const BgDataCard = ({bgData, prevBgData}: BgDataCardProps) => {
 
 const DataRowContainer = styled.View`
   flex-direction: row;
-  justify-content: space-around;
+  justify-content: flex-start;
   align-items: center;
+  width: 100%;
 `;
 
 const DataRowText = styled.Text<{theme: ThemeType}>`
@@ -84,9 +130,56 @@ const DataRowText = styled.Text<{theme: ThemeType}>`
   color: ${props => props.theme.textColor};
 `;
 
+const TimeBgSection = styled.View`
+  width: ${LOAD_BARS_CONSTANTS.timeBgSectionWidth}px;
+  flex-shrink: 0;
+  flex-direction: column;
+  justify-content: center;
+`;
+
+const BgAndTrendRow = styled.View`
+  flex-direction: row;
+  align-items: center;
+`;
+
+const BgValueText = styled(DataRowText)`
+  font-weight: 800;
+`;
+
+const TimeText = styled.Text`
+  margin-top: ${BG_DATA_CARD_CONSTANTS.timeMarginTop}px;
+  font-size: ${({theme}) => theme.typography.size.xs}px;
+  color: ${({theme}) => theme.textColor};
+`;
+
+const DeltaSection = styled.View`
+  width: ${LOAD_BARS_CONSTANTS.deltaSectionWidth}px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+`;
+
+const DeltaText = styled.Text`
+  font-size: ${({theme}) => theme.typography.size.sm}px;
+  font-weight: 700;
+  color: ${({theme}) => theme.textColor};
+`;
+
+const BarsSection = styled.View`
+  flex: 1;
+  flex-shrink: 1;
+  padding-left: ${({theme}) => theme.spacing.sm}px;
+`;
+
 export default React.memo(
   BgDataCard,
   (prevProps, nextProps) =>
     prevProps?.bgData?.sgv === nextProps?.bgData?.sgv &&
-    prevProps?.prevBgData?.sgv === nextProps?.prevBgData?.sgv,
+    prevProps?.prevBgData?.sgv === nextProps?.prevBgData?.sgv &&
+    prevProps?.bgData?.iob === nextProps?.bgData?.iob &&
+    prevProps?.bgData?.cob === nextProps?.bgData?.cob &&
+    prevProps?.bgData?.iobBolus === nextProps?.bgData?.iobBolus &&
+    prevProps?.bgData?.iobBasal === nextProps?.bgData?.iobBasal &&
+    prevProps?.maxIobReference === nextProps?.maxIobReference &&
+    prevProps?.maxCobReference === nextProps?.maxCobReference,
 );

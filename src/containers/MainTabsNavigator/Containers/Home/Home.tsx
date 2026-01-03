@@ -87,6 +87,17 @@ const Home: React.FC = () => {
     return cloneDeep(effectiveBgData).sort(bgSortFunction(true));
   }, [bgData, debouncedCurrentDate]);
 
+  const listBgData = useMemo(() => {
+    // In E2E, ensure the glucose log list has deterministic data even when the
+    // account/environment has no CGM entries.
+    if (bgData.length === 0 && isE2E) {
+      return cloneDeep(makeE2EBgSamplesForDate(debouncedCurrentDate)).sort(
+        bgSortFunction(true),
+      );
+    }
+    return bgData;
+  }, [bgData, debouncedCurrentDate]);
+
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
         <TimeInRangeRow bgData={bgData} />
@@ -119,7 +130,7 @@ const Home: React.FC = () => {
         <CgmRows
           onPullToRefreshRefresh={getUpdatedBgData}
           isLoading={isLoading}
-          bgData={bgData}
+          bgData={listBgData}
           isToday={isShowingToday}
         />
         <DateNavigatorRow

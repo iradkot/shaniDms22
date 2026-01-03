@@ -2,7 +2,7 @@ import {colors} from 'app/style/colors';
 // import {fonts} from 'app/style/fonts';
 // import {spacing} from 'app/style/spacing';
 // import {typography} from 'app/style/typography';
-import {Theme} from 'app/types/theme';
+import {ThemeType} from 'app/types/theme';
 import {Dimensions} from 'react-native';
 import {
   determineBgColorByGlucoseValue,
@@ -12,7 +12,7 @@ import {
 const {width, height} = Dimensions.get('window');
 
 // TODO - move all coolors to be under colors key, so instead of inRangeColor or primaryColor, it will be colors.inRange or colors.primary
-export const theme: Theme = {
+export const theme: ThemeType = {
   primaryColor: colors.purple[500],
   secondaryColor: colors.gray[200],
   screenHeight: height,
@@ -83,5 +83,17 @@ export const theme: Theme = {
       dark: this.getShadowStyles(1, colors.black),
       bright: this.getShadowStyles(2, colors.white),
     };
+  },
+
+  loadBars: {
+    iob: {
+      bolusFill: colors.blue[800],
+      autoFill: colors.blue[400],
+      track: colors.blue[100],
+    },
+    cob: {
+      fill: colors.orange[800],
+      track: colors.orange[200],
+    },
   },
 };

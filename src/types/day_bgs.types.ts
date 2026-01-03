@@ -9,6 +9,15 @@ export interface BgSample {
   direction: TrendDirectionString;
   device: string;
   type: string;
+
+  /**
+   * Optional load context (from Loop/OpenAPS device status).
+   * Values are clamped to >= 0 when visualized.
+   */
+  iob?: number;
+  iobBolus?: number;
+  iobBasal?: number;
+  cob?: number;
 }
 
 /*

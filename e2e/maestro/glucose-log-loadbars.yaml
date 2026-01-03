@@ -1,0 +1,39 @@
+appId: com.shanidms22
+---
+# Glucose log load bars smoke: verify IOB/COB visualization renders.
+#
+# This relies on E2E mode providing deterministic BG fixtures when live data is missing.
+# Selectors are stable `testID`s (see src/constants/E2E_TEST_IDS.ts).
+
+- launchApp:
+    clearState: true
+
+# Deterministic E2E login.
+- extendedWaitUntil:
+    visible:
+      id: login.e2eButton
+    timeout: 30000
+
+- tapOn:
+    id: login.e2eButton
+
+# Wait for Home.
+- extendedWaitUntil:
+    visible:
+      id: screen.home
+    timeout: 30000
+
+# Scroll until any load bars instance is visible.
+- scrollUntilVisible:
+    element:
+      id: loadBars.container
+    direction: DOWN
+    timeout: 20000
+
+# Assert both labels exist for at least one row.
+- assertVisible:
+    id: loadBars.iobText
+- assertVisible:
+    id: loadBars.cobText
+
+- takeScreenshot: glucose-log-loadbars

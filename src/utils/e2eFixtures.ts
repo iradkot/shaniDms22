@@ -53,6 +53,14 @@ export function makeE2EBgSamplesForDate(date: Date): BgSample[] {
       55,
       220,
     );
+
+    // Provide deterministic IOB/COB so LoadBars is exercised in E2E runs.
+    // Values are kept in realistic ranges and vary through the day.
+    const iobTotal = clamp(1.6 + 1.4 * Math.sin(i / 8 + phase), 0, 4);
+    const iobBolus = clamp(iobTotal * 0.75, 0, 4);
+    const iobBasal = clamp(iobTotal - iobBolus, 0, 4);
+    const cob = clamp(35 + 25 * Math.sin(i / 6 + phase / 2), 0, 90);
+
     samples.push({
       sgv,
       date: timestamp,
@@ -61,6 +69,10 @@ export function makeE2EBgSamplesForDate(date: Date): BgSample[] {
       direction: 'Flat',
       device: 'e2e',
       type: 'sgv',
+      iob: iobTotal,
+      iobBolus,
+      iobBasal,
+      cob,
     });
   }
 

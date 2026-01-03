@@ -8,6 +8,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {BgSample} from 'app/types/day_bgs.types';
 import {bgSortFunction} from 'app/utils/bg.utils';
+import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const DEFAULT_BG_COUNT = 1000;
@@ -73,6 +74,45 @@ export const fetchBgDataForDateRange = async (
   } catch (error: any) {
     console.error('Error fetching BG data from Nightscout:', error);
     throw error;
+  }
+};
+
+export const fetchDeviceStatusForDateRange = async (
+  startDate: Date,
+  endDate: Date,
+): Promise<DeviceStatusEntry[]> => {
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+
+  // Device status is usually emitted every ~5 minutes.
+  const count = estimateBgCountForRange(startDate, endDate);
+  const cacheKey: string = `deviceStatus-${startIso}-${endIso}-v1-count=${count}`;
+
+  try {
+    const cached = await AsyncStorage.getItem(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (e) {
+    console.warn('fetchDeviceStatusForDateRange: Failed reading cache', e);
+  }
+
+  const apiUrl = `/api/v1/devicestatus?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${count}`;
+  try {
+    const response = await nightscoutInstance.get<DeviceStatusEntry[]>(apiUrl);
+    const status = response.data ?? [];
+
+    try {
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(status));
+    } catch (e) {
+      console.warn('fetchDeviceStatusForDateRange: Failed caching device status', e);
+    }
+
+    return status;
+  } catch (error: any) {
+    // Device status may not be enabled; treat as optional.
+    console.warn('fetchDeviceStatusForDateRange: Failed to fetch device status', error);
+    return [];
   }
 };
 
