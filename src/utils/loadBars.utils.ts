@@ -7,12 +7,13 @@ import {BgSample} from 'app/types/day_bgs.types';
  * "magic" numbers in components.
  */
 export const LOAD_BARS_CONSTANTS = {
-  rowHeight: 60,
+  rowHeight: 68,
   timeBgSectionWidth: 120,
   deltaSectionWidth: 50,
-  barHeight: 8,
+  barHeight: 6,
   barRadius: 6,
-  interRowGap: 4,
+  /** Gap between label text and its track (small, not tied to spacing scale). */
+  labelToTrackGapPx: 2,
   /** Spec: show a minimum width if value is meaningful (> 0.3). */
   minVisibleValue: 0.3,
   minVisiblePercent: 5,

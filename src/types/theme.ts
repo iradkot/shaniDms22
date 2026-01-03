@@ -76,6 +76,19 @@ export type ThemeType = {
   };
 
   /**
+   * Semantic colors used across the app.
+   *
+   * Note: This is intentionally minimal. Add tokens here as design requirements
+   * become explicit, rather than hardcoding colors in components.
+   */
+  colors: {
+    insulin: string;
+    insulinSecondary: string;
+    carbs: string;
+    barTrack: string;
+  };
+
+  /**
    * Glucose log load bars (IOB/COB) colors.
    */
   loadBars: {

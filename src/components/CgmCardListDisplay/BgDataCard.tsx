@@ -62,6 +62,7 @@ const BgDataCard = ({
       justifyContent: 'flex-start' as const,
       alignItems: 'center' as FlexAlignType,
       paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
       borderBottomWidth: BG_DATA_CARD_CONSTANTS.borderBottomWidth,
       borderBottomColor: theme.borderColor,
       width: '100%',
@@ -168,7 +169,7 @@ const DeltaText = styled.Text`
 const BarsSection = styled.View`
   flex: 1;
   flex-shrink: 1;
-  padding-left: ${({theme}) => theme.spacing.sm}px;
+  padding-left: ${({theme}) => theme.spacing.md}px;
 `;
 
 export default React.memo(

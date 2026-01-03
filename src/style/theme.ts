@@ -5,6 +5,7 @@ import {colors} from 'app/style/colors';
 import {ThemeType} from 'app/types/theme';
 import {Dimensions} from 'react-native';
 import {
+  addOpacity,
   determineBgColorByGlucoseValue,
   shadowStyles,
 } from 'app/style/styling.utils';
@@ -32,6 +33,14 @@ export const theme: ThemeType = {
   shadowColor: colors.black,
   white: colors.white,
   black: colors.black,
+
+  colors: {
+    insulin: colors.blue[800],
+    insulinSecondary: colors.blue[400],
+    carbs: colors.orange[800],
+    barTrack: addOpacity(colors.black, 0.12),
+  },
+
   dimensions: {
     width,
     height: height,
@@ -89,11 +98,11 @@ export const theme: ThemeType = {
     iob: {
       bolusFill: colors.blue[800],
       autoFill: colors.blue[400],
-      track: colors.blue[100],
+      track: addOpacity(colors.black, 0.12),
     },
     cob: {
       fill: colors.orange[800],
-      track: colors.orange[200],
+      track: addOpacity(colors.black, 0.12),
     },
   },
 };

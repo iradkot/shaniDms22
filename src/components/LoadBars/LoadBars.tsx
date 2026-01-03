@@ -62,11 +62,6 @@ const LoadBars: React.FC<Props> = ({
     return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
   }, [cob]);
 
-  const hasAny = safeIobTotal > 0 || safeCob > 0;
-  if (!hasAny) {
-    return null;
-  }
-
   const iobFill = useMemo(
     () => toBarPercent({value: safeIobTotal, referenceMax: maxIobReference}),
     [safeIobTotal, maxIobReference],
@@ -83,26 +78,28 @@ const LoadBars: React.FC<Props> = ({
         <ValueText testID={E2E_TEST_IDS.loadBars.iobText} numberOfLines={1}>
           {formatIob(safeIobTotal)}
         </ValueText>
-        <Track $color={theme.loadBars.iob.track}>
+        <LabelGap />
+        <Track $color={theme.colors.barTrack}>
           {iobFill.percent > 0 ? (
             <FilledWrap $percent={iobFill.percent} $minWidthPx={iobFill.minWidthPx}>
-              <Segment $color={theme.loadBars.iob.bolusFill} $flex={safeIobBolus} />
-              <Segment $color={theme.loadBars.iob.autoFill} $flex={safeIobBasal} />
+              <Segment $color={theme.colors.insulin} $flex={safeIobBolus} />
+              <Segment $color={theme.colors.insulinSecondary} $flex={safeIobBasal} />
             </FilledWrap>
           ) : null}
         </Track>
       </BarRow>
 
-      <Gap />
+      <BlockGap />
 
       <BarRow>
         <ValueText testID={E2E_TEST_IDS.loadBars.cobText} numberOfLines={1}>
           {formatCob(safeCob)}
         </ValueText>
-        <Track $color={theme.loadBars.cob.track}>
+        <LabelGap />
+        <Track $color={theme.colors.barTrack}>
           {cobFill.percent > 0 ? (
             <Fill
-              $color={theme.loadBars.cob.fill}
+              $color={theme.colors.carbs}
               $percent={cobFill.percent}
               $minWidthPx={cobFill.minWidthPx}
             />
@@ -122,6 +119,8 @@ const Container = styled.View`
 
 const BarRow = styled.View`
   flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
 `;
 
 const ValueText = styled.Text<{theme: ThemeType}>`
@@ -135,6 +134,7 @@ const Track = styled.View<{$color: string}>`
   border-radius: ${LOAD_BARS_CONSTANTS.barRadius}px;
   overflow: hidden;
   background-color: ${(props: {$color: string}) => props.$color};
+  width: 100%;
 `;
 
 const FilledWrap = styled.View<{$percent: number; $minWidthPx: number}>`
@@ -160,8 +160,12 @@ const Fill = styled.View<{$color: string; $percent: number; $minWidthPx: number}
   min-width: ${(props: {$minWidthPx: number}) => (props.$minWidthPx > 0 ? props.$minWidthPx : 0)}px;
 `;
 
-const Gap = styled.View`
-  height: ${LOAD_BARS_CONSTANTS.interRowGap}px;
+const LabelGap = styled.View`
+  height: ${LOAD_BARS_CONSTANTS.labelToTrackGapPx}px;
+`;
+
+const BlockGap = styled.View`
+  height: ${(props: {theme: ThemeType}) => props.theme.spacing.xs}px;
 `;
 
 export default React.memo(LoadBars);
