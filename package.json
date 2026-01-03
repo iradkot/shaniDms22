@@ -14,8 +14,7 @@
     "e2e:maestro": "maestro test e2e/maestro",
     "e2e:maestro:android": "maestro test e2e/maestro/login-and-tabs.yaml",
     "e2e:maestro:install:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-maestro-windows.ps1",
-    "e2e:maestro:android:summary": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-maestro-android.ps1",
-    "postinstall": "patch-package"
+    "e2e:maestro:android:summary": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-maestro-android.ps1"
   },
   "dependencies": {
     "@notifee/react-native": "^9.1.8",
@@ -89,7 +88,6 @@
     "jest": "^29.6.3",
     "lodash": "^4.17.21",
     "metro-react-native-babel-preset": "^0.72.1",
-    "patch-package": "^8.0.1",
     "prettier": "2.8.8",
     "react-test-renderer": "19.0.0",
     "typescript": "5.0.4"
