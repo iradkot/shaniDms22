@@ -190,6 +190,36 @@ def resolved_app_identifier
   identifier
 end
 
+def determine_next_build_number(app_identifier:, version_number:, api_key:)
+  current_build = get_build_number(xcodeproj: XCODEPROJ_PATH).to_i
+  latest_remote_build = nil
+
+  if api_key
+    begin
+      latest_remote_build = latest_testflight_build_number(
+        app_identifier: app_identifier,
+        version: version_number,
+        api_key: api_key,
+        platform: "ios"
+      )
+
+      if latest_remote_build
+        UI.message("Latest TestFlight build for #{version_number} is #{latest_remote_build}")
+      else
+        UI.message("No existing TestFlight build found for #{version_number}")
+      end
+    rescue StandardError => e
+      UI.important("Could not fetch latest TestFlight build number: #{e.message}")
+    end
+  else
+    UI.important("Skipping TestFlight build lookup because App Store Connect API key is unavailable")
+  end
+
+  next_build = [current_build, latest_remote_build].compact.max + 1
+  UI.message("Next build number resolved to #{next_build} (project: #{current_build}, TestFlight: #{latest_remote_build || 'none'})")
+  next_build
+end
+
 def provisioning_profile_setup
   UI.message("Using Xcode project at #{XCODEPROJ_PATH}")
   UI.user_error!("Could not find Xcode project at #{XCODEPROJ_PATH}") unless File.exist?(XCODEPROJ_PATH)
@@ -356,9 +386,25 @@ platform :ios do
 
     provisioning_profile_setup
 
-    increment_build_number(xcodeproj: XCODEPROJ_PATH)
+    validate_app_store_connect_credentials!
 
     app_identifier = resolved_app_identifier
+    version_number = get_version_number(
+      xcodeproj: XCODEPROJ_PATH,
+      target: "shaniDms22"
+    )
+    api_key = app_store_api_key
+    next_build_number = determine_next_build_number(
+      app_identifier: app_identifier,
+      version_number: version_number,
+      api_key: api_key
+    )
+
+    increment_build_number(
+      xcodeproj: XCODEPROJ_PATH,
+      build_number: next_build_number
+    )
+
     profile_name = provisioning_profile_name
 
     build_app(
@@ -375,9 +421,8 @@ platform :ios do
       output_directory: "./builds"
     )
 
-    validate_app_store_connect_credentials!
     upload_to_testflight(
-      api_key: app_store_api_key
+      api_key: api_key
     )
   end
 
