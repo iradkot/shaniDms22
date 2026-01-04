@@ -32,12 +32,15 @@ const MainTabsNavigator: React.FC = () => {
           headerShown: false,
           tabBarStyle: {
             backgroundColor: theme.backgroundColor,
-            height: theme.tabBarHeight,
+            // Avoid forcing a fixed height: it can clip the label area,
+            // especially on iOS where safe-area insets affect the tab bar.
+            minHeight: theme.tabBarHeight,
           },
           tabBarIconStyle: {
             color: theme.textColor,
           },
           tabBarActiveTintColor: theme.accentColor,
+          tabBarInactiveTintColor: theme.textColor,
         }}
       >
         <Tab.Screen
