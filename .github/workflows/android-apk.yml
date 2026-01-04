@@ -33,7 +33,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses
+          # `yes` may receive SIGPIPE once sdkmanager stops reading; with `pipefail` that would fail the step.
+          yes 2>/dev/null | sdkmanager --licenses > /dev/null || true
           sdkmanager --install \
             "platform-tools" \
             "platforms;android-35" \
