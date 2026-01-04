@@ -9,6 +9,7 @@ import BgGradient from 'app/components/BgGradient';
 import {FlexAlignType} from 'react-native';
 import LoadBars from 'app/components/LoadBars/LoadBars';
 import {LOAD_BARS_CONSTANTS} from 'app/utils/loadBars.utils';
+import {formatDistanceToNow} from 'date-fns';
 
 const BG_DATA_CARD_CONSTANTS = {
   borderBottomWidth: 1,
@@ -54,7 +55,7 @@ const BgDataCard = ({
     return theme.determineBgColorByGlucoseValue(bgData.sgv);
   }, [bgData.sgv, theme]);
 
-  const formattedDate = useMemo(() => {
+  const formattedAbsoluteTime = useMemo(() => {
     return formatDateToLocaleTimeString(new Date(bgData.date));
   }, [bgData.date]);
 
@@ -78,10 +79,16 @@ const BgDataCard = ({
       width: '100%',
       borderRadius: isFeatured ? theme.borderRadius : BG_DATA_CARD_CONSTANTS.rowBorderRadius,
       marginTop: isFeatured ? theme.spacing.sm : BG_DATA_CARD_CONSTANTS.rowMarginTop,
-      marginHorizontal: isFeatured ? theme.spacing.md : 0,
       height: LOAD_BARS_CONSTANTS.rowHeight,
     };
   }, [theme, variant]);
+
+  const timeLabel = useMemo(() => {
+    if (variant === 'featured') {
+      return `${formatDistanceToNow(new Date(bgData.date))} ago`;
+    }
+    return formattedAbsoluteTime;
+  }, [bgData.date, formattedAbsoluteTime, variant]);
 
   const dropShadowStyle = useMemo(() => {
     return {
@@ -96,7 +103,7 @@ const BgDataCard = ({
   }, [theme.shadowColor]);
 
   return (
-    <DataRowContainer>
+    <DataRowContainer $variant={variant}>
       <BgGradient
         startColor={bgStartColor}
         endColor={bgEndColor}
@@ -108,7 +115,7 @@ const BgDataCard = ({
             </DropShadow>
             <DirectionArrows trendDirection={bgData.direction} />
           </BgAndTrendRow>
-          <TimeText numberOfLines={1}>{formattedDate}</TimeText>
+          <TimeText numberOfLines={1}>{timeLabel}</TimeText>
         </TimeBgSection>
 
         <DeltaSection>
@@ -130,11 +137,13 @@ const BgDataCard = ({
   );
 };
 
-const DataRowContainer = styled.View`
+const DataRowContainer = styled.View<{$variant: 'list' | 'featured'}>`
   flex-direction: row;
   justify-content: flex-start;
   align-items: center;
   width: 100%;
+  padding-left: ${({$variant, theme}) => ($variant === 'featured' ? theme.spacing.md : 0)}px;
+  padding-right: ${({$variant, theme}) => ($variant === 'featured' ? theme.spacing.md : 0)}px;
 `;
 
 const DataRowText = styled.Text<{theme: ThemeType}>`
