@@ -7,7 +7,7 @@ import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/c
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import Collapsable from 'app/components/Collapsable';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
-import BGValueRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestBgValueRow';
+import LatestCgmRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestCgmRow';
 import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import {cloneDeep} from 'lodash';
 import {Theme} from 'app/types/theme';
@@ -101,10 +101,11 @@ const Home: React.FC = () => {
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
         <TimeInRangeRow bgData={bgData} />
-        <BGValueRow
-          prevBgData={latestPrevBgSample}
-          bgData={latestBgSample}
-          getUpdatedBgDataCallback={getUpdatedBgData}
+        <LatestCgmRow
+          latestPrevBgSample={latestPrevBgSample}
+          latestBgSample={latestBgSample}
+          allBgData={listBgData}
+          onRefresh={getUpdatedBgData}
         />
         <Collapsable title={'Stats'}>
           <StatsRow bgData={bgData} />

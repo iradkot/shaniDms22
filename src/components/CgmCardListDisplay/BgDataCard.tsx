@@ -23,9 +23,16 @@ const BG_DATA_CARD_CONSTANTS = {
 
 interface BgDataCardProps {
   bgData: BgSample;
-  prevBgData: BgSample;
+  prevBgData?: BgSample;
   maxIobReference: number;
   maxCobReference: number;
+
+  /**
+   * Presentation variant.
+   * - `list`: compact row used in the CGM log list (default)
+   * - `featured`: used for the latest/primary row (e.g. Home)
+   */
+  variant?: 'list' | 'featured';
 }
 
 const BgDataCard = ({
@@ -33,6 +40,7 @@ const BgDataCard = ({
   prevBgData,
   maxIobReference,
   maxCobReference,
+  variant = 'list',
 }: BgDataCardProps) => {
   const theme = useTheme() as ThemeType;
 
@@ -57,20 +65,23 @@ const BgDataCard = ({
   }, [bgData.sgv, prevBgData]);
 
   const linearGradientStyle = useMemo(() => {
+    const isFeatured = variant === 'featured';
+
     return {
       flexDirection: 'row' as const,
       justifyContent: 'flex-start' as const,
       alignItems: 'center' as FlexAlignType,
       paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.sm,
-      borderBottomWidth: BG_DATA_CARD_CONSTANTS.borderBottomWidth,
+      borderBottomWidth: isFeatured ? 0 : BG_DATA_CARD_CONSTANTS.borderBottomWidth,
       borderBottomColor: theme.borderColor,
       width: '100%',
-      borderRadius: BG_DATA_CARD_CONSTANTS.rowBorderRadius,
-      marginTop: BG_DATA_CARD_CONSTANTS.rowMarginTop,
+      borderRadius: isFeatured ? theme.borderRadius : BG_DATA_CARD_CONSTANTS.rowBorderRadius,
+      marginTop: isFeatured ? theme.spacing.sm : BG_DATA_CARD_CONSTANTS.rowMarginTop,
+      marginHorizontal: isFeatured ? theme.spacing.md : 0,
       height: LOAD_BARS_CONSTANTS.rowHeight,
     };
-  }, [theme]);
+  }, [theme, variant]);
 
   const dropShadowStyle = useMemo(() => {
     return {
