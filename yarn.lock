@@ -3045,10 +3045,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@react-native-community/slider@npm:^5.1.1":
-  version: 5.1.1
-  resolution: "@react-native-community/slider@npm:5.1.1"
-  checksum: 63ab94d8ac22a0e4d7b86f0800283154604e93008dd04103e01a6aa5c56712d74f9b829665cd012ebc4fe29fa31f5a0d7e110bdeaa11bc9b347090f348428021
+"@react-native-community/slider@npm:4.4.3":
+  version: 4.4.3
+  resolution: "@react-native-community/slider@npm:4.4.3"
+  checksum: e02416e763a05bee54967aae1e14ff9c7d76395416dc4ff7c0595a71c9866db35ac0bca8305fa1c7feca3568a327d563f6f14e14d342536257e91d3d4b6d5f3e
   languageName: node
   linkType: hard
 
@@ -3116,17 +3116,20 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@react-native-google-signin/google-signin@latest":
-  version: 16.1.1
-  resolution: "@react-native-google-signin/google-signin@npm:16.1.1"
+"@react-native-google-signin/google-signin@npm:13.3.1":
+  version: 13.3.1
+  resolution: "@react-native-google-signin/google-signin@npm:13.3.1"
   peerDependencies:
-    expo: ">=52.0.40"
+    expo: ">=50.0.0"
     react: "*"
+    react-dom: "*"
     react-native: "*"
   peerDependenciesMeta:
     expo:
       optional: true
-  checksum: a60ae09a7febe59a3d1e412dbcb88d5e892f53ccca15bcf98b4ef03e3aee7eec99569968d22906b1701a4fbcc904af79dfd7c7fbdeb99981dc0d0134e61f1a6f
+    react-dom:
+      optional: true
+  checksum: 10cb250fea7db954b80f18f9d6e5114fde4548c72d3e1be013d5d7b54badd26651296cbe5874e03259ce20ed801b44b787949d5b62bccdb3793580c4894ac350
   languageName: node
   linkType: hard
 
@@ -12010,13 +12013,13 @@ __metadata:
     "@react-native-community/datetimepicker": latest
     "@react-native-community/eslint-config": ^2.0.0
     "@react-native-community/hooks": ^3.0.0
-    "@react-native-community/slider": ^5.1.1
+    "@react-native-community/slider": 4.4.3
     "@react-native-firebase/app": ^22.1.0
     "@react-native-firebase/auth": ^22.1.0
     "@react-native-firebase/firestore": ^22.1.0
     "@react-native-firebase/messaging": ^22.1.0
     "@react-native-firebase/storage": ^22.1.0
-    "@react-native-google-signin/google-signin": latest
+    "@react-native-google-signin/google-signin": 13.3.1
     "@react-native/babel-preset": 0.78.2
     "@react-native/eslint-config": 0.78.2
     "@react-native/metro-config": 0.78.2

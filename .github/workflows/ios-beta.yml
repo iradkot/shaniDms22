@@ -48,16 +48,20 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Fail if both are set (only one should be used)
-          if [[ -n "${APP_STORE_CONNECT_PRIVATE_KEY:-}" && -n "${APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64:-}" ]]; then
-            echo "::error::Both base64 and PEM key vars are set. Keep ONLY APP_STORE_CONNECT_PRIVATE_KEY (recommended)."
+          # Normalize key input: prefer base64 APP_STORE_CONNECT_PRIVATE_KEY, otherwise base64-encode PEM.
+          if [[ -n "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ]]; then
+            SELECTED_KEY="${APP_STORE_CONNECT_PRIVATE_KEY}"
+            echo "Using APP_STORE_CONNECT_PRIVATE_KEY (base64)."
+          elif [[ -n "${APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64:-}" ]]; then
+            echo "Base64-encoding APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 for App Store Connect token."
+            SELECTED_KEY="$(printf "%s" "${APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64}" | base64)"
+          else
+            echo "::error::Missing App Store Connect private key (provide APP_STORE_CONNECT_PRIVATE_KEY or APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64)."
             exit 1
           fi
 
-          if [[ -z "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ]]; then
-            echo "::error::Missing APP_STORE_CONNECT_PRIVATE_KEY (base64 .p8) for ASC token preflight"
-            exit 1
-          fi
+          # Persist normalized key for later steps.
+          echo "APP_STORE_CONNECT_PRIVATE_KEY=${SELECTED_KEY}" >> "$GITHUB_ENV"
 
           echo "Generating JWT via fastlane/spaceship..."
           JWT="$(bundle exec ruby -e '
@@ -71,7 +75,7 @@ jobs:
             duration: 600
           )
           puts t.text
-          ')"
+          ')" 
 
           echo "Calling App Store Connect API..."
           STATUS="$(curl -s -o /dev/null -w "%{http_code}" \
@@ -84,6 +88,10 @@ jobs:
             echo "::error::ASC token FAILED (HTTP ${STATUS}). Most common cause: KEY_ID / ISSUER_ID / .p8 do not belong to the same key."
             exit 1
           fi
+
+      - name: Update Firebase CoreOnly pod
+        working-directory: ios
+        run: bundle exec pod update Firebase/CoreOnly --repo-update
 
       - name: Install CocoaPods dependencies
         working-directory: ios

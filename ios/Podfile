@@ -7,6 +7,7 @@ require Pod::Executable.execute_command('node', ['-p',
   )', __dir__]).strip
 
 platform :ios, min_ios_version_supported
+$FirebaseSDKVersion = '11.12.0'
 prepare_react_native_project!
 
 linkage_env = ENV['USE_FRAMEWORKS']
