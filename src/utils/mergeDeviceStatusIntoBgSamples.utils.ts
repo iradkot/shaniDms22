@@ -19,7 +19,15 @@ function clampNonNegative(value: unknown): number | undefined {
  * Loop values often include their own timestamps (aligned to computation time).
  * We prefer those when available.
  */
-function getDeviceStatusTimestampMs(entry: DeviceStatusEntry): number | undefined {
+/**
+ * Extracts the best-available timestamp in milliseconds for a deviceStatus entry.
+ *
+ * Loop values often include their own timestamps (aligned to computation time).
+ * Prefer those when available.
+ */
+export function getDeviceStatusTimestampMs(
+  entry: DeviceStatusEntry,
+): number | undefined {
   // Loop payload provides timestamps that align to the computed iob/cob time.
   if (typeof entry.loop?.iob?.timestamp === 'string') {
     const ms = Date.parse(entry.loop.iob.timestamp);
@@ -43,7 +51,13 @@ function getDeviceStatusTimestampMs(entry: DeviceStatusEntry): number | undefine
   return undefined;
 }
 
-function extractLoad(entry: DeviceStatusEntry): {
+/**
+ * Extracts load values (IOB/COB) from a deviceStatus entry.
+ *
+ * - Clamps negative values to 0
+ * - Supports Loop payloads under `loop`, OpenAPS under `openaps`, and top-level fallbacks
+ */
+export function extractLoad(entry: DeviceStatusEntry): {
   iob?: number;
   iobBolus?: number;
   iobBasal?: number;

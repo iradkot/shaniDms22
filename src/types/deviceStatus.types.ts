@@ -14,6 +14,16 @@ export type DeviceStatusEntry = {
       cob?: number;
       timestamp?: string;
     };
+
+    /**
+     * Loop prediction payload (when enabled).
+     * Shape varies by uploader/version; this is a best-effort typed subset.
+     */
+    predicted?: {
+      values?: number[];
+      timestamps?: Array<string | number>;
+    };
+
     [key: string]: unknown;
   };
 

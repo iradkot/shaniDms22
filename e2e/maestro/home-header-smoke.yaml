@@ -1,0 +1,68 @@
+appId: com.shanidms22
+---
+# Home header smoke: verify SmartExpandableHeader can expand/collapse
+# and shows predictions + load bars.
+
+- launchApp:
+    clearState: true
+
+# Deterministic E2E login
+- extendedWaitUntil:
+    visible:
+      id: login.e2eButton
+    timeout: 30000
+
+- tapOn:
+    id: login.e2eButton
+
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 30000
+
+- tapOn:
+    id: tab.home
+
+- extendedWaitUntil:
+    visible:
+      id: screen.home
+    timeout: 15000
+
+# Collapsed state: predictions visible
+- extendedWaitUntil:
+    visible:
+      id: homeHeader.toggle
+    timeout: 15000
+
+- assertVisible:
+    id: homeHeader.predictionsRow
+
+- assertVisible:
+    id: homeHeader.predictionLabel
+
+- assertVisible:
+    id: homeHeader.predictionValue0
+
+# Expand and verify load bars + predictions (second line)
+- tapOn:
+    id: homeHeader.toggle
+
+- extendedWaitUntil:
+    visible:
+      id: loadBars.container
+    timeout: 15000
+
+- assertVisible:
+    id: homeHeader.predictionsRow
+
+- assertVisible:
+    id: homeHeader.predictionValue0
+
+# Collapse back
+- tapOn:
+    id: homeHeader.toggle
+
+- assertVisible:
+    id: homeHeader.predictionsRow
+
+- takeScreenshot: home-header-expandable

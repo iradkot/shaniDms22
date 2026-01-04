@@ -77,6 +77,45 @@ export const fetchBgDataForDateRange = async (
   }
 };
 
+/**
+ * Fetches the most recent BG entry from Nightscout.
+ *
+ * PRD: uses `/api/v1/entries.json?count=1`.
+ * Returns `null` when the request fails or no entries are available.
+ */
+export const fetchLatestBgEntry = async (): Promise<BgSample | null> => {
+  try {
+    const response = await nightscoutInstance.get<BgSample[]>(
+      '/api/v1/entries.json?count=1',
+    );
+    return response.data?.[0] ?? null;
+  } catch (error: any) {
+    console.warn('fetchLatestBgEntry: Failed to fetch latest BG entry', error);
+    return null;
+  }
+};
+
+/**
+ * Fetches the most recent device status entry from Nightscout.
+ *
+ * PRD: uses `/api/v1/devicestatus.json?count=1`.
+ * Device status is optional; returns `null` on failure.
+ */
+export const fetchLatestDeviceStatusEntry = async (): Promise<DeviceStatusEntry | null> => {
+  try {
+    const response = await nightscoutInstance.get<DeviceStatusEntry[]>(
+      '/api/v1/devicestatus.json?count=1',
+    );
+    return response.data?.[0] ?? null;
+  } catch (error: any) {
+    console.warn(
+      'fetchLatestDeviceStatusEntry: Failed to fetch latest device status',
+      error,
+    );
+    return null;
+  }
+};
+
 export const fetchDeviceStatusForDateRange = async (
   startDate: Date,
   endDate: Date,

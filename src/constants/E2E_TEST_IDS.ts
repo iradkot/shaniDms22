@@ -85,4 +85,16 @@ export const E2E_TEST_IDS = {
     iobText: 'loadBars.iobText',
     cobText: 'loadBars.cobText',
   },
+
+  /**
+   * Smart expandable header (Home) selectors.
+   */
+  homeHeader: {
+    toggle: 'homeHeader.toggle',
+    predictionsRow: 'homeHeader.predictionsRow',
+    predictionLabel: 'homeHeader.predictionLabel',
+    predictionValue0: 'homeHeader.predictionValue0',
+    predictionValue1: 'homeHeader.predictionValue1',
+    predictionValue2: 'homeHeader.predictionValue2',
+  },
 } as const;

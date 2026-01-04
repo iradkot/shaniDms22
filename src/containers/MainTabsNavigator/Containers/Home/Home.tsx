@@ -8,6 +8,7 @@ import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/component
 import Collapsable from 'app/components/Collapsable';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import LatestCgmRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestCgmRow';
+import SmartExpandableHeader from 'app/containers/MainTabsNavigator/Containers/Home/components/SmartExpandableHeader';
 import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import {cloneDeep} from 'lodash';
 import {Theme} from 'app/types/theme';
@@ -20,6 +21,7 @@ import {useInsulinData} from 'app/hooks/useInsulinData';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {isE2E} from 'app/utils/e2e';
 import {makeE2EBgSamplesForDate} from 'app/utils/e2eFixtures';
+import {getLoadReferences} from 'app/utils/loadBars.utils';
 
 const HomeContainer = styled.View<{theme: Theme}>`
   flex: 1;
@@ -98,15 +100,29 @@ const Home: React.FC = () => {
     return bgData;
   }, [bgData, debouncedCurrentDate]);
 
+  const {maxIobReference, maxCobReference} = useMemo(
+    () => getLoadReferences(listBgData),
+    [listBgData],
+  );
+
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
         <TimeInRangeRow bgData={bgData} />
-        <LatestCgmRow
-          latestPrevBgSample={latestPrevBgSample}
-          latestBgSample={latestBgSample}
-          allBgData={listBgData}
-          onRefresh={getUpdatedBgData}
-        />
+        {isShowingToday ? (
+          <SmartExpandableHeader
+            fallbackLatestBgSample={latestBgSample ?? undefined}
+            latestPrevBgSample={latestPrevBgSample ?? undefined}
+            maxIobReference={maxIobReference}
+            maxCobReference={maxCobReference}
+          />
+        ) : (
+          <LatestCgmRow
+            latestPrevBgSample={latestPrevBgSample}
+            latestBgSample={latestBgSample}
+            allBgData={listBgData}
+            onRefresh={getUpdatedBgData}
+          />
+        )}
         <Collapsable title={'Stats'}>
           <StatsRow bgData={bgData} />
         </Collapsable>
