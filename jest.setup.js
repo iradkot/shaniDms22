@@ -6,6 +6,12 @@ jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock
 global.__reanimatedWorkletInit = () => {};
 
 jest.mock('react-native-vector-icons/Ionicons', () => 'Ionicons');
+jest.mock('react-native-vector-icons/MaterialIcons', () => 'MaterialIcons');
+jest.mock('react-native-linear-gradient', () => {
+  const React = require('react');
+  const {View} = require('react-native');
+  return ({children, ...props}) => React.createElement(View, props, children);
+});
 jest.mock('react-native-drop-shadow', () => {
   const React = require('react');
   return ({children}) => React.createElement(React.Fragment, null, children);

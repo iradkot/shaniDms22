@@ -55,6 +55,84 @@ appId: com.shanidms22
 - assertVisible:
     id: chart.cgmGraph
 
+- assertVisible:
+    id: chart.cgmGraph.fullscreenButton
+
+- tapOn:
+    id: chart.cgmGraph.fullscreenButton
+
+- extendedWaitUntil:
+    visible:
+      id: screen.fullscreen
+    timeout: 15000
+
+- assertVisible:
+    id: screen.fullscreen.title
+
+- assertVisible:
+    id: chart.cgmGraph.fullscreen
+
+# Toggle horizontal fullscreen once (best-effort validation).
+- tapOn:
+    id: screen.fullscreen.rotateButton
+
+- takeScreenshot: charts-home-cgm-fullscreen
+
+- tapOn:
+    id: screen.fullscreen.backButton
+
+- extendedWaitUntil:
+        visible:
+            id: tabs.navigator
+        timeout: 20000
+
+- tapOn:
+        id: tab.home
+
+- extendedWaitUntil:
+        visible:
+            id: screen.home
+        timeout: 20000
+
+# --- CGM rows (Home) ---
+- scrollUntilVisible:
+    element:
+      id: glucoseLog.list
+    direction: DOWN
+    timeout: 20000
+
+- assertVisible:
+    id: glucoseLog.fullscreenButton
+
+- tapOn:
+    id: glucoseLog.fullscreenButton
+
+- extendedWaitUntil:
+    visible:
+      id: screen.fullscreen
+    timeout: 15000
+
+- assertVisible:
+    id: glucoseLog.list
+
+- takeScreenshot: charts-home-rows-fullscreen
+
+- tapOn:
+    id: screen.fullscreen.backButton
+
+- extendedWaitUntil:
+        visible:
+            id: tabs.navigator
+        timeout: 20000
+
+- tapOn:
+        id: tab.home
+
+- extendedWaitUntil:
+        visible:
+            id: screen.home
+        timeout: 20000
+
 - takeScreenshot: charts-home-cgm
 
 # --- AGP (Trends) ---
@@ -74,5 +152,40 @@ appId: com.shanidms22
 
 - assertVisible:
     id: chart.agpSummary
+
+- assertVisible:
+    id: chart.agpSummary.fullscreenButton
+
+- tapOn:
+    id: chart.agpSummary.fullscreenButton
+
+- extendedWaitUntil:
+    visible:
+      id: screen.fullscreen
+    timeout: 15000
+
+- assertVisible:
+    id: chart.agpGraph.fullscreen
+
+- tapOn:
+    id: screen.fullscreen.rotateButton
+
+- takeScreenshot: charts-trends-agp-fullscreen
+
+- tapOn:
+    id: screen.fullscreen.backButton
+
+- extendedWaitUntil:
+        visible:
+            id: tabs.navigator
+        timeout: 20000
+
+- tapOn:
+        id: tab.trends
+
+- extendedWaitUntil:
+        visible:
+            id: screen.trends
+        timeout: 20000
 
 - takeScreenshot: charts-trends-agp

@@ -1,5 +1,6 @@
 import React, {useMemo} from 'react';
 import {View, Dimensions} from 'react-native';
+import {StackActions, useNavigation} from '@react-navigation/native';
 import styled, {useTheme} from 'styled-components/native';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {addOpacity} from 'app/style/styling.utils';
@@ -8,8 +9,20 @@ import {useAGPData} from '../hooks/useAGPData';
 import {formatGlucose, formatPercentage} from '../utils/statistics';
 import AGPChart from './AGPChart';
 import AGPKeyMetrics from './AGPKeyMetrics';
+import FullScreenButton from 'app/components/common-ui/FullScreenButton/FullScreenButton';
+import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 const Container = styled.View``;
+
+const HeaderRow = styled.View`
+  width: 100%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 8px;
+  padding-right: 8px;
+`;
 
 const ErrorText = styled.Text<{color: string}>`
   text-align: center;
@@ -34,11 +47,42 @@ interface AGPSummaryProps {
    * This is intended for Maestro flows to validate chart presence.
    */
   testID?: string;
+
+  /**
+   * Whether to show the fullscreen button.
+   * Defaults to true.
+   */
+  showFullScreenButton?: boolean;
 }
 
-const AGPSummary: React.FC<AGPSummaryProps> = ({bgData, width, height = 260, testID}) => {
+const AGPSummary: React.FC<AGPSummaryProps> = ({
+  bgData,
+  width,
+  height = 260,
+  testID,
+  showFullScreenButton = true,
+}) => {
   const theme = useTheme();
+  const navigation = useNavigation();
   const {agpData, isLoading, error} = useAGPData(bgData);
+
+  const openFullScreen = useMemo(() => {
+    const params = {mode: 'agpGraph' as const, bgData};
+    const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, params);
+
+    return () => {
+      const parent = (navigation as any)?.getParent?.();
+      if (parent?.dispatch) {
+        parent.dispatch(action);
+        return;
+      }
+      if ((navigation as any)?.dispatch) {
+        (navigation as any).dispatch(action);
+        return;
+      }
+      (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, params);
+    };
+  }, [bgData, navigation]);
 
   const computedWidth = useMemo(() => {
     const screenWidth = width ?? Dimensions.get('window').width;
@@ -104,6 +148,15 @@ const AGPSummary: React.FC<AGPSummaryProps> = ({bgData, width, height = 260, tes
 
   return (
     <Container testID={testID}>
+      {showFullScreenButton ? (
+        <HeaderRow>
+          <FullScreenButton
+            testID={E2E_TEST_IDS.charts.agpSummaryFullScreenButton}
+            onPress={openFullScreen}
+          />
+        </HeaderRow>
+      ) : null}
+
       <View style={{marginBottom: theme.spacing.md}}>
         <AGPKeyMetrics metrics={keyMetrics} />
       </View>

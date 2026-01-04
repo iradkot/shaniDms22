@@ -1,4 +1,4 @@
-import React, {useEffect, useRef} from 'react';
+import React, {useEffect, useMemo, useRef} from 'react';
 import {View} from 'react-native';
 import Svg, {G, Line} from 'react-native-svg';
 import styled from 'styled-components/native';
@@ -17,7 +17,11 @@ import {formattedFoodItemDTO} from 'app/types/food.types';
 import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
 import SgvTooltip from 'app/components/charts/CgmGraph/components/Tooltips/SgvTooltip';
 import {useTheme} from 'styled-components/native';
+import FullScreenButton from 'app/components/common-ui/FullScreenButton/FullScreenButton';
+import {StackActions, useNavigation} from '@react-navigation/native';
+import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {ThemeType} from 'app/types/theme';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {InsulinDataEntry} from 'app/types/insulin.types';
 import BolusItemsRenderer from 'app/components/charts/CgmGraph/components/Bolus/BolusItemsRenderer';
 import {
@@ -41,6 +45,12 @@ interface Props {
    * We keep this optional so the chart can be reused in lists/cards without forcing unique IDs.
    */
   testID?: string;
+
+  /**
+   * Whether to show the fullscreen button.
+   * Defaults to true.
+   */
+  showFullScreenButton?: boolean;
 }
 
 const StyledSvg = styled(Svg)`
@@ -48,12 +58,21 @@ const StyledSvg = styled(Svg)`
   width: 100%;
 `;
 
-const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulinData, testID}) => {
+const CGMGraph: React.FC<Props> = ({
+  bgSamples,
+  width,
+  height,
+  foodItems,
+  insulinData,
+  testID,
+  showFullScreenButton = true,
+}) => {
   const containerRef = useRef<View>(null);
   const [graphStyleContextValue, setGraphStyleContextValue] =
     useGraphStyleContext(width, height, bgSamples);
   const touchContext = useTouchContext();
   const theme = useTheme() as ThemeType;
+  const navigation = useNavigation();
 
   const {
     isTouchActive,
@@ -90,6 +109,32 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
       ? findClosestBgSample(touchTimeMs, bgSamples)
       : null;
 
+  const fullScreenPayload = useMemo(
+    () => ({
+      mode: 'cgmGraph' as const,
+      bgSamples,
+      foodItems,
+      insulinData,
+    }),
+    [bgSamples, foodItems, insulinData],
+  );
+
+  const openFullScreen = useMemo(() => {
+    const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
+    return () => {
+      const parent = (navigation as any)?.getParent?.();
+      if (parent?.dispatch) {
+        parent.dispatch(action);
+        return;
+      }
+      if ((navigation as any)?.dispatch) {
+        (navigation as any).dispatch(action);
+        return;
+      }
+      (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
+    };
+  }, [fullScreenPayload, navigation]);
+
   const closestBolus =
     isTouchActive && touchTimeMs != null && insulinData?.length
       ? findClosestBolus(touchTimeMs, insulinData)
@@ -111,7 +156,7 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
   return (
     <GraphStyleContext.Provider
       value={[graphStyleContextValue, setGraphStyleContextValue]}>
-      <View ref={containerRef} style={{width, height}} testID={testID}>
+      <GraphContainer ref={containerRef} style={{width, height}} testID={testID}>
         <StyledSvg
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -191,9 +236,30 @@ const CGMGraph: React.FC<Props> = ({bgSamples, width, height, foodItems, insulin
             )}
           </G>
         </StyledSvg>
-      </View>
+
+        {showFullScreenButton ? (
+          <FullScreenButtonOverlay>
+            <FullScreenButton
+              testID={E2E_TEST_IDS.charts.cgmGraphFullScreenButton}
+              onPress={openFullScreen}
+            />
+          </FullScreenButtonOverlay>
+        ) : null}
+      </GraphContainer>
     </GraphStyleContext.Provider>
   );
 };
+
+const GraphContainer = styled.View`
+  position: relative;
+`;
+
+const FullScreenButtonOverlay = styled.View`
+  position: absolute;
+  top: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  right: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  z-index: 100;
+  elevation: 10;
+`;
 
 export default CGMGraph;

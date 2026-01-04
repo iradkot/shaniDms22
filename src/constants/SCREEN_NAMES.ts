@@ -13,3 +13,6 @@ export const EDIT_SPORT_ITEM_SCREEN: string = 'EditSportItemScreen';
 export const Food_Tracking_TAB_SCREEN: string = 'FoodTrackingTabScreen';
 export const ADD_FOOD_ITEM_SCREEN: string = 'AddFoodItemScreen';
 export const EDIT_FOOD_ITEM_SCREEN: string = 'EditFoodItemScreen';
+
+// Fullscreen visualizations
+export const FULL_SCREEN_VIEW_SCREEN: string = 'FullScreenViewScreen';

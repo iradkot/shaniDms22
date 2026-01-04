@@ -52,7 +52,11 @@ export const E2E_TEST_IDS = {
   charts: {
     cgmSection: 'chart.cgmSection',
     cgmGraph: 'chart.cgmGraph',
+    cgmGraphFullScreenButton: 'chart.cgmGraph.fullscreenButton',
+    cgmGraphFullScreen: 'chart.cgmGraph.fullscreen',
     agpSummary: 'chart.agpSummary',
+    agpSummaryFullScreenButton: 'chart.agpSummary.fullscreenButton',
+    agpGraphFullScreen: 'chart.agpGraph.fullscreen',
   },
 
   /**
@@ -60,6 +64,14 @@ export const E2E_TEST_IDS = {
    */
   glucoseLog: {
     list: 'glucoseLog.list',
+    fullScreenButton: 'glucoseLog.fullscreenButton',
+  },
+
+  fullscreen: {
+    screen: 'screen.fullscreen',
+    title: 'screen.fullscreen.title',
+    backButton: 'screen.fullscreen.backButton',
+    rotateButton: 'screen.fullscreen.rotateButton',
   },
 
   /**

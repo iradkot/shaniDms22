@@ -27,6 +27,8 @@ jest.mock('app/containers/initScreen', () => 'AppInitScreen');
 
 jest.mock('app/containers/MainTabsNavigator/MainTabsNavigator', () => 'MainTabsNavigator');
 
+jest.mock('app/containers/FullScreen/FullScreenViewScreen', () => 'FullScreenViewScreen');
+
 jest.mock('app/containers/forms/AddNotificationScreen/AddNotificationScreen', () => 'AddNotificationScreen');
 
 jest.mock('app/containers/forms/EditNotificationScreen/EditNotificationScreen', () => 'EditNotificationScreen');

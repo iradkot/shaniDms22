@@ -27,6 +27,7 @@ import {
   EDIT_SPORT_ITEM_SCREEN,
   LOGIN_SCREEN,
   MAIN_TAB_NAVIGATOR,
+  FULL_SCREEN_VIEW_SCREEN,
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 import AddNotificationScreen from './containers/forms/AddNotificationScreen/AddNotificationScreen';
@@ -47,6 +48,7 @@ import AddSportItem from 'app/containers/forms/Sport/AddSportItem';
 import {SportItemsProvider} from 'app/contexts/SportItemsContext';
 import EditFoodItemScreen from './containers/forms/Food/EditFoodItemScreen';
 import EditSportItem from './containers/forms/Sport/EditSportItem';
+import FullScreenViewScreen from 'app/containers/FullScreen/FullScreenViewScreen';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TouchProvider} from './components/charts/CgmGraph/contextStores/TouchContext';
 import {isE2E} from 'app/utils/e2e';
@@ -203,6 +205,11 @@ const App: () => React.ReactElement = () => {
                             options={{headerShown: true, headerTitle: ''}}
                             name={EDIT_FOOD_ITEM_SCREEN}
                             component={EditFoodItemScreen}
+                          />
+                          <Stack.Screen
+                            options={{headerShown: false}}
+                            name={FULL_SCREEN_VIEW_SCREEN}
+                            component={FullScreenViewScreen}
                           />
                         </Stack.Navigator>
                       </NavigationContainer>
