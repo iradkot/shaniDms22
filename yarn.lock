@@ -3045,10 +3045,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@react-native-community/slider@npm:^5.1.1":
-  version: 5.1.1
-  resolution: "@react-native-community/slider@npm:5.1.1"
-  checksum: 63ab94d8ac22a0e4d7b86f0800283154604e93008dd04103e01a6aa5c56712d74f9b829665cd012ebc4fe29fa31f5a0d7e110bdeaa11bc9b347090f348428021
+"@react-native-community/slider@npm:4.4.3":
+  version: 4.4.3
+  resolution: "@react-native-community/slider@npm:4.4.3"
+  checksum: e02416e763a05bee54967aae1e14ff9c7d76395416dc4ff7c0595a71c9866db35ac0bca8305fa1c7feca3568a327d563f6f14e14d342536257e91d3d4b6d5f3e
   languageName: node
   linkType: hard
 
@@ -12013,7 +12013,7 @@ __metadata:
     "@react-native-community/datetimepicker": latest
     "@react-native-community/eslint-config": ^2.0.0
     "@react-native-community/hooks": ^3.0.0
-    "@react-native-community/slider": ^5.1.1
+    "@react-native-community/slider": 4.4.3
     "@react-native-firebase/app": ^22.1.0
     "@react-native-firebase/auth": ^22.1.0
     "@react-native-firebase/firestore": ^22.1.0
