@@ -12,6 +12,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free disk space (runner)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Disk before:"; df -h
+          # GitHub hosted runners can be tight on free space, and the Android emulator
+          # fails to start with: "Your device does not have enough disk space to run avd".
+          # Remove large toolchains we don't use in this job.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift || true
+          sudo apt-get clean || true
+          echo "Disk after:"; df -h
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -60,6 +72,7 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -accel off -gpu swiftshader_indirect -partition-size 2048
           script: |
             set -euo pipefail
             APK_PATH=$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)
