@@ -289,6 +289,19 @@ def app_store_api_key
   )
 end
 
+def next_testflight_build_number(app_identifier:)
+  latest = latest_testflight_build_number(
+    app_identifier: app_identifier,
+    api_key: app_store_api_key,
+    platform: "ios"
+  )
+  return nil if latest.nil?
+  (latest.to_i + 1).to_s
+rescue StandardError => e
+  UI.important("Unable to fetch latest TestFlight build number: #{e}. Falling back to local increment.")
+  nil
+end
+
 def validate_app_store_connect_credentials!
   key_id = ENV["APP_STORE_CONNECT_KEY_ID"].to_s.strip
   issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"].to_s.strip
@@ -356,7 +369,11 @@ platform :ios do
 
     provisioning_profile_setup
 
-    increment_build_number(xcodeproj: XCODEPROJ_PATH)
+    build_number = next_testflight_build_number(app_identifier: resolved_app_identifier)
+    increment_build_number(
+      xcodeproj: XCODEPROJ_PATH,
+      build_number: build_number
+    )
 
     app_identifier = resolved_app_identifier
     profile_name = provisioning_profile_name
