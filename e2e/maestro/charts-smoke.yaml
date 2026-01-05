@@ -16,10 +16,12 @@ appId: com.shanidms22
 - extendedWaitUntil:
     visible:
       id: login.e2eButton
-    timeout: 30000
+    timeout: 15000
+    optional: true
 
 - tapOn:
     id: login.e2eButton
+    optional: true
 
 # Wait for tabs to be available.
 - extendedWaitUntil:

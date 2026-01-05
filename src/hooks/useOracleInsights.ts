@@ -172,7 +172,6 @@ export function useOracleInsights(params?: {
   }, [events, selectedEventTs]);
 
   const insights = useMemo(() => {
-    if (!history.length) return null;
     if (!selectedEvent) return null;
 
     const anchor: BgSample = {
