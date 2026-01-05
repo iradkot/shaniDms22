@@ -1,0 +1,74 @@
+appId: com.shanidms22
+---
+# Oracle / Events smoke: pick an event, ensure previous events list renders.
+
+- launchApp:
+    clearState: true
+
+# Deterministic E2E login.
+- extendedWaitUntil:
+    visible:
+      id: login.e2eButton
+    timeout: 30000
+
+- tapOn:
+    id: login.e2eButton
+
+# Wait for tabs.
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 30000
+
+# Go to Oracle tab.
+- tapOn:
+    id: tab.oracle
+
+- extendedWaitUntil:
+    visible:
+      id: screen.oracle
+    timeout: 30000
+
+# Recent events list should appear.
+- extendedWaitUntil:
+    visible:
+      id: oracle.events.list
+    timeout: 30000
+
+# Tap first event.
+- tapOn:
+    id: oracle.events.row.0
+
+# Ensure chart renders (existing selector).
+- extendedWaitUntil:
+    visible:
+      id: chart.oracle.ghostGraph
+    timeout: 30000
+
+# Ensure strategies section appears.
+- extendedWaitUntil:
+    visible:
+      id: oracle.strategies.list
+    timeout: 30000
+
+- extendedWaitUntil:
+    visible:
+      id: oracle.disclaimer
+    timeout: 30000
+
+# Ensure previous events section appears.
+- extendedWaitUntil:
+    visible:
+      id: oracle.previous.list
+    timeout: 30000
+
+# Tap first previous event row to open details.
+- tapOn:
+    id: oracle.previous.row.0
+
+- extendedWaitUntil:
+    visible:
+      text: "Event details"
+    timeout: 30000
+
+- takeScreenshot: oracle-events

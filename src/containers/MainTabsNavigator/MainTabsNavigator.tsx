@@ -13,15 +13,29 @@ import {theme} from 'app/style/theme';
 import FoodTracker from 'app/containers/MainTabsNavigator/Containers/FoodTracker/FoodTracker';
 import SportTracker from './Containers/SportTracker/SportTracker';
 import Trends from 'app/containers/MainTabsNavigator/Containers/Trends';
+import Oracle from 'app/containers/MainTabsNavigator/Containers/Oracle';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import SettingsNavigator from 'app/containers/MainTabsNavigator/Containers/Settings/SettingsNavigator';
+import {useTabsSettings} from 'app/contexts/TabsSettingsContext';
 
 const Tab = createBottomTabNavigator();
 
 const MainTabsNavigator: React.FC = () => {
+  const {settings} = useTabsSettings();
+
   const makeTabBarButton =
     (testID: string) => (props: BottomTabBarButtonProps) => (
-      <Pressable {...props} testID={testID} accessibilityLabel={testID} />
+      <Pressable
+        {...(props as any)}
+        testID={testID}
+        accessibilityLabel={testID}
+      />
     );
+
+  const hiddenTabOptions = {
+    tabBarButton: () => null,
+    tabBarItemStyle: {display: 'none' as const},
+  };
 
   return (
     <View testID={E2E_TEST_IDS.tabs.navigator} style={{flex: 1}}>
@@ -48,7 +62,7 @@ const MainTabsNavigator: React.FC = () => {
           component={Home}
           options={{
             headerShown: false,
-            tabBarIcon: ({color, size}) => (
+            tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="home" color={color} size={size} />
             ),
             tabBarLabel: 'Home',
@@ -60,7 +74,7 @@ const MainTabsNavigator: React.FC = () => {
           name="TRENDS"
           component={Trends}
           options={{
-            tabBarIcon: ({color, size}) => (
+            tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="timeline" color={color} size={size} />
             ),
             tabBarLabel: 'Trends',
@@ -68,11 +82,39 @@ const MainTabsNavigator: React.FC = () => {
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.trends),
           }}
         />
+
+        <Tab.Screen
+          name={SCREEN_NAMES.ORACLE_TAB_SCREEN}
+          component={Oracle}
+          options={{
+            tabBarIcon: ({color, size}: {color: string; size: number}) => (
+              <MaterialIcons name="insights" color={color} size={size} />
+            ),
+            tabBarLabel: 'Oracle',
+            tabBarTestID: E2E_TEST_IDS.tabs.oracle,
+            tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.oracle),
+          }}
+        />
+
+        <Tab.Screen
+          name={SCREEN_NAMES.SETTINGS_TAB_SCREEN}
+          component={SettingsNavigator}
+          options={{
+            tabBarIcon: ({color, size}: {color: string; size: number}) => (
+              <MaterialIcons name="settings" color={color} size={size} />
+            ),
+            tabBarLabel: 'Settings',
+            tabBarTestID: E2E_TEST_IDS.tabs.settings,
+            tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.settings),
+          }}
+        />
+
         <Tab.Screen
           name={SCREEN_NAMES.Food_Tracking_TAB_SCREEN}
           component={FoodTracker}
           options={{
-            tabBarIcon: ({color, size}) => (
+            ...(settings.showFoodTracking ? {} : hiddenTabOptions),
+            tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="fastfood" color={color} size={size} />
             ),
             tabBarLabel: 'Food Tracking',
@@ -84,7 +126,8 @@ const MainTabsNavigator: React.FC = () => {
           name={SCREEN_NAMES.SPORT_TRACKING_TAB_SCREEN}
           component={SportTracker}
           options={{
-            tabBarIcon: ({color, size}) => (
+            ...(settings.showSportTracking ? {} : hiddenTabOptions),
+            tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="directions-run" color={color} size={size} />
             ),
             tabBarLabel: 'Sport Tracking',
@@ -96,7 +139,8 @@ const MainTabsNavigator: React.FC = () => {
           name={SCREEN_NAMES.NOTIFICATION_TAB_SCREEN}
           component={NotificationsManager}
           options={{
-            tabBarIcon: ({color, size}) => (
+            ...(settings.showNotifications ? {} : hiddenTabOptions),
+            tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <ADIcon name="notification" color={color} size={size} />
             ),
             tabBarLabel: 'Notifications',

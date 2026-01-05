@@ -123,10 +123,10 @@ const Home: React.FC = () => {
             onRefresh={getUpdatedBgData}
           />
         )}
-        <Collapsable title={'Stats'}>
+        <Collapsable title={'BG Stats'}>
           <StatsRow bgData={bgData} />
         </Collapsable>
-        <Collapsable title={'Insulin stats'}>
+        <Collapsable title={'Insulin Stats'}>
           <InsulinStatsRow
             insulinData={insulinData}
             basalProfileData={basalProfileData}

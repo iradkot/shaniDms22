@@ -1,0 +1,48 @@
+appId: com.shanidms22
+---
+# Nightscout scan: verify the app is using live Nightscout polling
+# (not the deterministic E2E fallback snapshot).
+#
+# This uses the app's built-in Nightscout base URL + api-secret.
+
+- launchApp:
+    clearState: true
+
+# Deterministic E2E login.
+- extendedWaitUntil:
+    visible:
+      id: login.e2eButton
+    timeout: 30000
+
+- tapOn:
+    id: login.e2eButton
+
+# Wait for Home.
+- extendedWaitUntil:
+    visible:
+      id: screen.home
+    timeout: 30000
+
+# Assert we're driven by live Nightscout snapshot.
+# If this fails, the app likely fell back to the E2E snapshot (no live data).
+- extendedWaitUntil:
+    visible:
+      id: homeHeader.source.nightscout
+    timeout: 30000
+
+- assertNotVisible:
+    id: homeHeader.source.fallback
+
+# Sanity: header is interactive and expands.
+- assertVisible:
+    id: homeHeader.toggle
+
+- tapOn:
+    id: homeHeader.toggle
+
+- extendedWaitUntil:
+    visible:
+      id: loadBars.container
+    timeout: 15000
+
+- takeScreenshot: nightscout-scan

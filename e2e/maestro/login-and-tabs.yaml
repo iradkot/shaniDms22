@@ -35,6 +35,14 @@ appId: com.shanidms22
     timeout: 15000
 - assertVisible: "Data Range"
 
+# Settings
+- tapOn:
+        id: tab.settings
+- extendedWaitUntil:
+        visible:
+            id: screen.settings
+        timeout: 15000
+
 # Food
 - tapOn:
     id: tab.food

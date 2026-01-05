@@ -1,0 +1,67 @@
+appId: com.shanidms22
+---
+# Tabs visibility: verify Settings toggles hide/show optional tabs.
+
+- launchApp:
+    clearState: true
+
+# Deterministic E2E login.
+- extendedWaitUntil:
+    visible:
+      id: login.e2eButton
+    timeout: 30000
+
+- tapOn:
+    id: login.e2eButton
+
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 30000
+
+# Defaults should be ON after clearState.
+- assertVisible:
+    id: tab.food
+- assertVisible:
+    id: tab.sport
+- assertVisible:
+    id: tab.notifications
+
+# Go to Settings.
+- tapOn:
+    id: tab.settings
+- extendedWaitUntil:
+    visible:
+      id: screen.settings
+    timeout: 15000
+
+# Turn OFF Food + Sport + Notifications.
+- tapOn:
+    id: settings.toggle.foodTab
+- tapOn:
+    id: settings.toggle.sportTab
+- tapOn:
+    id: settings.toggle.notificationsTab
+
+# Tabs should disappear from the tab bar.
+- assertNotVisible:
+    id: tab.food
+- assertNotVisible:
+    id: tab.sport
+- assertNotVisible:
+    id: tab.notifications
+
+# Turn them back ON.
+- tapOn:
+    id: settings.toggle.foodTab
+- tapOn:
+    id: settings.toggle.sportTab
+- tapOn:
+    id: settings.toggle.notificationsTab
+
+- assertVisible:
+    id: tab.food
+- assertVisible:
+    id: tab.sport
+- assertVisible:
+    id: tab.notifications

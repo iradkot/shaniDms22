@@ -53,6 +53,8 @@ Maestro flows live under `e2e/maestro/`.
 
 - Smoke flow: `e2e/maestro/login-and-tabs.yaml`
 - Charts smoke flow: `e2e/maestro/charts-smoke.yaml`
+- Nightscout scan flow: `e2e/maestro/nightscout-scan.yaml`
+- Oracle events flow: `e2e/maestro/oracle-events.yaml`
 
 ## Run Locally (Windows)
 
@@ -100,11 +102,15 @@ Install the APK:
 
 `$apk = Get-ChildItem -Path .\app\build\outputs\apk\release\*.apk | Select-Object -First 1; adb install -r $apk.FullName`
 
-### 4) Run the smoke flow
+### 4) Run the Maestro flows
 
 From the repo root:
 
 `yarn e2e:maestro:android`
+
+Run only the smoke flow (login + tabs):
+
+`yarn e2e:maestro:android:smoke`
 
 Or run with the repo wrapper (recommended; includes summary + step analytics):
 
@@ -112,7 +118,7 @@ Or run with the repo wrapper (recommended; includes summary + step analytics):
 
 Or directly:
 
-`maestro test e2e/maestro/login-and-tabs.yaml`
+`maestro test e2e/maestro`
 
 Or use the repo helper script (build + install + run):
 

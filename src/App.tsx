@@ -30,6 +30,7 @@ import {
   FULL_SCREEN_VIEW_SCREEN,
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
+import {TabsSettingsProvider} from 'app/contexts/TabsSettingsContext';
 import AddNotificationScreen from './containers/forms/AddNotificationScreen/AddNotificationScreen';
 import EditNotificationScreen from 'app/containers/forms/EditNotificationScreen/EditNotificationScreen';
 import { getApp } from '@react-native-firebase/app';
@@ -163,56 +164,58 @@ const App: () => React.ReactElement = () => {
                 <AppContainer>
                   <SafeAreaView style={{flex: 1}}>
                     <SportItemsProvider>
-                      <NavigationContainer>
-                        <Stack.Navigator screenOptions={{headerShown: false}}>
-                          <Stack.Screen name="initScreen" component={AppInitScreen} />
-                          <Stack.Screen name={LOGIN_SCREEN} component={Login} />
-                          <Stack.Screen
-                            name={MAIN_TAB_NAVIGATOR}
-                            component={MainTabsNavigator}
-                          />
-                          <Stack.Screen
-                            options={{headerShown: true, headerTitle: ''}}
-                            name={ADD_NOTIFICATION_SCREEN}
-                            component={AddNotificationScreen}
-                          />
-                          <Stack.Screen
-                            options={{headerShown: true, headerTitle: ''}}
-                            name={EDIT_NOTIFICATION_SCREEN}
-                            component={EditNotificationScreen}
-                          />
-                          <Stack.Screen
-                            options={{headerShown: true, headerTitle: ''}}
-                            name={ADD_FOOD_ITEM_SCREEN}
-                            component={AddFoodItemScreen}
-                          />
-                          <Stack.Screen
-                            options={{headerShown: true, headerTitle: ''}}
-                            name={CAMERA_SCREEN}
-                            component={CameraScreen}
-                          />
-                          <Stack.Screen
-                            options={{headerShown: true, headerTitle: ''}}
-                            name={ADD_SPORT_ITEM_SCREEN}
-                            component={AddSportItem}
-                          />
-                          <Stack.Screen
-                            options={{headerShown: true, headerTitle: ''}}
-                            name={EDIT_SPORT_ITEM_SCREEN}
-                            component={EditSportItem}
-                          />
-                          <Stack.Screen
-                            options={{headerShown: true, headerTitle: ''}}
-                            name={EDIT_FOOD_ITEM_SCREEN}
-                            component={EditFoodItemScreen}
-                          />
-                          <Stack.Screen
-                            options={{headerShown: false}}
-                            name={FULL_SCREEN_VIEW_SCREEN}
-                            component={FullScreenViewScreen}
-                          />
-                        </Stack.Navigator>
-                      </NavigationContainer>
+                      <TabsSettingsProvider>
+                        <NavigationContainer>
+                          <Stack.Navigator screenOptions={{headerShown: false}}>
+                            <Stack.Screen name="initScreen" component={AppInitScreen} />
+                            <Stack.Screen name={LOGIN_SCREEN} component={Login} />
+                            <Stack.Screen
+                              name={MAIN_TAB_NAVIGATOR}
+                              component={MainTabsNavigator}
+                            />
+                            <Stack.Screen
+                              options={{headerShown: true, headerTitle: ''}}
+                              name={ADD_NOTIFICATION_SCREEN}
+                              component={AddNotificationScreen}
+                            />
+                            <Stack.Screen
+                              options={{headerShown: true, headerTitle: ''}}
+                              name={EDIT_NOTIFICATION_SCREEN}
+                              component={EditNotificationScreen}
+                            />
+                            <Stack.Screen
+                              options={{headerShown: true, headerTitle: ''}}
+                              name={ADD_FOOD_ITEM_SCREEN}
+                              component={AddFoodItemScreen}
+                            />
+                            <Stack.Screen
+                              options={{headerShown: true, headerTitle: ''}}
+                              name={CAMERA_SCREEN}
+                              component={CameraScreen}
+                            />
+                            <Stack.Screen
+                              options={{headerShown: true, headerTitle: ''}}
+                              name={ADD_SPORT_ITEM_SCREEN}
+                              component={AddSportItem}
+                            />
+                            <Stack.Screen
+                              options={{headerShown: true, headerTitle: ''}}
+                              name={EDIT_SPORT_ITEM_SCREEN}
+                              component={EditSportItem}
+                            />
+                            <Stack.Screen
+                              options={{headerShown: true, headerTitle: ''}}
+                              name={EDIT_FOOD_ITEM_SCREEN}
+                              component={EditFoodItemScreen}
+                            />
+                            <Stack.Screen
+                              options={{headerShown: false}}
+                              name={FULL_SCREEN_VIEW_SCREEN}
+                              component={FullScreenViewScreen}
+                            />
+                          </Stack.Navigator>
+                        </NavigationContainer>
+                      </TabsSettingsProvider>
                     </SportItemsProvider>
                   </SafeAreaView>
                 </AppContainer>

@@ -68,6 +68,10 @@ const SmartExpandableHeader: React.FC<{
 
   const {snapshot} = useLatestNightscoutSnapshot({pollingEnabled: !expanded});
 
+  const usingE2EFallback = useMemo(() => {
+    return Boolean(isE2E && !snapshot && fallbackLatestBgSample);
+  }, [fallbackLatestBgSample, snapshot]);
+
   const onToggleExpanded = useCallback(() => {
     setExpanded(v => !v);
   }, []);
@@ -145,6 +149,16 @@ const SmartExpandableHeader: React.FC<{
 
   return (
     <Container>
+      {isE2E ? (
+        <E2EHidden>
+          {snapshot ? (
+            <E2EHidden testID={E2E_TEST_IDS.homeHeader.sourceNightscout} />
+          ) : usingE2EFallback ? (
+            <E2EHidden testID={E2E_TEST_IDS.homeHeader.sourceFallback} />
+          ) : null}
+        </E2EHidden>
+      ) : null}
+
       <Pressable
         testID={E2E_TEST_IDS.homeHeader.toggle}
         onPress={onToggleExpanded}>
@@ -245,6 +259,13 @@ const SmartExpandableHeader: React.FC<{
     </Container>
   );
 };
+
+const E2EHidden = styled.View`
+  position: absolute;
+  opacity: 0;
+  width: 0px;
+  height: 0px;
+`;
 
 function gradientStyle(theme: ThemeType) {
   return {

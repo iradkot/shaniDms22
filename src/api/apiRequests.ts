@@ -78,6 +78,107 @@ export const fetchBgDataForDateRange = async (
 };
 
 /**
+ * Fetch BG entries for a range without writing to AsyncStorage.
+ *
+ * Oracle PRD: the Oracle feature maintains its own stable local cache and
+ * performs incremental sync; we avoid polluting the generic date-range cache
+ * keys (which would change on every run for rolling windows).
+ */
+export const fetchBgDataForDateRangeUncached = async (
+  startDate: Date,
+  endDate: Date,
+  options?: {count?: number},
+): Promise<BgSample[]> => {
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+  const count =
+    typeof options?.count === 'number'
+      ? options.count
+      : estimateBgCountForRange(startDate, endDate);
+
+  const apiUrl: string = `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=${count}`;
+  try {
+    const response = await nightscoutInstance.get<BgSample[]>(apiUrl);
+    const bgData: BgSample[] = response.data ?? [];
+    return bgData.sort(bgSortFunction(false));
+  } catch (error: any) {
+    console.warn('fetchBgDataForDateRangeUncached: Failed to fetch BG data', error);
+    return [];
+  }
+};
+
+const DEFAULT_TREATMENTS_COUNT = 1000;
+const MAX_TREATMENTS_COUNT = 50000;
+const EXPECTED_TREATMENTS_PER_DAY = 80;
+
+const estimateTreatmentsCountForRange = (startDate: Date, endDate: Date) => {
+  const days = Math.max(
+    1,
+    Math.floor((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1,
+  );
+
+  const estimate = Math.ceil(days * EXPECTED_TREATMENTS_PER_DAY * 1.2);
+  return Math.min(MAX_TREATMENTS_COUNT, Math.max(DEFAULT_TREATMENTS_COUNT, estimate));
+};
+
+/**
+ * Fetch treatments for a range without writing to AsyncStorage.
+ *
+ * Oracle PRD: the Oracle feature maintains its own stable local cache.
+ */
+export const fetchTreatmentsForDateRangeUncached = async (
+  startDate: Date,
+  endDate: Date,
+  options?: {count?: number},
+): Promise<any[]> => {
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+  const count =
+    typeof options?.count === 'number'
+      ? options.count
+      : estimateTreatmentsCountForRange(startDate, endDate);
+
+  const apiUrl = `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${count}`;
+  try {
+    const response = await nightscoutInstance.get<any[]>(apiUrl);
+    return response.data ?? [];
+  } catch (error: any) {
+    console.warn('fetchTreatmentsForDateRangeUncached: Failed to fetch treatments', error);
+    return [];
+  }
+};
+
+/**
+ * Fetch device status entries for a range without writing to AsyncStorage.
+ *
+ * Device status is optional; returns [] on failure.
+ */
+export const fetchDeviceStatusForDateRangeUncached = async (
+  startDate: Date,
+  endDate: Date,
+  options?: {count?: number},
+): Promise<DeviceStatusEntry[]> => {
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+  const count =
+    typeof options?.count === 'number'
+      ? options.count
+      : estimateBgCountForRange(startDate, endDate);
+
+  const apiUrl = `/api/v1/devicestatus?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${count}`;
+  try {
+    const response = await nightscoutInstance.get<DeviceStatusEntry[]>(apiUrl);
+    return response.data ?? [];
+  } catch (error: any) {
+    console.warn(
+      'fetchDeviceStatusForDateRangeUncached: Failed to fetch device status',
+      error,
+    );
+    return [];
+  }
+};
+
+/**
  * Fetches the most recent BG entry from Nightscout.
  *
  * PRD: uses `/api/v1/entries.json?count=1`.

@@ -12,7 +12,8 @@
     "publish_testflight": "cd ios && fastlane beta --verbose",
     "log-android": "adb logcat *:S ReactNative:V ReactNativeJS:V ReactNativeJNI:V com.shanidms22:D System.err:W",
     "e2e:maestro": "maestro test e2e/maestro",
-    "e2e:maestro:android": "maestro test e2e/maestro/login-and-tabs.yaml",
+    "e2e:maestro:android": "maestro test e2e/maestro",
+    "e2e:maestro:android:smoke": "maestro test e2e/maestro/login-and-tabs.yaml",
     "e2e:maestro:install:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-maestro-windows.ps1",
     "e2e:maestro:android:summary": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-maestro-android.ps1"
   },

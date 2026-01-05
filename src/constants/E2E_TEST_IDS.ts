@@ -14,6 +14,8 @@ export const E2E_TEST_IDS = {
     navigator: 'tabs.navigator',
     home: 'tab.home',
     trends: 'tab.trends',
+    oracle: 'tab.oracle',
+    settings: 'tab.settings',
     food: 'tab.food',
     sport: 'tab.sport',
     notifications: 'tab.notifications',
@@ -22,12 +24,20 @@ export const E2E_TEST_IDS = {
   screens: {
     home: 'screen.home',
     trends: 'screen.trends',
+    oracle: 'screen.oracle',
+    settings: 'screen.settings',
     food: 'screen.food',
     sport: 'screen.sport',
     notifications: 'screen.notifications',
 
     sportAdd: 'screen.sport.add',
     notificationsAdd: 'screen.notifications.add',
+  },
+
+  settings: {
+    toggleFoodTab: 'settings.toggle.foodTab',
+    toggleSportTab: 'settings.toggle.sportTab',
+    toggleNotificationsTab: 'settings.toggle.notificationsTab',
   },
 
   notifications: {
@@ -57,6 +67,8 @@ export const E2E_TEST_IDS = {
     agpSummary: 'chart.agpSummary',
     agpSummaryFullScreenButton: 'chart.agpSummary.fullscreenButton',
     agpGraphFullScreen: 'chart.agpGraph.fullscreen',
+
+    oracleGhostGraph: 'chart.oracle.ghostGraph',
   },
 
   /**
@@ -96,5 +108,24 @@ export const E2E_TEST_IDS = {
     predictionValue0: 'homeHeader.predictionValue0',
     predictionValue1: 'homeHeader.predictionValue1',
     predictionValue2: 'homeHeader.predictionValue2',
+
+
+    // Test-only markers to validate whether the header is driven by live Nightscout
+    // polling vs the deterministic E2E fallback snapshot.
+    sourceNightscout: 'homeHeader.source.nightscout',
+    sourceFallback: 'homeHeader.source.fallback',
+  },
+
+  /**
+   * Oracle / Events tab selectors.
+   */
+  oracle: {
+    eventsList: 'oracle.events.list',
+    eventRow: 'oracle.events.row',
+    strategiesList: 'oracle.strategies.list',
+    strategyCard: 'oracle.strategies.card',
+    disclaimer: 'oracle.disclaimer',
+    previousList: 'oracle.previous.list',
+    previousRow: 'oracle.previous.row',
   },
 } as const;
