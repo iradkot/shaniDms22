@@ -1,14 +1,14 @@
-import React, {useMemo, useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {
-  Pressable,
   ScrollView,
+  Switch,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
 import styled, {useTheme} from 'styled-components/native';
 
-import {Theme} from 'app/types/theme';
+import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import Loader from 'app/components/common-ui/Loader/Loader';
 import {useOracleInsights} from 'app/hooks/useOracleInsights';
@@ -17,70 +17,24 @@ import {addOpacity} from 'app/style/styling.utils';
 import {
   formatDateToDateAndTimeString,
   formatDateToLocaleTimeString,
-  getTimeInMinutes,
 } from 'app/utils/datetime.utils';
 
-const Container = styled.View<{theme: Theme}>`
+import {OracleStatusBanner, Spacer, Card, CardSubtle, CardTitle} from './components/OracleCards';
+import {Row, RowLeft, RowMeta, RowRight, RowTitle} from './components/OracleRows';
+import {OracleMatchDetailsCard} from './components/OracleMatchDetailsCard';
+import {
+  fmtBg,
+  fmtCob,
+  fmtIob,
+  formatOracleKind,
+  formatPercent,
+  isWithinNext2Hours,
+  summarizeMatch,
+} from './utils/oracleUiUtils';
+
+const Container = styled.View<{theme: ThemeType}>`
   flex: 1;
   background-color: ${({theme}) => theme.backgroundColor};
-`;
-
-const Card = styled.View<{theme: Theme}>`
-  background-color: ${({theme}) => theme.white};
-  border-radius: ${({theme}) => theme.borderRadius}px;
-  border-width: 1px;
-  border-color: ${({theme}) => theme.borderColor};
-  padding: ${({theme}) => theme.spacing.lg}px;
-`;
-
-const CardTitle = styled.Text<{theme: Theme}>`
-  font-size: ${({theme}) => theme.typography.size.lg}px;
-  font-weight: 700;
-  color: ${({theme}) => theme.textColor};
-`;
-
-const CardSubtle = styled.Text<{theme: Theme}>`
-  margin-top: ${({theme}) => theme.spacing.sm}px;
-  font-size: ${({theme}) => theme.typography.size.sm}px;
-  color: ${({theme}) => addOpacity(theme.textColor, 0.7)};
-`;
-
-const Spacer = styled.View<{h: number}>`
-  height: ${({h}) => h}px;
-`;
-
-const Row = styled(Pressable)<{theme: Theme; $selected?: boolean}>`
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  padding-vertical: ${({theme}) => theme.spacing.sm}px;
-  padding-horizontal: ${({theme}) => theme.spacing.md}px;
-  border-radius: ${({theme}) => theme.borderRadius}px;
-  background-color: ${({theme, $selected}) =>
-    $selected ? addOpacity(theme.accentColor, 0.12) : 'transparent'};
-`;
-
-const RowLeft = styled.View`
-  flex: 1;
-  padding-right: 12px;
-`;
-
-const RowTitle = styled.Text<{theme: Theme}>`
-  font-size: ${({theme}) => theme.typography.size.md}px;
-  color: ${({theme}) => theme.textColor};
-  font-weight: 600;
-`;
-
-const RowMeta = styled.Text<{theme: Theme}>`
-  margin-top: 2px;
-  font-size: ${({theme}) => theme.typography.size.sm}px;
-  color: ${({theme}) => addOpacity(theme.textColor, 0.7)};
-`;
-
-const RowRight = styled.Text<{theme: Theme}>`
-  font-size: ${({theme}) => theme.typography.size.md}px;
-  color: ${({theme}) => theme.textColor};
-  font-weight: 700;
 `;
 
 const StrategyCard = styled.View<{theme: Theme; $accent?: string}>`
@@ -117,65 +71,66 @@ const StrategyMeta = styled.Text<{theme: Theme}>`
   color: ${({theme}) => addOpacity(theme.textColor, 0.8)};
 `;
 
-function formatOracleKind(kind: string): string {
-  if (kind === 'rising') return 'Rising';
-  if (kind === 'falling') return 'Falling';
-  if (kind === 'stable') return 'Stable';
-  return kind;
-}
+const ToggleRow = styled.View`
+  margin-top: 10px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+`;
 
-function summarizeMatch(points: Array<{tMin: number; sgv: number}>): {
-  min2h: number | null;
-  max4h: number | null;
-} {
-  const in2h = points.filter(p => p.tMin >= 0 && p.tMin <= 120).map(p => p.sgv);
-  const in4h = points.filter(p => p.tMin >= 0 && p.tMin <= 240).map(p => p.sgv);
-
-  return {
-    min2h: in2h.length ? Math.min(...in2h) : null,
-    max4h: in4h.length ? Math.max(...in4h) : null,
-  };
-}
-
-function minutesForwardDiff(fromMinutes: number, toMinutes: number): number {
-  const day = 24 * 60;
-  return (toMinutes - fromMinutes + day) % day;
-}
-
-/**
- * Returns whether a candidate event time-of-day occurs within the next 2 hours
- * relative to the currently investigated anchor time-of-day (local time).
- */
-function isWithinNext2Hours(params: {anchorTs: number; candidateTs: number}): boolean {
-  const anchorMin = getTimeInMinutes(new Date(params.anchorTs));
-  const candidateMin = getTimeInMinutes(new Date(params.candidateTs));
-  return minutesForwardDiff(anchorMin, candidateMin) <= 120;
-}
-
-/** Formats 0..1 ratio as a human percent string. */
-function formatPercent(p: number | null | undefined): string {
-  if (typeof p !== 'number' || !Number.isFinite(p)) return '—';
-  return `${Math.round(p * 100)}%`;
-}
-
-/** Formats BG for compact UI display (rounded, or em dash when missing). */
-function fmtBg(v: number | null): string {
-  return typeof v === 'number' && Number.isFinite(v) ? String(Math.round(v)) : '—';
-}
+const ToggleLabel = styled.Text<{theme: Theme}>`
+  flex: 1;
+  margin-right: 12px;
+  font-size: ${({theme}) => theme.typography.size.sm}px;
+  color: ${({theme}) => addOpacity(theme.textColor, 0.9)};
+`;
 
 const Oracle: React.FC = () => {
   const {width} = useWindowDimensions();
-  const theme = useTheme() as Theme;
+  const theme = useTheme() as ThemeType;
   const [selectedEventTs, setSelectedEventTs] = useState<number | null>(null);
   const [selectedPreviousTs, setSelectedPreviousTs] = useState<number | null>(null);
-  const {insights, events, selectedEvent, isLoading, error, lastSyncedMs} =
-    useOracleInsights({selectedEventTs});
+  const [includeLoadInMatching, setIncludeLoadInMatching] = useState(true);
+  const {
+    insights,
+    events,
+    selectedEvent,
+    isLoading,
+    error,
+    lastSyncedMs,
+    historyCount,
+    isSyncing,
+    status,
+    retry,
+  } =
+    useOracleInsights({selectedEventTs, includeLoadInMatching});
 
   const summaryText = useMemo(() => {
     if (!selectedEvent) return 'Waiting for recent data…';
     if (!insights) return 'Searching cached history…';
+    if (isSyncing && insights.matchCount === 0) return 'Searching cached history…';
     return `Found ${insights.matchCount} previous similar events.`;
+  }, [insights, isSyncing, selectedEvent]);
+
+  const loadSummaryText = useMemo(() => {
+    if (!selectedEvent) return 'IOB — • COB —';
+    if (!insights) return 'Calculating IOB/COB…';
+    return `IOB ${fmtIob(insights.anchorIob)} • COB ${fmtCob(insights.anchorCob)}`;
   }, [insights, selectedEvent]);
+
+  const loadMatchModeText = useMemo(() => {
+    if (!selectedEvent) return '';
+    if (includeLoadInMatching) return 'Matching includes IOB/COB (when available).';
+    return 'Matching uses CGM pattern only.';
+  }, [includeLoadInMatching, selectedEvent]);
+
+  const loadAvailabilityHint = useMemo(() => {
+    if (!includeLoadInMatching) return '';
+    if (!insights) return '';
+    const hasAny = typeof insights.anchorIob === 'number' || typeof insights.anchorCob === 'number';
+    if (hasAny) return '';
+    return 'IOB/COB not available for this event; matching will ignore load.';
+  }, [includeLoadInMatching, insights]);
 
   const selectedLabel = useMemo(() => {
     if (!selectedEvent) return '';
@@ -189,6 +144,17 @@ const Oracle: React.FC = () => {
     return insights.matches.find(m => m.anchorTs === selectedPreviousTs) ?? null;
   }, [insights?.matches, selectedPreviousTs]);
 
+  /**
+   * Tap-to-open seam for previous matches.
+   *
+   * Today this toggles an inline details card.
+   * Later we can replace this with navigation to a dedicated details screen
+   * (powered by `oracleMatchToCgmGraphData`) without changing the row renderer.
+   */
+  const openPreviousMatch = useCallback((anchorTs: number) => {
+    setSelectedPreviousTs(prev => (prev === anchorTs ? null : anchorTs));
+  }, []);
+
   return (
     <Container testID={E2E_TEST_IDS.screens.oracle}>
       <ScrollView
@@ -197,16 +163,72 @@ const Oracle: React.FC = () => {
         <Card>
           <CardTitle>Investigate Events</CardTitle>
           {!!selectedLabel && <CardSubtle>{selectedLabel}</CardSubtle>}
-          <CardSubtle>{summaryText}</CardSubtle>
+          <CardSubtle testID={E2E_TEST_IDS.oracle.headerSummary}>{summaryText}</CardSubtle>
+
+          {!!selectedEvent && (
+            <>
+              <CardSubtle testID={E2E_TEST_IDS.oracle.loadSummary}>{loadSummaryText}</CardSubtle>
+              {!!loadMatchModeText && <CardSubtle>{loadMatchModeText}</CardSubtle>}
+              {!!loadAvailabilityHint && <CardSubtle>{loadAvailabilityHint}</CardSubtle>}
+              <ToggleRow>
+                <ToggleLabel>
+                  Include IOB/COB in similar-event search
+                </ToggleLabel>
+                <Switch
+                  testID={E2E_TEST_IDS.oracle.loadToggle}
+                  accessibilityLabel={E2E_TEST_IDS.oracle.loadToggle}
+                  value={includeLoadInMatching}
+                  onValueChange={setIncludeLoadInMatching}
+                  trackColor={{
+                    false: addOpacity(theme.textColor, 0.2),
+                    true: addOpacity(theme.accentColor, 0.4),
+                  }}
+                  thumbColor={includeLoadInMatching ? theme.accentColor : theme.borderColor}
+                />
+              </ToggleRow>
+            </>
+          )}
+
           {typeof lastSyncedMs === 'number' && (
             <CardSubtle>
               Cache updated: {formatDateToDateAndTimeString(lastSyncedMs)}
             </CardSubtle>
           )}
-          {!!error && (
-            <CardSubtle>
-              Note: Live fetch unavailable; showing cached data when possible.
+
+          {status.state === 'syncing' && !status.hasHistory && (
+            <CardSubtle testID={E2E_TEST_IDS.oracle.historySyncHint}>
+              {status.message} Similar events may be empty for a moment.
             </CardSubtle>
+          )}
+
+          {status.state === 'error' && (
+            <OracleStatusBanner
+              testID={E2E_TEST_IDS.oracle.statusBanner}
+              tone="error"
+              message={status.message}
+              actionLabel="Retry"
+              actionTestID={E2E_TEST_IDS.oracle.retryButton}
+              onPressAction={retry}
+            />
+          )}
+
+          {!!error && status.state !== 'error' && (
+            <OracleStatusBanner
+              testID={E2E_TEST_IDS.oracle.statusBanner}
+              tone="warn"
+              message="Live fetch unavailable; showing cached data when possible."
+              actionLabel="Retry"
+              actionTestID={E2E_TEST_IDS.oracle.retryButton}
+              onPressAction={retry}
+            />
+          )}
+
+          {status.state === 'syncing' && status.hasHistory && (
+            <OracleStatusBanner
+              testID={E2E_TEST_IDS.oracle.statusBanner}
+              tone="info"
+              message={status.message}
+            />
           )}
         </Card>
 
@@ -235,7 +257,7 @@ const Oracle: React.FC = () => {
                   <RowLeft>
                     <RowTitle>{formatOracleKind(e.kind)}</RowTitle>
                     <RowMeta>
-                      {when} • slope {e.slope.toFixed(1)} mg/dL/min
+                      {when} • slope {e.slope.toFixed(1)} mg/dL/min • IOB {fmtIob(e.iob)} • COB {fmtCob(e.cob)}
                     </RowMeta>
                   </RowLeft>
                   <RowRight>{e.sgv}</RowRight>
@@ -252,6 +274,9 @@ const Oracle: React.FC = () => {
         {isLoading && !insights ? (
           <View style={{alignItems: 'center', paddingVertical: 20}}>
             <Loader />
+            {status.state === 'loading' && (
+              <CardSubtle style={{marginTop: 10}}>{status.message}</CardSubtle>
+            )}
           </View>
         ) : insights ? (
           <>
@@ -269,7 +294,8 @@ const Oracle: React.FC = () => {
             <Card testID={E2E_TEST_IDS.oracle.strategiesList}>
               <CardTitle>What tended to work</CardTitle>
               <CardSubtle>
-                Strategy cards group similar past events by actions taken in the first 30 minutes.
+                Strategy cards group similar past events by actions recorded in the first 30 minutes.
+                Historical associations only — not dosing advice.
               </CardSubtle>
 
               <Spacer h={8} />
@@ -283,7 +309,7 @@ const Oracle: React.FC = () => {
 
                   const successText =
                     typeof s.successRate === 'number'
-                      ? `${Math.round(s.successRate * 100)}% in ${70}–${140} at +2h`
+                      ? `${Math.round(s.successRate * 100)}% in 70–140 at +2h`
                       : 'Success rate unavailable';
 
                   const accent =
@@ -347,6 +373,7 @@ const Oracle: React.FC = () => {
                     metaParts.push('Outcome unavailable');
                   }
 
+                  metaParts.push(`IOB ${fmtIob(m.iob ?? null)} • COB ${fmtCob(m.cob ?? null)}`);
                   metaParts.push(`TIR(0–2h) ${formatPercent(m.tir2h)}`);
                   metaParts.push(within2h ? 'Within next 2h' : 'Outside next 2h');
 
@@ -360,9 +387,7 @@ const Oracle: React.FC = () => {
                       testID={`${E2E_TEST_IDS.oracle.previousRow}.${idx}`}
                       accessibilityLabel={`${E2E_TEST_IDS.oracle.previousRow}.${idx}`}
                       $selected={selected}
-                      onPress={() =>
-                        setSelectedPreviousTs(prev => (prev === m.anchorTs ? null : m.anchorTs))
-                      }>
+                      onPress={() => openPreviousMatch(m.anchorTs)}>
                       <RowLeft>
                         <RowTitle>{when}</RowTitle>
                         <RowMeta>{meta}</RowMeta>
@@ -371,44 +396,22 @@ const Oracle: React.FC = () => {
                     </Row>
                   );
                 })
+              ) : isSyncing ? (
+                <CardSubtle>Searching history…</CardSubtle>
               ) : (
-                <CardSubtle>No similar events found.</CardSubtle>
+                <CardSubtle testID={E2E_TEST_IDS.oracle.noMatches}>
+                  No similar events found.
+                </CardSubtle>
               )}
 
               {!!selectedPrevious && (
                 <>
                   <Spacer h={12} />
-                  <Card>
-                    <CardTitle>Event details</CardTitle>
-                    <CardSubtle>{formatDateToDateAndTimeString(selectedPrevious.anchorTs)}</CardSubtle>
-
-                    <Spacer h={8} />
-
-                    <OracleGhostGraph
-                      width={Math.max(1, width - 64)}
-                      height={220}
-                      currentSeries={[]}
-                      matches={[selectedPrevious]}
-                      medianSeries={[]}
-                    />
-
-                    <Spacer h={8} />
-
-                    <CardSubtle>
-                      Boluses (0–30m): {selectedPrevious.actionCounts30m?.boluses ?? 0} • Insulin:{' '}
-                      {selectedPrevious.actions30m?.insulin?.toFixed?.(1) ?? '0.0'}U • Carbs:{' '}
-                      {selectedPrevious.actions30m?.carbs != null
-                        ? Math.round(selectedPrevious.actions30m.carbs)
-                        : 0}
-                      g
-                    </CardSubtle>
-
-                    <CardSubtle>
-                      IOB/COB at event:{' '}
-                      {selectedPrevious.iob != null ? `${selectedPrevious.iob.toFixed(1)}U` : '—'} /{' '}
-                      {selectedPrevious.cob != null ? `${Math.round(selectedPrevious.cob)}g` : '—'}
-                    </CardSubtle>
-                  </Card>
+                  <OracleMatchDetailsCard
+                    testID={E2E_TEST_IDS.oracle.previousDetails}
+                    match={selectedPrevious}
+                    width={Math.max(1, width - 64)}
+                  />
                 </>
               )}
             </Card>

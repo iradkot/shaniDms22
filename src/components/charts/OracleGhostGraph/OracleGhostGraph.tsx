@@ -33,15 +33,23 @@ function yDomainFromSeries(params: {
   matches: OracleMatchTrace[];
   median: OracleSeriesPoint[];
 }): [number, number] {
-  const values: number[] = [];
-  params.current.forEach(p => values.push(p.sgv));
-  params.median.forEach(p => values.push(p.sgv));
-  params.matches.forEach(m => m.points.forEach(p => values.push(p.sgv)));
+  let hasAny = false;
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
 
-  if (!values.length) return [40, 250];
+  const consider = (sgv: number) => {
+    hasAny = true;
+    if (sgv < min) min = sgv;
+    if (sgv > max) max = sgv;
+  };
 
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  for (const p of params.current) consider(p.sgv);
+  for (const p of params.median) consider(p.sgv);
+  for (const m of params.matches) {
+    for (const p of m.points) consider(p.sgv);
+  }
+
+  if (!hasAny) return [40, 250];
 
   const paddedMin = Math.floor(min / 10) * 10 - 20;
   const paddedMax = Math.ceil(max / 10) * 10 + 20;

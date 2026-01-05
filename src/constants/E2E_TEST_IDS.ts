@@ -120,6 +120,13 @@ export const E2E_TEST_IDS = {
    * Oracle / Events tab selectors.
    */
   oracle: {
+    headerSummary: 'oracle.header.summary',
+    loadSummary: 'oracle.header.loadSummary',
+    loadToggle: 'oracle.header.loadToggle',
+    historySyncHint: 'oracle.history.syncHint',
+    statusBanner: 'oracle.status.banner',
+    retryButton: 'oracle.retry.button',
+    errorText: 'oracle.error.text',
     eventsList: 'oracle.events.list',
     eventRow: 'oracle.events.row',
     strategiesList: 'oracle.strategies.list',
@@ -127,5 +134,7 @@ export const E2E_TEST_IDS = {
     disclaimer: 'oracle.disclaimer',
     previousList: 'oracle.previous.list',
     previousRow: 'oracle.previous.row',
+    previousDetails: 'oracle.previous.details',
+    noMatches: 'oracle.previous.noMatches',
   },
 } as const;

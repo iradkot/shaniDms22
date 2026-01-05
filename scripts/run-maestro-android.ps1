@@ -1,7 +1,10 @@
 Param(
   # Default to the whole suite so new flows (e.g. charts-smoke.yaml) run automatically.
   [string]$FlowPath = "e2e/maestro",
-  [int]$TopSlowestSteps = 10
+  [int]$TopSlowestSteps = 10,
+  [switch]$SkipBuild,
+  [switch]$SkipInstall,
+  [string]$AppId = "com.shanidms22"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,16 +34,91 @@ Write-Host "Running Maestro flow(s): $FlowPath"
 Write-Host "JUnit report: $junitPath"
 Write-Host "Debug output: $debugPath"
 
+if (-not $SkipBuild) {
+  Write-Host "Building E2E-enabled Android release APK (E2E=true)..."
+  $previousE2E = $env:E2E
+  try {
+    Push-Location (Join-Path $workspace 'android')
+    $env:E2E = 'true'
+    & .\gradlew.bat :app:assembleRelease
+  } finally {
+    Pop-Location
+    $env:E2E = $previousE2E
+  }
+}
+
+if (-not $SkipInstall) {
+  Write-Host "Installing APK to connected device/emulator..."
+  $apkDir = Join-Path $workspace 'android\app\build\outputs\apk\release'
+  if (-not (Test-Path -LiteralPath $apkDir)) {
+    throw "APK output folder not found: $apkDir"
+  }
+
+  $apk = Get-ChildItem -LiteralPath $apkDir -Filter '*.apk' -File |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+  if (-not $apk) {
+    throw "No APK found under: $apkDir"
+  }
+
+  Write-Host "- APK: $($apk.FullName)"
+
+  # If a different build variant is installed, install -r can fail with signature mismatch.
+  # Uninstall best-effort first to keep local runs reliable.
+  try {
+    & adb uninstall $AppId | Out-Null
+  } catch {
+    # ignore
+  }
+
+  & adb install -r $apk.FullName
+}
+
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
 # Run with JUnit output + debug output (commands json) so we can count steps on Windows.
 New-Item -ItemType Directory -Force -Path $debugPath | Out-Null
-& $maestro test --format JUNIT --output $junitRelative --debug-output $debugRelative --flatten-debug-output $FlowPath
+
+# Maestro 2.x on Windows may treat a directory argument as a single flow.
+# To ensure the full suite runs, expand directories into an explicit list of flow files.
+$flowArgs = @()
+$flowResolved = Join-Path $workspace ($FlowPath -replace '/', '\')
+if (Test-Path -LiteralPath $flowResolved -PathType Container) {
+  $yaml = @(Get-ChildItem -LiteralPath $flowResolved -Filter '*.yaml' -File -ErrorAction SilentlyContinue)
+  $yml = @(Get-ChildItem -LiteralPath $flowResolved -Filter '*.yml' -File -ErrorAction SilentlyContinue)
+  $flowArgs = @($yaml + $yml | Sort-Object Name | Select-Object -ExpandProperty FullName)
+
+  if ($flowArgs.Count -eq 0) {
+    throw "No Maestro flow files (*.yaml/*.yml) found under: $flowResolved"
+  }
+
+  Write-Host "Discovered $($flowArgs.Count) flow file(s) under $FlowPath"
+} else {
+  $flowArgs = @($FlowPath)
+}
+
+try {
+  $maestroArgs = @(
+    'test',
+    '--format', 'JUNIT',
+    '--output', $junitRelative,
+    '--debug-output', $debugRelative,
+    '--flatten-debug-output'
+  ) + $flowArgs
+
+  Write-Host "Invoking Maestro with $($flowArgs.Count) flow(s):"
+  foreach ($f in $flowArgs) {
+    Write-Host "- $f"
+  }
+
+  & $maestro @maestroArgs
+} catch {
+  Write-Host "Maestro invocation failed: $($_.Exception.Message)"
+  throw
+}
 
 $exitCode = 0
-if (-not $?) {
-  $exitCode = 1
-}
 if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) {
   $exitCode = $LASTEXITCODE
 }
@@ -105,7 +183,7 @@ function Get-MaestroCommandLabel {
 }
 
 try {
-  $commandFiles = Get-ChildItem -LiteralPath $debugPath -File -ErrorAction SilentlyContinue |
+  $commandFiles = Get-ChildItem -LiteralPath $debugPath -File -Recurse -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -like 'commands-*.json' }
   foreach ($f in $commandFiles) {
     $json = Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json

@@ -100,6 +100,43 @@ const Home: React.FC = () => {
     return bgData;
   }, [bgData, debouncedCurrentDate]);
 
+  const headerLatestBgSample = useMemo(() => {
+    if (latestBgSample) return latestBgSample;
+    if (!isE2E) return latestBgSample;
+    if (!listBgData.length) return undefined;
+
+    let best = listBgData[0];
+    for (const sample of listBgData) {
+      if (sample.date > best.date) best = sample;
+    }
+    return best;
+  }, [latestBgSample, listBgData]);
+
+  const headerLatestPrevBgSample = useMemo(() => {
+    if (latestPrevBgSample) return latestPrevBgSample;
+    if (!isE2E) return latestPrevBgSample;
+    if (listBgData.length < 2) return undefined;
+
+    let best = listBgData[0];
+    let second = listBgData[1];
+    if (second.date > best.date) {
+      const tmp = best;
+      best = second;
+      second = tmp;
+    }
+
+    for (const sample of listBgData) {
+      if (sample.date > best.date) {
+        second = best;
+        best = sample;
+      } else if (sample.date > second.date && sample.date !== best.date) {
+        second = sample;
+      }
+    }
+
+    return second;
+  }, [latestPrevBgSample, listBgData]);
+
   const {maxIobReference, maxCobReference} = useMemo(
     () => getLoadReferences(listBgData),
     [listBgData],
@@ -110,8 +147,8 @@ const Home: React.FC = () => {
         <TimeInRangeRow bgData={bgData} />
         {isShowingToday ? (
           <SmartExpandableHeader
-            fallbackLatestBgSample={latestBgSample ?? undefined}
-            latestPrevBgSample={latestPrevBgSample ?? undefined}
+            fallbackLatestBgSample={headerLatestBgSample ?? undefined}
+            latestPrevBgSample={headerLatestPrevBgSample ?? undefined}
             maxIobReference={maxIobReference}
             maxCobReference={maxCobReference}
           />

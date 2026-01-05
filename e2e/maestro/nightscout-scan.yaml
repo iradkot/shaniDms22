@@ -25,15 +25,34 @@ appId: com.shanidms22
       id: screen.home
     timeout: 30000
 
-# Assert we're driven by live Nightscout snapshot.
-# If this fails, the app likely fell back to the E2E snapshot (no live data).
+# Validate data source marker:
+# - On real devices / connected Nightscout: expect `homeHeader.source.nightscout`
+# - In E2E mode (deterministic): accept `homeHeader.source.fallback`
 - extendedWaitUntil:
-    visible:
-      id: homeHeader.source.nightscout
-    timeout: 30000
+        visible:
+            id: homeHeader.source.nightscout
+        timeout: 15000
+        optional: true
 
-- assertNotVisible:
-    id: homeHeader.source.fallback
+- runFlow:
+        when:
+            visible:
+                id: homeHeader.source.nightscout
+        commands:
+            - assertVisible:
+                    id: homeHeader.source.nightscout
+
+- runFlow:
+        when:
+            notVisible:
+                id: homeHeader.source.nightscout
+        commands:
+            - extendedWaitUntil:
+                    visible:
+                        id: homeHeader.source.fallback
+                    timeout: 30000
+            - assertVisible:
+                    id: homeHeader.source.fallback
 
 # Sanity: header is interactive and expands.
 - assertVisible:

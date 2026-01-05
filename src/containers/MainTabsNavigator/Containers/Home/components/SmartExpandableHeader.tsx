@@ -260,11 +260,13 @@ const SmartExpandableHeader: React.FC<{
   );
 };
 
-const E2EHidden = styled.View`
+const E2EHidden = styled.View.attrs({collapsable: false})`
   position: absolute;
-  opacity: 0;
-  width: 0px;
-  height: 0px;
+  top: 0px;
+  left: 0px;
+  opacity: 0.01;
+  width: 1px;
+  height: 1px;
 `;
 
 function gradientStyle(theme: ThemeType) {

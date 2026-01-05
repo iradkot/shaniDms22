@@ -40,6 +40,10 @@ export type OracleInvestigateEvent = {
   /** Slope at t=0 (mg/dL/min), computed over a ~15m window. */
   slope: number;
   kind: OracleEventKind;
+  /** Best-effort IOB at this timestamp (units). */
+  iob?: number | null;
+  /** Best-effort COB at this timestamp (grams). */
+  cob?: number | null;
 };
 
 export type OracleMatchTrace = {
@@ -55,6 +59,16 @@ export type OracleMatchTrace = {
   iob?: number | null;
   /** Best-effort COB at the matching anchor time (grams). */
   cob?: number | null;
+  /**
+   * Raw treatment events observed shortly after the historical anchor.
+   *
+   * This is intended for future "open match" details views where we want
+   * to render insulin/carbs amounts on top of a richer graph (e.g. `CgmGraph`).
+   *
+   * Today we still summarize these into `actions30m` / `actionCounts30m` and
+   * `actionMarkers` for the ghost graph.
+   */
+  treatments30m?: OracleCachedTreatment[];
   /** Treatment summary in first 30 minutes. */
   actions30m?: {
     insulin: number;
@@ -87,6 +101,12 @@ export type OracleStrategyCard = {
 export type OracleInsights = {
   matchCount: number;
   matches: OracleMatchTrace[];
+  /** Best-effort IOB at the investigated anchor time (units). */
+  anchorIob: number | null;
+  /** Best-effort COB at the investigated anchor time (grams). */
+  anchorCob: number | null;
+  /** Whether IOB/COB matching was enabled for this computation. */
+  usedLoadInMatching: boolean;
   /** Current series for the user's own recent BG (t<=0). */
   currentSeries: OracleSeriesPoint[];
   /** Median trajectory for future window (0..+240). */
