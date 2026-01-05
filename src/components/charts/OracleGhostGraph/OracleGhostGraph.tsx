@@ -182,7 +182,7 @@ const OracleGhostGraph: React.FC<Props> = ({
 
   return (
     <View testID={testID} style={{width, height}}>
-      <Svg width={width} height={height}>
+      <Svg pointerEvents="none" width={width} height={height}>
         <G x={margin.left} y={margin.top}>
           {/* Grid: Y */}
           {yTicks.map(v => (

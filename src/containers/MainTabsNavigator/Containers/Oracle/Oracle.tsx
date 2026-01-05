@@ -191,7 +191,9 @@ const Oracle: React.FC = () => {
 
   return (
     <Container testID={E2E_TEST_IDS.screens.oracle}>
-      <ScrollView contentContainerStyle={{padding: 16}}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{padding: 16, paddingBottom: 48}}>
         <Card>
           <CardTitle>Investigate Events</CardTitle>
           {!!selectedLabel && <CardSubtle>{selectedLabel}</CardSubtle>}
