@@ -1,7 +1,8 @@
 // /Trends/TrendsContainer.tsx
 
-import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import React, {useCallback, useMemo, useState} from 'react';
+import {View, ScrollView} from 'react-native';
+import {differenceInCalendarDays} from 'date-fns';
 
 import { useTrendsData } from './hooks/useTrendsData';
 import { DayDetail, calculateTrendsMetrics } from './utils/trendsCalculations';
@@ -34,18 +35,51 @@ import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 type MetricType = 'tir' | 'hypos' | 'hypers';
 
 const Trends: React.FC = () => {
-  const [rangeDays, setRangeDays] = useState<number>(7);
+  const [presetDays, setPresetDays] = useState<number>(7);
+  const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
+  const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('tir');
 
   // 1) Calculate date range
-  const { start, end } = useMemo(() => {
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
+  const {start, end, rangeDays} = useMemo(() => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    const normalizeStart = (d: Date) => {
+      const x = new Date(d);
+      x.setHours(0, 0, 0, 0);
+      return x;
+    };
+
+    const normalizeEnd = (d: Date) => {
+      const x = new Date(d);
+      if (x.getTime() > today.getTime()) x.setTime(today.getTime());
+      x.setHours(23, 59, 59, 999);
+      return x;
+    };
+
+    // Custom date range (From/To)
+    if (customStartDate && customEndDate) {
+      let start = normalizeStart(customStartDate);
+      let end = normalizeEnd(customEndDate);
+
+      if (end.getTime() < start.getTime()) {
+        const tmp = start;
+        start = normalizeStart(end);
+        end = normalizeEnd(tmp);
+      }
+
+      const days = Math.max(1, differenceInCalendarDays(end, start) + 1);
+      return {start, end, rangeDays: days};
+    }
+
+    // Preset ranges (7/14/30)
+    const end = today;
     const start = new Date(end);
     start.setHours(0, 0, 0, 0);
-    start.setDate(end.getDate() - (rangeDays - 1));
-    return { start, end };
-  }, [rangeDays]);
+    start.setDate(end.getDate() - (presetDays - 1));
+    return {start, end, rangeDays: presetDays};
+  }, [customStartDate, customEndDate, presetDays]);
 
   // 2) Use custom hook for BG data
   const {
@@ -72,6 +106,42 @@ const Trends: React.FC = () => {
     start: Date;
     end: Date;
   } | null>(null);
+
+  const resetComparison = useCallback((nextRangeDays?: number) => {
+    setShowComparison(false);
+    setComparing(false);
+    setPreviousMetrics(null);
+    setComparisonDateRange(null);
+    setComparisonOffset(nextRangeDays ?? rangeDays);
+  }, [rangeDays]);
+
+  const handlePresetDaysChange = useCallback(
+    (days: number) => {
+      setPresetDays(days);
+      setCustomStartDate(null);
+      setCustomEndDate(null);
+      resetComparison(days);
+    },
+    [resetComparison],
+  );
+
+  const handleCustomStartChange = useCallback(
+    (date: Date) => {
+      setCustomStartDate(date);
+      setCustomEndDate(prev => prev ?? new Date());
+      resetComparison();
+    },
+    [resetComparison],
+  );
+
+  const handleCustomEndChange = useCallback(
+    (date: Date) => {
+      setCustomEndDate(date);
+      setCustomStartDate(prev => prev ?? new Date(date));
+      resetComparison();
+    },
+    [resetComparison],
+  );
 
   async function handleCompare(offset = rangeDays) {
     setComparing(true);
@@ -142,14 +212,21 @@ const Trends: React.FC = () => {
   return (
     <TrendsContainer testID={E2E_TEST_IDS.screens.trends}>
       {/* 1. Date Range Buttons */}
-      <DateRangeSelector onRangeChange={days => setRangeDays(days)} />
+      <DateRangeSelector
+        presetDays={presetDays}
+        onPresetDaysChange={handlePresetDaysChange}
+        startDate={start}
+        endDate={end}
+        onStartDateChange={handleCustomStartChange}
+        onEndDateChange={handleCustomEndChange}
+      />
 
       {/* 2. Current date range info */}
-      <View style={{ alignItems: "center", marginVertical: 10 }}>
+      <View style={{alignItems: 'center', marginVertical: 10}}>
         <SectionTitle>Data Range</SectionTitle>
-        <Text style={{ fontSize: 16, fontWeight: "bold" }}>
+        <ExplanationText>
           {start.toDateString()} to {end.toDateString()} ({rangeDays} days)
-        </Text>
+        </ExplanationText>
       </View>
 
       {/* 3. Loading/Error/No data status */}

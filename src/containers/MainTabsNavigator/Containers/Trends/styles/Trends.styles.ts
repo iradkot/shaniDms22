@@ -115,6 +115,17 @@ export const MetricButtonText = styled.Text`
   font-weight: bold;
 `;
 
+export const DateRangeHeader = styled.View`
+  align-items: center;
+  margin-vertical: 10px;
+`;
+
+export const DateRangeText = styled.Text`
+  font-size: 16px;
+  font-weight: 700;
+  color: ${({theme}) => theme.textColor};
+`;
+
 /**
  * Overall Stats Grid
  */
