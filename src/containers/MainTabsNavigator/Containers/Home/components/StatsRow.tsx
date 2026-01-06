@@ -8,78 +8,51 @@ import {
   findBiggestChangesInTimeRange,
 } from 'app/utils/bg.utils';
 import {Theme} from 'app/types/theme';
-import LinearGradient from 'react-native-linear-gradient';
+import DropShadow from 'react-native-drop-shadow';
+import {addOpacity} from 'app/style/styling.utils';
 
-// Add background colors to the Container component
-const Container = styled.View<{theme: Theme}>`
-  padding: 5px 10px;
+const Section = styled.View<{theme: Theme}>`
+  padding: 6px 10px;
+`;
+
+const CardRow = styled.View`
   flex-direction: row;
-  justify-content: space-around;
-  align-items: center;
-  flex-wrap: wrap;
-  background-color: ${props => props.theme.backgroundColor};
+  gap: 8px;
+  margin-bottom: 8px;
 `;
 
-// Add some padding to the Column component
-const Column = styled.View<{
-  theme: Theme;
-  bgValue?: number;
-}>`
-  flex-direction: column;
-  align-items: center;
-  padding: 10px;
-  height: 100%;
-`;
-
-const GradientColumn = styled(LinearGradient).attrs(({theme, bgValue}) => ({
-  colors: [
-    'rgba(255, 255, 255, 0.1)',
-    theme.determineBgColorByGlucoseValue(bgValue),
-    theme.determineBgColorByGlucoseValue(bgValue),
-    theme.determineBgColorByGlucoseValue(bgValue),
-    'rgba(255, 255, 255, 0.1)',
-  ],
-  locations: [0, 0.1, 0.5, 0.9, 1],
-  start: {x: 0, y: 1},
-  end: {x: 0, y: 0},
-  useAngle: true,
-  angle: 90,
-  angleCenter: {x: 0.5, y: 0.5},
-}))`
-  flex-direction: column;
-  align-items: center;
-  padding: 10px;
-  height: 100%;
+const CardSurface = styled.View<{theme: Theme}>`
   flex: 1;
-  border-radius: 5px;
-  margin: 2.5px;
+  background-color: ${({theme}) => theme.white};
+  border-radius: 12px;
+  padding: 12px;
 `;
 
-// Increase the font size and weight of the ValueText component
-const ValueText = styled.Text<{color?: string; theme: Theme}>`
+const CardTitle = styled.Text<{theme: Theme}>`
+  font-size: 12px;
+  font-weight: 700;
+  color: ${({theme}) => addOpacity(theme.textColor, 0.75)};
+`;
+
+const CardValue = styled.Text<{theme: Theme; color?: string}>`
+  margin-top: 6px;
   font-size: 18px;
-  font-weight: bold;
-  color: ${props => (props.color ? props.color : props.theme.textColor)};
+  font-weight: 800;
+  color: ${({theme, color}) => color ?? theme.textColor};
 `;
 
-// Increase the font size of the LabelText component
-const LabelText = styled.Text<{color?: string}>`
-  font-size: 16px;
-  color: ${props => (props.color ? props.color : '#333')};
-  margin: 4px 0;
-  font-family: Courier New;
-  font-weight: bold;
+const CardSubtle = styled.Text<{theme: Theme}>`
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: ${({theme}) => addOpacity(theme.textColor, 0.65)};
 `;
 
-// noinspection CssNoGenericFontName
-const TimeValueText = styled(ValueText)`
-  font-size: 16px;
-  font-family: Courier New;
-`;
-
-const StDevValueText = styled(ValueText)`
-  font-size: 16px;
-  color: ${props => props.theme.textColor};
+const InlineRow = styled.View`
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 `;
 
 interface StatsRowProps {
@@ -87,12 +60,13 @@ interface StatsRowProps {
 }
 
 export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
-  if (!bgData || bgData.length === 0) {
-    return null;
-  }
+  const theme = useTheme() as Theme;
+  const data = bgData ?? [];
+  if (data.length === 0) return null;
+
   // Calculate the statistics from the bgData array
-  const {averageBg, stdDev} = calculateAverageAndStdDev(bgData);
-  const {lowestBg, highestBg} = bgData.reduce(
+  const {averageBg, stdDev} = calculateAverageAndStdDev(data);
+  const {lowestBg, highestBg} = data.reduce(
     (acc, bg) => {
       if (bg.sgv <= acc.lowestBg.sgv) {
         acc.lowestBg = bg;
@@ -102,73 +76,123 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
       }
       return acc;
     },
-    {lowestBg: bgData[0], highestBg: bgData[0]},
+    {lowestBg: data[0], highestBg: data[0]},
   );
   const bgChangeTimeRange = 30;
   const {upChange, downChange} = findBiggestChangesInTimeRange(
-    bgData,
+    data,
     bgChangeTimeRange,
   );
 
-  const theme = useTheme() as Theme;
+  const avgColor = theme.determineBgColorByGlucoseValue(averageBg);
+  const lowColor = theme.determineBgColorByGlucoseValue(lowestBg.sgv);
+  const highColor = theme.determineBgColorByGlucoseValue(highestBg.sgv);
 
   return (
     <>
-      <Container>
-        {/* Add a background color to the column with the lowest blood glucose value */}
-        <GradientColumn bgValue={averageBg}>
-          <LabelText>Average BG</LabelText>
-          <ValueText>{averageBg}</ValueText>
-          <StDevValueText>
-            {stdDev >= 0 ? '+' : '-'}
-            {stdDev.toFixed(2)}
-          </StDevValueText>
-        </GradientColumn>
-        {/* Add a background color to the column with the lowest blood glucose value */}
-        <GradientColumn bgValue={lowestBg.sgv}>
-          <LabelText color={'#ffffff'}>Lowest BG</LabelText>
-          <ValueText color={'#ffffff'}>{lowestBg.sgv}</ValueText>
-          <TimeValueText color={'#ffffff'}>
-            {formatDateToLocaleTimeString(lowestBg.date)}
-          </TimeValueText>
-        </GradientColumn>
-        {/* Add a background color to the column with the highest blood glucose value */}
-        <GradientColumn bgValue={highestBg.sgv}>
-          <LabelText>Highest BG</LabelText>
-          <ValueText>{highestBg.sgv}</ValueText>
-          <TimeValueText>
-            {formatDateToLocaleTimeString(highestBg.date)}
-          </TimeValueText>
-        </GradientColumn>
-      </Container>
-      <Container>
-        <Column style={{flex: 1}}>
-          <LabelText>Biggest rise up</LabelText>
-          {/* Use icons to represent the blood glucose values */}
-          <View style={{flexDirection: 'row', alignItems: 'center'}}>
-            <ValueText>{upChange.fromValue}</ValueText>
-            <Text style={{fontSize: 24}}>{'\u2191'}</Text>
-            <ValueText>{upChange.toValue}</ValueText>
-          </View>
-          <TimeValueText style={{fontSize: 14, color: '#666'}}>
-            {formatDateToLocaleTimeString(upChange.fromTime)} -{' '}
-            {formatDateToLocaleTimeString(upChange.toTime)}
-          </TimeValueText>
-        </Column>
-        <Column style={{flex: 1}}>
-          <LabelText>Biggest fall down</LabelText>
-          {/* Use icons to represent the blood glucose values */}
-          <View style={{flexDirection: 'row', alignItems: 'center'}}>
-            <ValueText>{downChange.fromValue}</ValueText>
-            <Text style={{fontSize: 24}}>{'\u2193'}</Text>
-            <ValueText>{downChange.toValue}</ValueText>
-          </View>
-          <TimeValueText style={{fontSize: 14, color: '#666'}}>
-            {formatDateToLocaleTimeString(downChange.fromTime)} -{' '}
-            {formatDateToLocaleTimeString(downChange.toTime)}
-          </TimeValueText>
-        </Column>
-      </Container>
+      <Section>
+        <CardRow>
+          <DropShadow
+            style={{
+              shadowColor: '#000',
+              shadowOffset: {width: 0, height: 2},
+              shadowOpacity: 0.08,
+              shadowRadius: 3,
+              elevation: 2,
+              flex: 1,
+            }}>
+            <CardSurface>
+              <CardTitle>Average</CardTitle>
+              <CardValue color={avgColor}>{averageBg}</CardValue>
+              <CardSubtle>
+                SD: {stdDev.toFixed(1)}
+              </CardSubtle>
+            </CardSurface>
+          </DropShadow>
+
+          <DropShadow
+            style={{
+              shadowColor: '#000',
+              shadowOffset: {width: 0, height: 2},
+              shadowOpacity: 0.08,
+              shadowRadius: 3,
+              elevation: 2,
+              flex: 1,
+            }}>
+            <CardSurface>
+              <CardTitle>Lowest</CardTitle>
+              <CardValue color={lowColor}>{lowestBg.sgv}</CardValue>
+              <CardSubtle>{formatDateToLocaleTimeString(lowestBg.date)}</CardSubtle>
+            </CardSurface>
+          </DropShadow>
+
+          <DropShadow
+            style={{
+              shadowColor: '#000',
+              shadowOffset: {width: 0, height: 2},
+              shadowOpacity: 0.08,
+              shadowRadius: 3,
+              elevation: 2,
+              flex: 1,
+            }}>
+            <CardSurface>
+              <CardTitle>Highest</CardTitle>
+              <CardValue color={highColor}>{highestBg.sgv}</CardValue>
+              <CardSubtle>{formatDateToLocaleTimeString(highestBg.date)}</CardSubtle>
+            </CardSurface>
+          </DropShadow>
+        </CardRow>
+
+        <CardRow>
+          <DropShadow
+            style={{
+              shadowColor: '#000',
+              shadowOffset: {width: 0, height: 2},
+              shadowOpacity: 0.08,
+              shadowRadius: 3,
+              elevation: 2,
+              flex: 1,
+            }}>
+            <CardSurface>
+              <CardTitle>Biggest Rise</CardTitle>
+              <InlineRow>
+                <CardValue>{upChange.fromValue}</CardValue>
+                <Text style={{fontSize: 18, color: addOpacity(theme.textColor, 0.6)}}>
+                  {'\u2191'}
+                </Text>
+                <CardValue>{upChange.toValue}</CardValue>
+              </InlineRow>
+              <CardSubtle>
+                {formatDateToLocaleTimeString(upChange.fromTime)} - {formatDateToLocaleTimeString(upChange.toTime)}
+              </CardSubtle>
+            </CardSurface>
+          </DropShadow>
+
+          <DropShadow
+            style={{
+              shadowColor: '#000',
+              shadowOffset: {width: 0, height: 2},
+              shadowOpacity: 0.08,
+              shadowRadius: 3,
+              elevation: 2,
+              flex: 1,
+            }}>
+            <CardSurface>
+              <CardTitle>Biggest Fall</CardTitle>
+              <InlineRow>
+                <CardValue>{downChange.fromValue}</CardValue>
+                <Text style={{fontSize: 18, color: addOpacity(theme.textColor, 0.6)}}>
+                  {'\u2193'}
+                </Text>
+                <CardValue>{downChange.toValue}</CardValue>
+              </InlineRow>
+              <CardSubtle>
+                {formatDateToLocaleTimeString(downChange.fromTime)} - {formatDateToLocaleTimeString(downChange.toTime)}
+              </CardSubtle>
+            </CardSurface>
+          </DropShadow>
+        </CardRow>
+      </Section>
     </>
   );
 };

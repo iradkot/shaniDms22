@@ -3,6 +3,7 @@
 import styled from 'styled-components/native';
 import {TouchableOpacity} from 'react-native';
 import {ThemeType} from 'app/types/theme';
+import {addOpacity} from 'app/style/styling.utils';
 
 export const TrendsContainer = styled.View<{theme: ThemeType}>`
   flex: 1;
@@ -110,9 +111,10 @@ export const MetricButton = styled.TouchableOpacity<{selected?: boolean}>`
     selected ? theme.accentColor : theme.secondaryColor};
 `;
 
-export const MetricButtonText = styled.Text`
-  color: #fff;
-  font-weight: bold;
+export const MetricButtonText = styled.Text<{selected?: boolean}>`
+  color: ${({selected, theme}) =>
+    selected ? theme.buttonTextColor : addOpacity(theme.textColor, 0.8)};
+  font-weight: 700;
 `;
 
 export const DateRangeHeader = styled.View`

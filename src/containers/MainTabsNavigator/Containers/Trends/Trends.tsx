@@ -1,7 +1,7 @@
 // /Trends/TrendsContainer.tsx
 
 import React, {useCallback, useMemo, useState} from 'react';
-import {View, ScrollView} from 'react-native';
+import {View, ScrollView, Text} from 'react-native';
 import {differenceInCalendarDays} from 'date-fns';
 
 import { useTrendsData } from './hooks/useTrendsData';
@@ -304,7 +304,7 @@ const Trends: React.FC = () => {
                   selected={selectedMetric === 'tir'}
                   onPress={() => setSelectedMetric('tir')}
                 >
-                  <MetricButtonText>TIR</MetricButtonText>
+                  <MetricButtonText selected={selectedMetric === 'tir'}>TIR</MetricButtonText>
                 </MetricButton>
               </View>
               <View style={{ marginHorizontal: 5 }}>
@@ -312,7 +312,7 @@ const Trends: React.FC = () => {
                   selected={selectedMetric === 'hypos'}
                   onPress={() => setSelectedMetric('hypos')}
                 >
-                  <MetricButtonText>Fewest Hypos</MetricButtonText>
+                  <MetricButtonText selected={selectedMetric === 'hypos'}>Fewest Hypos</MetricButtonText>
                 </MetricButton>
               </View>
               <View style={{ marginHorizontal: 5 }}>
@@ -320,7 +320,7 @@ const Trends: React.FC = () => {
                   selected={selectedMetric === 'hypers'}
                   onPress={() => setSelectedMetric('hypers')}
                 >
-                  <MetricButtonText>Fewest Hypers</MetricButtonText>
+                  <MetricButtonText selected={selectedMetric === 'hypers'}>Fewest Hypers</MetricButtonText>
                 </MetricButton>
               </View>
             </View>

@@ -9,6 +9,18 @@ Param(
 
 $ErrorActionPreference = 'Stop'
 
+# PowerShell 7+ can treat native command stderr as a terminating error when
+# PSNativeCommandUseErrorActionPreference is enabled. That breaks Gradle builds
+# that emit harmless warnings to stderr. We capture logs and check exit codes
+# explicitly instead.
+try {
+  if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -Scope Global -ErrorAction SilentlyContinue) {
+    $global:PSNativeCommandUseErrorActionPreference = $false
+  }
+} catch {
+  # ignore
+}
+
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $workspace
 
@@ -25,14 +37,53 @@ $resultsDir = Join-Path $workspace 'e2e/results'
 New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$junitRelative = "e2e/results/maestro-android-$timestamp.xml"
+
+# Per-run output folder + stable latest-run mirror for quick inspection.
+$runRelative = "e2e/results/run-$timestamp"
+$runPath = Join-Path $workspace ($runRelative -replace '/', '\\')
+New-Item -ItemType Directory -Force -Path $runPath | Out-Null
+
+$latestRunPath = Join-Path $resultsDir 'latest-run'
+if (Test-Path -LiteralPath $latestRunPath) {
+  Remove-Item -LiteralPath $latestRunPath -Recurse -Force -ErrorAction SilentlyContinue
+}
+New-Item -ItemType Directory -Force -Path $latestRunPath | Out-Null
+
+$junitRelative = "$runRelative/maestro-android.xml"
 $junitPath = Join-Path $workspace ($junitRelative -replace '/', '\\')
-$debugRelative = "e2e/results/debug-$timestamp"
+$debugRelative = "$runRelative/debug"
 $debugPath = Join-Path $workspace ($debugRelative -replace '/', '\\')
+
+$maestroLogPath = Join-Path $runPath 'maestro.log.txt'
+$logcatPath = Join-Path $runPath 'adb-logcat.txt'
+$metaPath = Join-Path $runPath 'run-info.txt'
+$nodeErrorsPath = Join-Path $runPath 'node-errors'
+New-Item -ItemType Directory -Force -Path $nodeErrorsPath | Out-Null
+
+try {
+  $gitSha = (git rev-parse --short HEAD 2>$null)
+} catch {
+  $gitSha = ''
+}
+
+"Timestamp: $timestamp" | Out-File -FilePath $metaPath -Encoding utf8
+"FlowPath:   $FlowPath" | Out-File -FilePath $metaPath -Append -Encoding utf8
+if ($gitSha) { "Git:       $gitSha" | Out-File -FilePath $metaPath -Append -Encoding utf8 }
+"AppId:     $AppId" | Out-File -FilePath $metaPath -Append -Encoding utf8
+"Workspace: $workspace" | Out-File -FilePath $metaPath -Append -Encoding utf8
+try {
+  "" | Out-File -FilePath $metaPath -Append -Encoding utf8
+  "adb devices -l:" | Out-File -FilePath $metaPath -Append -Encoding utf8
+  (adb devices -l 2>&1) | Out-File -FilePath $metaPath -Append -Encoding utf8
+} catch {
+  # ignore
+}
 
 Write-Host "Running Maestro flow(s): $FlowPath"
 Write-Host "JUnit report: $junitPath"
 Write-Host "Debug output: $debugPath"
+Write-Host "Run folder:   $runPath"
+Write-Host "Latest-run:   $latestRunPath"
 
 if (-not $SkipBuild) {
   Write-Host "Building E2E-enabled Android release APK (E2E=true)..."
@@ -40,7 +91,27 @@ if (-not $SkipBuild) {
   try {
     Push-Location (Join-Path $workspace 'android')
     $env:E2E = 'true'
-    & .\gradlew.bat :app:assembleRelease
+    $gradleLog = (Join-Path $runPath 'gradle-assembleRelease.log.txt')
+    $gradleStdout = (Join-Path $runPath 'gradle-assembleRelease.stdout.txt')
+    $gradleStderr = (Join-Path $runPath 'gradle-assembleRelease.stderr.txt')
+
+    $gradleProc = Start-Process -FilePath '.\gradlew.bat' -ArgumentList @(':app:assembleRelease') -NoNewWindow -Wait -PassThru -RedirectStandardOutput $gradleStdout -RedirectStandardError $gradleStderr
+    $gradleExit = $gradleProc.ExitCode
+
+    # Combine for convenience
+    try {
+      "--- STDOUT ---" | Out-File -FilePath $gradleLog -Encoding utf8
+      if (Test-Path -LiteralPath $gradleStdout) { Get-Content -LiteralPath $gradleStdout | Out-File -FilePath $gradleLog -Append -Encoding utf8 }
+      "" | Out-File -FilePath $gradleLog -Append -Encoding utf8
+      "--- STDERR ---" | Out-File -FilePath $gradleLog -Append -Encoding utf8
+      if (Test-Path -LiteralPath $gradleStderr) { Get-Content -LiteralPath $gradleStderr | Out-File -FilePath $gradleLog -Append -Encoding utf8 }
+    } catch { }
+
+    if ($gradleExit -ne 0) {
+      Write-Host "Gradle failed (exit $gradleExit). Last 80 lines:" 
+      try { Get-Content -LiteralPath $gradleLog -Tail 80 | ForEach-Object { Write-Host $_ } } catch { }
+      throw "Gradle assembleRelease failed (exit $gradleExit). See: $gradleLog"
+    }
   } finally {
     Pop-Location
     $env:E2E = $previousE2E
@@ -72,10 +143,19 @@ if (-not $SkipInstall) {
     # ignore
   }
 
-  & adb install -r $apk.FullName
+  & adb install -r $apk.FullName 2>&1 | Tee-Object -FilePath (Join-Path $runPath 'adb-install.log.txt')
 }
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
+
+# Capture device logs while Maestro runs.
+$logcatProc = $null
+try {
+  & adb logcat -c | Out-Null
+  $logcatProc = Start-Process -FilePath 'adb' -ArgumentList @('logcat', '-v', 'threadtime') -NoNewWindow -PassThru -RedirectStandardOutput $logcatPath -RedirectStandardError (Join-Path $runPath 'adb-logcat.stderr.txt')
+} catch {
+  Write-Host "(warning) Could not start adb logcat capture: $($_.Exception.Message)"
+}
 
 # Run with JUnit output + debug output (commands json) so we can count steps on Windows.
 New-Item -ItemType Directory -Force -Path $debugPath | Out-Null
@@ -112,10 +192,15 @@ try {
     Write-Host "- $f"
   }
 
-  & $maestro @maestroArgs
+  # Capture Maestro stdout/stderr so crashes show up in logs even when VS Code truncates output.
+  & $maestro @maestroArgs 2>&1 | Tee-Object -FilePath $maestroLogPath
 } catch {
   Write-Host "Maestro invocation failed: $($_.Exception.Message)"
   throw
+} finally {
+  if ($logcatProc -and -not $logcatProc.HasExited) {
+    try { Stop-Process -Id $logcatProc.Id -Force -ErrorAction SilentlyContinue } catch { }
+  }
 }
 
 $exitCode = 0
@@ -124,6 +209,56 @@ if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) {
 }
 
 $sw.Stop()
+
+# Mirror run artifacts to stable latest-run folder.
+try {
+  Copy-Item -Path (Join-Path $runPath '*') -Destination $latestRunPath -Recurse -Force
+} catch {
+  Write-Host "(warning) Could not mirror to latest-run: $($_.Exception.Message)"
+}
+
+# Extract likely JS/Node/React Native crashes for quick analysis.
+function Write-ErrorExtract {
+  param(
+    [Parameter(Mandatory = $true)][string]$InputPath,
+    [Parameter(Mandatory = $true)][string]$OutputPath
+  )
+
+  if (-not (Test-Path -LiteralPath $InputPath)) {
+    "(missing) $InputPath" | Out-File -FilePath $OutputPath -Encoding utf8
+    return
+  }
+
+  $patterns = @(
+    'FATAL EXCEPTION',
+    'AndroidRuntime',
+    'ReactNativeJS',
+    'Unhandled JS Exception',
+    'Invariant Violation',
+    'TypeError',
+    'ReferenceError',
+    'SyntaxError',
+    'Cannot read property',
+    "doesn't exist",
+    'Hermes',
+    'E/unknown:ReactNative',
+    'JSApplicationIllegalArgumentException'
+  )
+
+  $hits = Select-String -LiteralPath $InputPath -Pattern $patterns -SimpleMatch -Context 2,4 -ErrorAction SilentlyContinue
+  if (-not $hits) {
+    "No matches for error patterns." | Out-File -FilePath $OutputPath -Encoding utf8
+    return
+  }
+
+  $hits | ForEach-Object { $_.ToString() } | Out-File -FilePath $OutputPath -Encoding utf8
+}
+
+Write-ErrorExtract -InputPath $maestroLogPath -OutputPath (Join-Path $nodeErrorsPath 'maestro-errors.txt')
+Write-ErrorExtract -InputPath $logcatPath -OutputPath (Join-Path $nodeErrorsPath 'logcat-errors.txt')
+try {
+  Copy-Item -Path (Join-Path $nodeErrorsPath '*') -Destination (Join-Path $latestRunPath 'node-errors') -Recurse -Force
+} catch { }
 
 # Count executed/skipped steps from Maestro debug output.
 $executedStepsCount = 0

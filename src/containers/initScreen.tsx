@@ -14,16 +14,15 @@ const AppInitScreen: React.FC<{navigation: NavigationProp<any>}> = ({
   useEffect(() => {
     const authInstance = getAuth(getApp());
 
-    if (isE2E && !authInstance.currentUser) {
-      (authInstance as any)
-        .signInAnonymously?.()
-        .catch((e: unknown) => {
-          console.warn('AppInitScreen: E2E anonymous sign-in failed', e);
-          return auth().signInAnonymously();
-        })
-        .catch((e: unknown) => {
-          console.warn('AppInitScreen: E2E fallback anonymous sign-in failed', e);
-        });
+    // E2E runs should not depend on Firebase auth configuration.
+    // In release builds, anonymous sign-in can be disabled which would block
+    // navigation and cause all Maestro flows to fail.
+    if (isE2E) {
+      navigation.reset({
+        index: 0,
+        routes: [{name: MAIN_TAB_NAVIGATOR}],
+      });
+      return;
     }
 
     const unsubscribe = authInstance.onAuthStateChanged(user => {

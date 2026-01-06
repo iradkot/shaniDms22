@@ -4,10 +4,9 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import styled from 'styled-components/native';
 
 import {
-  MetricButton,
-  MetricButtonText,
   ExplanationText,
 } from '../styles/Trends.styles';
+import {addOpacity} from 'app/style/styling.utils';
 
 interface Props {
   presetDays: number;
@@ -37,17 +36,19 @@ export const DateRangeSelector: React.FC<Props> = ({
 
   return (
     <Container>
-      <PresetRow>
-        <MetricButton selected={presetDays === 7} onPress={() => onPresetDaysChange(7)}>
-          <MetricButtonText>7 Days</MetricButtonText>
-        </MetricButton>
-        <MetricButton selected={presetDays === 14} onPress={() => onPresetDaysChange(14)}>
-          <MetricButtonText>14 Days</MetricButtonText>
-        </MetricButton>
-        <MetricButton selected={presetDays === 30} onPress={() => onPresetDaysChange(30)}>
-          <MetricButtonText>30 Days</MetricButtonText>
-        </MetricButton>
-      </PresetRow>
+      <PillRow>
+        <Pill>
+          <PillSegment selected={presetDays === 7} onPress={() => onPresetDaysChange(7)}>
+            <PillSegmentText selected={presetDays === 7}>7 Days</PillSegmentText>
+          </PillSegment>
+          <PillSegment selected={presetDays === 14} onPress={() => onPresetDaysChange(14)}>
+            <PillSegmentText selected={presetDays === 14}>14 Days</PillSegmentText>
+          </PillSegment>
+          <PillSegment selected={presetDays === 30} onPress={() => onPresetDaysChange(30)}>
+            <PillSegmentText selected={presetDays === 30}>30 Days</PillSegmentText>
+          </PillSegment>
+        </Pill>
+      </PillRow>
 
       <CustomRow>
         <RangeButton onPress={() => setActivePicker('start')}>
@@ -92,10 +93,31 @@ const Container = styled.View`
   margin-vertical: 10px;
 `;
 
-const PresetRow = styled.View`
+const PillRow = styled.View`
   flex-direction: row;
   justify-content: center;
   margin-bottom: 8px;
+`;
+
+const Pill = styled.View`
+  flex-direction: row;
+  align-items: center;
+  padding: 2px;
+  border-radius: 999px;
+  background-color: ${({theme}) => addOpacity(theme.black, 0.06)};
+`;
+
+const PillSegment = styled.TouchableOpacity<{selected?: boolean}>`
+  padding: 8px 12px;
+  border-radius: 999px;
+  background-color: ${({selected, theme}) =>
+    selected ? theme.buttonBackgroundColor : 'transparent'};
+`;
+
+const PillSegmentText = styled.Text<{selected?: boolean}>`
+  font-weight: 700;
+  color: ${({selected, theme}) =>
+    selected ? theme.buttonTextColor : addOpacity(theme.textColor, 0.8)};
 `;
 
 const CustomRow = styled.View`
