@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect, useRef} from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import {Text, View} from 'react-native';
 import {BgSample} from 'app/types/day_bgs.types';
@@ -30,21 +30,21 @@ const CardSurface = styled.View<{theme: Theme}>`
 const CardTitle = styled.Text<{theme: Theme}>`
   font-size: 12px;
   font-weight: 700;
-  color: ${({theme}) => addOpacity(theme.textColor, 0.75)};
+  color: ${({theme}) => addOpacity(theme.black, 0.75)};
 `;
 
 const CardValue = styled.Text<{theme: Theme; color?: string}>`
   margin-top: 6px;
   font-size: 18px;
   font-weight: 800;
-  color: ${({theme, color}) => color ?? theme.textColor};
+  color: ${({theme, color}) => color ?? theme.black};
 `;
 
 const CardSubtle = styled.Text<{theme: Theme}>`
   margin-top: 4px;
   font-size: 12px;
   font-weight: 600;
-  color: ${({theme}) => addOpacity(theme.textColor, 0.65)};
+  color: ${({theme}) => addOpacity(theme.black, 0.65)};
 `;
 
 const InlineRow = styled.View`
@@ -87,6 +87,43 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
   const avgColor = theme.determineBgColorByGlucoseValue(averageBg);
   const lowColor = theme.determineBgColorByGlucoseValue(lowestBg.sgv);
   const highColor = theme.determineBgColorByGlucoseValue(highestBg.sgv);
+
+  const didLogRef = useRef(false);
+  useEffect(() => {
+    if (!__DEV__) return;
+    if (didLogRef.current) return;
+    didLogRef.current = true;
+
+    console.log('[BG Stats] render', {
+      count: data.length,
+      averageBg,
+      stdDev,
+      lowest: {sgv: lowestBg?.sgv, date: lowestBg?.date},
+      highest: {sgv: highestBg?.sgv, date: highestBg?.date},
+      upChange,
+      downChange,
+      colors: {
+        avgColor,
+        lowColor,
+        highColor,
+        themeBlack: (theme as any)?.black,
+        themeWhite: (theme as any)?.white,
+        themeText: (theme as any)?.textColor,
+      },
+    });
+  }, [
+    data.length,
+    averageBg,
+    stdDev,
+    lowestBg,
+    highestBg,
+    upChange,
+    downChange,
+    avgColor,
+    lowColor,
+    highColor,
+    theme,
+  ]);
 
   return (
     <>
@@ -140,7 +177,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
               <CardTitle>Biggest Rise</CardTitle>
               <InlineRow>
                 <CardValue>{upChange.fromValue}</CardValue>
-                <Text style={{fontSize: 18, color: addOpacity(theme.textColor, 0.6)}}>
+                <Text style={{fontSize: 18, color: addOpacity(theme.black, 0.6)}}>
                   {'\u2191'}
                 </Text>
                 <CardValue>{upChange.toValue}</CardValue>
@@ -159,7 +196,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
               <CardTitle>Biggest Fall</CardTitle>
               <InlineRow>
                 <CardValue>{downChange.fromValue}</CardValue>
-                <Text style={{fontSize: 18, color: addOpacity(theme.textColor, 0.6)}}>
+                <Text style={{fontSize: 18, color: addOpacity(theme.black, 0.6)}}>
                   {'\u2193'}
                 </Text>
                 <CardValue>{downChange.toValue}</CardValue>
