@@ -21,6 +21,12 @@ export const ORACLE_CHART_FUTURE_MIN = 240; // +4h
 // Feature extraction.
 export const ORACLE_SLOPE_WINDOW_MIN = 15;
 
+// Slope calculation samples ("dots") within the slope window.
+// We compute slope via least-squares over N samples to reduce noise.
+export const ORACLE_SLOPE_POINTS_MIN = 2;
+export const ORACLE_SLOPE_POINTS_MAX = 10;
+export const ORACLE_SLOPE_POINTS_DEFAULT = 4;
+
 // Matching tolerances.
 export const ORACLE_TIME_WINDOW_MIN = 90;
 export const ORACLE_BG_TOLERANCE_FIXED = 15;

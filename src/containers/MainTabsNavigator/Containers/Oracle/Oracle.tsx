@@ -1,5 +1,6 @@
 import React, {useCallback, useMemo, useState} from 'react';
 import {
+  Pressable,
   ScrollView,
   Switch,
   Text,
@@ -14,6 +15,11 @@ import Loader from 'app/components/common-ui/Loader/Loader';
 import {useOracleInsights} from 'app/hooks/useOracleInsights';
 import OracleGhostGraph from 'app/components/charts/OracleGhostGraph/OracleGhostGraph';
 import {addOpacity} from 'app/style/styling.utils';
+import {
+  ORACLE_SLOPE_POINTS_DEFAULT,
+  ORACLE_SLOPE_POINTS_MAX,
+  ORACLE_SLOPE_POINTS_MIN,
+} from 'app/services/oracle/oracleConstants';
 import {
   formatDateToDateAndTimeString,
   formatDateToLocaleTimeString,
@@ -85,12 +91,47 @@ const ToggleLabel = styled.Text<{theme: Theme}>`
   color: ${({theme}) => addOpacity(theme.textColor, 0.9)};
 `;
 
+const StepperRow = styled.View`
+  margin-top: 10px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const StepperControls = styled.View`
+  flex-direction: row;
+  align-items: center;
+`;
+
+const StepperValue = styled.Text<{theme: ThemeType}>`
+  min-width: 26px;
+  text-align: center;
+  font-size: ${({theme}) => theme.typography.size.sm}px;
+  font-weight: 800;
+  color: ${({theme}) => theme.textColor};
+`;
+
+const StepperButton = styled(Pressable)<{theme: ThemeType}>`
+  padding-vertical: ${({theme}) => theme.spacing.xs}px;
+  padding-horizontal: ${({theme}) => theme.spacing.sm}px;
+  border-radius: ${({theme}) => theme.borderRadius}px;
+  border-width: 1px;
+  border-color: ${({theme}) => addOpacity(theme.borderColor, 0.9)};
+`;
+
+const StepperButtonText = styled.Text<{theme: ThemeType}>`
+  font-size: ${({theme}) => theme.typography.size.sm}px;
+  font-weight: 800;
+  color: ${({theme}) => theme.textColor};
+`;
+
 const Oracle: React.FC = () => {
   const {width} = useWindowDimensions();
   const theme = useTheme() as ThemeType;
   const [selectedEventTs, setSelectedEventTs] = useState<number | null>(null);
   const [selectedPreviousTs, setSelectedPreviousTs] = useState<number | null>(null);
   const [includeLoadInMatching, setIncludeLoadInMatching] = useState(true);
+  const [slopePointCount, setSlopePointCount] = useState<number>(ORACLE_SLOPE_POINTS_DEFAULT);
   const {
     insights,
     events,
@@ -103,7 +144,7 @@ const Oracle: React.FC = () => {
     status,
     retry,
   } =
-    useOracleInsights({selectedEventTs, includeLoadInMatching});
+    useOracleInsights({selectedEventTs, includeLoadInMatching, slopePointCount});
 
   const summaryText = useMemo(() => {
     if (!selectedEvent) return 'Waiting for recent data…';
@@ -186,6 +227,40 @@ const Oracle: React.FC = () => {
                   thumbColor={includeLoadInMatching ? theme.accentColor : theme.borderColor}
                 />
               </ToggleRow>
+
+              <StepperRow>
+                <ToggleLabel>
+                  Slope points (noise smoothing)
+                </ToggleLabel>
+                <StepperControls>
+                  <StepperButton
+                    accessibilityLabel={E2E_TEST_IDS.oracle.slopeMinus ?? 'oracle.slope.minus'}
+                    onPress={() =>
+                      setSlopePointCount(v =>
+                        Math.max(ORACLE_SLOPE_POINTS_MIN, v - 1),
+                      )
+                    }
+                  >
+                    <StepperButtonText>−</StepperButtonText>
+                  </StepperButton>
+
+                  <StepperValue>{slopePointCount}</StepperValue>
+
+                  <StepperButton
+                    accessibilityLabel={E2E_TEST_IDS.oracle.slopePlus ?? 'oracle.slope.plus'}
+                    onPress={() =>
+                      setSlopePointCount(v =>
+                        Math.min(ORACLE_SLOPE_POINTS_MAX, v + 1),
+                      )
+                    }
+                  >
+                    <StepperButtonText>+</StepperButtonText>
+                  </StepperButton>
+                </StepperControls>
+              </StepperRow>
+              <CardSubtle>
+                Uses least-squares slope over the last 15 minutes.
+              </CardSubtle>
             </>
           )}
 

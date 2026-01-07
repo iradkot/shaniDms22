@@ -22,6 +22,9 @@ import {
   ORACLE_LOAD_MAX_MATCH_DISTANCE_MIN,
   ORACLE_MINUTES_PER_DAY,
   ORACLE_MINUTE_MS,
+  ORACLE_SLOPE_POINTS_DEFAULT,
+  ORACLE_SLOPE_POINTS_MAX,
+  ORACLE_SLOPE_POINTS_MIN,
   ORACLE_SLOPE_TOLERANCE,
   ORACLE_SLOPE_WINDOW_MIN,
   ORACLE_TARGET_BG_IDEAL_2H,
@@ -101,13 +104,68 @@ function interpolateSgvAt(
 }
 
 export function slopeAt(entries: OracleCachedBgEntry[], anchorTs: number): number | null {
-  const prevTs = anchorTs - ORACLE_SLOPE_WINDOW_MIN * ORACLE_MINUTE_MS;
-  const s0 = interpolateSgvAt(entries, anchorTs);
-  const sPrev = interpolateSgvAt(entries, prevTs);
-  if (s0 === null || sPrev === null) return null;
+  return slopeAtLeastSquares(entries, anchorTs);
+}
 
-  // Use the nominal 15m window (PRD). Interpolation already accounts for uneven sampling.
-  return (s0 - sPrev) / ORACLE_SLOPE_WINDOW_MIN;
+function clampInt(n: unknown, min: number, max: number): number {
+  const v = typeof n === 'number' && Number.isFinite(n) ? Math.round(n) : min;
+  return Math.max(min, Math.min(max, v));
+}
+
+/**
+ * Computes slope via least-squares regression over N sample points in the last ORACLE_SLOPE_WINDOW_MIN.
+ *
+ * Why: A two-point slope is extremely sensitive to CGM noise/jumps.
+ */
+export function slopeAtLeastSquares(
+  entries: OracleCachedBgEntry[],
+  anchorTs: number,
+  opts?: {
+    /** Number of sample points ("dots") to use across the window. */
+    sampleCount?: number;
+  },
+): number | null {
+  const sampleCount = clampInt(
+    opts?.sampleCount ?? ORACLE_SLOPE_POINTS_DEFAULT,
+    ORACLE_SLOPE_POINTS_MIN,
+    ORACLE_SLOPE_POINTS_MAX,
+  );
+
+  // Choose evenly spaced timestamps across [T-15m .. T], inclusive.
+  const points: Array<{x: number; y: number}> = [];
+  const windowMs = ORACLE_SLOPE_WINDOW_MIN * ORACLE_MINUTE_MS;
+  const denom = Math.max(1, sampleCount - 1);
+
+  for (let i = 0; i < sampleCount; i++) {
+    const t = anchorTs - ((denom - i) / denom) * windowMs;
+    const sgv = interpolateSgvAt(entries, t);
+    if (sgv == null) continue;
+    const xMin = (t - anchorTs) / ORACLE_MINUTE_MS; // minutes relative to anchor (negative..0)
+    points.push({x: xMin, y: sgv});
+  }
+
+  if (points.length < 2) return null;
+
+  // Least-squares slope: cov(x,y) / var(x)
+  let sumX = 0;
+  let sumY = 0;
+  for (const p of points) {
+    sumX += p.x;
+    sumY += p.y;
+  }
+  const meanX = sumX / points.length;
+  const meanY = sumY / points.length;
+
+  let num = 0;
+  let den = 0;
+  for (const p of points) {
+    const dx = p.x - meanX;
+    const dy = p.y - meanY;
+    num += dx * dy;
+    den += dx * dx;
+  }
+  if (den <= 1e-9) return null;
+  return num / den;
 }
 
 /**
@@ -332,9 +390,12 @@ export function computeOracleInsights(params: {
   deviceStatus: OracleCachedDeviceStatus[];
   /** When true, also require similar IOB/COB at the anchor (when available). */
   includeLoadInMatching?: boolean;
+  /** Number of sample points ("dots") for slope regression. */
+  slopePointCount?: number;
 }): OracleInsights {
   const {anchor, recentBg, history, treatments, deviceStatus} = params;
   const includeLoadInMatching = params.includeLoadInMatching !== false;
+  const slopePointCount = params.slopePointCount;
 
   // Defensive: caches may contain null/partial items across app upgrades.
   const historyClean: OracleCachedBgEntry[] = Array.isArray(history)
@@ -380,7 +441,8 @@ export function computeOracleInsights(params: {
     .sort((a, b) => a.date - b.date);
 
   const slopeSource = recentSlim.length ? recentSlim : sortedHistory;
-  const currentSlope = slopeAt(slopeSource, nowTs) ?? 0;
+  const currentSlope =
+    slopeAtLeastSquares(slopeSource, nowTs, {sampleCount: slopePointCount}) ?? 0;
   const currentBucket = trendBucket(currentSlope);
 
   const nowMinutes = minutesFromMidnightLocal(nowTs);
@@ -399,7 +461,7 @@ export function computeOracleInsights(params: {
     if (t0 >= nowTs) continue;
 
     // Must be able to compute slope for the past entry.
-    const pastSlope = slopeAt(sortedHistory, t0);
+    const pastSlope = slopeAtLeastSquares(sortedHistory, t0, {sampleCount: slopePointCount});
     if (pastSlope === null) continue;
 
     // Filter A: Time of day.
