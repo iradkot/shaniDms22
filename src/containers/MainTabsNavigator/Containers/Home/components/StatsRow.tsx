@@ -8,7 +8,6 @@ import {
   findBiggestChangesInTimeRange,
 } from 'app/utils/bg.utils';
 import {Theme} from 'app/types/theme';
-import DropShadow from 'react-native-drop-shadow';
 import {addOpacity} from 'app/style/styling.utils';
 
 const Section = styled.View<{theme: Theme}>`
@@ -17,7 +16,7 @@ const Section = styled.View<{theme: Theme}>`
 
 const CardRow = styled.View`
   flex-direction: row;
-  gap: 8px;
+  justify-content: space-between;
   margin-bottom: 8px;
 `;
 
@@ -57,9 +56,10 @@ const InlineRow = styled.View`
 
 interface StatsRowProps {
   bgData: BgSample[];
+  averageTitleTestID?: string;
 }
 
-export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
+export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) => {
   const theme = useTheme() as Theme;
   const data = bgData ?? [];
   if (data.length === 0) return null;
@@ -92,47 +92,34 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
     <>
       <Section>
         <CardRow>
-          <DropShadow
+          <View
             style={{
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: 2},
-              shadowOpacity: 0.08,
-              shadowRadius: 3,
-              elevation: 2,
               flex: 1,
+              marginRight: 8,
             }}>
-            <CardSurface>
+            <CardSurface testID={averageTitleTestID} collapsable={false}>
               <CardTitle>Average</CardTitle>
               <CardValue color={avgColor}>{averageBg}</CardValue>
               <CardSubtle>
                 SD: {stdDev.toFixed(1)}
               </CardSubtle>
             </CardSurface>
-          </DropShadow>
+          </View>
 
-          <DropShadow
+          <View
             style={{
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: 2},
-              shadowOpacity: 0.08,
-              shadowRadius: 3,
-              elevation: 2,
               flex: 1,
+              marginRight: 8,
             }}>
             <CardSurface>
               <CardTitle>Lowest</CardTitle>
               <CardValue color={lowColor}>{lowestBg.sgv}</CardValue>
               <CardSubtle>{formatDateToLocaleTimeString(lowestBg.date)}</CardSubtle>
             </CardSurface>
-          </DropShadow>
+          </View>
 
-          <DropShadow
+          <View
             style={{
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: 2},
-              shadowOpacity: 0.08,
-              shadowRadius: 3,
-              elevation: 2,
               flex: 1,
             }}>
             <CardSurface>
@@ -140,18 +127,14 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
               <CardValue color={highColor}>{highestBg.sgv}</CardValue>
               <CardSubtle>{formatDateToLocaleTimeString(highestBg.date)}</CardSubtle>
             </CardSurface>
-          </DropShadow>
+          </View>
         </CardRow>
 
         <CardRow>
-          <DropShadow
+          <View
             style={{
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: 2},
-              shadowOpacity: 0.08,
-              shadowRadius: 3,
-              elevation: 2,
               flex: 1,
+              marginRight: 8,
             }}>
             <CardSurface>
               <CardTitle>Biggest Rise</CardTitle>
@@ -166,15 +149,10 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
                 {formatDateToLocaleTimeString(upChange.fromTime)} - {formatDateToLocaleTimeString(upChange.toTime)}
               </CardSubtle>
             </CardSurface>
-          </DropShadow>
+          </View>
 
-          <DropShadow
+          <View
             style={{
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: 2},
-              shadowOpacity: 0.08,
-              shadowRadius: 3,
-              elevation: 2,
               flex: 1,
             }}>
             <CardSurface>
@@ -190,7 +168,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
                 {formatDateToLocaleTimeString(downChange.fromTime)} - {formatDateToLocaleTimeString(downChange.toTime)}
               </CardSubtle>
             </CardSurface>
-          </DropShadow>
+          </View>
         </CardRow>
       </Section>
     </>

@@ -137,4 +137,11 @@ export const E2E_TEST_IDS = {
     previousDetails: 'oracle.previous.details',
     noMatches: 'oracle.previous.noMatches',
   },
+
+  trends: {
+    quickStatsSection: 'trends.quickStats.section',
+    quickStatsAverageTitle: 'trends.quickStats.average.title',
+    quickStatsAvgTdd: 'trends.quickStats.avgTdd',
+    metricSelectorCollapsable: 'trends.metricSelector.collapsable',
+  },
 } as const;

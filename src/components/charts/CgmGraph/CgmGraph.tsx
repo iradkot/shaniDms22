@@ -83,19 +83,13 @@ const CGMGraph: React.FC<Props> = ({
   } = touchContext;
 
   useEffect(() => {
-    setGraphStyleContextValue({
-      ...graphStyleContextValue,
+    setGraphStyleContextValue(prev => ({
+      ...prev,
       width,
       height,
       bgSamples,
-    });
-  }, [width, height, bgSamples]);
-
-  if (!bgSamples || bgSamples.length === 0) {
-    // For E2E we still want a stable anchor in the view hierarchy.
-    // Rendering an empty container avoids flakiness when an account has no CGM data.
-    return testID ? <View style={{width, height}} testID={testID} /> : null;
-  }
+    }));
+  }, [width, height, bgSamples, setGraphStyleContextValue]);
 
   const xTouchPosition = touchPosition.x - graphStyleContextValue.margin.left;
   const yTouchPosition = touchPosition.y - graphStyleContextValue.margin.top;
@@ -134,6 +128,12 @@ const CGMGraph: React.FC<Props> = ({
       (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
     };
   }, [fullScreenPayload, navigation]);
+
+  if (!bgSamples || bgSamples.length === 0) {
+    // For E2E we still want a stable anchor in the view hierarchy.
+    // Rendering an empty container avoids flakiness when an account has no CGM data.
+    return testID ? <View style={{width, height}} testID={testID} /> : null;
+  }
 
   const closestBolus =
     isTouchActive && touchTimeMs != null && insulinData?.length

@@ -12,8 +12,9 @@ import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const DEFAULT_BG_COUNT = 1000;
-const MAX_BG_COUNT = 50000;
+const MAX_BG_COUNT = 100000;
 const EXPECTED_READINGS_PER_DAY = 288; // 5-minute CGM
+const HIGH_FREQUENCY_READINGS_PER_DAY = 1440; // 1-minute CGM
 
 const estimateBgCountForRange = (startDate: Date, endDate: Date) => {
   const days = Math.max(
@@ -21,8 +22,12 @@ const estimateBgCountForRange = (startDate: Date, endDate: Date) => {
     Math.floor((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1,
   );
 
-  // Add some slack for devices that report more frequently than 5 minutes.
-  const estimate = Math.ceil(days * EXPECTED_READINGS_PER_DAY * 1.2);
+  // For longer ranges, it's common to have 1-minute CGM. If we under-estimate,
+  // Nightscout will truncate the *earliest* readings which breaks month TIR.
+  const expectedPerDay = days >= 20 ? HIGH_FREQUENCY_READINGS_PER_DAY : EXPECTED_READINGS_PER_DAY;
+
+  // Add a bit of slack for sensors that report slightly faster / duplicates.
+  const estimate = Math.ceil(days * expectedPerDay * 1.1);
   return Math.min(MAX_BG_COUNT, Math.max(DEFAULT_BG_COUNT, estimate));
 };
 
@@ -332,7 +337,8 @@ export const fetchInsulinDataForDateRange = async (
 ): Promise<InsulinDataEntry[]> => {
   const startIso = startDate.toISOString();
   const endIso = endDate.toISOString();
-  const apiUrl = `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=1000`;
+  const count = estimateTreatmentsCountForRange(startDate, endDate);
+  const apiUrl = `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${count}`;
 
   try {
     const response = await nightscoutInstance.get<any[]>(apiUrl);

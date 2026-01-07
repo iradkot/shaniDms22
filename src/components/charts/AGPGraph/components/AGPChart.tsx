@@ -103,6 +103,12 @@ interface AGPChartProps {
   width: number;
   height: number;
   targetRange?: {min: number; max: number};
+
+  /**
+   * Enables touch interaction (crosshair + tooltip). Disable in scrollable summaries
+   * to avoid hijacking vertical scroll gestures.
+   */
+  enableTouch?: boolean;
 }
 
 const AGPChart: React.FC<AGPChartProps> = ({
@@ -110,6 +116,7 @@ const AGPChart: React.FC<AGPChartProps> = ({
   width,
   height,
   targetRange = cgmRange.TARGET,
+  enableTouch = true,
 }) => {
   const theme = useTheme();
 
@@ -258,18 +265,30 @@ const AGPChart: React.FC<AGPChartProps> = ({
       <Svg
         width={width}
         height={height}
-        onTouchStart={e => {
-          setIsTouchActive(true);
-          handleTouch(e.nativeEvent.locationX);
-        }}
-        onTouchMove={e => {
-          handleTouch(e.nativeEvent.locationX);
-        }}
-        onTouchEnd={() => {
-          setIsTouchActive(false);
-          setActivePoint(null);
-          setActiveX(null);
-        }}
+        onTouchStart={
+          enableTouch
+            ? e => {
+                setIsTouchActive(true);
+                handleTouch(e.nativeEvent.locationX);
+              }
+            : undefined
+        }
+        onTouchMove={
+          enableTouch
+            ? e => {
+                handleTouch(e.nativeEvent.locationX);
+              }
+            : undefined
+        }
+        onTouchEnd={
+          enableTouch
+            ? () => {
+                setIsTouchActive(false);
+                setActivePoint(null);
+                setActiveX(null);
+              }
+            : undefined
+        }
       >
         <G transform={`translate(${margin.left}, ${margin.top})`}>
         {/* Background + border */}
@@ -390,7 +409,7 @@ const AGPChart: React.FC<AGPChartProps> = ({
         />
 
         {/* Touch overlay: crosshair + marker + tooltip */}
-        {isTouchActive && activePoint && activeX !== null && activeY !== null && (
+        {enableTouch && isTouchActive && activePoint && activeX !== null && activeY !== null && (
           <>
             <Line
               x1={activeX}

@@ -15,13 +15,14 @@ import { DataFetchStatus } from './components/DataFetchStatus';
 import { DateRangeSelector } from './components/DateRangeSelector';
 import { CompareSection } from './components/CompareSection';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
-import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
 // (If you have insulin data, pass it in above.)
 
 import Collapsable from 'app/components/Collapsable';
 import { DayInsights } from './TrendsUI'; // <--- Now it exists for real!
 import {AGPSummary} from 'app/components/charts/AGPGraph';
+import QuickStatsRow from './components/QuickStatsRow';
+import {useTrendsQuickStats} from './hooks/useTrendsQuickStats';
 
 import {
   TrendsContainer,
@@ -94,6 +95,8 @@ const Trends: React.FC = () => {
     showMaxWaitReached,
     finalMetrics,
   } = useTrendsData({ rangeDays, start, end });
+
+  const {stats: quickStats} = useTrendsQuickStats({bgData, start, end, rangeDays});
 
   // 3) Compare logic
   const [showComparison, setShowComparison] = useState(false);
@@ -260,7 +263,7 @@ const Trends: React.FC = () => {
 
       {/* 6. Main content if data is present */}
       {!isLoading && !fetchError && finalMetrics.dailyDetails.length > 0 && (
-        <ScrollView>
+        <ScrollView removeClippedSubviews={false}>
           {/* (a) Time In Range */}
           <View style={{ marginBottom: 15 }}>
             <SectionTitle>Key Glucose Trends</SectionTitle>
@@ -268,9 +271,19 @@ const Trends: React.FC = () => {
           </View>
 
           {/* (b) Quick Stats */}
-          <View style={{ marginBottom: 15 }}>
+          <View
+            testID={E2E_TEST_IDS.trends.quickStatsSection}
+            style={{ marginBottom: 15 }}>
             <SectionTitle>Quick Stats</SectionTitle>
-            <StatsRow bgData={bgData} />
+            <QuickStatsRow
+              avgTddUPerDay={quickStats.avgTddUPerDay}
+              basalPct={quickStats.basalPct}
+              bolusPct={quickStats.bolusPct}
+              hyposPerWeek={quickStats.hyposPerWeek}
+              nightTirPct={quickStats.nightTirPct}
+              avgCarbsGPerDay={quickStats.avgCarbsGPerDay}
+              avgTddTestID={E2E_TEST_IDS.trends.quickStatsAvgTdd}
+            />
           </View>
 
           {/* (c) AGP Summary */}
@@ -296,7 +309,9 @@ const Trends: React.FC = () => {
           */}
 
           {/* (e) Best/Worst Day Selection */}
-          <Collapsable title="Select Metric for Best/Worst Day">
+          <Collapsable
+            title="Select Metric for Best/Worst Day"
+            testID={E2E_TEST_IDS.trends.metricSelectorCollapsable}>
             <ExplanationText>Choose how to determine best/worst day:</ExplanationText>
             <View style={{flexDirection: 'row', justifyContent: 'center', marginVertical: 10}}>
               <View style={{ marginHorizontal: 5 }}>
