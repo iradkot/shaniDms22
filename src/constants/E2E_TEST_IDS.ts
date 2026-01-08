@@ -38,6 +38,13 @@ export const E2E_TEST_IDS = {
     toggleFoodTab: 'settings.toggle.foodTab',
     toggleSportTab: 'settings.toggle.sportTab',
     toggleNotificationsTab: 'settings.toggle.notificationsTab',
+
+    severeHypoInput: 'settings.input.severeHypo',
+    hypoInput: 'settings.input.hypo',
+    hyperInput: 'settings.input.hyper',
+    severeHyperInput: 'settings.input.severeHyper',
+    nightStartHourInput: 'settings.input.nightStartHour',
+    nightEndHourInput: 'settings.input.nightEndHour',
   },
 
   notifications: {
@@ -147,3 +154,4 @@ export const E2E_TEST_IDS = {
     metricSelectorCollapsable: 'trends.metricSelector.collapsable',
   },
 } as const;
+

@@ -5,14 +5,6 @@ import { format } from 'date-fns';
 import { cgmRange, CGM_STATUS_CODES } from 'app/constants/PLAN_CONFIG';
 import {calculateTimeInRangePercentages} from 'app/utils/glucose/timeInRange';
 
-const LOW_THRESHOLD = cgmRange.TARGET.min;
-const HIGH_THRESHOLD = cgmRange.TARGET.max;
-const VERY_LOW_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_LOW] as number;
-const VERY_HIGH_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
-const SERIOUS_HYPO_THRESHOLD = cgmRange[CGM_STATUS_CODES.SERIOUS_LOW] as number;
-const SERIOUS_HYPER_THRESHOLD =
-  cgmRange[CGM_STATUS_CODES.SERIOUS_HIGH] as number;
-
 export interface DayDetail {
   dateString: string;
   avg: number;
@@ -36,6 +28,15 @@ export function calculateTrendsMetrics(bgData: BgSample[]) {
     return { ...emptyMetrics(), dailyDetails: [] };
   }
 
+  // Read thresholds dynamically (they can be user-configured in Settings).
+  const LOW_THRESHOLD = cgmRange.TARGET.min;
+  const HIGH_THRESHOLD = cgmRange.TARGET.max;
+  const VERY_LOW_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_LOW] as number;
+  const VERY_HIGH_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
+  const SERIOUS_HYPO_THRESHOLD = cgmRange[CGM_STATUS_CODES.SERIOUS_LOW] as number;
+  const SERIOUS_HYPER_THRESHOLD =
+    cgmRange[CGM_STATUS_CODES.SERIOUS_HIGH] as number;
+
   const chronData = [...bgData].sort((a, b) => a.date - b.date);
 
   const allValues = chronData.map(d => d.sgv).sort((a, b) => a - b);
@@ -52,7 +53,11 @@ export function calculateTrendsMetrics(bgData: BgSample[]) {
   const afternoonAvg = afternoonValues.length > 0 ? avg(afternoonValues) : mean;
   const eveningAvg = eveningValues.length > 0 ? avg(eveningValues) : mean;
 
-  const { seriousHypoEvents, seriousHyperEvents } = countSeriousEvents(chronData);
+  const { seriousHypoEvents, seriousHyperEvents } = countSeriousEvents(
+    chronData,
+    SERIOUS_HYPO_THRESHOLD,
+    SERIOUS_HYPER_THRESHOLD,
+  );
 
   const {percentages: overallTirPct, validCount: overallValidCount} =
     calculateTimeInRangePercentages(chronData, {
@@ -86,7 +91,7 @@ export function calculateTrendsMetrics(bgData: BgSample[]) {
     const dInRange = dayValidCount > 0 ? dayTirPct.target / 100 : 0;
 
     const { seriousHypoEvents: dayHypoEvents, seriousHyperEvents: dayHyperEvents } =
-      countSeriousEvents(samples);
+      countSeriousEvents(samples, SERIOUS_HYPO_THRESHOLD, SERIOUS_HYPER_THRESHOLD);
 
     const dMorning = filterValuesByTime(samples, 0, 6);
     const dMidday = filterValuesByTime(samples, 6, 12);
@@ -132,7 +137,11 @@ export function calculateTrendsMetrics(bgData: BgSample[]) {
   };
 }
 
-function countSeriousEvents(samples: BgSample[]) {
+function countSeriousEvents(
+  samples: BgSample[],
+  seriousHypoThreshold: number,
+  seriousHyperThreshold: number,
+) {
   let inHypo = false;
   let inHyper = false;
   let hypoEvents = 0;
@@ -141,17 +150,17 @@ function countSeriousEvents(samples: BgSample[]) {
   for (let i = 0; i < samples.length; i++) {
     const sgv = samples[i].sgv;
     // Check for serious hypo
-    if (sgv < SERIOUS_HYPO_THRESHOLD && !inHypo) {
+    if (sgv < seriousHypoThreshold && !inHypo) {
       inHypo = true;
-    } else if (sgv >= SERIOUS_HYPO_THRESHOLD && inHypo) {
+    } else if (sgv >= seriousHypoThreshold && inHypo) {
       hypoEvents++;
       inHypo = false;
     }
 
     // Check for serious hyper
-    if (sgv > SERIOUS_HYPER_THRESHOLD && !inHyper) {
+    if (sgv > seriousHyperThreshold && !inHyper) {
       inHyper = true;
-    } else if (sgv <= SERIOUS_HYPER_THRESHOLD && inHyper) {
+    } else if (sgv <= seriousHyperThreshold && inHyper) {
       hyperEvents++;
       inHyper = false;
     }

@@ -2,20 +2,21 @@ import {interpolateRgb} from 'd3';
 import {DetermineBgColorByGlucoseValue, Theme} from 'app/types/theme';
 import {Platform} from 'react-native';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
-//
-const SEVERE_HYPO_THRESHOLD = cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number;
-const HYPO_THRESHOLD = cgmRange.TARGET.min;
-const TARGET_FROM = cgmRange.TARGET.min;
-const TARGET_TO = cgmRange.TARGET.max;
-const TARGET_MIDDLE = (TARGET_TO + TARGET_FROM) / 2;
-const HYPER_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
-const SEVERE_HYPER_THRESHOLD = cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] as number;
 
 // props are bgValue and theme, theme defaults to theme
 export const determineBgColorByGlucoseValue: DetermineBgColorByGlucoseValue = (
   bgValue: number,
   currentTheme: Theme,
 ) => {
+  // Read thresholds dynamically (they can be user-configured in Settings).
+  const SEVERE_HYPO_THRESHOLD = cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number;
+  const HYPO_THRESHOLD = cgmRange.TARGET.min;
+  const TARGET_FROM = cgmRange.TARGET.min;
+  const TARGET_TO = cgmRange.TARGET.max;
+  const TARGET_MIDDLE = (TARGET_TO + TARGET_FROM) / 2;
+  const HYPER_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
+  const SEVERE_HYPER_THRESHOLD = cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] as number;
+
   const SEVERE_HYPO_COLOR = currentTheme.severeBelowRange;
   const HYPO_COLOR = currentTheme.belowRangeColor;
   const TARGET_FROM_COLOR = currentTheme.inRangeColor;
@@ -123,3 +124,4 @@ export const addBrightness = (color: string, amount: number): string => {
 
   return color;
 };
+
