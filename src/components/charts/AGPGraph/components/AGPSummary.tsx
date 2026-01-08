@@ -162,7 +162,13 @@ const AGPSummary: React.FC<AGPSummaryProps> = ({
       </View>
 
       <Card bg={theme.white} border={border}>
-        <AGPChart agpData={agpData} width={computedWidth} height={height} targetRange={cgmRange.TARGET} />
+        <AGPChart
+          agpData={agpData}
+          width={computedWidth}
+          height={height}
+          targetRange={cgmRange.TARGET}
+          enableTouch={false}
+        />
         <View style={{marginTop: theme.spacing.sm}}>
           <ErrorText color={subtleText}>
             {agpData.dateRange.days} days • {stats.totalReadings} readings

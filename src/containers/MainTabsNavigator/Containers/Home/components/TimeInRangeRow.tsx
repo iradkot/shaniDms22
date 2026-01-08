@@ -174,6 +174,8 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
   const legendLow = Math.round(buckets.severeLow + buckets.low);
   const legendTarget = Math.round(buckets.target);
   const legendHigh = Math.round(buckets.high + buckets.severeHigh);
+  const legendSevereLow = Math.round(buckets.severeLow);
+  const legendSevereHigh = Math.round(buckets.severeHigh);
 
   const showLargestInBar = useMemo(() => {
     const max = Math.max(
@@ -280,6 +282,17 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
         <LegendItem>
           <LegendDot color={theme.aboveRangeColor} />
           <LegendText>High: {legendHigh}%</LegendText>
+        </LegendItem>
+      </LegendRow>
+
+      <LegendRow>
+        <LegendItem>
+          <LegendDot color={theme.severeBelowRange} />
+          <LegendText>Severe Hypo: {legendSevereLow}%</LegendText>
+        </LegendItem>
+        <LegendItem>
+          <LegendDot color={theme.severeAboveRange} />
+          <LegendText>Severe Hyper: {legendSevereHigh}%</LegendText>
         </LegendItem>
       </LegendRow>
     </Container>

@@ -1,17 +1,10 @@
-import React, {useEffect, useRef, useState} from 'react';
-import {
-  Animated,
-  Easing,
-  LayoutAnimation,
-  TouchableOpacity,
-} from 'react-native';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {Animated, Easing, TouchableOpacity, View} from 'react-native';
 import styled from 'styled-components/native';
 import AntDesign from 'react-native-vector-icons/AntDesign';
-import {useLayout} from '@react-native-community/hooks';
-import {Theme} from 'app/types/theme';
-import DropShadow from 'react-native-drop-shadow';
+import {ThemeType} from 'app/types/theme';
 
-const CollapsableContainer = styled.View<{theme: Theme}>`
+const CollapsableContainer = styled.View<{theme: ThemeType}>`
   width: 100%;
   border-bottom-width: 1px;
   border-bottom-color: #ddd;
@@ -25,7 +18,7 @@ const TitleContainer = styled.View`
   padding: 0 16px;
 `;
 
-const TitleText = styled.Text<{theme: Theme}>`
+const TitleText = styled.Text<{theme: ThemeType}>`
   font-size: 18px;
   color: #333;
   align-items: center;
@@ -39,24 +32,20 @@ const IconContainer = styled.View`
   justify-content: center;
 `;
 
-const ContentContainer = styled(Animated.View)`
-  overflow: hidden;
-`;
-
-const ContentOverlay = styled(Animated.View)`
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #fff;
-`;
+const ContentContainer = styled.View``;
 
 interface CollapsableProps {
   title: string;
   initialIsCollapsed?: boolean;
   testID?: string;
   children: React.ReactNode;
+
+  /**
+   * If true, keeps children mounted while collapsed (hidden via height/opacity).
+   * Default false because keeping mounted can trigger RN layout/clipping glitches
+   * in long ScrollViews on Android.
+   */
+  keepMounted?: boolean;
 }
 
 const openAnimationDuration = 500;
@@ -66,33 +55,10 @@ const Collapsable: React.FC<CollapsableProps> = ({
   children,
   initialIsCollapsed = true,
   testID,
+  keepMounted = false,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(initialIsCollapsed);
-  const contentHeight = useRef(new Animated.Value(0)).current;
-  const overlayOpacity = useRef(new Animated.Value(1)).current;
   const arrowRotation = useRef(new Animated.Value(0)).current;
-  // WIP TO MAKE BETTER ANIMATION WITH LAYOUT PROP
-  // const {onLayout, ...layout} = useLayout();
-  const {onLayout} = useLayout();
-
-  // console.log('layout: ', layout);
-  useEffect(() => {
-    if (isCollapsed) {
-      contentHeight.setValue(0);
-    } else {
-      contentHeight.setValue(200);
-    }
-    // eslint-disable-next-line
-  }, [isCollapsed]);
-
-  useEffect(() => {
-    LayoutAnimation.configureNext({
-      duration: isCollapsed ? closeAnimationDuration : openAnimationDuration,
-      update: {
-        type: LayoutAnimation.Types.easeOut,
-      },
-    });
-  }, [isCollapsed]);
 
   useEffect(() => {
     Animated.timing(arrowRotation, {
@@ -103,14 +69,9 @@ const Collapsable: React.FC<CollapsableProps> = ({
     }).start();
   }, [isCollapsed, arrowRotation]);
 
-  useEffect(() => {
-    Animated.timing(overlayOpacity, {
-      toValue: isCollapsed ? 1 : 0,
-      duration: isCollapsed ? closeAnimationDuration : openAnimationDuration,
-      useNativeDriver: true,
-      easing: Easing.out(Easing.ease),
-    }).start();
-  }, [isCollapsed, overlayOpacity]);
+  const shouldRenderChildren = useMemo(() => {
+    return keepMounted ? true : !isCollapsed;
+  }, [isCollapsed, keepMounted]);
 
   return (
     <CollapsableContainer>
@@ -119,63 +80,44 @@ const Collapsable: React.FC<CollapsableProps> = ({
         onPress={() => setIsCollapsed(prevCollapsed => !prevCollapsed)}
         testID={testID}>
         <TitleContainer>
-          <DropShadow
-            style={{
-              shadowColor: '#000',
-              shadowOffset: {
-                width: 1,
-                height: 1,
-              },
-              shadowOpacity: 0.2,
-              shadowRadius: 1,
-              flex: 1,
-              height: 48,
-              justifyContent: 'center',
-            }}>
-            <TitleText testID={testID}>{title}</TitleText>
-          </DropShadow>
-          <DropShadow
-            style={{
-              shadowColor: '#000',
-              shadowOffset: {
-                width: 1,
-                height: 1,
-              },
-              shadowOpacity: 0.5,
-              shadowRadius: 1,
-            }}>
-            <IconContainer>
-              <Animated.View
-                style={{
-                  transform: [
-                    {
-                      rotate: arrowRotation.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ['0deg', '180deg'],
-                      }),
-                    },
-                  ],
-                }}>
-                <AntDesign name="up" size={24} color="#333" />
-              </Animated.View>
-            </IconContainer>
-          </DropShadow>
+          <TitleText style={{flex: 1}}>
+            {title}
+          </TitleText>
+          <IconContainer>
+            <Animated.View
+              style={{
+                transform: [
+                  {
+                    rotate: arrowRotation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0deg', '180deg'],
+                    }),
+                  },
+                ],
+              }}>
+              <AntDesign name="up" size={24} color="#333" />
+            </Animated.View>
+          </IconContainer>
         </TitleContainer>
       </TouchableOpacity>
-      {!isCollapsed && (
+      {shouldRenderChildren ? (
         <ContentContainer
-          // style={{height: contentHeight}}
-          pointerEvents="auto"
-          onLayout={onLayout}>
-          {children}
-          <ContentOverlay
-            style={{
-              opacity: overlayOpacity,
-            }}
-            pointerEvents={isCollapsed ? 'auto' : 'none'}
-          />
+          pointerEvents={isCollapsed ? 'none' : 'auto'}
+          style={
+            keepMounted
+              ? {
+                  height: isCollapsed ? 0 : undefined,
+                  opacity: isCollapsed ? 0 : 1,
+                  overflow: 'hidden',
+                }
+              : undefined
+          }
+          collapsable={false}
+        >
+          {/* Extra wrapper prevents certain flattening/layout edge-cases */}
+          <View collapsable={false}>{children}</View>
         </ContentContainer>
-      )}
+      ) : null}
     </CollapsableContainer>
   );
 };

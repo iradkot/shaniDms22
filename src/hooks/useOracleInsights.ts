@@ -9,7 +9,7 @@ import {syncOracleCache} from 'app/services/oracle/oracleCache';
 import {
   computeOracleInsights,
   findLoadAtTs,
-  slopeAt,
+  slopeAtLeastSquares,
   trendBucket,
 } from 'app/services/oracle/oracleMatching';
 import {
@@ -45,15 +45,16 @@ function buildRecentEvents(params: {
   recentSlim: OracleCachedBgEntry[];
   maxEvents: number;
   minSpacingMinutes: number;
+  slopePointCount?: number;
 }): OracleInvestigateEvent[] {
-  const {recentSlim, maxEvents, minSpacingMinutes} = params;
+  const {recentSlim, maxEvents, minSpacingMinutes, slopePointCount} = params;
   const events: OracleInvestigateEvent[] = [];
   const spacingMs = minSpacingMinutes * 60 * 1000;
 
   // Walk from newest to oldest; keep a few spaced-out anchors to avoid spam.
   for (let i = recentSlim.length - 1; i >= 0; i--) {
     const e = recentSlim[i];
-    const slope = slopeAt(recentSlim, e.date);
+    const slope = slopeAtLeastSquares(recentSlim, e.date, {sampleCount: slopePointCount});
     if (slope == null) continue;
 
     const shouldKeep =
@@ -73,8 +74,12 @@ function buildRecentEvents(params: {
   return events;
 }
 
-function bestEffortSlopeAt(entries: OracleCachedBgEntry[], anchorTs: number): number | null {
-  const strict = slopeAt(entries, anchorTs);
+function bestEffortSlopeAt(
+  entries: OracleCachedBgEntry[],
+  anchorTs: number,
+  slopePointCount?: number,
+): number | null {
+  const strict = slopeAtLeastSquares(entries, anchorTs, {sampleCount: slopePointCount});
   if (strict != null) return strict;
 
   // Fallback for sparse or gappy data: use the nearest earlier point within a short window.
@@ -116,6 +121,8 @@ export function useOracleInsights(params?: {
   selectedEventTs?: number | null;
   /** When true, require similar IOB/COB at the anchor (when available). */
   includeLoadInMatching?: boolean;
+  /** Number of sample points ("dots") for slope regression. */
+  slopePointCount?: number;
 }): {
   insights: OracleInsights | null;
   events: OracleInvestigateEvent[];
@@ -134,6 +141,7 @@ export function useOracleInsights(params?: {
 } {
   const selectedEventTs = params?.selectedEventTs ?? null;
   const includeLoadInMatching = params?.includeLoadInMatching !== false;
+  const slopePointCount = params?.slopePointCount;
 
   const {snapshot, isLoading: snapshotLoading, error: snapshotError} =
     useLatestNightscoutSnapshot({pollingEnabled: true});
@@ -283,7 +291,12 @@ export function useOracleInsights(params?: {
     const sortedDeviceStatus = [...(deviceStatus ?? [])].sort((a, b) => a.ts - b.ts);
 
     // Enrich with a best-effort slope to avoid empty lists on sparse data.
-    const raw = buildRecentEvents({recentSlim: base, maxEvents: 10, minSpacingMinutes: 20});
+    const raw = buildRecentEvents({
+      recentSlim: base,
+      maxEvents: 10,
+      minSpacingMinutes: 20,
+      slopePointCount,
+    });
     if (raw.length) {
       return raw.map(e => {
         const load = findLoadAtTs(sortedDeviceStatus, e.date);
@@ -295,7 +308,7 @@ export function useOracleInsights(params?: {
     const spacingMs = 20 * 60 * 1000;
     for (let i = base.length - 1; i >= 0; i--) {
       const e = base[i];
-      const slope = bestEffortSlopeAt(base, e.date);
+      const slope = bestEffortSlopeAt(base, e.date, slopePointCount);
       if (slope == null) continue;
       const shouldKeep =
         fallbackEvents.length === 0 ||
@@ -347,6 +360,7 @@ export function useOracleInsights(params?: {
         treatments,
         deviceStatus,
         includeLoadInMatching,
+        slopePointCount,
       });
 
       const elapsed = Date.now() - startMs;
@@ -361,7 +375,7 @@ export function useOracleInsights(params?: {
       console.warn('Oracle: computeOracleInsights failed', e);
       return {insights: null, computeError: e};
     }
-  }, [history, recentBg, selectedEvent, treatments, deviceStatus, includeLoadInMatching]);
+  }, [history, recentBg, selectedEvent, treatments, deviceStatus, includeLoadInMatching, slopePointCount]);
 
   const error = snapshotError ?? syncError ?? recentError ?? computed.computeError;
   const isLoading = snapshotLoading || isSyncing || isLoadingRecent;

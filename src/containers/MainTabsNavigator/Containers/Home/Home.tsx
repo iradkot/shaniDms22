@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo} from 'react';
+import React, {useCallback, useEffect, useMemo} from 'react';
 
 import styled from 'styled-components/native';
 import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
@@ -56,12 +56,17 @@ const Home: React.FC = () => {
     insulinData,
     basalProfileData,
     isLoading: insulinIsLoading,
+    getUpdatedInsulinData,
   } = useInsulinData(debouncedCurrentDate);
 
   const startOfDay = new Date(debouncedCurrentDate);
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(debouncedCurrentDate);
   endOfDay.setHours(23, 59, 59, 999);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([getUpdatedBgData(), getUpdatedInsulinData()]);
+  }, [getUpdatedBgData, getUpdatedInsulinData]);
 
   useEffect(() => {
     setDebouncedCurrentDate(currentDate);
@@ -169,6 +174,7 @@ const Home: React.FC = () => {
             basalProfileData={basalProfileData}
             startDate={startOfDay}
             endDate={endOfDay}
+            onRefresh={refreshAll}
           />
         </Collapsable>
         <Collapsable title={'chart'} testID={E2E_TEST_IDS.charts.cgmSection}>

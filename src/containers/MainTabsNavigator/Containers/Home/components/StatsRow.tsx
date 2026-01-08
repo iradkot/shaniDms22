@@ -8,58 +8,60 @@ import {
   findBiggestChangesInTimeRange,
 } from 'app/utils/bg.utils';
 import {Theme} from 'app/types/theme';
-import DropShadow from 'react-native-drop-shadow';
 import {addOpacity} from 'app/style/styling.utils';
 
-const Section = styled.View<{theme: Theme}>`
-  padding: 6px 10px;
+const Section = styled.View.attrs({collapsable: false})<{theme: Theme}>`
+  padding-top: 6px;
+  padding-right: 10px;
+  padding-bottom: 6px;
+  padding-left: 10px;
 `;
 
-const CardRow = styled.View`
+const CardRow = styled.View.attrs({collapsable: false})`
   flex-direction: row;
-  gap: 8px;
+  justify-content: flex-start;
   margin-bottom: 8px;
 `;
 
-const CardSurface = styled.View<{theme: Theme}>`
-  flex: 1;
+const CardSurface = styled.View.attrs({collapsable: false})<{theme: Theme}>`
   background-color: ${({theme}) => theme.white};
   border-radius: 12px;
   padding: 12px;
+  width: 100%;
 `;
 
 const CardTitle = styled.Text<{theme: Theme}>`
   font-size: 12px;
   font-weight: 700;
-  color: ${({theme}) => addOpacity(theme.textColor, 0.75)};
+  color: ${({theme}) => addOpacity(theme.black, 0.75)};
 `;
 
 const CardValue = styled.Text<{theme: Theme; color?: string}>`
   margin-top: 6px;
   font-size: 18px;
   font-weight: 800;
-  color: ${({theme, color}) => color ?? theme.textColor};
+  color: ${({theme, color}) => color ?? theme.black};
 `;
 
 const CardSubtle = styled.Text<{theme: Theme}>`
   margin-top: 4px;
   font-size: 12px;
   font-weight: 600;
-  color: ${({theme}) => addOpacity(theme.textColor, 0.65)};
+  color: ${({theme}) => addOpacity(theme.black, 0.65)};
 `;
 
-const InlineRow = styled.View`
+const InlineRow = styled.View.attrs({collapsable: false})`
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 6px;
 `;
 
 interface StatsRowProps {
   bgData: BgSample[];
+  averageTitleTestID?: string;
 }
 
-export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
+export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) => {
   const theme = useTheme() as Theme;
   const data = bgData ?? [];
   if (data.length === 0) return null;
@@ -92,47 +94,37 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
     <>
       <Section>
         <CardRow>
-          <DropShadow
+          <View
+            collapsable={false}
             style={{
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: 2},
-              shadowOpacity: 0.08,
-              shadowRadius: 3,
-              elevation: 2,
               flex: 1,
+              marginRight: 8,
             }}>
-            <CardSurface>
+            <CardSurface testID={averageTitleTestID} collapsable={false}>
               <CardTitle>Average</CardTitle>
-              <CardValue color={avgColor}>{averageBg}</CardValue>
-              <CardSubtle>
-                SD: {stdDev.toFixed(1)}
-              </CardSubtle>
+              <CardValue color={avgColor}>
+                {averageBg}
+              </CardValue>
+              <CardSubtle>SD: {stdDev.toFixed(1)}</CardSubtle>
             </CardSurface>
-          </DropShadow>
+          </View>
 
-          <DropShadow
+          <View
+            collapsable={false}
             style={{
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: 2},
-              shadowOpacity: 0.08,
-              shadowRadius: 3,
-              elevation: 2,
               flex: 1,
+              marginRight: 8,
             }}>
             <CardSurface>
               <CardTitle>Lowest</CardTitle>
               <CardValue color={lowColor}>{lowestBg.sgv}</CardValue>
               <CardSubtle>{formatDateToLocaleTimeString(lowestBg.date)}</CardSubtle>
             </CardSurface>
-          </DropShadow>
+          </View>
 
-          <DropShadow
+          <View
+            collapsable={false}
             style={{
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: 2},
-              shadowOpacity: 0.08,
-              shadowRadius: 3,
-              elevation: 2,
               flex: 1,
             }}>
             <CardSurface>
@@ -140,24 +132,26 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
               <CardValue color={highColor}>{highestBg.sgv}</CardValue>
               <CardSubtle>{formatDateToLocaleTimeString(highestBg.date)}</CardSubtle>
             </CardSurface>
-          </DropShadow>
+          </View>
         </CardRow>
 
         <CardRow>
-          <DropShadow
+          <View
+            collapsable={false}
             style={{
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: 2},
-              shadowOpacity: 0.08,
-              shadowRadius: 3,
-              elevation: 2,
               flex: 1,
+              marginRight: 8,
             }}>
             <CardSurface>
               <CardTitle>Biggest Rise</CardTitle>
               <InlineRow>
                 <CardValue>{upChange.fromValue}</CardValue>
-                <Text style={{fontSize: 18, color: addOpacity(theme.textColor, 0.6)}}>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    color: addOpacity(theme.black, 0.6),
+                    marginHorizontal: 6,
+                  }}>
                   {'\u2191'}
                 </Text>
                 <CardValue>{upChange.toValue}</CardValue>
@@ -166,22 +160,23 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
                 {formatDateToLocaleTimeString(upChange.fromTime)} - {formatDateToLocaleTimeString(upChange.toTime)}
               </CardSubtle>
             </CardSurface>
-          </DropShadow>
+          </View>
 
-          <DropShadow
+          <View
+            collapsable={false}
             style={{
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: 2},
-              shadowOpacity: 0.08,
-              shadowRadius: 3,
-              elevation: 2,
               flex: 1,
             }}>
             <CardSurface>
               <CardTitle>Biggest Fall</CardTitle>
               <InlineRow>
                 <CardValue>{downChange.fromValue}</CardValue>
-                <Text style={{fontSize: 18, color: addOpacity(theme.textColor, 0.6)}}>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    color: addOpacity(theme.black, 0.6),
+                    marginHorizontal: 6,
+                  }}>
                   {'\u2193'}
                 </Text>
                 <CardValue>{downChange.toValue}</CardValue>
@@ -190,7 +185,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData}) => {
                 {formatDateToLocaleTimeString(downChange.fromTime)} - {formatDateToLocaleTimeString(downChange.toTime)}
               </CardSubtle>
             </CardSurface>
-          </DropShadow>
+          </View>
         </CardRow>
       </Section>
     </>

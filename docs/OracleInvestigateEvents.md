@@ -1,263 +1,677 @@
-# Investigate Events ("Oracle") — Product Review Doc
+# Investigate Events ("Oracle") — Implementation Deep Dive
 
-> Date: 2026-01-04
+> Date: 2026-01-07
 
-## TL;DR
+This document describes **how the Oracle / Investigate Events feature works today in code**, including:
 
-- **Today (v1):** We do pattern matching on BG history to answer “what usually happens next?”.
-- **Next (v2):** Add **Actionable Intelligence** by correlating **Treatments → Outcomes** to answer “what actions historically worked best in similar situations?”.
-- **Safety:** The app must only describe historical associations (not prescribe). Always include a visible disclaimer.
+- What we fetch (Nightscout endpoints), what we cache locally, and how incremental syncing works
+- How “events” are built and selected
+- How the **matching algorithm** filters history and produces match traces
+- How outcomes/strategies are computed
+- The exact UI copy/text we show the user
+- Which inputs/fields are supported by the codebase but **not currently used in the UX**
 
-## 1) What this feature is
+## 1) Where the code lives
 
-The **Investigate Events** tab (previously labeled “Oracle”) is a pattern-matching tool:
+Core data + math:
 
-- A user selects a **recent event** (an anchor point in recent BG data).
-- The app searches **historical BG history** for **previous similar events**.
-- It visualizes what typically happened **after** those similar events and provides a short text insight.
+- `src/services/oracle/oracleConstants.ts`
+- `src/services/oracle/oracleTypes.ts`
+- `src/services/oracle/oracleCache.ts`
+- `src/services/oracle/oracleMatching.ts`
+- `src/services/oracle/oracleCgmGraphAdapter.ts` (adapter for richer match details UI)
 
-This is meant to answer:
+Hook and UI:
 
-- “When my BG looks like *this* at *this time of day*, what usually happens next?”
+- `src/hooks/useOracleInsights.ts`
+- `src/containers/MainTabsNavigator/Containers/Oracle/Oracle.tsx`
+- `src/containers/MainTabsNavigator/Containers/Oracle/components/OracleCards.tsx`
+- `src/containers/MainTabsNavigator/Containers/Oracle/components/OracleRows.tsx`
+- `src/containers/MainTabsNavigator/Containers/Oracle/components/OracleMatchDetailsCard.tsx`
+- `src/containers/MainTabsNavigator/Containers/Oracle/utils/oracleUiUtils.ts`
+- `src/components/charts/OracleGhostGraph/OracleGhostGraph.tsx`
 
+Nightscout fetch utilities used by Oracle:
 
-## 2) Current UX (in-app)
+- `src/api/apiRequests.ts`
+- `src/utils/mergeDeviceStatusIntoBgSamples.utils.ts` (device status timestamp + IOB/COB extraction helpers)
+
+Tests:
+
+- `__tests__/oracleCgmGraphAdapter.test.ts`
+- `e2e/maestro/oracle-events.yaml`
+
+## 2) User-facing UX (current)
 
 ### 2.1 Entry point
 
-- Bottom tab: **Oracle** (label can be renamed later; current implementation keeps the tab label).
-- Screen title: **Investigate Events**.
+- Bottom tab label (in tab bar): **"Oracle"**
+- Screen header/title inside the screen: **"Investigate Events"**
 
-### 2.2 Flow
+### 2.2 Screen sections + exact displayed copy
 
-1) **Pick an event**
-   - Shows a small list of recent candidate events (spaced out to avoid duplicates).
-   - Each row displays:
-     - Event kind: `Rising` / `Falling` / `Stable`
-     - Time (local time)
-     - Slope (mg/dL/min)
-     - BG value (mg/dL)
+The Oracle screen is one scroll view containing these cards:
 
-2) **Compare vs history**
-   - The chart overlays:
-     - The user’s **current** recent BG (up to 2h back)
-     - Several matched historical trajectories (“ghost” traces)
-     - A median trajectory (future window)
+#### A) Header / status card
 
-3) **Insight**
-   - A concise text summary of what often happened in those matches.
+Title:
 
-4) **Previous events list**
-   - A short list of recent historical matches.
-   - Each item shows:
-     - Anchor timestamp (local date/time)
-     - Anchor BG value
-     - Basic outcome summary (currently: 2h min + 4h max)
+- **"Investigate Events"**
 
+Dynamic subtitle line (event label):
 
-## 3) Definitions (important for product discussions)
+- `"Rising event • {date/time}"` / `"Falling event • {date/time}"` / `"Stable event • {date/time}"`
 
-### 3.1 “Event” (today)
+Summary line (header summary):
 
-An “event” is **not** a logged user action (meal/bolus/exercise).
+- When no selected event yet: **"Waiting for recent data…"**
+- When event selected but insights not computed yet: **"Searching cached history…"**
+- When syncing and matchCount==0: **"Searching cached history…"**
+- Otherwise: **"Found {matchCount} previous similar events."**
 
-Today it is purely a **BG pattern anchor**:
+IOB/COB line (load summary):
 
-- A point in recent BG data with an estimated slope at that time.
-- Categorized into an event kind:
-  - `Rising` if slope > +0.5 mg/dL/min
-  - `Falling` if slope < −0.5 mg/dL/min
-  - `Stable` otherwise
+- When no selected event: **"IOB — • COB —"**
+- When insights missing: **"Calculating IOB/COB…"**
+- When ready: **"IOB {x.y}u • COB {z}g"** (formats: `u` with 1 decimal, `g` rounded)
 
-### 3.2 “Previous events” (today)
+Matching mode hint:
 
-These are matched historical anchors that:
+- If “Include load” toggle is ON: **"Matching includes IOB/COB (when available)."**
+- If OFF: **"Matching uses CGM pattern only."**
 
-- Occurred **before** the selected event timestamp
-- Have similar:
-  - Time-of-day window
-  - BG level (within tolerance)
-  - Trend bucket and slope proximity
+Load availability hint (only when toggle ON and the anchor has no numeric IOB/COB):
 
+- **"IOB/COB not available for this event; matching will ignore load."**
 
-## 4) Data inputs & storage
+Toggle label:
 
-### 4.1 Live / recent BG
+- **"Include IOB/COB in similar-event search"**
 
-- Source: Nightscout via existing API requests.
-- Recent window used for anchoring/slope: ~3 hours (derived around the current snapshot).
+Slope smoothing control:
 
-### 4.2 Historical BG cache
+- Label: **"Slope points (noise smoothing)"**
+- Buttons: **"−"** and **"+"**
+- Hint text: **"Uses least-squares slope over the last 15 minutes."**
+- Notes:
+  - Higher values smooth CGM noise more, but can lag quick changes.
+  - The value is clamped to `ORACLE_SLOPE_POINTS_MIN..MAX`.
 
-- A 90‑day local cache is synced and stored on device.
-- This cache is used for matching even when live fetch fails.
+Cache timestamp line (only when available):
 
-### 4.3 Offline behavior
+- **"Cache updated: {date/time}"**
 
-- If fetching recent BG window fails, the hook derives a best-effort recent window from cached history.
-- If live snapshot is missing, the feature currently has limited ability to compute “recent event candidates”.
+Sync hint when we are doing the initial (no-history) sync:
 
+- `"{status.message} Similar events may be empty for a moment."`
 
-## 5) Matching logic (current implementation)
+Status banner (error state):
 
-### 5.1 High-level
+- Message (computed by the hook):
+  - **"Unable to load data. Check your connection and try again."**
+  - or **"Not enough recent data to pick an event yet. Try again in a minute."**
+- Button label: **"Retry"**
 
-Given a selected anchor event with:
+Status banner (warn state when there is an error but we still show cached data):
 
-- Anchor time `T0`
-- Anchor BG `BG0`
-- Anchor slope `S0`
-- Anchor trend bucket `K0`
+- **"Live fetch unavailable; showing cached data when possible."**
+- Button label: **"Retry"**
 
-Search historical cache for entries `Ti` such that:
+Status banner (info state while syncing with existing history):
 
-- Ti < T0 (previous-only)
-- Time-of-day similarity: within `±90 min` circularly (handles day wrap)
-- Glucose proximity: within `max(15 mg/dL, 10% of BG0)`
-- Trend alignment:
-  - Same trend bucket
-  - Slope difference within a tolerance
+- Message (computed): one of
+  - **"Updating history cache…"**
+  - **"Building your 90‑day history cache…"**
+  - **"Syncing history cache…"**
 
-Then build a trace by interpolating history to generate a series of points:
+Loading spinner caption (only when hook status.state == loading):
 
-- Past window: −120 min
-- Future window: +240 min
+- **"Loading recent data…"**
 
-A median series is computed for future minutes where data exists.
+#### B) “Pick an event” card
 
-### 5.2 Insight text (current)
+Title:
 
-The text insight is currently a simple outcome comparison across matches:
+- **"Pick an event"**
 
-- % of matches that dropped below 120 within 2 hours
-- % of matches that rose to ~250 within 4 hours
+Subtitle:
 
-The larger percentage “wins” and is rendered as the single insight sentence.
+- **"Choose a recent point to compare against history."**
 
+If no events available:
 
-## 6) E2E coverage (Maestro)
+- **"No recent events yet."**
 
-This repo uses Maestro flows under `e2e/maestro/`.
+Each event row shows (single line format):
 
-### 6.1 Oracle Investigate Events
+- Left title: `Rising` / `Falling` / `Stable`
+- Meta line format:
+  - `"{time} • slope {slope} mg/dL/min • IOB {iob} • COB {cob}"`
+- Right value: `{sgv}` (raw BG number)
 
-- Flow: `e2e/maestro/oracle-events.yaml`
-- Validates:
-  - Oracle tab opens
-  - Event list renders
-  - Selecting an event triggers insights + chart
-  - “Previous events” list renders
+#### C) Ghost chart
 
-### 6.2 Related E2E flows supporting stability
+Renders `OracleGhostGraph` (see section 6 for details).
 
-- `e2e/maestro/login-and-tabs.yaml` (baseline navigation)
-- `e2e/maestro/charts-smoke.yaml` (chart containers)
-- `e2e/maestro/home-header-smoke.yaml` + `glucose-log-loadbars.yaml`
-- `e2e/maestro/nightscout-scan.yaml`
-  - Ensures Home header is driven by live Nightscout data vs fallback in E2E mode.
+#### D) “What tended to work” card
 
+Title:
 
-## 7) Current limitations / open questions
+- **"What tended to work"**
 
-### 7.1 Product meaning of “event”
+Subtitle:
 
-Today “event” = “BG trend anchor”.
+- **"Strategy cards group similar past events by actions recorded in the first 30 minutes. Historical associations only — not dosing advice."**
 
-If Product expects event kinds like:
+Strategy card badge:
 
-- Meal
-- Bolus
-- Exercise
-- Hypo / Hyper episode
-- Sensor/loop changes
+- If marked best: **"Best historical outcome"**
+- Otherwise: **"{count} matches"**
 
-…we need additional inputs (treatments, device status, user-entered logs) and explicit event definitions.
+Outcome line formats:
 
-### 7.2 Explainability
+- Avg line:
+  - **"Avg +2h BG {value}"** or **"Avg +2h BG unavailable"**
+- Success line:
+  - **"{pct}% in 70–140 at +2h"** or **"Success rate unavailable"**
 
-We currently show:
+Empty state:
 
-- A graph + one-line insight
-- A list of matched historical anchors
+- **"No strategies yet (not enough similar events)."**
 
-But we do not show *why* each match matched (time-of-day delta, BG delta, slope delta).
+Disclaimer (comes from `ORACLE_DISCLAIMER_TEXT`):
 
-### 7.3 Personalization controls
+- **"Informational only. Not medical advice. Always follow your clinician’s guidance and your therapy settings."**
 
-No user controls exist yet for:
+#### E) “Previous events” card
 
-- Match strictness
-- Time-of-day window size
-- History window (30/60/90 days)
-- Excluding nights/weekends, etc.
+Title:
 
-### 7.4 Stability vs data availability
+- **"Previous events"**
 
-If recent data is missing/empty, the event picker can become empty (nothing to investigate).
+Subtitle:
 
+- **"Most recent similar events from history."**
 
-## 8) Extension ideas (concrete next steps)
+If syncing and no matches shown yet:
 
-Below are options Product can choose from; each is independent.
+- **"Searching history…"**
 
-### 8.1 True “event kinds” (meal/bolus/exercise)
+If no matches found:
 
-- Define event schemas:
-  - Meal event: carbs, timestamp, optional photo
-  - Bolus event: units, type
-  - Exercise event: intensity + duration
-  - Hypo/hyper: threshold-based episode
-- Create an event timeline and let Investigate Events select from those, not from BG anchors.
-- Matching would incorporate:
-  - Event metadata (carbs, bolus, intensity)
-  - Context window (BG and IOB/COB around the event)
+- **"No similar events found."**
 
-### 8.2 Add an “Event details” drill-down
+Each previous-event row meta line is composed as:
 
-- Tapping a previous event could open a detail view:
-  - Exact curve
-  - Match reason breakdown
-  - Outcome metrics
+- Either `"2h min {min} • 4h max {max}"` OR `"Outcome unavailable"`
+- Then `"IOB {iob} • COB {cob}"`
+- Then `"TIR(0–2h) {percent}"`
+- Then either **"Within next 2h"** or **"Outside next 2h"**
 
-(Requires product decision: new screen vs inline expansion.)
+If a previous event row is tapped, an inline details card is rendered:
 
-### 8.3 Better outcome metrics
+- Title: **"Event details"**
+- One-line treatment summary:
+  - **"Boluses (0–30m): {n} • Insulin: {x.y}U • Carbs: {z}g"**
+- One-line load summary:
+  - **"IOB/COB at event: {x.y}U / {z}g"**
 
-Replace or complement the current insight with:
+## 3) Inputs, fetches, and local cache
 
-- Probability of hypo (<70 / <80) in 2h/4h
-- Time-to-peak / time-to-nadir
-- Expected delta at +30/+60/+120 minutes
-- Confidence (based on match count)
+Oracle uses two “data horizons”:
 
-### 8.4 Reliability improvements
+1) A **recent window** (~3 hours) to build event candidates and compute the “current” line.
+2) A **90-day local cache** to match against and compute strategies/medians.
 
-- Ensure recent event candidates always exist by:
-  - Allowing anchors from cached history when live snapshot is missing
-  - Or allowing the user to pick an anchor time from the Home chart
+### 3.1 Live snapshot
 
-### 8.5 Experiment framework
+`useOracleInsights` uses `useLatestNightscoutSnapshot({pollingEnabled: true})`.
 
-- Add product toggles / remote config to A/B:
-  - Strict vs loose matching
-  - Different insight text variants
+- If snapshot BG is valid, it becomes the “now anchor”.
+- If snapshot BG is missing (offline), it falls back to the last cached history entry.
 
+### 3.2 Nightscout endpoints used
 
-## 9) PRD v2.0 — Actionable Treatments ("So What?")
+All are GETs via `nightscoutInstance`.
 
-> **Goal:** Move from “predicting the curve” to “revealing the winning strategy.”
-> **Key question:** “In similar past situations, what action (bolus/carbs) led to the best result?”
+BG entries (cached by Oracle):
 
-### 9.1 Core concept: Treatment clustering
+- `/api/v1/entries?find[dateString][$gte]={startISO}&find[dateString][$lte]={endISO}&count={count}`
 
-Instead of averaging all matched historical trajectories into a single median, split matches into groups based on what the user actually did shortly after the event.
+Treatments (cached by Oracle):
 
-**Algorithm outline (v2):**
+- `/api/v1/treatments?find[created_at][$gte]={startISO}&find[created_at][$lte]={endISO}&count={count}`
 
-1) Find ~20 similar historical events using the existing match logic.
-2) Look at **treatments** that occurred in the first **30 minutes** after each historical anchor.
-3) Cluster matches into strategy buckets, for example:
-   - **Cluster A (Passive):** no action
+Device status (cached by Oracle):
+
+- `/api/v1/devicestatus?find[created_at][$gte]={startISO}&find[created_at][$lte]={endISO}&count={count}`
+
+Important behavior:
+
+- Oracle intentionally uses the “Uncached” variants in `apiRequests.ts` to avoid polluting generic date-range caches.
+- Failures for these endpoints generally return `[]` (Oracle treats deviceStatus/treatments as optional).
+
+### 3.3 Oracle local cache (AsyncStorage)
+
+Oracle stores stable keys independent of rolling-window timestamps:
+
+- BG entries: `oracle.entries.v2`
+- Treatments: `oracle.treatments.v1`
+- Device status: `oracle.deviceStatus.v1`
+- Meta: `oracle.meta.v2`
+
+Meta schema:
+
+- `{ version: 2, lastSyncedMs: number }`
+
+### 3.4 Cache sync behavior (full vs incremental)
+
+Function: `syncOracleCache({ nowMs?, days? })`
+
+Defaults:
+
+- `days = 90` (also exposed as `ORACLE_CACHE_DAYS`)
+- `nowMs = Date.now()`
+
+Computed:
+
+- `startMs = nowMs - days * 24h`
+
+Full sync triggers when:
+
+- There is no usable meta (`lastSyncedMs` missing/invalid), or
+- There are 0 cached BG entries
+
+Fetch range:
+
+- Full sync: `[startMs, nowMs]`
+- Incremental: `[max(startMs, lastSyncedMs - 5 minutes), nowMs]`
+
+This “-5 minutes” overlap is intentional to reduce edge misses.
+
+### 3.5 What we cache (shapes)
+
+BG entries are slimmed to:
+
+- `{ date: number(ms), sgv: number }`
+
+Treatments are slimmed to:
+
+- `{ ts: number(ms), insulin?: number, carbs?: number, eventType?: string }`
+
+Timestamp parsing supports (in this order):
+
+- `t.mills` (number)
+- `t.created_at` (ISO string)
+- `t.timestamp` (ISO string)
+
+Device status is slimmed to:
+
+- `{ ts: number(ms), iob?, iobBolus?, iobBasal?, cob? }`
+
+Device status `ts` selection prefers Loop-aligned timestamps:
+
+- `entry.loop.iob.timestamp`
+- `entry.loop.cob.timestamp`
+- `entry.loop.timestamp`
+- fallback: `entry.mills`, then `entry.created_at`
+
+Load extraction supports multiple payload shapes:
+
+- Loop (`entry.loop.*`)
+- OpenAPS (`entry.openaps.*`)
+- top-level fallbacks (`entry.iob`, `entry.cob`)
+
+## 4) Event candidates: how we pick “events”
+
+An “event” here is a **recent BG anchor point**, not a user-logged event.
+
+### 4.1 Recent window (currently used)
+
+Constant:
+
+- `ORACLE_RECENT_WINDOW_HOURS = 3`
+
+The recent BG window is fetched as:
+
+- `start = now.date - 3 hours`
+- `end = now.date`
+
+Offline fallback:
+
+- If recent fetch fails, derive recent points from cached history in the same window.
+
+### 4.2 How event rows are constructed
+
+Function: `buildRecentEvents({ recentSlim, maxEvents, minSpacingMinutes })`
+
+Current parameters (hard-coded in the hook):
+
+- `maxEvents = 10`
+- `minSpacingMinutes = 20`
+
+Algorithm:
+
+1) Walk the recent BG points from newest → oldest.
+2) For each candidate time `t`, compute slope using least-squares regression (`slopeAtLeastSquares(recentSlim, t, { sampleCount: slopePointCount })`).
+3) Keep the point if it is at least 20 minutes away from the last kept event.
+4) Event kind is `trendBucket(slope)`.
+
+If strict slope computation yields no events (e.g. sparse/gappy recent data):
+
+- Fallback slope uses `bestEffortSlopeAt()` which:
+  - looks backward up to 30 minutes
+  - requires at least a 5-minute spacing between points
+  - uses $(\Delta \text{SGV}) / (\Delta \text{minutes})$
+
+Finally, events are enriched with best-effort IOB/COB via `findLoadAtTs()`.
+
+## 5) Matching & calculation logic
+
+The core computation is synchronous/pure:
+
+- `computeOracleInsights({ anchor, recentBg, history, treatments, deviceStatus, includeLoadInMatching?, slopePointCount? })`
+
+### 5.1 Constants / parameters (current values)
+
+Caching:
+
+- `ORACLE_CACHE_DAYS = 90`
+
+Time and chart windows:
+
+- `ORACLE_RECENT_WINDOW_HOURS = 3`
+- `ORACLE_CHART_PAST_MIN = 120` (match traces include -2h)
+- `ORACLE_CHART_FUTURE_MIN = 240` (match traces include +4h)
+
+Slope (feature extraction):
+
+- `ORACLE_SLOPE_WINDOW_MIN = 15`
+- `ORACLE_SLOPE_POINTS_MIN = 2`
+- `ORACLE_SLOPE_POINTS_MAX = 10`
+- `ORACLE_SLOPE_POINTS_DEFAULT = 4`
+
+Matching tolerances:
+
+- `ORACLE_TIME_WINDOW_MIN = 90` (minutes-of-day circular window)
+- `ORACLE_BG_TOLERANCE_FIXED = 15` (mg/dL)
+- `ORACLE_BG_TOLERANCE_PERCENT = 0.1` (10%)
+- `ORACLE_SLOPE_TOLERANCE = 2` (mg/dL/min)
+
+Load matching:
+
+- `ORACLE_LOAD_MAX_MATCH_DISTANCE_MIN = 10` (how close deviceStatus must be to be considered “at ts”)
+- `ORACLE_IOB_TOLERANCE_U = 1.0`
+- `ORACLE_COB_TOLERANCE_G = 20`
+
+Treatments window:
+
+- `ORACLE_ACTION_WINDOW_MIN = 30` (sum/count markers within first 30 minutes after match anchor)
+
+Outcome metrics:
+
+- `ORACLE_TARGET_BG_MIN_2H = 70`
+- `ORACLE_TARGET_BG_MAX_2H = 140`
+- `ORACLE_TARGET_BG_IDEAL_2H = 110`
+
+Trend bucketing threshold (hard-coded):
+
+- Rising if slope > `+0.5`
+- Falling if slope < `-0.5`
+- Else Stable
+
+Interpolation gap guard (default parameter):
+
+- `maxGapMin = 10` minutes (if nearest samples are farther than this, interpolation returns null)
+
+### 5.2 “Slope at time” definition
+
+We define slope at timestamp $T$ (mg/dL/min) over the prior 15 minutes using **least-squares linear regression** over $N$ sample points ("dots") across $[T-15\,\text{min}, T]$.
+
+Implementation (`slopeAtLeastSquares()`):
+
+- Choose $N$ evenly spaced timestamps across the window (inclusive).
+- For each timestamp $t_i$, compute $\text{SGV}(t_i)$ via `interpolateSgvAt()`.
+- Let $x_i$ be minutes relative to the anchor: $x_i = (t_i - T)$ (so $x_i \in [-15, 0]$), and $y_i = \text{SGV}(t_i)$.
+- Compute slope as:
+
+$$\text{slope}(T) = \frac{\sum_i (x_i-\bar{x})(y_i-\bar{y})}{\sum_i (x_i-\bar{x})^2}$$
+
+Notes:
+
+- Output is in **mg/dL/min**.
+- If fewer than 2 SGV samples can be interpolated in the window, slope returns null.
+- `slopeAt()` remains as a wrapper for backward compatibility and currently delegates to the regression slope.
+
+Where `interpolateSgvAt()` behaves like:
+
+- If there is a sample within 10 minutes of T, use it.
+- Else, if there are samples on both sides within 10 minutes, linearly interpolate.
+- Else return null.
+
+### 5.3 Match filters (A/B/C/…)
+
+Given an anchor BG sample:
+
+- `nowTs = anchor.date`
+- `nowSgv = anchor.sgv`
+
+We compute:
+
+- `currentSlope = slopeAt(recentWindowOrHistory, nowTs) ?? 0`
+- `currentBucket = trendBucket(currentSlope)`
+- `nowMinutes = minutesFromMidnightLocal(nowTs)`
+- BG tolerance:
+  - `bgTol = max(ORACLE_BG_TOLERANCE_FIXED, nowSgv * ORACLE_BG_TOLERANCE_PERCENT)`
+
+We iterate each cached history entry `entry` with `t0 = entry.date` and apply:
+
+1) **Previous-only:** `t0 < nowTs`
+2) **Slope computable:** `pastSlope = slopeAt(history, t0)` must not be null
+3) **Filter A — Time-of-day proximity:**
+   - `circularMinuteDiff(nowMinutes, pastMinutes) <= ORACLE_TIME_WINDOW_MIN`
+4) **Filter B — BG proximity:**
+   - `abs(nowSgv - entry.sgv) <= bgTol`
+5) **Filter C — Trend alignment:**
+   - `trendBucket(pastSlope) == currentBucket`
+   - `abs(currentSlope - pastSlope) <= ORACLE_SLOPE_TOLERANCE`
+6) **Trace availability:** we must have at least some data out to +4h in the cache
+7) **Optional Filter — Load proximity (when enabled):**
+   - We compute best-effort anchor load and match load:
+     - `anchorLoad = findLoadAtTs(deviceStatus, nowTs)`
+     - `matchLoad = findLoadAtTs(deviceStatus, t0)`
+   - If both anchor and match have numeric IOB, require `abs(anchorIob - matchIob) <= 1.0`
+   - If both have numeric COB, require `abs(anchorCob - matchCob) <= 20g`
+   - If either side is missing a numeric value, that specific check is skipped.
+
+### 5.4 Trace construction
+
+For each surviving match anchor `t0`, we build a minute-resolution trace for:
+
+- $tMin \in [-120, +240]$ (inclusive)
+
+For each minute, compute:
+
+- `ts = t0 + tMin * 60s`
+- `sgv = interpolateSgvAt(history, ts)`
+
+Only minutes where `sgv != null` are included.
+
+We also require a minimum amount of future data:
+
+- At least 10 points with `tMin > 0` must exist.
+
+### 5.5 Treatments summary and chart markers
+
+For each match we look at treatments in `[t0, t0 + 30 minutes]`:
+
+- Sum insulin for treatments where `insulin > 0`
+- Sum carbs for treatments where `carbs > 0`
+- Count “boluses” (insulin events) and “carbs events” (carb entries)
+
+We also create `actionMarkers` used by the ghost chart:
+
+- For each relevant treatment event, we add `{ tMin, kind: 'insulin' | 'carbs' }`.
+
+### 5.6 TIR(0–2h) per match
+
+We compute per-match time-in-range ratio over trace points with `tMin in [0..120]`:
+
+- In-range is `70 <= sgv <= 140`
+- `tir2h = inRangeCount / windowCount`
+
+This is rendered as `TIR(0–2h) {percent}` in the Previous Events list.
+
+### 5.7 Output ordering and limiting
+
+- All matches are sorted most-recent-first by `anchorTs`.
+- The UI displays the first 10 matches.
+
+## 6) “What tended to work” strategy cards
+
+Strategies are built by grouping matches based on the *summarized 30-minute actions*.
+
+### 6.1 Grouping rules (current)
+
+`summarizeActions({ insulin, carbs })` returns a bucket:
+
+- If insulin > 0:
+  - `< 1u` → key `insulin.tiny`, title **"Small insulin (recorded)"**
+  - `1–2u` → key `insulin.small`, title **"Moderate insulin (recorded)"**
+  - `> 3u` → key `insulin.large`, title **"Higher insulin (recorded)"**
+  - else → key `insulin.other`, title **"Insulin (recorded)"**
+- Else if carbs > 0:
+  - key `carbs`, title **"Carbs (recorded)"**
+- Else:
+  - key `none`, title **"No recorded carbs/insulin"**
+
+Each group also contains an action summary string:
+
+- Insulin groups: `"Total insulin recorded in first 30m: {x.y}u"`
+- Carbs group: `"Total carbs recorded in first 30m: {z}g"`
+- None group: `"No carbs/insulin recorded in first 30m"`
+
+### 6.2 Outcome metrics per strategy
+
+For each group:
+
+- Collect `bg2h = sgv at minute 120` (best-effort nearest within 10 minutes).
+- `avgBg2h` is the mean of `bg2h` (rounded to integer in the final card).
+- `successRate` is fraction of `bg2h` values within 70–140, rounded to 2 decimals.
+
+Cards are:
+
+- Sorted by descending `count`.
+- Only the top 3 are returned.
+
+“Best historical outcome” is chosen among those 3 by:
+
+- Highest successRate
+- Tiebreaker: closeness to ideal 110 at +2h
+
+## 7) Ghost chart rendering details
+
+Component: `OracleGhostGraph`
+
+X-axis domain is fixed:
+
+- -120 to +240 minutes
+
+X tick labels include:
+
+- `"Now"` at 0
+- `"1h"` for -60, `"2h"` for -120, and `"+1h"`, `"+2h"`, etc for future.
+
+Y-axis domain is computed from available series (current/matches/median) with padding:
+
+- Baseline is at least `[40, 250]`
+- If data extends beyond, we pad to nearest 10 plus +/-20.
+
+What’s drawn:
+
+- Ghost match traces (thin, semi-transparent)
+- Treatment markers (small circles):
+  - Insulin marker color: `theme.colors.insulin`
+  - Carbs marker color: `theme.colors.carbs`
+- Median future path (dashed)
+- Current path (thicker, accent color)
+
+## 8) “Supported but not currently used” capabilities
+
+This section is intentionally strict: these are things the **code already supports** or clearly scaffolds, but the current UX does not expose.
+
+### 8.1 Rich match drill-down using `CgmGraph`
+
+The adapter `oracleCgmGraphAdapter.ts` can convert a match to the richer chart inputs:
+
+- `bgSamples` (as `BgSample[]`)
+- `foodItems` (`FoodItemDTO[]`) with name `"Carbs"`
+- `insulinData` (`InsulinDataEntry[]` with `type: 'bolus'`)
+- window `[anchor-120m, anchor+240m]`
+
+Today the UI uses only `OracleGhostGraph`. A future screen could reuse this adapter to show an interactive CGM graph with carb/bolus overlays.
+
+### 8.2 Using treatment `eventType`
+
+Treatments are cached with optional `eventType`, but the matching + UI currently uses only numeric `insulin` and `carbs`.
+
+Potential uses (not implemented):
+
+- Differentiate manual bolus vs SMB vs correction vs meal bolus
+- Separate “meal carbs” vs “treatment carbs”
+
+### 8.3 Using split IOB (bolus vs basal)
+
+Device status cache stores:
+
+- `iob` (total)
+- `iobBolus`
+- `iobBasal`
+
+Matching currently uses only `iob` and `cob` and ignores split IOB.
+
+Potential uses (not implemented):
+
+- Require similar *bolus IOB* rather than total IOB
+- Expose “IOB composition” in UI to explain differences
+
+### 8.4 Explainability (“why did this match?”)
+
+The algorithm computes (implicitly):
+
+- time-of-day delta (minutes)
+- BG delta and computed BG tolerance
+- slope delta and slope bucket
+- optional IOB/COB delta
+
+None of these are rendered today. A future UI could show per-match “match reasons” for trust.
+
+### 8.5 Personalization knobs
+
+All tolerances are constants today. The code would support parameterizing:
+
+- time-of-day window
+- BG tolerance (fixed/percent)
+- slope window + slope tolerance
+- action window length
+- cache history days
+
+This would require product decisions + UI, not just code wiring.
+
+## 9) Test coverage
+
+E2E:
+
+- `e2e/maestro/oracle-events.yaml` verifies:
+  - opening Oracle screen
+  - selecting an event
+  - ghost chart renders
+  - strategies section renders + disclaimer visible
+  - previous events renders, and details card expands when possible
+
+Unit test:
+
+- `__tests__/oracleCgmGraphAdapter.test.ts` verifies conversion of matches to graph-ready data.
    - **Cluster B (Moderate):** correction ~1.0u–2.0u
    - **Cluster C (Aggressive):** correction > 3.0u
    (Exact thresholds are product-configurable.)

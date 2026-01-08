@@ -1,0 +1,106 @@
+appId: com.shanidms22
+---
+# Trends regression: expanding the "Select Metric" collapsible must not
+# make Quick Stats disappear/stop rendering.
+
+- launchApp:
+    clearState: true
+
+# Either we land on tabs (already authenticated) or we land on login.
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 15000
+    optional: true
+
+- extendedWaitUntil:
+    visible:
+      id: login.screen
+    timeout: 15000
+    optional: true
+
+# Deterministic E2E login (only available in E2E-enabled builds).
+- runFlow:
+    when:
+      visible:
+        id: login.screen
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: login.e2eButton
+          timeout: 15000
+      - tapOn:
+          id: login.e2eButton
+
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 30000
+
+# Go to Trends.
+- tapOn:
+    id: tab.trends
+
+- extendedWaitUntil:
+    visible:
+      id: screen.trends
+    timeout: 20000
+
+# Ensure Quick Stats content is present.
+- scrollUntilVisible:
+    element:
+      id: trends.quickStats.section
+    direction: DOWN
+    timeout: 20000
+
+- assertVisible:
+    id: trends.quickStats.section
+
+- scrollUntilVisible:
+    element:
+      id: trends.quickStats.avgTdd
+    direction: DOWN
+    visibilityPercentage: 50
+    timeout: 20000
+
+- assertVisible:
+    id: trends.quickStats.avgTdd
+
+- takeScreenshot: trends-quick-stats-before-expand
+
+# Scroll to the metric selector collapsible and expand it.
+- scrollUntilVisible:
+    element:
+      id: trends.metricSelector.collapsable
+    direction: DOWN
+    timeout: 20000
+
+- tapOn:
+    id: trends.metricSelector.collapsable
+
+# After expanding, Quick Stats should still render when we scroll back.
+- scrollUntilVisible:
+    element:
+      id: trends.quickStats.section
+    direction: UP
+    timeout: 20000
+
+- assertVisible:
+    id: trends.quickStats.section
+
+- takeScreenshot: trends-quick-stats-after-expand
+
+# Sanity: one of the Quick Stats card titles should still be visible.
+# After expanding the collapsible, we tend to be near the bottom of the screen;
+# scroll UP until the Average card title is visible.
+- scrollUntilVisible:
+    element:
+      id: trends.quickStats.avgTdd
+    direction: UP
+    visibilityPercentage: 50
+    timeout: 20000
+
+- takeScreenshot: trends-quick-stats-average-visible
+
+- assertVisible:
+    id: trends.quickStats.avgTdd
