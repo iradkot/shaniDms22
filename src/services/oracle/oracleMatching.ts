@@ -17,6 +17,7 @@ import {
   ORACLE_COB_TOLERANCE_G,
   ORACLE_CHART_FUTURE_MIN,
   ORACLE_CHART_PAST_MIN,
+  ORACLE_INTERPOLATION_MAX_GAP_MIN,
   ORACLE_DISCLAIMER_TEXT,
   ORACLE_IOB_TOLERANCE_U,
   ORACLE_LOAD_MAX_MATCH_DISTANCE_MIN,
@@ -30,8 +31,12 @@ import {
   ORACLE_TARGET_BG_IDEAL_2H,
   ORACLE_TARGET_BG_MAX_2H,
   ORACLE_TARGET_BG_MIN_2H,
+  ORACLE_TREND_BUCKET_THRESHOLD,
   ORACLE_TIME_WINDOW_MIN,
 } from './oracleConstants';
+
+const TRACE_NEAREST_TOLERANCE_MIN = 10;
+const SLOPE_DEN_EPSILON = 1e-9;
 
 function minutesFromMidnightLocal(ts: number): number {
   const d = new Date(ts);
@@ -75,7 +80,7 @@ function isSortedBy<T>(items: T[], getKey: (v: T) => number): boolean {
 function interpolateSgvAt(
   entries: OracleCachedBgEntry[],
   ts: number,
-  maxGapMin = 10,
+  maxGapMin = ORACLE_INTERPOLATION_MAX_GAP_MIN,
 ): number | null {
   if (!entries.length) return null;
 
@@ -164,7 +169,7 @@ export function slopeAtLeastSquares(
     num += dx * dy;
     den += dx * dx;
   }
-  if (den <= 1e-9) return null;
+  if (den <= SLOPE_DEN_EPSILON) return null;
   return num / den;
 }
 
@@ -175,8 +180,8 @@ export function slopeAtLeastSquares(
  */
 export function trendBucket(slope: number): OracleEventKind {
   // Keep stable relatively small so noisy lines don't flip buckets too easily.
-  if (slope > 0.5) return 'rising';
-  if (slope < -0.5) return 'falling';
+  if (slope > ORACLE_TREND_BUCKET_THRESHOLD) return 'rising';
+  if (slope < -ORACLE_TREND_BUCKET_THRESHOLD) return 'falling';
   return 'stable';
 }
 
@@ -213,7 +218,7 @@ function getSgvAtMinute(points: OracleSeriesPoint[], tMin: number): number | nul
   let best: OracleSeriesPoint | null = null;
   for (const p of points) {
     const d = Math.abs(p.tMin - tMin);
-    if (d > 10) continue;
+    if (d > TRACE_NEAREST_TOLERANCE_MIN) continue;
     if (!best || d < Math.abs(best.tMin - tMin)) best = p;
   }
   return best ? best.sgv : null;

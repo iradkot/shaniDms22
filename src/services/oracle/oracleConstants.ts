@@ -21,11 +21,17 @@ export const ORACLE_CHART_FUTURE_MIN = 240; // +4h
 // Feature extraction.
 export const ORACLE_SLOPE_WINDOW_MIN = 15;
 
+// Interpolation / trace tolerances.
+export const ORACLE_INTERPOLATION_MAX_GAP_MIN = 10;
+
 // Slope calculation samples ("dots") within the slope window.
 // We compute slope via least-squares over N samples to reduce noise.
 export const ORACLE_SLOPE_POINTS_MIN = 2;
 export const ORACLE_SLOPE_POINTS_MAX = 10;
 export const ORACLE_SLOPE_POINTS_DEFAULT = 4;
+
+// Trend bucketing threshold (mg/dL/min) used to stabilize event kinds.
+export const ORACLE_TREND_BUCKET_THRESHOLD = 0.5;
 
 // Matching tolerances.
 export const ORACLE_TIME_WINDOW_MIN = 90;

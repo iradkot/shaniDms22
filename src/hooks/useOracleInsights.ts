@@ -15,6 +15,7 @@ import {
 import {
   ORACLE_CACHE_DAYS,
   ORACLE_HOUR_MS,
+  ORACLE_MINUTE_MS,
   ORACLE_RECENT_WINDOW_HOURS,
 } from 'app/services/oracle/oracleConstants';
 import {
@@ -34,6 +35,12 @@ type OracleInsightsStatus =
 
 const ORACLE_DIRECTION_NOT_COMPUTABLE: TrendDirectionString = 'NOT COMPUTABLE';
 
+const BEST_EFFORT_SLOPE_LOOKBACK_MINUTES = 30;
+const BEST_EFFORT_SLOPE_MIN_GAP_MINUTES = 5;
+
+const RECENT_EVENTS_MAX = 10;
+const RECENT_EVENTS_MIN_SPACING_MINUTES = 20;
+
 function toSlim(entries: BgSample[]): OracleCachedBgEntry[] {
   return (entries ?? [])
     .filter(e => typeof e?.date === 'number' && typeof e?.sgv === 'number')
@@ -49,7 +56,7 @@ function buildRecentEvents(params: {
 }): OracleInvestigateEvent[] {
   const {recentSlim, maxEvents, minSpacingMinutes, slopePointCount} = params;
   const events: OracleInvestigateEvent[] = [];
-  const spacingMs = minSpacingMinutes * 60 * 1000;
+  const spacingMs = minSpacingMinutes * ORACLE_MINUTE_MS;
 
   // Walk from newest to oldest; keep a few spaced-out anchors to avoid spam.
   for (let i = recentSlim.length - 1; i >= 0; i--) {
@@ -86,7 +93,7 @@ function bestEffortSlopeAt(
   // This keeps the event picker from going empty due to a single missing interpolation sample.
   if (entries.length < 2) return null;
 
-  const maxLookbackMs = 30 * 60 * 1000;
+  const maxLookbackMs = BEST_EFFORT_SLOPE_LOOKBACK_MINUTES * ORACLE_MINUTE_MS;
   const targetStart = anchorTs - maxLookbackMs;
 
   // Find a previous point within the lookback window.
@@ -99,8 +106,8 @@ function bestEffortSlopeAt(
       const dt = cur.date - prev.date;
       if (dt <= 0) continue;
       if (prev.date < targetStart) break;
-      const minutes = dt / (60 * 1000);
-      if (minutes < 5) continue;
+      const minutes = dt / ORACLE_MINUTE_MS;
+      if (minutes < BEST_EFFORT_SLOPE_MIN_GAP_MINUTES) continue;
       return (cur.sgv - prev.sgv) / minutes;
     }
   }
@@ -293,8 +300,8 @@ export function useOracleInsights(params?: {
     // Enrich with a best-effort slope to avoid empty lists on sparse data.
     const raw = buildRecentEvents({
       recentSlim: base,
-      maxEvents: 10,
-      minSpacingMinutes: 20,
+      maxEvents: RECENT_EVENTS_MAX,
+      minSpacingMinutes: RECENT_EVENTS_MIN_SPACING_MINUTES,
       slopePointCount,
     });
     if (raw.length) {
@@ -305,7 +312,7 @@ export function useOracleInsights(params?: {
     }
 
     const fallbackEvents: OracleInvestigateEvent[] = [];
-    const spacingMs = 20 * 60 * 1000;
+    const spacingMs = RECENT_EVENTS_MIN_SPACING_MINUTES * ORACLE_MINUTE_MS;
     for (let i = base.length - 1; i >= 0; i--) {
       const e = base[i];
       const slope = bestEffortSlopeAt(base, e.date, slopePointCount);
@@ -323,7 +330,7 @@ export function useOracleInsights(params?: {
         iob: load.iob,
         cob: load.cob,
       });
-      if (fallbackEvents.length >= 10) break;
+      if (fallbackEvents.length >= RECENT_EVENTS_MAX) break;
     }
 
     return fallbackEvents;
