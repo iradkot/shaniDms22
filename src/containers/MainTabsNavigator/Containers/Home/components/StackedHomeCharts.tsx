@@ -1,5 +1,7 @@
 import React, {useMemo, useState} from 'react';
 
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
 import {Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import styled, {useTheme} from 'styled-components/native';
@@ -9,8 +11,8 @@ import type {CGMGraphExternalTooltipPayload} from 'app/components/charts/CgmGrap
 import BasalMiniGraph from 'app/components/charts/BasalMiniGraph/BasalMiniGraph';
 import ActiveInsulinMiniGraph from 'app/components/charts/ActiveInsulinMiniGraph/ActiveInsulinMiniGraph';
 import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
-import {findBolusEventsInTooltipWindow} from 'app/components/charts/CgmGraph/utils/bolusUtils';
-import {findCarbEventsInTooltipWindow} from 'app/components/charts/CgmGraph/utils/carbsUtils';
+import {findBolusEventsInTooltipWindow, findClosestBolus} from 'app/components/charts/CgmGraph/utils/bolusUtils';
+import {findCarbEventsInTooltipWindow, findClosestCarbEvent} from 'app/components/charts/CgmGraph/utils/carbsUtils';
 import HomeChartsTooltip from 'app/containers/MainTabsNavigator/Containers/Home/components/HomeChartsTooltip';
 import {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 
@@ -73,6 +75,31 @@ export type StackedHomeChartsProps = {
    * Optional E2E selector.
    */
   testID?: string;
+
+  /**
+   * Controls where the unified tooltip is positioned.
+   *
+   * - `above` (default): renders above the CGM chart.
+   * - `inside`: renders inside the CGM chart area (useful for fullscreen screens that
+   *   clip overflow).
+   */
+  tooltipPlacement?: 'above' | 'inside';
+
+  /**
+   * Controls horizontal alignment when `tooltipPlacement="inside"`.
+   */
+  tooltipAlign?: 'left' | 'right' | 'auto';
+
+  /**
+   * When false, the tooltip sizes to its content (useful for landscape).
+   */
+  tooltipFullWidth?: boolean;
+
+  /**
+   * Optional max width for the tooltip container (px).
+   * Useful in fullscreen landscape to avoid covering charts.
+   */
+  tooltipMaxWidthPx?: number;
 };
 
 const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
@@ -90,6 +117,10 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     showFullScreenButton = true,
     onPressFullScreen,
     testID,
+    tooltipPlacement = 'above',
+    tooltipAlign = 'left',
+    tooltipFullWidth = true,
+    tooltipMaxWidthPx,
   } = props;
 
   const theme = useTheme() as ThemeType;
@@ -118,18 +149,76 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     return best;
   }, [bgSamples]);
 
+  const xDomainResolvedMs = useMemo(() => {
+    if (xDomain?.[0] && xDomain?.[1]) {
+      const startMs = xDomain[0].getTime();
+      const endMs = xDomain[1].getTime();
+      if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) {
+        return {startMs, endMs};
+      }
+    }
+
+    // Fallback: derive from BG samples.
+    if (!bgSamples?.length) {
+      const now = Date.now();
+      return {startMs: now, endMs: now};
+    }
+
+    let min = bgSamples[0]?.date ?? Date.now();
+    let max = min;
+    for (const s of bgSamples) {
+      const t = typeof s?.date === 'number' ? s.date : NaN;
+      if (!Number.isFinite(t)) continue;
+      if (t < min) min = t;
+      if (t > max) max = t;
+    }
+    return {startMs: min, endMs: max};
+  }, [bgSamples, xDomain]);
+
   const tooltipAnchorTimeMs = useMemo(() => {
-    if (chartsTooltip?.anchorTimeMs != null) return chartsTooltip.anchorTimeMs;
+    // When touching, treat `touchTimeMs` as the input signal and compute a stable anchor.
+    // This prevents the tooltip / focus-line from lagging a render behind.
+    if (chartsTooltip?.touchTimeMs != null) {
+      const touchTimeMs = chartsTooltip.touchTimeMs;
+
+      const closestBolus = insulinData?.length ? findClosestBolus(touchTimeMs, insulinData) : null;
+      if (closestBolus?.timestamp) {
+        const t = Date.parse(closestBolus.timestamp);
+        if (Number.isFinite(t)) return t;
+      }
+
+      const closestCarb = foodItems?.length ? findClosestCarbEvent(touchTimeMs, foodItems) : null;
+      if (closestCarb?.timestamp != null) {
+        return closestCarb.timestamp;
+      }
+
+      return touchTimeMs;
+    }
     if (typeof fallbackAnchorTimeMs === 'number' && Number.isFinite(fallbackAnchorTimeMs)) {
       return fallbackAnchorTimeMs;
     }
     return latestBgTimeMs;
-  }, [chartsTooltip?.anchorTimeMs, fallbackAnchorTimeMs, latestBgTimeMs]);
+  }, [chartsTooltip?.touchTimeMs, fallbackAnchorTimeMs, foodItems, insulinData, latestBgTimeMs]);
 
   const cursorTimeMs = useMemo(() => {
     // Show the cross-chart focus only while touching.
     return chartsTooltip ? tooltipAnchorTimeMs : null;
   }, [chartsTooltip, tooltipAnchorTimeMs]);
+
+  const resolvedTooltipAlign = useMemo<'left' | 'right'>(() => {
+    if (tooltipAlign !== 'auto') return tooltipAlign;
+    if (cursorTimeMs == null) return 'right';
+
+    const graphWidth = Math.max(1, width - stackedChartsMargin.left - stackedChartsMargin.right);
+    const spanMs = xDomainResolvedMs.endMs - xDomainResolvedMs.startMs;
+    if (!(spanMs > 0)) return 'right';
+
+    const t = clamp01((cursorTimeMs - xDomainResolvedMs.startMs) / spanMs);
+    const cursorX = t * graphWidth;
+
+    // If the user is focusing the right side, dock tooltip left (and vice versa).
+    return cursorX > graphWidth / 2 ? 'left' : 'right';
+  }, [cursorTimeMs, stackedChartsMargin.left, stackedChartsMargin.right, tooltipAlign, width, xDomainResolvedMs.endMs, xDomainResolvedMs.startMs]);
 
   const tooltipBgSample = useMemo(() => {
     if (!bgSamples?.length) return null;
@@ -231,20 +320,34 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
   const shouldShowTooltip = chartsTooltip != null;
 
+  const tooltipOverlayTestID = testID ? `${testID}.tooltipOverlay` : undefined;
+  const tooltipDockTestID = testID ? `${testID}.tooltipDock` : undefined;
+
   return (
     <View testID={testID}>
       <ChartStack>
         {shouldShowTooltip ? (
-          <ChartTooltipOverlay pointerEvents="none">
-            <HomeChartsTooltip
-              anchorTimeMs={tooltipAnchorTimeMs}
-              bgSample={tooltipBgSample}
-              activeInsulinU={activeInsulinU}
-              cobG={cobG}
-              basalRateUhr={basalRateUhr}
-              bolusSummary={bolusSummary}
-              carbsSummary={carbsSummary}
-            />
+          <ChartTooltipOverlay
+            $placement={tooltipPlacement}
+            pointerEvents="none"
+            testID={tooltipOverlayTestID}
+          >
+            <TooltipDock
+              testID={tooltipDockTestID}
+              style={{justifyContent: resolvedTooltipAlign === 'right' ? 'flex-end' : 'flex-start'}}
+            >
+              <HomeChartsTooltip
+                anchorTimeMs={tooltipAnchorTimeMs}
+                bgSample={tooltipBgSample}
+                activeInsulinU={activeInsulinU}
+                cobG={cobG}
+                basalRateUhr={basalRateUhr}
+                bolusSummary={bolusSummary}
+                carbsSummary={carbsSummary}
+                fullWidth={tooltipFullWidth}
+                maxWidthPx={tooltipMaxWidthPx}
+              />
+            </TooltipDock>
           </ChartTooltipOverlay>
         ) : null}
 
@@ -273,6 +376,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
           showFullScreenButton={false}
           tooltipMode="external"
           onTooltipChange={setChartsTooltip}
+          cursorTimeMs={cursorTimeMs}
         />
       </ChartStack>
 
@@ -312,13 +416,19 @@ const ChartStack = styled.View`
   position: relative;
 `;
 
-const ChartTooltipOverlay = styled.View`
+const ChartTooltipOverlay = styled.View<{$placement: 'above' | 'inside'}>`
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 100%;
+  ${({$placement}: {$placement: 'above' | 'inside'}) =>
+    $placement === 'inside' ? 'top: 0;' : 'bottom: 100%;'}
   z-index: 999;
   elevation: 20;
+`;
+
+const TooltipDock = styled.View`
+  width: 100%;
+  flex-direction: row;
 `;
 
 const FullScreenButtonOverlay = styled.View`

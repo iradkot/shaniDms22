@@ -1,5 +1,5 @@
 import * as d3 from 'd3';
-import {createContext, useState} from 'react';
+import {createContext, useCallback, useMemo} from 'react';
 import {BgSample} from 'app/types/day_bgs.types';
 import {xAccessor} from 'app/components/charts/CgmGraph/utils';
 
@@ -32,10 +32,42 @@ export const GraphStyleContext = createContext<
   () => {},
 ]);
 
+const DEFAULT_MARGIN: ChartMargin = {
+  top: 20,
+  right: 15,
+  bottom: 30,
+  left: 50,
+};
+
+function computeXDomainFromSamples(bgSamples: BgSample[]): [Date, Date] {
+  if (!bgSamples.length) {
+    const now = new Date();
+    return [now, now];
+  }
+
+  // Prefer using the numeric timestamps already present on BgSample (ms since epoch).
+  // This avoids allocating `Date` objects per sample.
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const s of bgSamples) {
+    const t = typeof s.date === 'number' ? s.date : new Date(xAccessor(s)).getTime();
+    if (!Number.isFinite(t)) continue;
+    if (t < min) min = t;
+    if (t > max) max = t;
+  }
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    const now = new Date();
+    return [now, now];
+  }
+
+  return [new Date(min), new Date(max)];
+}
+
 export const useGraphStyleContext = (
-  initialWidth: number,
-  initialHeight: number,
-  initialBgSamples: BgSample[],
+  width: number,
+  height: number,
+  bgSamples: BgSample[],
   xDomainOverride?: [Date, Date] | null,
   marginOverride?: ChartMargin,
 ): [
@@ -43,55 +75,48 @@ export const useGraphStyleContext = (
   (values: GraphStyleContextInterface) => void,
 ] => {
   const highestBgThreshold = 300;
-  const [width, setWidth] = useState(initialWidth);
-  const [height, setHeight] = useState(initialHeight);
-  const [bgSamples, setBgSamples] = useState(initialBgSamples);
-  const [margin] = useState<ChartMargin>(
-    marginOverride ?? {
-      top: 20,
-      right: 15,
-      bottom: 30,
-      left: 50,
-    },
-  );
+  const margin = useMemo(() => marginOverride ?? DEFAULT_MARGIN, [marginOverride]);
 
-  const xExtent = d3.extent(bgSamples, xAccessor);
-  const xDomainFromData =
-    xExtent[0] !== undefined
-      ? (xExtent as [Date, Date])
-      : ([new Date(), new Date()] as [Date, Date]); // set default domain if extent is undefined
-  const xDomain = xDomainOverride ?? xDomainFromData;
-  const xScale = d3
-    .scaleTime()
-    .domain(xDomain)
-    .range([0, width - margin.left - margin.right]);
-  const yScale = d3
-    .scaleLinear()
-    .domain([0, highestBgThreshold])
-    .range([height - margin.top - margin.bottom, 0]);
+  const graphWidth = Math.max(0, width - margin.left - margin.right);
+  const graphHeight = Math.max(0, height - margin.top - margin.bottom);
 
-  const graphStyleContextValue: GraphStyleContextInterface = {
-    width,
-    height,
-    margin,
-    xScale,
-    yScale,
-    graphWidth: width - margin.left - margin.right,
-    graphHeight: height - margin.top - margin.bottom,
-    bgSamples,
-  };
+  const xDomain = useMemo(() => {
+    return xDomainOverride ?? computeXDomainFromSamples(bgSamples);
+  }, [bgSamples, xDomainOverride]);
 
-  const setGraphStyleContextValue = (values: GraphStyleContextInterface) => {
-    if (values.width) {
-      setWidth(values.width);
-    }
-    if (values.height) {
-      setHeight(values.height);
-    }
-    if (values.bgSamples) {
-      setBgSamples(values.bgSamples);
-    }
-  };
+  const xScale = useMemo(() => {
+    return d3.scaleTime<number, number>().domain(xDomain).range([0, graphWidth]);
+  }, [graphWidth, xDomain]);
+
+  const yScale = useMemo(() => {
+    return d3
+      .scaleLinear<number, number>()
+      .domain([0, highestBgThreshold])
+      .range([graphHeight, 0]);
+  }, [graphHeight]);
+
+  const graphStyleContextValue = useMemo<GraphStyleContextInterface>(() => {
+    return {
+      width,
+      height,
+      margin,
+      xScale,
+      yScale,
+      graphWidth,
+      graphHeight,
+      bgSamples,
+    };
+  }, [bgSamples, graphHeight, graphWidth, height, margin, width, xScale, yScale]);
+
+  /**
+   * Setter kept for API compatibility.
+   *
+   * The chart styles are derived from `width`, `height`, `bgSamples`, `xDomainOverride`, and `marginOverride`.
+   * We intentionally avoid internal state here to keep the context referentially stable during touch-move renders.
+   */
+  const setGraphStyleContextValue = useCallback((_values: GraphStyleContextInterface) => {
+    // no-op by design
+  }, []);
 
   return [graphStyleContextValue, setGraphStyleContextValue];
 };

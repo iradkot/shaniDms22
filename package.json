@@ -15,7 +15,8 @@
     "e2e:maestro:android": "maestro test e2e/maestro",
     "e2e:maestro:android:smoke": "maestro test e2e/maestro/login-and-tabs.yaml",
     "e2e:maestro:install:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-maestro-windows.ps1",
-    "e2e:maestro:android:summary": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-maestro-android.ps1"
+    "e2e:maestro:android:summary": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-maestro-android.ps1",
+    "perf:cgm-selection": "jest __tests__/perf/cgmSelection.perf.test.ts --runInBand"
   },
   "dependencies": {
     "@notifee/react-native": "^9.1.8",

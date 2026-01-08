@@ -15,6 +15,17 @@ type Props = {
   basalRateUhr: number | null;
   bolusSummary: {count: number; totalU: number};
   carbsSummary: {count: number; totalG: number};
+
+  /**
+   * When true (default), the tooltip stretches to the available width.
+   * When false, it sizes to its content (useful for landscape/fullscreen docking).
+   */
+  fullWidth?: boolean;
+
+  /**
+   * Optional max width constraint (px).
+   */
+  maxWidthPx?: number;
 };
 
 const HomeChartsTooltip: React.FC<Props> = ({
@@ -25,6 +36,8 @@ const HomeChartsTooltip: React.FC<Props> = ({
   basalRateUhr,
   bolusSummary,
   carbsSummary,
+  fullWidth = true,
+  maxWidthPx,
 }) => {
   const theme = useTheme() as ThemeType;
 
@@ -80,7 +93,11 @@ const HomeChartsTooltip: React.FC<Props> = ({
     carbsSummary.count > 0 ? `${Math.round(carbsSummary.totalG)} g (${carbsSummary.count})` : '—';
 
   return (
-    <Container pointerEvents="none">
+    <Container
+      $fullWidth={fullWidth}
+      pointerEvents="none"
+      style={maxWidthPx != null ? {maxWidth: maxWidthPx} : undefined}
+    >
       <Inner style={theme.shadow.small}>
         <HeaderRow>
           <HeaderLeft>
@@ -149,8 +166,8 @@ const HomeChartsTooltip: React.FC<Props> = ({
   );
 };
 
-const Container = styled.View`
-  width: 100%;
+const Container = styled.View<{$fullWidth: boolean}>`
+  ${({$fullWidth}: {$fullWidth: boolean}) => ($fullWidth ? 'width: 100%;' : '')}
 `;
 
 const Inner = styled.View`
