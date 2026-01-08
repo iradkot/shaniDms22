@@ -20,6 +20,10 @@ export interface FormattedFoodItemDTO
   id: string;
 }
 
+// Backwards-compatible alias used throughout the codebase.
+// Prefer `FormattedFoodItemDTO` for new code.
+export type formattedFoodItemDTO = FormattedFoodItemDTO;
+
 export interface GroupedMeal {
   date: string;
   meals: FormattedFoodItemDTO[];

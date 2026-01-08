@@ -86,7 +86,9 @@ export function extractLoad(entry: DeviceStatusEntry): {
 
   // If we only have total IOB, still provide a usable split.
   if (typeof iob === 'number' && (iobBolus == null || iobBasal == null)) {
-    return {iob, iobBolus: iob, iobBasal: 0, cob};
+    // Many setups only provide total IOB. Avoid inventing a basal/bolus split
+    // (it makes consumers think basal IOB is really 0).
+    return {iob, cob};
   }
 
   const total =

@@ -4,6 +4,7 @@ import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import {InsulinDataEntry} from 'app/types/insulin.types';
+import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import Tooltip from './Tooltip';
 import {GraphStyleContext} from '../../contextStores/GraphStyleContext';
 import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
@@ -17,6 +18,7 @@ type Props = {
   y: number;
   bgSample: BgSample;
   bolusEvents: InsulinDataEntry[];
+  carbEvents?: Array<FoodItemDTO | formattedFoodItemDTO>;
 };
 
 function formatBolusRow(bolus: InsulinDataEntry): string {
@@ -25,7 +27,19 @@ function formatBolusRow(bolus: InsulinDataEntry): string {
   return `${amount.toFixed(1)}u @ ${time}`;
 }
 
-const CombinedBgMultiBolusTooltip: React.FC<Props> = ({x, y, bgSample, bolusEvents}) => {
+function formatCarbRow(item: FoodItemDTO | formattedFoodItemDTO): string {
+  const grams = typeof item.carbs === 'number' ? item.carbs : 0;
+  const time = typeof item.timestamp === 'number' ? formatDateToLocaleTimeString(item.timestamp) : '';
+  return `${Math.round(grams)}g @ ${time}`;
+}
+
+const CombinedBgMultiBolusTooltip: React.FC<Props> = ({
+  x,
+  y,
+  bgSample,
+  bolusEvents,
+  carbEvents,
+}) => {
   const theme = useTheme() as ThemeType;
   const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
@@ -33,9 +47,13 @@ const CombinedBgMultiBolusTooltip: React.FC<Props> = ({x, y, bgSample, bolusEven
     const bgRow = `BG: ${bgSample.sgv} mg/dL`;
     const header = `Boluses (${bolusEvents.length})`;
     const bolusRows = bolusEvents.map(formatBolusRow);
+    const carbs = (carbEvents ?? []).filter(i => typeof i.carbs === 'number' && i.carbs > 0);
+    const carbRows = carbs.length
+      ? [`Carbs (${carbs.length})`, ...carbs.map(formatCarbRow)]
+      : [];
     const timeRow = `Time: ${formatDateToLocaleTimeString(bgSample.date)}`;
-    return [bgRow, header, ...bolusRows, timeRow];
-  }, [bgSample, bolusEvents]);
+    return [bgRow, header, ...bolusRows, ...carbRows, timeRow];
+  }, [bgSample, bolusEvents, carbEvents]);
 
   const tooltipWidth = 250;
   const fontSize = theme.typography.size.xs;

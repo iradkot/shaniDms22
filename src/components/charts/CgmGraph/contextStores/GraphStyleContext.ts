@@ -3,10 +3,12 @@ import {createContext, useState} from 'react';
 import {BgSample} from 'app/types/day_bgs.types';
 import {xAccessor} from 'app/components/charts/CgmGraph/utils';
 
+export type ChartMargin = {top: number; right: number; bottom: number; left: number};
+
 interface GraphStyleContextInterface {
   width: number;
   height: number;
-  margin: {top: number; right: number; bottom: number; left: number};
+  margin: ChartMargin;
   xScale: d3.ScaleTime<number, number>;
   yScale: d3.ScaleLinear<number, number>;
   bgSamples: BgSample[];
@@ -35,6 +37,7 @@ export const useGraphStyleContext = (
   initialHeight: number,
   initialBgSamples: BgSample[],
   xDomainOverride?: [Date, Date] | null,
+  marginOverride?: ChartMargin,
 ): [
   GraphStyleContextInterface,
   (values: GraphStyleContextInterface) => void,
@@ -43,12 +46,14 @@ export const useGraphStyleContext = (
   const [width, setWidth] = useState(initialWidth);
   const [height, setHeight] = useState(initialHeight);
   const [bgSamples, setBgSamples] = useState(initialBgSamples);
-  const [margin] = useState({
-    top: 20,
-    right: 15,
-    bottom: 30,
-    left: 50,
-  });
+  const [margin] = useState<ChartMargin>(
+    marginOverride ?? {
+      top: 20,
+      right: 15,
+      bottom: 30,
+      left: 50,
+    },
+  );
 
   const xExtent = d3.extent(bgSamples, xAccessor);
   const xDomainFromData =
@@ -71,8 +76,8 @@ export const useGraphStyleContext = (
     margin,
     xScale,
     yScale,
-    graphWidth: width - 50 - 15,
-    graphHeight: height - 20 - 30,
+    graphWidth: width - margin.left - margin.right,
+    graphHeight: height - margin.top - margin.bottom,
     bgSamples,
   };
 

@@ -8,17 +8,19 @@ import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/component
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import LatestCgmRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestCgmRow';
 import SmartExpandableHeader from 'app/containers/MainTabsNavigator/Containers/Home/components/SmartExpandableHeader';
-import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
+import StackedHomeCharts from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
 import {cloneDeep} from 'lodash';
 import {Theme} from 'app/types/theme';
 import {Dimensions, Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import {useNavigation, StackActions} from '@react-navigation/native';
 import {useBgData} from 'app/hooks/useBgData';
 import {useFoodItems} from 'app/hooks/useFoodItems';
 import {bgSortFunction} from 'app/utils/bg.utils';
 import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
 import {useInsulinData} from 'app/hooks/useInsulinData';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {isE2E} from 'app/utils/e2e';
 import {makeE2EBgSamplesForDate} from 'app/utils/e2eFixtures';
 import {getLoadReferences} from 'app/utils/loadBars.utils';
@@ -85,6 +87,7 @@ const ChartControlText = styled.Text<{theme: Theme}>`
 // create dummy home component with typescript
 const Home: React.FC = () => {
   const theme = useTheme() as Theme;
+  const navigation = useNavigation();
   type HomeSection = 'bgStats' | 'insulinStats' | 'chart';
   const [selectedSection, setSelectedSection] = useState<HomeSection | null>(null);
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
@@ -116,6 +119,7 @@ const Home: React.FC = () => {
   const {
     insulinData,
     basalProfileData,
+    carbTreatments,
     isLoading: insulinIsLoading,
     getUpdatedInsulinData,
   } = useInsulinData(debouncedCurrentDate);
@@ -145,6 +149,14 @@ const Home: React.FC = () => {
   };
 
   const {foodItems} = useFoodItems(currentDate);
+
+  const chartFoodItems = useMemo(() => {
+    const a = foodItems ?? [];
+    const b = carbTreatments ?? [];
+    if (!a.length) return b;
+    if (!b.length) return a;
+    return [...a, ...b];
+  }, [foodItems, carbTreatments]);
 
   const memoizedBgSamples = useMemo(() => {
     const effectiveBgData =
@@ -323,6 +335,38 @@ const Home: React.FC = () => {
     [listBgData],
   );
 
+  const handleOpenStackedChartsFullScreen = useCallback(() => {
+    const xDomainMs = chartXDomain
+      ? {startMs: chartXDomain[0].getTime(), endMs: chartXDomain[1].getTime()}
+      : null;
+
+    const fullScreenPayload = {
+      mode: 'stackedCharts' as const,
+      bgSamples: memoizedBgSamples,
+      foodItems: chartFoodItems,
+      insulinData,
+      basalProfileData,
+      xDomainMs,
+      fallbackAnchorTimeMs: headerLatestBgSample?.date ?? latestBgSample?.date,
+    };
+
+    try {
+      const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
+      (navigation as any).dispatch(action);
+    } catch (e) {
+      (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
+    }
+  }, [
+    basalProfileData,
+    chartFoodItems,
+    chartXDomain,
+    headerLatestBgSample?.date,
+    insulinData,
+    latestBgSample?.date,
+    memoizedBgSamples,
+    navigation,
+  ]);
+
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
         <TimeInRangeRow bgData={bgData} />
@@ -451,13 +495,18 @@ const Home: React.FC = () => {
               </ChartControlButton>
             </ChartControlsRow>
 
-            <BgGraph
+            <StackedHomeCharts
               bgSamples={memoizedBgSamples}
-              width={Dimensions.get('window').width}
-              height={200}
-              foodItems={foodItems}
+              foodItems={chartFoodItems}
               insulinData={insulinData}
+              basalProfileData={basalProfileData}
+              width={Dimensions.get('window').width}
+              cgmHeight={200}
+              miniChartHeight={65}
               xDomain={chartXDomain}
+              fallbackAnchorTimeMs={headerLatestBgSample?.date ?? latestBgSample?.date}
+              showFullScreenButton
+              onPressFullScreen={handleOpenStackedChartsFullScreen}
               testID={E2E_TEST_IDS.charts.cgmGraph}
             />
           </View>

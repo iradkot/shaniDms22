@@ -4,7 +4,6 @@ import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {InsulinDataEntry} from 'app/types/insulin.types';
 import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
-import {colors} from 'app/style/colors';
 import {getBolusMarkerYValue} from 'app/components/charts/CgmGraph/utils/bolusUtils';
 
 type Props = {
@@ -42,7 +41,8 @@ const BolusItemsRenderer: React.FC<Props> = ({insulinData, focusedBolusTimestamp
         const y = yScale(getBolusMarkerYValue());
         const baseRadius = 3;
         const scaledRadius = Math.max(3, Math.min(7, baseRadius + bolus.amount * 0.3));
-        const fill = colors.orange[500];
+        // Keep insulin events visually distinct from carbs (carbs are orange in theme)
+        const fill = theme.colors.insulin;
         const isFocused = Boolean(
           focusedBolusTimestamps?.some(ts => ts === bolus.timestamp.toISOString()),
         );

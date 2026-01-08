@@ -3,6 +3,7 @@ import {Text} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {InsulinDataEntry} from 'app/types/insulin.types';
+import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import Tooltip from './Tooltip';
 import {GraphStyleContext} from '../../contextStores/GraphStyleContext';
 import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
@@ -14,6 +15,7 @@ type Props = {
   x: number;
   y: number;
   bolusEvents: InsulinDataEntry[];
+  carbEvents?: Array<FoodItemDTO | formattedFoodItemDTO>;
 };
 
 function formatBolusRow(bolus: InsulinDataEntry): string {
@@ -22,15 +24,25 @@ function formatBolusRow(bolus: InsulinDataEntry): string {
   return `${amount.toFixed(1)}u @ ${time}`;
 }
 
-const MultiBolusTooltip: React.FC<Props> = ({x, y, bolusEvents}) => {
+function formatCarbRow(item: FoodItemDTO | formattedFoodItemDTO): string {
+  const grams = typeof item.carbs === 'number' ? item.carbs : 0;
+  const time = typeof item.timestamp === 'number' ? formatDateToLocaleTimeString(item.timestamp) : '';
+  return `${Math.round(grams)}g @ ${time}`;
+}
+
+const MultiBolusTooltip: React.FC<Props> = ({x, y, bolusEvents, carbEvents}) => {
   const theme = useTheme() as ThemeType;
   const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
   const rows = useMemo(() => {
     const header = `Boluses (${bolusEvents.length})`;
     const items = bolusEvents.map(formatBolusRow);
-    return [header, ...items];
-  }, [bolusEvents]);
+    const carbs = (carbEvents ?? []).filter(i => typeof i.carbs === 'number' && i.carbs > 0);
+    const carbRows = carbs.length
+      ? [`Carbs (${carbs.length})`, ...carbs.map(formatCarbRow)]
+      : [];
+    return [header, ...items, ...carbRows];
+  }, [bolusEvents, carbEvents]);
 
   const tooltipWidth = 210;
   const fontSize = theme.typography.size.xs;

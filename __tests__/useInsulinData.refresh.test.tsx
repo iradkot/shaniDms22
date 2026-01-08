@@ -4,12 +4,12 @@ import renderer, {act} from 'react-test-renderer';
 import {useInsulinData} from 'app/hooks/useInsulinData';
 
 jest.mock('app/api/apiRequests', () => ({
-  fetchInsulinDataForDateRange: jest.fn(),
+  fetchTreatmentsForDateRangeUncached: jest.fn(),
   getUserProfileFromNightscout: jest.fn(),
 }));
 
 const api = require('app/api/apiRequests') as {
-  fetchInsulinDataForDateRange: jest.Mock;
+  fetchTreatmentsForDateRangeUncached: jest.Mock;
   getUserProfileFromNightscout: jest.Mock;
 };
 
@@ -32,7 +32,7 @@ test('useInsulinData refresh re-fetches and updates bolus data', async () => {
   ]);
 
   // Initial fetch: no bolus.
-  api.fetchInsulinDataForDateRange.mockResolvedValueOnce([]);
+  api.fetchTreatmentsForDateRangeUncached.mockResolvedValueOnce([]);
 
   let latest:
     | {insulinData: any[]; refresh: () => Promise<void>}
@@ -59,11 +59,12 @@ test('useInsulinData refresh re-fetches and updates bolus data', async () => {
   expect(latest?.insulinData).toEqual([]);
 
   // Refresh fetch: bolus appears (e.g., 21:30 Israel ~ 19:30Z).
-  api.fetchInsulinDataForDateRange.mockResolvedValueOnce([
+  api.fetchTreatmentsForDateRangeUncached.mockResolvedValueOnce([
     {
-      type: 'bolus',
-      amount: 1.95,
-      timestamp: '2026-01-07T19:30:00.000Z',
+      _id: 'treatment-1',
+      eventType: 'Bolus',
+      insulin: 1.95,
+      created_at: '2026-01-07T19:30:00.000Z',
     },
   ]);
 

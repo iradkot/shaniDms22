@@ -8,8 +8,9 @@ import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
 import CgmGraph from 'app/components/charts/CgmGraph/CgmGraph';
-import {FormattedFoodItemDTO} from 'app/types/food.types';
-import {InsulinDataEntry} from 'app/types/insulin.types';
+import StackedHomeCharts from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
+import {FoodItemDTO, formattedFoodItemDTO, FormattedFoodItemDTO} from 'app/types/food.types';
+import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {useAGPData} from 'app/components/charts/AGPGraph/hooks/useAGPData';
 import AGPChart from 'app/components/charts/AGPGraph/components/AGPChart';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
@@ -24,7 +25,7 @@ const FULL_SCREEN_CONSTANTS = {
   agpMinWidth: 280,
 } as const;
 
-type Mode = 'cgmRows' | 'cgmGraph' | 'agpGraph';
+type Mode = 'cgmRows' | 'cgmGraph' | 'stackedCharts' | 'agpGraph';
 
 type FullScreenRouteParams =
   | {
@@ -38,6 +39,15 @@ type FullScreenRouteParams =
       bgSamples: BgSample[];
       foodItems: FormattedFoodItemDTO[] | null;
       insulinData?: InsulinDataEntry[];
+    }
+  | {
+      mode: 'stackedCharts';
+      bgSamples: BgSample[];
+      foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
+      insulinData?: InsulinDataEntry[];
+      basalProfileData?: BasalProfile;
+      xDomainMs?: {startMs: number; endMs: number} | null;
+      fallbackAnchorTimeMs?: number;
     }
   | {
       mode: 'agpGraph';
@@ -102,8 +112,29 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
   const headerTitle = useMemo(() => {
     if (mode === 'cgmRows') return 'Glucose Log';
     if (mode === 'cgmGraph') return 'CGM Graph';
+    if (mode === 'stackedCharts') return 'Charts';
     return 'AGP Graph';
   }, [mode]);
+
+  const stackedXDomain = useMemo(() => {
+    const xDomainMs = (params as any)?.xDomainMs as
+      | {startMs: number; endMs: number}
+      | null
+      | undefined;
+    if (!xDomainMs) return null;
+    if (!Number.isFinite(xDomainMs.startMs) || !Number.isFinite(xDomainMs.endMs)) return null;
+    return [new Date(xDomainMs.startMs), new Date(xDomainMs.endMs)] as [Date, Date];
+  }, [params]);
+
+  const stackedHeights = useMemo(() => {
+    // Prefer giving the CGM chart more space, but keep minis readable.
+    const minCgm = 220;
+    const maxCgm = 420;
+    const cgm = Math.max(minCgm, Math.min(maxCgm, Math.floor(contentHeight * 0.58)));
+    const remaining = Math.max(0, contentHeight - cgm);
+    const mini = Math.max(80, Math.floor(remaining / 2));
+    return {cgmHeight: cgm, miniHeight: mini};
+  }, [contentHeight]);
 
   return (
     <Screen testID={E2E_TEST_IDS.fullscreen.screen}>
@@ -177,6 +208,23 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
               />
             </RotatableFrame>
           </Centered>
+        ) : null}
+
+        {mode === 'stackedCharts' ? (
+          <View testID={E2E_TEST_IDS.charts.cgmGraphFullScreen}>
+            <StackedHomeCharts
+              bgSamples={(params as any)?.bgSamples ?? []}
+              foodItems={(params as any)?.foodItems ?? null}
+              insulinData={(params as any)?.insulinData}
+              basalProfileData={(params as any)?.basalProfileData}
+              width={Math.max(1, Math.floor(screenWidth))}
+              cgmHeight={stackedHeights.cgmHeight}
+              miniChartHeight={stackedHeights.miniHeight}
+              xDomain={stackedXDomain}
+              fallbackAnchorTimeMs={(params as any)?.fallbackAnchorTimeMs}
+              showFullScreenButton={false}
+            />
+          </View>
         ) : null}
 
         {mode === 'agpGraph' ? (

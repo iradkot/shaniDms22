@@ -4,6 +4,7 @@ import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import {InsulinDataEntry} from 'app/types/insulin.types';
+import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import Tooltip from './Tooltip';
 import {GraphStyleContext} from '../../contextStores/GraphStyleContext';
 import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
@@ -17,9 +18,22 @@ type Props = {
   y: number;
   bgSample: BgSample;
   bolusEvent: InsulinDataEntry;
+  carbEvents?: Array<FoodItemDTO | formattedFoodItemDTO>;
 };
 
-const CombinedBgBolusTooltip: React.FC<Props> = ({x, y, bgSample, bolusEvent}) => {
+function formatCarbRow(item: FoodItemDTO | formattedFoodItemDTO): string {
+  const grams = typeof item.carbs === 'number' ? item.carbs : 0;
+  const time = typeof item.timestamp === 'number' ? formatDateToLocaleTimeString(item.timestamp) : '';
+  return `Carbs: ${Math.round(grams)}g${time ? ` @ ${time}` : ''}`;
+}
+
+const CombinedBgBolusTooltip: React.FC<Props> = ({
+  x,
+  y,
+  bgSample,
+  bolusEvent,
+  carbEvents,
+}) => {
   const theme = useTheme() as ThemeType;
   const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
@@ -30,9 +44,10 @@ const CombinedBgBolusTooltip: React.FC<Props> = ({x, y, bgSample, bolusEvent}) =
       ? formatDateToLocaleTimeString(bolusEvent.timestamp)
       : '';
     const bolusRow = `Bolus: ${bolusAmt.toFixed(1)}u @ ${bolusTime}`;
+    const carbRows = (carbEvents ?? []).slice(0, 1).map(formatCarbRow);
     const timeRow = `Time: ${formatDateToLocaleTimeString(bgSample.date)}`;
-    return [bgRow, bolusRow, timeRow];
-  }, [bgSample, bolusEvent]);
+    return [bgRow, bolusRow, ...carbRows, timeRow];
+  }, [bgSample, bolusEvent, carbEvents]);
 
   const tooltipWidth = 240;
   const fontSize = theme.typography.size.xs;
@@ -61,38 +76,24 @@ const CombinedBgBolusTooltip: React.FC<Props> = ({x, y, bgSample, bolusEvent}) =
   return (
     <Tooltip x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}>
       <SvgTooltipBox width={tooltipWidth} height={tooltipHeight} />
-      <Text
-        x={textX}
-        y={rowYs[0]}
-        fontSize={String(fontSize)}
-        fontFamily={theme.typography.fontFamily}
-        fill={bgColor}
-        textAnchor="start"
-      >
-        {rows[0]}
-      </Text>
-      <Text
-        x={textX}
-        y={rowYs[1]}
-        fontSize={String(fontSize)}
-        fontFamily={theme.typography.fontFamily}
-        fill={theme.textColor}
-        opacity={0.9}
-        textAnchor="start"
-      >
-        {rows[1]}
-      </Text>
-      <Text
-        x={textX}
-        y={rowYs[2]}
-        fontSize={String(fontSize)}
-        fontFamily={theme.typography.fontFamily}
-        fill={theme.textColor}
-        opacity={0.85}
-        textAnchor="start"
-      >
-        {rows[2]}
-      </Text>
+      {rows.map((row, idx) => {
+        const isBgRow = idx === 0;
+        const isFooter = idx === rows.length - 1;
+        return (
+          <Text
+            key={String(idx)}
+            x={textX}
+            y={rowYs[idx]}
+            fontSize={String(fontSize)}
+            fontFamily={theme.typography.fontFamily}
+            fill={isBgRow ? bgColor : theme.textColor}
+            opacity={isFooter ? 0.85 : isBgRow ? 0.95 : 0.9}
+            textAnchor="start"
+          >
+            {row}
+          </Text>
+        );
+      })}
     </Tooltip>
   );
 };

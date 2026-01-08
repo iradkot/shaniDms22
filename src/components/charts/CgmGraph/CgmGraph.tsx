@@ -13,7 +13,7 @@ import {
   useGraphStyleContext,
 } from './contextStores/GraphStyleContext';
 import {useTouchContext} from './contextStores/TouchContext';
-import {formattedFoodItemDTO} from 'app/types/food.types';
+import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
 import SgvTooltip from 'app/components/charts/CgmGraph/components/Tooltips/SgvTooltip';
 import {useTheme} from 'styled-components/native';
@@ -31,13 +31,23 @@ import {
 import MultiBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/MultiBolusTooltip';
 import CombinedBgBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/CombinedBgBolusTooltip';
 import CombinedBgMultiBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/CombinedBgMultiBolusTooltip';
+import {
+  findCarbEventsInTooltipWindow,
+  findClosestCarbEvent,
+} from 'app/components/charts/CgmGraph/utils/carbsUtils';
+import {addOpacity} from 'app/style/styling.utils';
 
 interface Props {
   bgSamples: BgSample[];
-  foodItems: formattedFoodItemDTO[] | null;
+  foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
   insulinData?: InsulinDataEntry[];
   width: number;
   height: number;
+
+  /**
+   * Optional margin override so stacked charts can share exact x-axis alignment.
+   */
+  margin?: {top: number; right: number; bottom: number; left: number};
 
   /**
    * Optional override for the x-axis time domain.
@@ -58,7 +68,25 @@ interface Props {
    * Defaults to true.
    */
   showFullScreenButton?: boolean;
+
+  /**
+   * Tooltip rendering mode.
+   * - internal: render the SVG tooltip inside this chart (default)
+   * - external: suppress internal tooltip; emit tooltip info via `onTooltipChange`
+   */
+  tooltipMode?: 'internal' | 'external';
+
+  /**
+   * When `tooltipMode="external"`, emits tooltip timing info so a parent can
+   * render a single unified tooltip for multiple charts.
+   */
+  onTooltipChange?: (payload: CGMGraphExternalTooltipPayload | null) => void;
 }
+
+export type CGMGraphExternalTooltipPayload = {
+  touchTimeMs: number;
+  anchorTimeMs: number;
+};
 
 const StyledSvg = styled(Svg)`
   height: 100%;
@@ -72,12 +100,15 @@ const CGMGraph: React.FC<Props> = ({
   foodItems,
   insulinData,
   xDomain,
+  margin,
   testID,
   showFullScreenButton = true,
+  tooltipMode = 'internal',
+  onTooltipChange,
 }) => {
   const containerRef = useRef<View>(null);
   const [graphStyleContextValue, setGraphStyleContextValue] =
-    useGraphStyleContext(width, height, bgSamples, xDomain);
+    useGraphStyleContext(width, height, bgSamples, xDomain, margin);
   const touchContext = useTouchContext();
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation();
@@ -148,18 +179,64 @@ const CGMGraph: React.FC<Props> = ({
       ? findClosestBolus(touchTimeMs, insulinData)
       : null;
 
+  const closestCarb =
+    isTouchActive && touchTimeMs != null && foodItems?.length
+      ? findClosestCarbEvent(touchTimeMs, foodItems)
+      : null;
+
+  const anchorTimeMs = useMemo(() => {
+    if (!isTouchActive) return null;
+    if (touchTimeMs == null) return null;
+
+    if (closestBolus?.timestamp != null) {
+      const t = new Date(closestBolus.timestamp).getTime();
+      return Number.isFinite(t) ? t : touchTimeMs;
+    }
+    if (closestCarb?.timestamp != null) {
+      return closestCarb.timestamp;
+    }
+    return touchTimeMs;
+  }, [closestBolus?.timestamp, closestCarb?.timestamp, isTouchActive, touchTimeMs]);
+
   const tooltipBolusEvents =
-    closestBolus && insulinData?.length
+    isTouchActive && anchorTimeMs != null && insulinData?.length
       ? findBolusEventsInTooltipWindow({
-          anchorTimeMs: new Date(closestBolus.timestamp).getTime(),
+          anchorTimeMs,
           insulinData,
         })
       : [];
+
+  const tooltipCarbEvents = useMemo(() => {
+    if (!isTouchActive) return [];
+    if (!foodItems?.length) return [];
+
+    if (anchorTimeMs == null) return [];
+
+    return findCarbEventsInTooltipWindow({anchorTimeMs, foodItems});
+  }, [anchorTimeMs, foodItems, isTouchActive]);
+
+  useEffect(() => {
+    if (tooltipMode !== 'external' || !onTooltipChange) {
+      return;
+    }
+
+    if (!isTouchActive || touchTimeMs == null || anchorTimeMs == null) {
+      onTooltipChange(null);
+      return;
+    }
+
+    onTooltipChange({touchTimeMs, anchorTimeMs});
+  }, [anchorTimeMs, isTouchActive, onTooltipChange, tooltipMode, touchTimeMs]);
 
   const showCombined = !!closestBgSample && tooltipBolusEvents.length === 1;
   const showCombinedMulti = !!closestBgSample && tooltipBolusEvents.length > 1;
   const showBgOnly = !!closestBgSample && tooltipBolusEvents.length === 0;
   const showBolusOnly = !closestBgSample && tooltipBolusEvents.length > 0;
+
+  const focusX =
+    tooltipMode === 'external' && anchorTimeMs != null
+      ? graphStyleContextValue.xScale(new Date(anchorTimeMs))
+      : xTouchPosition;
 
   return (
     <GraphStyleContext.Provider
@@ -181,7 +258,10 @@ const CGMGraph: React.FC<Props> = ({
             <CGMSamplesRenderer
               focusedSampleDateString={closestBgSample?.dateString}
             />
-            <FoodItemsRenderer foodItems={foodItems} />
+            <FoodItemsRenderer
+              foodItems={foodItems}
+              focusedFoodItemIds={tooltipCarbEvents.map(c => c.id)}
+            />
             <BolusItemsRenderer
               insulinData={insulinData}
               focusedBolusTimestamps={tooltipBolusEvents.map(b => b.timestamp)}
@@ -189,57 +269,66 @@ const CGMGraph: React.FC<Props> = ({
             {isTouchActive && (closestBgSample || tooltipBolusEvents.length > 0) && (
               <>
                 <Line
-                  x1={xTouchPosition}
+                  x1={focusX}
                   y1="0"
-                  x2={xTouchPosition}
-                  y2={height}
-                  stroke={theme.borderColor}
-                  strokeWidth={1}
-                  opacity={0.2}
+                  x2={focusX}
+                  y2={graphStyleContextValue.graphHeight}
+                  stroke={addOpacity(theme.textColor, 0.55)}
+                  strokeWidth={2}
+                  opacity={1}
                 />
-                <Line
-                  x1="0"
-                  y1={yTouchPosition}
-                  x2={width}
-                  y2={yTouchPosition}
-                  stroke={theme.borderColor}
-                  strokeWidth={1}
-                  opacity={0.5}
-                />
-
-                {showCombinedMulti && (
-                  <CombinedBgMultiBolusTooltip
-                    x={xTouchPosition}
-                    y={yTouchPosition}
-                    bgSample={closestBgSample!}
-                    bolusEvents={tooltipBolusEvents}
+                {tooltipMode === 'internal' ? (
+                  <Line
+                    x1="0"
+                    y1={yTouchPosition}
+                    x2={width}
+                    y2={yTouchPosition}
+                    stroke={theme.borderColor}
+                    strokeWidth={1}
+                    opacity={0.5}
                   />
-                )}
+                ) : null}
 
-                {showBolusOnly && (
-                  <MultiBolusTooltip
-                    x={xTouchPosition}
-                    y={yTouchPosition}
-                    bolusEvents={tooltipBolusEvents}
-                  />
-                )}
+                {tooltipMode === 'internal' ? (
+                  <>
+                    {showCombinedMulti && (
+                      <CombinedBgMultiBolusTooltip
+                        x={xTouchPosition}
+                        y={yTouchPosition}
+                        bgSample={closestBgSample!}
+                        bolusEvents={tooltipBolusEvents}
+                        carbEvents={tooltipCarbEvents}
+                      />
+                    )}
 
-                {showCombined && (
-                  <CombinedBgBolusTooltip
-                    x={xTouchPosition}
-                    y={yTouchPosition}
-                    bgSample={closestBgSample!}
-                    bolusEvent={tooltipBolusEvents[0]}
-                  />
-                )}
+                    {showBolusOnly && (
+                      <MultiBolusTooltip
+                        x={xTouchPosition}
+                        y={yTouchPosition}
+                        bolusEvents={tooltipBolusEvents}
+                        carbEvents={tooltipCarbEvents}
+                      />
+                    )}
 
-                {showBgOnly && (
-                  <SgvTooltip
-                    x={xTouchPosition}
-                    y={yTouchPosition}
-                    bgSample={closestBgSample!}
-                  />
-                )}
+                    {showCombined && (
+                      <CombinedBgBolusTooltip
+                        x={xTouchPosition}
+                        y={yTouchPosition}
+                        bgSample={closestBgSample!}
+                        bolusEvent={tooltipBolusEvents[0]}
+                        carbEvents={tooltipCarbEvents}
+                      />
+                    )}
+
+                    {showBgOnly && (
+                      <SgvTooltip
+                        x={xTouchPosition}
+                        y={yTouchPosition}
+                        bgSample={closestBgSample!}
+                      />
+                    )}
+                  </>
+                ) : null}
               </>
             )}
           </G>
