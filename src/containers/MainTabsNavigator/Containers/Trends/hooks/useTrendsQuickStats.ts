@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 
 import {BgSample} from 'app/types/day_bgs.types';
-import {cgmRange} from 'app/constants/PLAN_CONFIG';
+import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {
   fetchTreatmentsForDateRangeUncached,
   getUserProfileFromNightscout,
@@ -149,15 +149,20 @@ export function useTrendsQuickStats(params: {
   const [bolusPct, setBolusPct] = useState<number | null>(null);
   const [avgCarbsGPerDay, setAvgCarbsGPerDay] = useState<number | null>(null);
 
-  const lowThreshold = cgmRange.TARGET.min;
+  const severeLowThresholdRaw = cgmRange[CGM_STATUS_CODES.EXTREME_LOW];
+  const severeLowThreshold =
+    typeof severeLowThresholdRaw === 'number' && Number.isFinite(severeLowThresholdRaw)
+      ? severeLowThresholdRaw
+      : cgmRange.TARGET.min;
+
   const targetMin = cgmRange.TARGET.min;
   const targetMax = cgmRange.TARGET.max;
 
   const hyposPerWeek = useMemo(() => {
-    const events = countHypoEvents(bgData, lowThreshold);
+    const events = countHypoEvents(bgData, severeLowThreshold);
     const days = Math.max(1, rangeDays || 1);
     return (events / days) * 7;
-  }, [bgData, lowThreshold, rangeDays]);
+  }, [bgData, severeLowThreshold, rangeDays]);
 
   const nightTirPct = useMemo(() => {
     return computeNightTirPct(bgData, targetMin, targetMax);

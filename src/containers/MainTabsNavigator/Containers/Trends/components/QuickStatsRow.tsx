@@ -4,7 +4,7 @@ import styled from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
-import {cgmRange} from 'app/constants/PLAN_CONFIG';
+import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW, formatHourWindowLabel} from 'app/constants/GLUCOSE_WINDOWS';
 
 type Props = {
@@ -98,9 +98,11 @@ export const QuickStatsRow: React.FC<Props> = ({
 
         <View collapsable={false} style={{flex: 1}}>
           <CardSurface>
-            <CardTitle>Hypos</CardTitle>
+            <CardTitle>Severe Hypos</CardTitle>
             <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
-            <CardSubtle>Events &lt; {cgmRange.TARGET.min} mg/dL</CardSubtle>
+            <CardSubtle>
+              Events &lt; {cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number} mg/dL
+            </CardSubtle>
           </CardSurface>
         </View>
       </CardRow>
