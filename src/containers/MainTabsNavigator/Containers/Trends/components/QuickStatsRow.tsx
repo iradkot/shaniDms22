@@ -1,6 +1,6 @@
 import React from 'react';
 import {View} from 'react-native';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
@@ -18,21 +18,24 @@ type Props = {
   avgTddTestID?: string;
 };
 
-const Section = styled.View`
-  padding: 6px 10px;
+const Section = styled.View.attrs({collapsable: false})`
+  padding-top: 6px;
+  padding-right: 10px;
+  padding-bottom: 6px;
+  padding-left: 10px;
 `;
 
-const CardRow = styled.View`
+const CardRow = styled.View.attrs({collapsable: false})`
   flex-direction: row;
-  justify-content: space-between;
+  justify-content: flex-start;
   margin-bottom: 8px;
 `;
 
-const CardSurface = styled.View`
-  flex: 1;
+const CardSurface = styled.View.attrs({collapsable: false})`
   background-color: ${({theme}: {theme: ThemeType}) => theme.white};
   border-radius: 12px;
   padding: 12px;
+  width: 100%;
 `;
 
 const CardTitle = styled.Text`
@@ -69,8 +72,6 @@ export const QuickStatsRow: React.FC<Props> = ({
   avgCarbsGPerDay,
   avgTddTestID,
 }) => {
-  const theme = useTheme() as ThemeType;
-
   const basalBolusText =
     typeof basalPct === 'number' && typeof bolusPct === 'number'
       ? `${Math.round(basalPct)}% / ${Math.round(bolusPct)}%`
@@ -79,7 +80,7 @@ export const QuickStatsRow: React.FC<Props> = ({
   return (
     <Section>
       <CardRow>
-        <View style={{flex: 1, marginRight: 8}}>
+        <View collapsable={false} style={{flex: 1, marginRight: 8}}>
           <CardSurface testID={avgTddTestID} collapsable={false}>
             <CardTitle>Avg TDD</CardTitle>
             <CardValue>{fmtMaybe(avgTddUPerDay ? Number(avgTddUPerDay.toFixed(1)) : avgTddUPerDay, ' U/day')}</CardValue>
@@ -87,7 +88,7 @@ export const QuickStatsRow: React.FC<Props> = ({
           </CardSurface>
         </View>
 
-        <View style={{flex: 1, marginRight: 8}}>
+        <View collapsable={false} style={{flex: 1, marginRight: 8}}>
           <CardSurface>
             <CardTitle>Basal / Bolus</CardTitle>
             <CardValue>{basalBolusText}</CardValue>
@@ -95,7 +96,7 @@ export const QuickStatsRow: React.FC<Props> = ({
           </CardSurface>
         </View>
 
-        <View style={{flex: 1}}>
+        <View collapsable={false} style={{flex: 1}}>
           <CardSurface>
             <CardTitle>Hypos</CardTitle>
             <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
@@ -105,7 +106,7 @@ export const QuickStatsRow: React.FC<Props> = ({
       </CardRow>
 
       <CardRow>
-        <View style={{flex: 1, marginRight: 8}}>
+        <View collapsable={false} style={{flex: 1, marginRight: 8}}>
           <CardSurface>
             <CardTitle>Night TIR</CardTitle>
             <CardValue>{fmtMaybe(nightTirPct !== null ? Math.round(nightTirPct) : null, '%')}</CardValue>
@@ -113,7 +114,7 @@ export const QuickStatsRow: React.FC<Props> = ({
           </CardSurface>
         </View>
 
-        <View style={{flex: 1}}>
+        <View collapsable={false} style={{flex: 1}}>
           <CardSurface>
             <CardTitle>Avg Carbs</CardTitle>
             <CardValue>{fmtMaybe(avgCarbsGPerDay !== null ? Math.round(avgCarbsGPerDay) : null, ' g/day')}</CardValue>

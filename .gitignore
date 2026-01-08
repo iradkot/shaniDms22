@@ -136,3 +136,17 @@ keys/*
 # Maestro generated artifacts
 /e2e/results/
 /e2e/.maestro/
+
+# Local screenshots (dev artifacts)
+/charts-home-cgm-fullscreen.png
+/charts-home-cgm.png
+/charts-home-rows-fullscreen.png
+/charts-trends-agp-fullscreen.png
+/charts-trends-agp.png
+/glucose-log-loadbars.png
+/home-header-expandable.png
+/nightscout-scan.png
+/oracle-events.png
+/trends-quick-stats-after-expand.png
+/trends-quick-stats-average-visible.png
+/trends-quick-stats-before-expand.png

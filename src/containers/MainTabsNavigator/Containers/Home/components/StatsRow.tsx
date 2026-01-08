@@ -1,4 +1,4 @@
-import React, {useEffect, useRef} from 'react';
+import React from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import {Text, View} from 'react-native';
 import {BgSample} from 'app/types/day_bgs.types';
@@ -10,21 +10,24 @@ import {
 import {Theme} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
-const Section = styled.View<{theme: Theme}>`
-  padding: 6px 10px;
+const Section = styled.View.attrs({collapsable: false})<{theme: Theme}>`
+  padding-top: 6px;
+  padding-right: 10px;
+  padding-bottom: 6px;
+  padding-left: 10px;
 `;
 
-const CardRow = styled.View`
+const CardRow = styled.View.attrs({collapsable: false})`
   flex-direction: row;
-  justify-content: space-between;
+  justify-content: flex-start;
   margin-bottom: 8px;
 `;
 
-const CardSurface = styled.View<{theme: Theme}>`
-  flex: 1;
+const CardSurface = styled.View.attrs({collapsable: false})<{theme: Theme}>`
   background-color: ${({theme}) => theme.white};
   border-radius: 12px;
   padding: 12px;
+  width: 100%;
 `;
 
 const CardTitle = styled.Text<{theme: Theme}>`
@@ -47,11 +50,10 @@ const CardSubtle = styled.Text<{theme: Theme}>`
   color: ${({theme}) => addOpacity(theme.black, 0.65)};
 `;
 
-const InlineRow = styled.View`
+const InlineRow = styled.View.attrs({collapsable: false})`
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 6px;
 `;
 
 interface StatsRowProps {
@@ -88,62 +90,27 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
   const lowColor = theme.determineBgColorByGlucoseValue(lowestBg.sgv);
   const highColor = theme.determineBgColorByGlucoseValue(highestBg.sgv);
 
-  const didLogRef = useRef(false);
-  useEffect(() => {
-    if (!__DEV__) return;
-    if (didLogRef.current) return;
-    didLogRef.current = true;
-
-    console.log('[BG Stats] render', {
-      count: data.length,
-      averageBg,
-      stdDev,
-      lowest: {sgv: lowestBg?.sgv, date: lowestBg?.date},
-      highest: {sgv: highestBg?.sgv, date: highestBg?.date},
-      upChange,
-      downChange,
-      colors: {
-        avgColor,
-        lowColor,
-        highColor,
-        themeBlack: (theme as any)?.black,
-        themeWhite: (theme as any)?.white,
-        themeText: (theme as any)?.textColor,
-      },
-    });
-  }, [
-    data.length,
-    averageBg,
-    stdDev,
-    lowestBg,
-    highestBg,
-    upChange,
-    downChange,
-    avgColor,
-    lowColor,
-    highColor,
-    theme,
-  ]);
-
   return (
     <>
       <Section>
         <CardRow>
           <View
+            collapsable={false}
             style={{
               flex: 1,
               marginRight: 8,
             }}>
             <CardSurface testID={averageTitleTestID} collapsable={false}>
               <CardTitle>Average</CardTitle>
-              <CardValue color={avgColor}>{averageBg}</CardValue>
-              <CardSubtle>
-                SD: {stdDev.toFixed(1)}
-              </CardSubtle>
+              <CardValue color={avgColor}>
+                {averageBg}
+              </CardValue>
+              <CardSubtle>SD: {stdDev.toFixed(1)}</CardSubtle>
             </CardSurface>
           </View>
 
           <View
+            collapsable={false}
             style={{
               flex: 1,
               marginRight: 8,
@@ -156,6 +123,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
           </View>
 
           <View
+            collapsable={false}
             style={{
               flex: 1,
             }}>
@@ -169,6 +137,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
 
         <CardRow>
           <View
+            collapsable={false}
             style={{
               flex: 1,
               marginRight: 8,
@@ -177,7 +146,12 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
               <CardTitle>Biggest Rise</CardTitle>
               <InlineRow>
                 <CardValue>{upChange.fromValue}</CardValue>
-                <Text style={{fontSize: 18, color: addOpacity(theme.black, 0.6)}}>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    color: addOpacity(theme.black, 0.6),
+                    marginHorizontal: 6,
+                  }}>
                   {'\u2191'}
                 </Text>
                 <CardValue>{upChange.toValue}</CardValue>
@@ -189,6 +163,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
           </View>
 
           <View
+            collapsable={false}
             style={{
               flex: 1,
             }}>
@@ -196,7 +171,12 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
               <CardTitle>Biggest Fall</CardTitle>
               <InlineRow>
                 <CardValue>{downChange.fromValue}</CardValue>
-                <Text style={{fontSize: 18, color: addOpacity(theme.black, 0.6)}}>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    color: addOpacity(theme.black, 0.6),
+                    marginHorizontal: 6,
+                  }}>
                   {'\u2193'}
                 </Text>
                 <CardValue>{downChange.toValue}</CardValue>
