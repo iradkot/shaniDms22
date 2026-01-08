@@ -10,6 +10,11 @@ import {
 import {Theme} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
+const BG_CHANGE_TIME_RANGE_MINUTES = 30;
+const CARD_GAP = 8;
+const INLINE_ICON_FONT_SIZE = 18;
+const INLINE_ICON_MARGIN_HORIZONTAL = 6;
+
 const Section = styled.View.attrs({collapsable: false})<{theme: Theme}>`
   padding-top: 6px;
   padding-right: 10px;
@@ -80,7 +85,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
     },
     {lowestBg: data[0], highestBg: data[0]},
   );
-  const bgChangeTimeRange = 30;
+  const bgChangeTimeRange = BG_CHANGE_TIME_RANGE_MINUTES;
   const {upChange, downChange} = findBiggestChangesInTimeRange(
     data,
     bgChangeTimeRange,
@@ -98,7 +103,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
             collapsable={false}
             style={{
               flex: 1,
-              marginRight: 8,
+              marginRight: CARD_GAP,
             }}>
             <CardSurface testID={averageTitleTestID} collapsable={false}>
               <CardTitle>Average</CardTitle>
@@ -113,7 +118,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
             collapsable={false}
             style={{
               flex: 1,
-              marginRight: 8,
+              marginRight: CARD_GAP,
             }}>
             <CardSurface>
               <CardTitle>Lowest</CardTitle>
@@ -140,7 +145,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
             collapsable={false}
             style={{
               flex: 1,
-              marginRight: 8,
+              marginRight: CARD_GAP,
             }}>
             <CardSurface>
               <CardTitle>Biggest Rise</CardTitle>
@@ -148,9 +153,9 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
                 <CardValue>{upChange.fromValue}</CardValue>
                 <Text
                   style={{
-                    fontSize: 18,
+                    fontSize: INLINE_ICON_FONT_SIZE,
                     color: addOpacity(theme.black, 0.6),
-                    marginHorizontal: 6,
+                    marginHorizontal: INLINE_ICON_MARGIN_HORIZONTAL,
                   }}>
                   {'\u2191'}
                 </Text>
@@ -173,9 +178,9 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
                 <CardValue>{downChange.fromValue}</CardValue>
                 <Text
                   style={{
-                    fontSize: 18,
+                    fontSize: INLINE_ICON_FONT_SIZE,
                     color: addOpacity(theme.black, 0.6),
-                    marginHorizontal: 6,
+                    marginHorizontal: INLINE_ICON_MARGIN_HORIZONTAL,
                   }}>
                   {'\u2193'}
                 </Text>

@@ -7,6 +7,8 @@ import {addOpacity} from 'app/style/styling.utils';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW, formatHourWindowLabel} from 'app/constants/GLUCOSE_WINDOWS';
 
+const CARD_GAP = 8;
+
 type Props = {
   avgTddUPerDay: number | null;
   basalPct: number | null;
@@ -72,6 +74,17 @@ export const QuickStatsRow: React.FC<Props> = ({
   avgCarbsGPerDay,
   avgTddTestID,
 }) => {
+  const avgTddRounded =
+    typeof avgTddUPerDay === 'number' && Number.isFinite(avgTddUPerDay)
+      ? Number(avgTddUPerDay.toFixed(1))
+      : null;
+
+  const severeHypoThresholdRaw = cgmRange[CGM_STATUS_CODES.EXTREME_LOW];
+  const severeHypoThreshold =
+    typeof severeHypoThresholdRaw === 'number' && Number.isFinite(severeHypoThresholdRaw)
+      ? severeHypoThresholdRaw
+      : cgmRange.TARGET.min;
+
   const basalBolusText =
     typeof basalPct === 'number' && typeof bolusPct === 'number'
       ? `${Math.round(basalPct)}% / ${Math.round(bolusPct)}%`
@@ -80,15 +93,15 @@ export const QuickStatsRow: React.FC<Props> = ({
   return (
     <Section>
       <CardRow>
-        <View collapsable={false} style={{flex: 1, marginRight: 8}}>
+        <View collapsable={false} style={{flex: 1, marginRight: CARD_GAP}}>
           <CardSurface testID={avgTddTestID} collapsable={false}>
             <CardTitle>Avg TDD</CardTitle>
-            <CardValue>{fmtMaybe(avgTddUPerDay ? Number(avgTddUPerDay.toFixed(1)) : avgTddUPerDay, ' U/day')}</CardValue>
+            <CardValue>{fmtMaybe(avgTddRounded, ' U/day')}</CardValue>
             <CardSubtle>Basal + bolus</CardSubtle>
           </CardSurface>
         </View>
 
-        <View collapsable={false} style={{flex: 1, marginRight: 8}}>
+        <View collapsable={false} style={{flex: 1, marginRight: CARD_GAP}}>
           <CardSurface>
             <CardTitle>Basal / Bolus</CardTitle>
             <CardValue>{basalBolusText}</CardValue>
@@ -101,14 +114,14 @@ export const QuickStatsRow: React.FC<Props> = ({
             <CardTitle>Severe Hypos</CardTitle>
             <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
             <CardSubtle>
-              Events &lt; {cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number} mg/dL
+              Events &lt; {severeHypoThreshold} mg/dL
             </CardSubtle>
           </CardSurface>
         </View>
       </CardRow>
 
       <CardRow>
-        <View collapsable={false} style={{flex: 1, marginRight: 8}}>
+        <View collapsable={false} style={{flex: 1, marginRight: CARD_GAP}}>
           <CardSurface>
             <CardTitle>Night TIR</CardTitle>
             <CardValue>{fmtMaybe(nightTirPct !== null ? Math.round(nightTirPct) : null, '%')}</CardValue>

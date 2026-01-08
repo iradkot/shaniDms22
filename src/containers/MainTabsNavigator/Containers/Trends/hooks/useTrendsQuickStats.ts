@@ -20,13 +20,14 @@ type TrendsQuickStats = {
   avgCarbsGPerDay: number | null;
 };
 
+const HYPO_EVENT_MAX_GAP_MINUTES = 20;
+const HYPO_EVENT_MAX_GAP_MS = HYPO_EVENT_MAX_GAP_MINUTES * 60 * 1000;
+
 function countHypoEvents(samples: BgSample[], lowThreshold: number): number {
   const sorted = [...(samples ?? [])].sort((a, b) => a.date - b.date);
   let events = 0;
   let inEvent = false;
   let lastTs: number | null = null;
-
-  const MAX_GAP_MS = 20 * 60 * 1000;
 
   for (const s of sorted) {
     const v = s?.sgv;
@@ -35,7 +36,7 @@ function countHypoEvents(samples: BgSample[], lowThreshold: number): number {
 
     const isHypo = v < lowThreshold;
     const gap = lastTs === null ? 0 : ts - lastTs;
-    const gapBreaks = lastTs !== null && gap > MAX_GAP_MS;
+    const gapBreaks = lastTs !== null && gap > HYPO_EVENT_MAX_GAP_MS;
 
     if (gapBreaks) {
       inEvent = false;
