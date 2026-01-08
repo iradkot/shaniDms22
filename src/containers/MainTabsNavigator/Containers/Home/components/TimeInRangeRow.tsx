@@ -9,6 +9,7 @@ import {BgSample} from 'app/types/day_bgs.types';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {Theme} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+import {calculateTimeInRangePercentages} from 'app/utils/glucose/timeInRange';
 
 const Container = styled.View`
   margin: 10px 0;
@@ -97,43 +98,19 @@ type TirBuckets = {
  * - severeHigh: > VERY_HIGH
  */
 export function calculateTirBuckets(bgData: BgSample[]): TirBuckets {
-  const samples = bgData ?? [];
-  const total = samples.length;
-  if (!total) return {severeLow: 0, low: 0, target: 0, high: 0, severeHigh: 0};
+  const {percentages} = calculateTimeInRangePercentages(bgData ?? [], {
+    veryLowMax: cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number,
+    targetMin: cgmRange.TARGET.min,
+    targetMax: cgmRange.TARGET.max,
+    highMax: cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number,
+  });
 
-  const severeLowMax = cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number;
-  const lowMax = cgmRange.TARGET.min;
-  const targetMax = cgmRange.TARGET.max;
-  const severeHighMin = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
-
-  let severeLow = 0;
-  let low = 0;
-  let target = 0;
-  let high = 0;
-  let severeHigh = 0;
-
-  for (const s of samples) {
-    // @ts-ignore
-    const v = s?.sgv;
-    if (typeof v !== 'number' || !Number.isFinite(v)) continue;
-
-    if (v <= severeLowMax) severeLow += 1;
-    else if (v < lowMax) low += 1;
-    else if (v <= targetMax) target += 1;
-    else if (v <= severeHighMin) high += 1;
-    else severeHigh += 1;
-  }
-
-  const validTotal = severeLow + low + target + high + severeHigh;
-  if (!validTotal) return {severeLow: 0, low: 0, target: 0, high: 0, severeHigh: 0};
-
-  const pct = (n: number) => (n / validTotal) * 100;
   return {
-    severeLow: pct(severeLow),
-    low: pct(low),
-    target: pct(target),
-    high: pct(high),
-    severeHigh: pct(severeHigh),
+    severeLow: percentages.veryLow,
+    low: percentages.low,
+    target: percentages.target,
+    high: percentages.high,
+    severeHigh: percentages.veryHigh,
   };
 }
 

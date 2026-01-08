@@ -1,4 +1,5 @@
 import {calculateTirBuckets} from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
+import {calculateTimeInRange as calculateAgpTimeInRange} from 'app/components/charts/AGPGraph/utils/statistics';
 import {BgSample} from 'app/types/day_bgs.types';
 
 describe('calculateTirBuckets', () => {
@@ -44,5 +45,22 @@ describe('calculateTirBuckets', () => {
 
     const res = calculateTirBuckets(bgData);
     expect(Math.round(res.target)).toBe(100);
+  });
+
+  it('AGP time-in-range includes TARGET.min in target bucket', () => {
+    const mk = (sgv: number, date: number): BgSample =>
+      ({sgv, date} as unknown as BgSample);
+
+    const bgData: BgSample[] = [
+      mk(69, 1),
+      mk(70, 2),
+      mk(70, 3),
+      mk(71, 4),
+    ];
+
+    const res = calculateAgpTimeInRange(bgData);
+    // 3/4 readings are in [70..140]
+    expect(Math.round(res.target)).toBe(75);
+    expect(Math.round(res.low)).toBe(25);
   });
 });

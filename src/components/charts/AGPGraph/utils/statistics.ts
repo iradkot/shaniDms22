@@ -1,47 +1,22 @@
 import {BgSample} from 'app/types/day_bgs.types';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {AGPStatistics, AGPTimeInRange} from '../types';
-
-const VERY_LOW_MAX = cgmRange[CGM_STATUS_CODES.VERY_LOW] as number;
-const LOW_MAX = cgmRange.TARGET.min;
-const TARGET_MAX = cgmRange.TARGET.max;
-const HIGH_MAX = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
+import {calculateTimeInRangePercentages} from 'app/utils/glucose/timeInRange';
 
 export const calculateTimeInRange = (bgSamples: BgSample[]): AGPTimeInRange => {
-  if (bgSamples.length === 0) {
-    return {veryLow: 0, low: 0, target: 0, high: 0, veryHigh: 0};
-  }
-
-  let veryLow = 0;
-  let low = 0;
-  let target = 0;
-  let high = 0;
-  let veryHigh = 0;
-
-  bgSamples.forEach(sample => {
-    const sgv = sample.sgv;
-
-    if (sgv <= VERY_LOW_MAX) {
-      veryLow++;
-    } else if (sgv <= LOW_MAX) {
-      low++;
-    } else if (sgv <= TARGET_MAX) {
-      target++;
-    } else if (sgv <= HIGH_MAX) {
-      high++;
-    } else {
-      veryHigh++;
-    }
+  const {percentages} = calculateTimeInRangePercentages(bgSamples ?? [], {
+    veryLowMax: cgmRange[CGM_STATUS_CODES.VERY_LOW] as number,
+    targetMin: cgmRange.TARGET.min,
+    targetMax: cgmRange.TARGET.max,
+    highMax: cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number,
   });
 
-  const total = bgSamples.length;
-
   return {
-    veryLow: (veryLow / total) * 100,
-    low: (low / total) * 100,
-    target: (target / total) * 100,
-    high: (high / total) * 100,
-    veryHigh: (veryHigh / total) * 100,
+    veryLow: percentages.veryLow,
+    low: percentages.low,
+    target: percentages.target,
+    high: percentages.high,
+    veryHigh: percentages.veryHigh,
   };
 };
 
