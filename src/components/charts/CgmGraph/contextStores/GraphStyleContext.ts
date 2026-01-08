@@ -34,6 +34,7 @@ export const useGraphStyleContext = (
   initialWidth: number,
   initialHeight: number,
   initialBgSamples: BgSample[],
+  xDomainOverride?: [Date, Date] | null,
 ): [
   GraphStyleContextInterface,
   (values: GraphStyleContextInterface) => void,
@@ -50,7 +51,11 @@ export const useGraphStyleContext = (
   });
 
   const xExtent = d3.extent(bgSamples, xAccessor);
-  const xDomain = xExtent[0] !== undefined ? xExtent : [new Date(), new Date()]; // set default domain if extent is undefined
+  const xDomainFromData =
+    xExtent[0] !== undefined
+      ? (xExtent as [Date, Date])
+      : ([new Date(), new Date()] as [Date, Date]); // set default domain if extent is undefined
+  const xDomain = xDomainOverride ?? xDomainFromData;
   const xScale = d3
     .scaleTime()
     .domain(xDomain)

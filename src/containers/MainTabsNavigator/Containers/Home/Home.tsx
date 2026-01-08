@@ -53,12 +53,45 @@ const SectionLabel = styled.Text<{theme: Theme; active: boolean}>`
     active ? theme.textColor : addOpacity(theme.textColor, 0.55)};
 `;
 
+const ChartControlsRow = styled.View<{theme: Theme}>`
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-bottom-width: 1px;
+  border-bottom-color: ${({theme}) => addOpacity(theme.black, 0.08)};
+`;
+
+const ChartControlButton = styled(Pressable)<{theme: Theme; disabled?: boolean}>`
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  padding-vertical: 6px;
+  padding-horizontal: 10px;
+  margin-left: 8px;
+  border-width: 1px;
+  border-radius: 10px;
+  border-color: ${({theme}) => addOpacity(theme.textColor, 0.18)};
+  opacity: ${({disabled}) => (disabled ? 0.4 : 1)};
+`;
+
+const ChartControlText = styled.Text<{theme: Theme}>`
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: ${({theme}) => theme.textColor};
+`;
+
 // create dummy home component with typescript
 const Home: React.FC = () => {
   const theme = useTheme() as Theme;
   type HomeSection = 'bgStats' | 'insulinStats' | 'chart';
   const [selectedSection, setSelectedSection] = useState<HomeSection | null>(null);
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
+
+  const [chartViewportMs, setChartViewportMs] = useState<
+    {startMs: number; endMs: number} | null
+  >(null);
   const isShowingToday = useMemo(() => {
     const today = new Date();
     return (
@@ -121,6 +154,121 @@ const Home: React.FC = () => {
 
     return cloneDeep(effectiveBgData).sort(bgSortFunction(true));
   }, [bgData, debouncedCurrentDate]);
+
+  const chartDataExtentMs = useMemo(() => {
+    if (!memoizedBgSamples.length) {
+      const now = Date.now();
+      return {minMs: now, maxMs: now};
+    }
+
+    const minMs = memoizedBgSamples[0].date;
+    const maxMs = memoizedBgSamples[memoizedBgSamples.length - 1].date;
+    return {minMs, maxMs};
+  }, [memoizedBgSamples]);
+
+  const clampViewport = useCallback(
+    (viewport: {startMs: number; endMs: number}) => {
+      const {minMs, maxMs} = chartDataExtentMs;
+      const spanMs = Math.max(0, maxMs - minMs);
+      const windowMs = Math.max(1, viewport.endMs - viewport.startMs);
+
+      if (spanMs <= 0) {
+        return {startMs: minMs, endMs: maxMs};
+      }
+
+      if (windowMs >= spanMs) {
+        return {startMs: minMs, endMs: maxMs};
+      }
+
+      let startMs = viewport.startMs;
+      let endMs = viewport.endMs;
+
+      if (startMs < minMs) {
+        startMs = minMs;
+        endMs = minMs + windowMs;
+      }
+
+      if (endMs > maxMs) {
+        endMs = maxMs;
+        startMs = maxMs - windowMs;
+      }
+
+      return {startMs, endMs};
+    },
+    [chartDataExtentMs],
+  );
+
+  useEffect(() => {
+    // When the underlying data extent changes (e.g. refresh/new day),
+    // ensure the current viewport remains valid without causing render loops.
+    setChartViewportMs(prev => {
+      if (!prev) return prev;
+      const next = clampViewport(prev);
+      if (next.startMs === prev.startMs && next.endMs === prev.endMs) {
+        return prev;
+      }
+      return next;
+    });
+  }, [chartDataExtentMs.minMs, chartDataExtentMs.maxMs, clampViewport]);
+
+  const isZoomed = !!chartViewportMs;
+  const canPan = useMemo(() => {
+    if (!chartViewportMs) return false;
+    return chartViewportMs.endMs - chartViewportMs.startMs <
+      chartDataExtentMs.maxMs - chartDataExtentMs.minMs;
+  }, [chartViewportMs, chartDataExtentMs]);
+
+  const canPanLeft = useMemo(() => {
+    if (!chartViewportMs || !canPan) return false;
+    return chartViewportMs.startMs > chartDataExtentMs.minMs + 1;
+  }, [chartViewportMs, canPan, chartDataExtentMs]);
+
+  const canPanRight = useMemo(() => {
+    if (!chartViewportMs || !canPan) return false;
+    return chartViewportMs.endMs < chartDataExtentMs.maxMs - 1;
+  }, [chartViewportMs, canPan, chartDataExtentMs]);
+
+  const handleToggleZoom = useCallback(() => {
+    if (chartViewportMs) {
+      setChartViewportMs(null);
+      return;
+    }
+
+    const {minMs, maxMs} = chartDataExtentMs;
+    const anchorMs = headerLatestBgSample?.date ?? maxMs;
+    const zoomWindowMs = 3 * 60 * 60 * 1000; // 3 hours
+    const next = clampViewport({
+      startMs: anchorMs - zoomWindowMs / 2,
+      endMs: anchorMs + zoomWindowMs / 2,
+    });
+    setChartViewportMs(next);
+  }, [chartViewportMs, chartDataExtentMs, headerLatestBgSample, clampViewport]);
+
+  const handlePan = useCallback(
+    (direction: 'left' | 'right') => {
+      if (!chartViewportMs) return;
+      const windowMs = Math.max(1, chartViewportMs.endMs - chartViewportMs.startMs);
+      const stepMs = windowMs * 0.5;
+      const delta = direction === 'left' ? -stepMs : stepMs;
+      setChartViewportMs(prev =>
+        prev
+          ? clampViewport({
+              startMs: prev.startMs + delta,
+              endMs: prev.endMs + delta,
+            })
+          : prev,
+      );
+    },
+    [chartViewportMs, clampViewport],
+  );
+
+  const chartXDomain = useMemo(() => {
+    if (!chartViewportMs) return null;
+    return [new Date(chartViewportMs.startMs), new Date(chartViewportMs.endMs)] as [
+      Date,
+      Date,
+    ];
+  }, [chartViewportMs]);
 
   const listBgData = useMemo(() => {
     // In E2E, ensure the glucose log list has deterministic data even when the
@@ -264,12 +412,52 @@ const Home: React.FC = () => {
 
         {selectedSection === 'chart' ? (
           <View collapsable={false}>
+            <ChartControlsRow>
+              <ChartControlButton
+                accessibilityRole="button"
+                accessibilityLabel="Pan chart left"
+                disabled={!isZoomed || !canPanLeft}
+                onPress={() => handlePan('left')}>
+                <Icon
+                  name="chevron-left"
+                  size={20}
+                  color={theme.textColor}
+                />
+              </ChartControlButton>
+
+              <ChartControlButton
+                accessibilityRole="button"
+                accessibilityLabel={isZoomed ? 'Zoom out' : 'Zoom in'}
+                accessibilityHint="Toggles chart zoom"
+                onPress={handleToggleZoom}>
+                <Icon
+                  name={isZoomed ? 'magnify-minus-outline' : 'magnify-plus-outline'}
+                  size={18}
+                  color={theme.textColor}
+                />
+                <ChartControlText>{isZoomed ? 'Zoom out' : 'Zoom in'}</ChartControlText>
+              </ChartControlButton>
+
+              <ChartControlButton
+                accessibilityRole="button"
+                accessibilityLabel="Pan chart right"
+                disabled={!isZoomed || !canPanRight}
+                onPress={() => handlePan('right')}>
+                <Icon
+                  name="chevron-right"
+                  size={20}
+                  color={theme.textColor}
+                />
+              </ChartControlButton>
+            </ChartControlsRow>
+
             <BgGraph
               bgSamples={memoizedBgSamples}
               width={Dimensions.get('window').width}
               height={200}
               foodItems={foodItems}
               insulinData={insulinData}
+              xDomain={chartXDomain}
               testID={E2E_TEST_IDS.charts.cgmGraph}
             />
           </View>

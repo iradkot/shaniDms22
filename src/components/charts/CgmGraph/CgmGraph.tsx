@@ -38,6 +38,13 @@ interface Props {
   insulinData?: InsulinDataEntry[];
   width: number;
   height: number;
+
+  /**
+   * Optional override for the x-axis time domain.
+   *
+   * When not provided, the domain is derived from the BG sample extent.
+   */
+  xDomain?: [Date, Date] | null;
   
   /**
    * Optional E2E selector.
@@ -64,12 +71,13 @@ const CGMGraph: React.FC<Props> = ({
   height,
   foodItems,
   insulinData,
+  xDomain,
   testID,
   showFullScreenButton = true,
 }) => {
   const containerRef = useRef<View>(null);
   const [graphStyleContextValue, setGraphStyleContextValue] =
-    useGraphStyleContext(width, height, bgSamples);
+    useGraphStyleContext(width, height, bgSamples, xDomain);
   const touchContext = useTouchContext();
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation();
