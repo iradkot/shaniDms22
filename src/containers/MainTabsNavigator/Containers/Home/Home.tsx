@@ -1,18 +1,18 @@
-import React, {useCallback, useEffect, useMemo} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
-import Collapsable from 'app/components/Collapsable';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import LatestCgmRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestCgmRow';
 import SmartExpandableHeader from 'app/containers/MainTabsNavigator/Containers/Home/components/SmartExpandableHeader';
 import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import {cloneDeep} from 'lodash';
 import {Theme} from 'app/types/theme';
-import {Dimensions, SafeAreaView, Text} from 'react-native';
+import {Dimensions, Pressable, View} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useBgData} from 'app/hooks/useBgData';
 import {useFoodItems} from 'app/hooks/useFoodItems';
 import {bgSortFunction} from 'app/utils/bg.utils';
@@ -22,14 +22,42 @@ import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {isE2E} from 'app/utils/e2e';
 import {makeE2EBgSamplesForDate} from 'app/utils/e2eFixtures';
 import {getLoadReferences} from 'app/utils/loadBars.utils';
+import {addOpacity} from 'app/style/styling.utils';
 
 const HomeContainer = styled.View<{theme: Theme}>`
   flex: 1;
   background-color: ${({theme}) => theme.backgroundColor};
 `;
 
+const SectionSwitcherRow = styled.View.attrs({collapsable: false})<{theme: Theme}>`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  padding: 10px 12px;
+  border-bottom-width: 1px;
+  border-bottom-color: ${({theme}) => addOpacity(theme.black, 0.08)};
+`;
+
+const SectionButton = styled(Pressable).attrs({collapsable: false})`
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding-vertical: 6px;
+`;
+
+const SectionLabel = styled.Text<{theme: Theme; active: boolean}>`
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: ${({theme, active}) =>
+    active ? theme.textColor : addOpacity(theme.textColor, 0.55)};
+`;
+
 // create dummy home component with typescript
 const Home: React.FC = () => {
+  const theme = useTheme() as Theme;
+  type HomeSection = 'bgStats' | 'insulinStats' | 'chart';
+  const [selectedSection, setSelectedSection] = useState<HomeSection | null>(null);
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
   const isShowingToday = useMemo(() => {
     const today = new Date();
@@ -165,10 +193,66 @@ const Home: React.FC = () => {
             onRefresh={getUpdatedBgData}
           />
         )}
-        <Collapsable title={'BG Stats'}>
-          <StatsRow bgData={bgData} />
-        </Collapsable>
-        <Collapsable title={'Insulin Stats'}>
+
+        <SectionSwitcherRow>
+          <SectionButton
+            onPress={() =>
+              setSelectedSection(prev => (prev === 'bgStats' ? null : 'bgStats'))
+            }
+            accessibilityRole="button">
+            <Icon
+              name="chart-bar"
+              size={22}
+              color={
+                selectedSection === 'bgStats'
+                  ? theme.textColor
+                  : addOpacity(theme.textColor, 0.55)
+              }
+            />
+            <SectionLabel active={selectedSection === 'bgStats'}>BG Stats</SectionLabel>
+          </SectionButton>
+
+          <SectionButton
+            onPress={() =>
+              setSelectedSection(prev =>
+                prev === 'insulinStats' ? null : 'insulinStats',
+              )
+            }
+            accessibilityRole="button">
+            <Icon
+              name="needle"
+              size={22}
+              color={
+                selectedSection === 'insulinStats'
+                  ? theme.textColor
+                  : addOpacity(theme.textColor, 0.55)
+              }
+            />
+            <SectionLabel active={selectedSection === 'insulinStats'}>
+              Insulin
+            </SectionLabel>
+          </SectionButton>
+
+          <SectionButton
+            testID={E2E_TEST_IDS.charts.cgmSection}
+            onPress={() => setSelectedSection(prev => (prev === 'chart' ? null : 'chart'))}
+            accessibilityRole="button">
+            <Icon
+              name="chart-line"
+              size={22}
+              color={
+                selectedSection === 'chart'
+                  ? theme.textColor
+                  : addOpacity(theme.textColor, 0.55)
+              }
+            />
+            <SectionLabel active={selectedSection === 'chart'}>Chart</SectionLabel>
+          </SectionButton>
+        </SectionSwitcherRow>
+
+        {selectedSection === 'bgStats' ? <StatsRow bgData={bgData} /> : null}
+
+        {selectedSection === 'insulinStats' ? (
           <InsulinStatsRow
             insulinData={insulinData}
             basalProfileData={basalProfileData}
@@ -176,17 +260,21 @@ const Home: React.FC = () => {
             endDate={endOfDay}
             onRefresh={refreshAll}
           />
-        </Collapsable>
-        <Collapsable title={'chart'} testID={E2E_TEST_IDS.charts.cgmSection}>
-          <BgGraph
-            bgSamples={memoizedBgSamples}
-            width={Dimensions.get('window').width}
-            height={200}
-            foodItems={foodItems}
-            insulinData={insulinData}
-            testID={E2E_TEST_IDS.charts.cgmGraph}
-          />
-        </Collapsable>
+        ) : null}
+
+        {selectedSection === 'chart' ? (
+          <View collapsable={false}>
+            <BgGraph
+              bgSamples={memoizedBgSamples}
+              width={Dimensions.get('window').width}
+              height={200}
+              foodItems={foodItems}
+              insulinData={insulinData}
+              testID={E2E_TEST_IDS.charts.cgmGraph}
+            />
+          </View>
+        ) : null}
+
         <CgmRows
           onPullToRefreshRefresh={getUpdatedBgData}
           isLoading={isLoading}
