@@ -94,3 +94,25 @@ export function calculateTargetTimeInRangePct(
   const res = calculateTimeInRangePercentages(bgSamples, thresholds);
   return res.validCount ? res.percentages.target : null;
 }
+
+export function calculateFractionInInclusiveRange(
+  values: Array<number | null | undefined>,
+  minInclusive: number,
+  maxInclusive: number,
+): number | null {
+  const minV = toFiniteNumber(minInclusive);
+  const maxV = toFiniteNumber(maxInclusive);
+  if (minV == null || maxV == null) return null;
+
+  let total = 0;
+  let inRange = 0;
+  for (const raw of values ?? []) {
+    const v = toFiniteNumber(raw);
+    if (v == null) continue;
+    total += 1;
+    if (v >= minV && v <= maxV) inRange += 1;
+  }
+
+  if (!total) return null;
+  return inRange / total;
+}

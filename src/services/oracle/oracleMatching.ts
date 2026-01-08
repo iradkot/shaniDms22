@@ -1,4 +1,5 @@
 import {BgSample} from 'app/types/day_bgs.types';
+import {calculateFractionInInclusiveRange} from 'app/utils/glucose/timeInRange';
 import {
   OracleCachedBgEntry,
   OracleCachedDeviceStatus,
@@ -262,11 +263,11 @@ function computeTir(
   tMinEnd: number,
 ): number | null {
   const window = points.filter(p => p.tMin >= tMinStart && p.tMin <= tMinEnd);
-  if (!window.length) return null;
-  const inRange = window.filter(
-    p => p.sgv >= ORACLE_TARGET_BG_MIN_2H && p.sgv <= ORACLE_TARGET_BG_MAX_2H,
-  ).length;
-  return inRange / window.length;
+  return calculateFractionInInclusiveRange(
+    window.map(p => p.sgv),
+    ORACLE_TARGET_BG_MIN_2H,
+    ORACLE_TARGET_BG_MAX_2H,
+  );
 }
 
 function summarizeActions(actions: {insulin: number; carbs: number}): {
