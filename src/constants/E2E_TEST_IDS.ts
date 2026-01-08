@@ -123,6 +123,8 @@ export const E2E_TEST_IDS = {
     headerSummary: 'oracle.header.summary',
     loadSummary: 'oracle.header.loadSummary',
     loadToggle: 'oracle.header.loadToggle',
+    slopeMinus: 'oracle.header.slope.minus',
+    slopePlus: 'oracle.header.slope.plus',
     historySyncHint: 'oracle.history.syncHint',
     statusBanner: 'oracle.status.banner',
     retryButton: 'oracle.retry.button',

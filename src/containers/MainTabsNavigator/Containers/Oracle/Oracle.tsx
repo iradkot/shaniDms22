@@ -38,6 +38,25 @@ import {
   summarizeMatch,
 } from './utils/oracleUiUtils';
 
+const SCREEN_PADDING_PX = 16;
+const SCREEN_PADDING_BOTTOM_PX = 48;
+const SCREEN_HORIZONTAL_INSET_PX = SCREEN_PADDING_PX * 2;
+
+const SECTION_SPACER_PX = 12;
+const ROW_SPACER_PX = 8;
+
+const LOADER_PADDING_VERTICAL_PX = 20;
+const LOADER_STATUS_MARGIN_TOP_PX = 10;
+
+const SETTINGS_ROW_MARGIN_TOP_PX = 10;
+const TOGGLE_LABEL_MARGIN_RIGHT_PX = 12;
+const STEPPER_VALUE_MIN_WIDTH_PX = 26;
+
+const ORACLE_GHOST_GRAPH_HEIGHT_PX = 260;
+const STRATEGY_CARD_GAP_PX = 10;
+const PREVIOUS_MATCHES_LIMIT = 10;
+const ORACLE_DETAILS_CARD_HORIZONTAL_INSET_PX = 64;
+
 const Container = styled.View<{theme: ThemeType}>`
   flex: 1;
   background-color: ${({theme}) => theme.backgroundColor};
@@ -78,7 +97,7 @@ const StrategyMeta = styled.Text<{theme: Theme}>`
 `;
 
 const ToggleRow = styled.View`
-  margin-top: 10px;
+  margin-top: ${SETTINGS_ROW_MARGIN_TOP_PX}px;
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
@@ -86,13 +105,13 @@ const ToggleRow = styled.View`
 
 const ToggleLabel = styled.Text<{theme: Theme}>`
   flex: 1;
-  margin-right: 12px;
+  margin-right: ${TOGGLE_LABEL_MARGIN_RIGHT_PX}px;
   font-size: ${({theme}) => theme.typography.size.sm}px;
   color: ${({theme}) => addOpacity(theme.textColor, 0.9)};
 `;
 
 const StepperRow = styled.View`
-  margin-top: 10px;
+  margin-top: ${SETTINGS_ROW_MARGIN_TOP_PX}px;
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
@@ -104,7 +123,7 @@ const StepperControls = styled.View`
 `;
 
 const StepperValue = styled.Text<{theme: ThemeType}>`
-  min-width: 26px;
+  min-width: ${STEPPER_VALUE_MIN_WIDTH_PX}px;
   text-align: center;
   font-size: ${({theme}) => theme.typography.size.sm}px;
   font-weight: 800;
@@ -200,7 +219,7 @@ const Oracle: React.FC = () => {
     <Container testID={E2E_TEST_IDS.screens.oracle}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{padding: 16, paddingBottom: 48}}>
+        contentContainerStyle={{padding: SCREEN_PADDING_PX, paddingBottom: SCREEN_PADDING_BOTTOM_PX}}>
         <Card>
           <CardTitle>Investigate Events</CardTitle>
           {!!selectedLabel && <CardSubtle>{selectedLabel}</CardSubtle>}
@@ -234,7 +253,8 @@ const Oracle: React.FC = () => {
                 </ToggleLabel>
                 <StepperControls>
                   <StepperButton
-                    accessibilityLabel={E2E_TEST_IDS.oracle.slopeMinus ?? 'oracle.slope.minus'}
+                    testID={E2E_TEST_IDS.oracle.slopeMinus}
+                    accessibilityLabel={E2E_TEST_IDS.oracle.slopeMinus}
                     onPress={() =>
                       setSlopePointCount(v =>
                         Math.max(ORACLE_SLOPE_POINTS_MIN, v - 1),
@@ -247,7 +267,8 @@ const Oracle: React.FC = () => {
                   <StepperValue>{slopePointCount}</StepperValue>
 
                   <StepperButton
-                    accessibilityLabel={E2E_TEST_IDS.oracle.slopePlus ?? 'oracle.slope.plus'}
+                    testID={E2E_TEST_IDS.oracle.slopePlus}
+                    accessibilityLabel={E2E_TEST_IDS.oracle.slopePlus}
                     onPress={() =>
                       setSlopePointCount(v =>
                         Math.min(ORACLE_SLOPE_POINTS_MAX, v + 1),
@@ -307,13 +328,13 @@ const Oracle: React.FC = () => {
           )}
         </Card>
 
-        <Spacer h={12} />
+        <Spacer h={SECTION_SPACER_PX} />
 
         <Card testID={E2E_TEST_IDS.oracle.eventsList}>
           <CardTitle>Pick an event</CardTitle>
           <CardSubtle>Choose a recent point to compare against history.</CardSubtle>
 
-          <Spacer h={8} />
+          <Spacer h={ROW_SPACER_PX} />
 
           {events.length ? (
             events.map((e, idx) => {
@@ -347,24 +368,24 @@ const Oracle: React.FC = () => {
         <Spacer h={12} />
 
         {isLoading && !insights ? (
-          <View style={{alignItems: 'center', paddingVertical: 20}}>
+          <View style={{alignItems: 'center', paddingVertical: LOADER_PADDING_VERTICAL_PX}}>
             <Loader />
             {status.state === 'loading' && (
-              <CardSubtle style={{marginTop: 10}}>{status.message}</CardSubtle>
+              <CardSubtle style={{marginTop: LOADER_STATUS_MARGIN_TOP_PX}}>{status.message}</CardSubtle>
             )}
           </View>
         ) : insights ? (
           <>
             <OracleGhostGraph
               testID={E2E_TEST_IDS.charts.oracleGhostGraph}
-              width={Math.max(1, width - 32)}
-              height={260}
+              width={Math.max(1, width - SCREEN_HORIZONTAL_INSET_PX)}
+              height={ORACLE_GHOST_GRAPH_HEIGHT_PX}
               currentSeries={insights.currentSeries}
               matches={insights.matches}
               medianSeries={insights.medianSeries}
             />
 
-            <Spacer h={12} />
+            <Spacer h={SECTION_SPACER_PX} />
 
             <Card testID={E2E_TEST_IDS.oracle.strategiesList}>
               <CardTitle>What tended to work</CardTitle>
@@ -373,7 +394,7 @@ const Oracle: React.FC = () => {
                 Historical associations only — not dosing advice.
               </CardSubtle>
 
-              <Spacer h={8} />
+              <Spacer h={ROW_SPACER_PX} />
 
               {insights.strategies.length ? (
                 insights.strategies.map((s, idx) => {
@@ -393,7 +414,7 @@ const Oracle: React.FC = () => {
                       : undefined;
 
                   return (
-                    <View key={s.key} style={{marginTop: idx === 0 ? 0 : 10}}>
+                    <View key={s.key} style={{marginTop: idx === 0 ? 0 : STRATEGY_CARD_GAP_PX}}>
                       <StrategyCard
                         testID={`${E2E_TEST_IDS.oracle.strategyCard}.${idx}`}
                         accessibilityLabel={`${E2E_TEST_IDS.oracle.strategyCard}.${idx}`}
@@ -417,23 +438,23 @@ const Oracle: React.FC = () => {
                 <CardSubtle>No strategies yet (not enough similar events).</CardSubtle>
               )}
 
-              <Spacer h={12} />
+              <Spacer h={SECTION_SPACER_PX} />
 
               <CardSubtle testID={E2E_TEST_IDS.oracle.disclaimer}>
                 {insights.disclaimerText}
               </CardSubtle>
             </Card>
 
-            <Spacer h={12} />
+            <Spacer h={SECTION_SPACER_PX} />
 
             <Card testID={E2E_TEST_IDS.oracle.previousList}>
               <CardTitle>Previous events</CardTitle>
               <CardSubtle>Most recent similar events from history.</CardSubtle>
 
-              <Spacer h={8} />
+              <Spacer h={ROW_SPACER_PX} />
 
               {insights.matches.length ? (
-                insights.matches.slice(0, 10).map((m, idx) => {
+                insights.matches.slice(0, PREVIOUS_MATCHES_LIMIT).map((m, idx) => {
                   const when = formatDateToDateAndTimeString(m.anchorTs);
                   const s = summarizeMatch(m.points);
                   const within2h =
@@ -481,11 +502,11 @@ const Oracle: React.FC = () => {
 
               {!!selectedPrevious && (
                 <>
-                  <Spacer h={12} />
+                  <Spacer h={SECTION_SPACER_PX} />
                   <OracleMatchDetailsCard
                     testID={E2E_TEST_IDS.oracle.previousDetails}
                     match={selectedPrevious}
-                    width={Math.max(1, width - 64)}
+                    width={Math.max(1, width - ORACLE_DETAILS_CARD_HORIZONTAL_INSET_PX)}
                   />
                 </>
               )}
