@@ -10,6 +10,7 @@ import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsul
 import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {isE2E} from 'app/utils/e2e';
 import {DEFAULT_NIGHT_WINDOW, isInHourWindowLocal} from 'app/constants/GLUCOSE_WINDOWS';
+import {calculateTargetTimeInRangePct} from 'app/utils/glucose/timeInRange';
 
 type TrendsQuickStats = {
   avgTddUPerDay: number | null;
@@ -55,7 +56,7 @@ function countHypoEvents(samples: BgSample[], lowThreshold: number): number {
   return events;
 }
 
-function computeNightTirPct(bgData: BgSample[], targetMin: number, targetMax: number): number | null {
+function computeNightTirPct(bgData: BgSample[]): number | null {
   const night = (bgData ?? []).filter(s => {
     if (typeof s?.date !== 'number') return false;
     const d = new Date(s.date);
@@ -64,18 +65,12 @@ function computeNightTirPct(bgData: BgSample[], targetMin: number, targetMax: nu
 
   if (!night.length) return null;
 
-  let inRange = 0;
-  let valid = 0;
-
-  for (const s of night) {
-    const v = s?.sgv;
-    if (typeof v !== 'number' || !Number.isFinite(v)) continue;
-    valid += 1;
-    if (v >= targetMin && v <= targetMax) inRange += 1;
-  }
-
-  if (!valid) return null;
-  return (inRange / valid) * 100;
+  return calculateTargetTimeInRangePct(night, {
+    veryLowMax: cgmRange[CGM_STATUS_CODES.VERY_LOW] as number,
+    targetMin: cgmRange.TARGET.min,
+    targetMax: cgmRange.TARGET.max,
+    highMax: cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number,
+  });
 }
 
 function extractBasalProfile(profileData: any): BasalProfile {
@@ -166,8 +161,8 @@ export function useTrendsQuickStats(params: {
   }, [bgData, severeLowThreshold, rangeDays]);
 
   const nightTirPct = useMemo(() => {
-    return computeNightTirPct(bgData, targetMin, targetMax);
-  }, [bgData, targetMax, targetMin]);
+    return computeNightTirPct(bgData);
+  }, [bgData]);
 
   useEffect(() => {
     if (isE2E) {

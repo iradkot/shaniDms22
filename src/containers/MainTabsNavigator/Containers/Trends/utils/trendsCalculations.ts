@@ -3,9 +3,12 @@
 import { BgSample } from 'app/types/day_bgs.types';
 import { format } from 'date-fns';
 import { cgmRange, CGM_STATUS_CODES } from 'app/constants/PLAN_CONFIG';
+import {calculateTimeInRangePercentages} from 'app/utils/glucose/timeInRange';
 
 const LOW_THRESHOLD = cgmRange.TARGET.min;
 const HIGH_THRESHOLD = cgmRange.TARGET.max;
+const VERY_LOW_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_LOW] as number;
+const VERY_HIGH_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
 const SERIOUS_HYPO_THRESHOLD = cgmRange[CGM_STATUS_CODES.SERIOUS_LOW] as number;
 const SERIOUS_HYPER_THRESHOLD =
   cgmRange[CGM_STATUS_CODES.SERIOUS_HIGH] as number;
@@ -51,9 +54,15 @@ export function calculateTrendsMetrics(bgData: BgSample[]) {
 
   const { seriousHypoEvents, seriousHyperEvents } = countSeriousEvents(chronData);
 
-  const totalCount = allValues.length;
-  const inRangeCount = allValues.filter(v => v >= LOW_THRESHOLD && v <= HIGH_THRESHOLD).length;
-  const tir = totalCount > 0 ? inRangeCount / totalCount : 0;
+  const {percentages: overallTirPct, validCount: overallValidCount} =
+    calculateTimeInRangePercentages(chronData, {
+      veryLowMax: VERY_LOW_THRESHOLD,
+      targetMin: LOW_THRESHOLD,
+      targetMax: HIGH_THRESHOLD,
+      highMax: VERY_HIGH_THRESHOLD,
+    });
+
+  const tir = overallValidCount > 0 ? overallTirPct.target / 100 : 0;
 
   const dailyMap: Record<string, BgSample[]> = {};
   chronData.forEach(s => {
@@ -65,8 +74,16 @@ export function calculateTrendsMetrics(bgData: BgSample[]) {
   const dailyDetails = Object.entries(dailyMap).map(([day, samples]) => {
     const vals = samples.map(s => s.sgv);
     const dMean = avg(vals);
-    const inRange = vals.filter(v => v >= LOW_THRESHOLD && v <= HIGH_THRESHOLD).length;
-    const dInRange = vals.length > 0 ? inRange / vals.length : 0;
+
+    const {percentages: dayTirPct, validCount: dayValidCount} =
+      calculateTimeInRangePercentages(samples, {
+        veryLowMax: VERY_LOW_THRESHOLD,
+        targetMin: LOW_THRESHOLD,
+        targetMax: HIGH_THRESHOLD,
+        highMax: VERY_HIGH_THRESHOLD,
+      });
+
+    const dInRange = dayValidCount > 0 ? dayTirPct.target / 100 : 0;
 
     const { seriousHypoEvents: dayHypoEvents, seriousHyperEvents: dayHyperEvents } =
       countSeriousEvents(samples);
@@ -78,13 +95,9 @@ export function calculateTrendsMetrics(bgData: BgSample[]) {
 
     const minBg = vals.length > 0 ? Math.min(...vals) : 0;
     const maxBg = vals.length > 0 ? Math.max(...vals) : 0;
-    const timeInRange = vals.length > 0 ? (inRange / vals.length) * 100 : 0;
-    const timeBelowRange = vals.length > 0
-      ? (vals.filter(v => v < LOW_THRESHOLD).length / vals.length) * 100
-      : 0;
-    const timeAboveRange = vals.length > 0
-      ? (vals.filter(v => v > HIGH_THRESHOLD).length / vals.length) * 100
-      : 0;
+    const timeInRange = dayTirPct.target;
+    const timeBelowRange = dayTirPct.veryLow + dayTirPct.low;
+    const timeAboveRange = dayTirPct.high + dayTirPct.veryHigh;
 
     return {
       dateString: day,
