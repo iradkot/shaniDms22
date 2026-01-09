@@ -1,11 +1,27 @@
 import axios from 'axios';
 
-export const nightScoutUrl = 'https://shani-dms.jumpingcrab.com';
+export type NightscoutAxiosConfig = {
+  baseUrl: string;
+  apiSecretSha1?: string | null;
+};
+
 export const nightscoutInstance = axios.create({
-  baseURL: nightScoutUrl,
   timeout: 5000, // 5 seconds
   headers: {
     'Content-Type': 'application/json',
-    'api-secret': '55a342b44e4c1d0d3c293f90042af4251e150e32', // The secret in sha1 for api requests
   },
 });
+
+export const configureNightscoutInstance = (config: NightscoutAxiosConfig) => {
+  nightscoutInstance.defaults.baseURL = config.baseUrl;
+
+  if (config.apiSecretSha1) {
+    nightscoutInstance.defaults.headers.common['api-secret'] = config.apiSecretSha1;
+  } else {
+    delete (nightscoutInstance.defaults.headers.common as any)['api-secret'];
+  }
+};
+
+export const getNightscoutBaseUrl = () => nightscoutInstance.defaults.baseURL;
+
+export const isNightscoutConfigured = () => !!nightscoutInstance.defaults.baseURL;

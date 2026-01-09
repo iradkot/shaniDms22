@@ -125,7 +125,13 @@ jest.mock('@react-navigation/native', () => {
   const React = require('react');
   return {
     NavigationContainer: ({children}) => React.createElement(React.Fragment, null, children),
-    useNavigation: () => ({navigate: jest.fn(), goBack: jest.fn(), setOptions: jest.fn()}),
+    useNavigation: () => ({
+      navigate: jest.fn(),
+      goBack: jest.fn(),
+      setOptions: jest.fn(),
+      reset: jest.fn(),
+      canGoBack: jest.fn(() => false),
+    }),
     useRoute: () => ({params: {}}),
     StackActions: {
       push: jest.fn(() => ({type: 'PUSH'})),

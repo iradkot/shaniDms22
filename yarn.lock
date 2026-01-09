@@ -9160,6 +9160,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"js-sha1@npm:^0.7.0":
+  version: 0.7.0
+  resolution: "js-sha1@npm:0.7.0"
+  checksum: c0dfb69df9979025f7ebc7a91ebbf43920d736c584c83cfc94747241dba6be27dc2a5afdc3e8fa178cc54908123677d435f2c65c256c6d3f53d8179a2650dba2
+  languageName: node
+  linkType: hard
+
 "js-sha3@npm:0.8.0":
   version: 0.8.0
   resolution: "js-sha3@npm:0.8.0"
@@ -12048,6 +12055,7 @@ __metadata:
     eslint-config-prettier: ^9.1.0
     eslint-plugin-prettier: ^5.1.3
     jest: ^29.6.3
+    js-sha1: ^0.7.0
     lodash: ^4.17.21
     metro-react-native-babel-preset: ^0.72.1
     prettier: 2.8.8

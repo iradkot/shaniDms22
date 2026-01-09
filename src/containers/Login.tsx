@@ -4,21 +4,23 @@ import {Pressable, ScrollView, Text, View} from 'react-native';
 import {GoogleSigninButton} from '@react-native-google-signin/google-signin';
 import {NavigationProp} from '@react-navigation/native';
 import GoogleSignIn, {GoogleSignInResult} from '../api/GoogleSignIn';
-import {MAIN_TAB_NAVIGATOR} from '../constants/SCREEN_NAMES';
+import {MAIN_TAB_NAVIGATOR, NIGHTSCOUT_SETUP_SCREEN} from '../constants/SCREEN_NAMES';
 import auth, {getAuth} from '@react-native-firebase/auth';
 import {getApp} from '@react-native-firebase/app';
 import {isE2E} from 'app/utils/e2e';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {hasAnyNightscoutProfile} from 'app/services/nightscoutProfiles';
 
 const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
   const [userInfo, setUserInfo] = useState<GoogleSignInResult | null>(null);
   const [loading, setLoading] = useState(false);
   const googleSignIn = useMemo(() => new GoogleSignIn(), []);
 
-  const goToMainTabs = () => {
+  const goToPostLogin = async () => {
+    const hasProfile = await hasAnyNightscoutProfile();
     navigation.reset({
       index: 0,
-      routes: [{name: MAIN_TAB_NAVIGATOR}],
+      routes: [{name: hasProfile ? MAIN_TAB_NAVIGATOR : NIGHTSCOUT_SETUP_SCREEN}],
     });
   };
 
@@ -32,12 +34,18 @@ const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
       } else {
         await auth().signInAnonymously();
       }
-      goToMainTabs();
+      navigation.reset({
+        index: 0,
+        routes: [{name: MAIN_TAB_NAVIGATOR}],
+      });
     } catch (err) {
       console.error('E2E sign-in error:', err);
       // In E2E runs we prefer deterministic navigation over tying tests to
       // Firebase auth provider configuration.
-      goToMainTabs();
+      navigation.reset({
+        index: 0,
+        routes: [{name: MAIN_TAB_NAVIGATOR}],
+      });
     } finally {
       setLoading(false);
     }
@@ -52,7 +60,7 @@ const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
         return;
       }
       setUserInfo(result);
-      goToMainTabs();
+      await goToPostLogin();
     } catch (err) {
       console.error('Unhandled sign-in error:', err);
     } finally {

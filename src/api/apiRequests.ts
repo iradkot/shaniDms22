@@ -1,4 +1,4 @@
-import { nightscoutInstance, nightScoutUrl } from "app/api/shaniNightscoutInstances";
+import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
 import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
 import {
   InsulinDataEntry,
@@ -292,17 +292,14 @@ export const getInsulinDataFromNightscout = async (
   // Adjusted return type to match expected data structure
   try {
     setIsLoading(true);
-    const response = await fetch(
-      `${nightScoutUrl}/api/v1/treatments?find[created_at][$gte]=${dateStr}T00:00:00Z&find[created_at][$lte]=${dateStr}T23:59:59Z&count=10`,
-    );
-    if (!response.ok) throw new Error('Failed to fetch insulin data');
-    const data: TempBasalInsulinDataEntry[] = await response.json(); // Ensure the type matches what you expect based on the API response
+    const apiUrl = `/api/v1/treatments?find[created_at][$gte]=${dateStr}T00:00:00Z&find[created_at][$lte]=${dateStr}T23:59:59Z&count=10`;
+    const response = await nightscoutInstance.get<TempBasalInsulinDataEntry[]>(apiUrl);
+    const data: TempBasalInsulinDataEntry[] = response.data ?? [];
     setIsLoading(false);
     return data; // Ensure this data is in the format your application expects
   } catch (error) {
     setIsLoading(false);
     console.error('Error fetching insulin data:', error);
-    console.log('error data:', error.data);
     throw error; // Propagate error up for handling elsewhere
   }
 };

@@ -54,6 +54,9 @@ import FullScreenViewScreen from 'app/containers/FullScreen/FullScreenViewScreen
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TouchProvider} from './components/charts/CgmGraph/contextStores/TouchContext';
 import {isE2E} from 'app/utils/e2e';
+import {NightscoutConfigProvider} from 'app/contexts/NightscoutConfigContext';
+import NightscoutSetupScreen from 'app/containers/NightscoutSetupScreen';
+import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
 
 // Suppress deprecation warnings from Firebase React Native v21 with Hermes
 LogBox.ignoreLogs([
@@ -165,16 +168,21 @@ const App: () => React.ReactElement = () => {
                 <AppContainer>
                   <SafeAreaView style={{flex: 1}}>
                     <SportItemsProvider>
-                      <TabsSettingsProvider>
-                        <GlucoseSettingsProvider>
-                          <NavigationContainer>
-                            <Stack.Navigator screenOptions={{headerShown: false}}>
-                              <Stack.Screen name="initScreen" component={AppInitScreen} />
-                              <Stack.Screen name={LOGIN_SCREEN} component={Login} />
-                              <Stack.Screen
-                                name={MAIN_TAB_NAVIGATOR}
-                                component={MainTabsNavigator}
-                              />
+                      <NightscoutConfigProvider>
+                        <TabsSettingsProvider>
+                          <GlucoseSettingsProvider>
+                            <NavigationContainer>
+                              <Stack.Navigator screenOptions={{headerShown: false}}>
+                                <Stack.Screen name="initScreen" component={AppInitScreen} />
+                                <Stack.Screen name={LOGIN_SCREEN} component={Login} />
+                                <Stack.Screen
+                                  name={NIGHTSCOUT_SETUP_SCREEN}
+                                  component={NightscoutSetupScreen}
+                                />
+                                <Stack.Screen
+                                  name={MAIN_TAB_NAVIGATOR}
+                                  component={MainTabsNavigator}
+                                />
                               <Stack.Screen
                                 options={{headerShown: true, headerTitle: ''}}
                                 name={ADD_NOTIFICATION_SCREEN}
@@ -215,10 +223,11 @@ const App: () => React.ReactElement = () => {
                                 name={FULL_SCREEN_VIEW_SCREEN}
                                 component={FullScreenViewScreen}
                               />
-                            </Stack.Navigator>
-                          </NavigationContainer>
-                        </GlucoseSettingsProvider>
-                      </TabsSettingsProvider>
+                              </Stack.Navigator>
+                            </NavigationContainer>
+                          </GlucoseSettingsProvider>
+                        </TabsSettingsProvider>
+                      </NightscoutConfigProvider>
                     </SportItemsProvider>
                   </SafeAreaView>
                 </AppContainer>

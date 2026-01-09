@@ -17,9 +17,9 @@ type TabsSettingsContextValue = {
 const STORAGE_KEY = 'tabs.settings.v1';
 
 const DEFAULT_SETTINGS: TabsSettings = {
-  showFoodTracking: true,
-  showSportTracking: true,
-  showNotifications: true,
+  showFoodTracking: false,
+  showSportTracking: false,
+  showNotifications: false,
 };
 
 const TabsSettingsContext = createContext<TabsSettingsContextValue>({

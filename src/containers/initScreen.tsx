@@ -4,8 +4,13 @@ import React, {useEffect} from 'react';
 import {NavigationProp} from '@react-navigation/native';
 
 import {Text, View} from 'react-native';
-import {MAIN_TAB_NAVIGATOR, LOGIN_SCREEN} from '../constants/SCREEN_NAMES';
+import {
+  MAIN_TAB_NAVIGATOR,
+  LOGIN_SCREEN,
+  NIGHTSCOUT_SETUP_SCREEN,
+} from '../constants/SCREEN_NAMES';
 import {isE2E} from 'app/utils/e2e';
+import {hasAnyNightscoutProfile} from 'app/services/nightscoutProfiles';
 
 const AppInitScreen: React.FC<{navigation: NavigationProp<any>}> = ({
   navigation,
@@ -26,10 +31,28 @@ const AppInitScreen: React.FC<{navigation: NavigationProp<any>}> = ({
     }
 
     const unsubscribe = authInstance.onAuthStateChanged(user => {
-      console.log('AppInitScreen: Auth UID=', user?.uid);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: user ? MAIN_TAB_NAVIGATOR : LOGIN_SCREEN }],
+      (async () => {
+        console.log('AppInitScreen: Auth UID=', user?.uid);
+
+        if (!user) {
+          navigation.reset({
+            index: 0,
+            routes: [{name: LOGIN_SCREEN}],
+          });
+          return;
+        }
+
+        const hasProfile = await hasAnyNightscoutProfile();
+        navigation.reset({
+          index: 0,
+          routes: [{name: hasProfile ? MAIN_TAB_NAVIGATOR : NIGHTSCOUT_SETUP_SCREEN}],
+        });
+      })().catch(err => {
+        console.warn('AppInitScreen: failed deciding initial route', err);
+        navigation.reset({
+          index: 0,
+          routes: [{name: MAIN_TAB_NAVIGATOR}],
+        });
       });
     });
     return () => unsubscribe();

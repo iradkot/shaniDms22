@@ -5,8 +5,11 @@ import {theme} from 'app/style/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {useTabsSettings} from 'app/contexts/TabsSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
+import {useNightscoutConfig} from 'app/contexts/NightscoutConfigContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import ADIcon from 'react-native-vector-icons/AntDesign';
+import {useNavigation} from '@react-navigation/native';
+import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
 
 const rowStyle = {
   flexDirection: 'row' as const,
@@ -73,11 +76,14 @@ function SectionHeader(props: {title: string; expanded: boolean; onToggle: () =>
 const UI_STORAGE_KEY = 'settings.ui.v1';
 
 const Settings: React.FC = () => {
+  const navigation = useNavigation<any>();
   const {settings, setSetting} = useTabsSettings();
   const {settings: glucoseSettings, setSetting: setGlucoseSetting, isLoaded: glucoseLoaded} =
     useGlucoseSettings();
+  const {profiles, activeProfile, setActiveProfileId} = useNightscoutConfig();
 
   const [showDisplayedTabs, setShowDisplayedTabs] = useState(true);
+  const [showNightscout, setShowNightscout] = useState(false);
   const [showRanges, setShowRanges] = useState(false);
   const [showNightWindow, setShowNightWindow] = useState(false);
   const [uiLoaded, setUiLoaded] = useState(false);
@@ -115,12 +121,16 @@ const Settings: React.FC = () => {
 
         const parsed = JSON.parse(raw) as Partial<{
           showDisplayedTabs: boolean;
+          showNightscout: boolean;
           showRanges: boolean;
           showNightWindow: boolean;
         }>;
 
         if (typeof parsed.showDisplayedTabs === 'boolean') {
           setShowDisplayedTabs(parsed.showDisplayedTabs);
+        }
+        if (typeof parsed.showNightscout === 'boolean') {
+          setShowNightscout(parsed.showNightscout);
         }
         if (typeof parsed.showRanges === 'boolean') {
           setShowRanges(parsed.showRanges);
@@ -149,6 +159,7 @@ const Settings: React.FC = () => {
       UI_STORAGE_KEY,
       JSON.stringify({
         showDisplayedTabs,
+        showNightscout,
         showRanges,
         showNightWindow,
       }),
@@ -324,6 +335,106 @@ const Settings: React.FC = () => {
                 onValueChange={v => setSetting('showNotifications', v)}
               />
             </View>
+          </>
+        )}
+      </View>
+
+      <View>
+        <SectionHeader
+          title="Nightscout"
+          expanded={showNightscout}
+          onToggle={() => setShowNightscout(v => !v)}
+        />
+
+        {showNightscout && (
+          <>
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="cloud" size={20} color={theme.textColor} />
+              </View>
+              <View style={{flex: 1, paddingRight: theme.spacing.md}}>
+                <Text style={{color: theme.textColor, fontSize: theme.typography.size.md}}>
+                  Active profile
+                </Text>
+                <Text
+                  style={{
+                    color: theme.textColor,
+                    fontSize: theme.typography.size.sm,
+                    opacity: 0.8,
+                    marginTop: 2,
+                  }}
+                >
+                  {activeProfile ? `${activeProfile.label} (${activeProfile.baseUrl})` : 'Not configured'}
+                </Text>
+              </View>
+            </View>
+
+            {profiles.map(p => {
+              const isActive = activeProfile?.id === p.id;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  accessibilityRole="button"
+                  onPress={() => setActiveProfileId(p.id)}
+                  style={rowStyle}
+                >
+                  <View style={iconContainerStyle}>
+                    <MaterialIcons
+                      name={isActive ? 'radio-button-checked' : 'radio-button-unchecked'}
+                      size={20}
+                      color={theme.textColor}
+                    />
+                  </View>
+                  <View style={{flex: 1, paddingRight: theme.spacing.md}}>
+                    <Text style={{color: theme.textColor, fontSize: theme.typography.size.md}}>
+                      {p.label}
+                    </Text>
+                    <Text
+                      style={{
+                        color: theme.textColor,
+                        fontSize: theme.typography.size.sm,
+                        opacity: 0.8,
+                        marginTop: 2,
+                      }}
+                    >
+                      {p.baseUrl}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md}}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() => navigation.navigate(NIGHTSCOUT_SETUP_SCREEN)}
+                style={{
+                  paddingVertical: theme.spacing.md,
+                  paddingHorizontal: theme.spacing.lg,
+                  backgroundColor: theme.accentColor,
+                  borderRadius: theme.borderRadius,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                <Text style={{color: theme.buttonTextColor, fontWeight: '600'}}>
+                  Add Nightscout profile
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {!profiles.length && (
+              <Text
+                style={{
+                  color: theme.textColor,
+                  fontSize: theme.typography.size.sm,
+                  opacity: 0.8,
+                  paddingHorizontal: theme.spacing.lg,
+                  paddingTop: theme.spacing.sm,
+                }}
+              >
+                You need at least one Nightscout profile to view data.
+              </Text>
+            )}
           </>
         )}
       </View>
