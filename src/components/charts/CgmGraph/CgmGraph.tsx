@@ -15,9 +15,8 @@ import {useTouchContext} from './contextStores/TouchContext';
 import SgvTooltip from 'app/components/charts/CgmGraph/components/Tooltips/SgvTooltip';
 import {useTheme} from 'styled-components/native';
 import FullScreenButton from 'app/components/common-ui/FullScreenButton/FullScreenButton';
-import {StackActions, useNavigation} from '@react-navigation/native';
-import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
-import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
+import {useNavigation} from '@react-navigation/native';
+import {pushFullScreenViewScreen} from 'app/utils/fullscreenNavigation.utils';
 import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import BolusItemsRenderer from 'app/components/charts/CgmGraph/components/Bolus/BolusItemsRenderer';
@@ -125,14 +124,8 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   );
 
   const openFullScreen = useMemo(() => {
-    const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
     return () => {
-      dispatchToParentOrSelf({
-        navigation,
-        action,
-        fallbackNavigate: () =>
-          (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload),
-      });
+      pushFullScreenViewScreen({navigation, payload: fullScreenPayload});
     };
   }, [fullScreenPayload, navigation]);
   const handleTouchStartWithTooltip = useMemo(() => {

@@ -6,11 +6,9 @@ import {getLoadReferences, LOAD_BARS_CONSTANTS} from 'app/utils/loadBars.utils';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import FullScreenButton from 'app/components/common-ui/FullScreenButton/FullScreenButton';
 import {useNavigation} from '@react-navigation/native';
-import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
-import {StackActions} from '@react-navigation/native';
 import styled from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
-import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
+import {pushFullScreenViewScreen} from 'app/utils/fullscreenNavigation.utils';
 
 const FullScreenButtonContainer = styled.View.attrs({collapsable: false})`
   position: absolute;
@@ -81,12 +79,7 @@ const CgmRows: FC<CgmCardListDisplayProps> = ({
       isToday,
     };
 
-    const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, params);
-    dispatchToParentOrSelf({
-      navigation,
-      action,
-      fallbackNavigate: () => (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, params),
-    });
+    pushFullScreenViewScreen({navigation, payload: params});
   }, [bgData, isLoading, isToday, navigation]);
 
   const {maxIobReference, maxCobReference} = useMemo(
