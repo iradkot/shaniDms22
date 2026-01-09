@@ -3,7 +3,10 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import styled from 'styled-components/native';
 import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
-import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
+import StatsRow, {
+  type BgStatsKey,
+  type BgStatsNavigatePayload,
+} from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import {ThemeType} from 'app/types/theme';
 import {useNavigation, StackActions} from '@react-navigation/native';
@@ -17,7 +20,6 @@ import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {isE2E} from 'app/utils/e2e';
 import {makeE2EBgSamplesForDate} from 'app/utils/e2eFixtures';
 import {getLoadReferences} from 'app/utils/loadBars.utils';
-import {addOpacity} from 'app/style/styling.utils';
 
 import HomeHeaderSection from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeHeaderSection';
 import HomeSectionSwitcher, {
@@ -31,11 +33,23 @@ const HomeContainer = styled.View`
   background-color: ${(props: {theme: ThemeType}) => props.theme.backgroundColor};
 `;
 
+const HOME_SECTION_KEYS = {
+  bgStats: 'bgStats',
+  insulinStats: 'insulinStats',
+  chart: 'chart',
+} as const;
+
 // create dummy home component with typescript
 const Home: React.FC = () => {
   const navigation = useNavigation();
   const [selectedSection, setSelectedSection] = useState<HomeSection | null>(null);
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
+
+  const [activeBgStatsKey, setActiveBgStatsKey] = useState<BgStatsKey | null>(null);
+  const [bgStatsFocusToken, setBgStatsFocusToken] = useState<number>(0);
+  const [bgStatsFocusTargetDateMs, setBgStatsFocusTargetDateMs] =
+    useState<number | null>(null);
+  const [bgStatsHighlightDateMs, setBgStatsHighlightDateMs] = useState<number[]>([]);
   const isShowingToday = useMemo(() => {
     const today = new Date();
     return (
@@ -218,6 +232,53 @@ const Home: React.FC = () => {
     setSelectedSection(prev => (prev === section ? null : section));
   }, []);
 
+  const handleNavigateToBgSample = useCallback((payload: BgStatsNavigatePayload) => {
+    const token = Date.now();
+    setBgStatsFocusToken(token);
+    setBgStatsFocusTargetDateMs(payload.targetDateMs);
+    setBgStatsHighlightDateMs(payload.highlightDateMs);
+    setActiveBgStatsKey(payload.key);
+  }, []);
+
+  useEffect(() => {
+    if (!bgStatsFocusToken) return;
+    const timeoutId = setTimeout(() => {
+      setActiveBgStatsKey(null);
+    }, 1400);
+    return () => clearTimeout(timeoutId);
+  }, [bgStatsFocusToken]);
+
+  const homeSectionNodes = useMemo(() => {
+    const nodes: Record<HomeSection, React.ReactNode> = {
+      bgStats: (
+        <StatsRow
+          bgData={bgData}
+          activeKey={activeBgStatsKey}
+          onNavigateToSample={handleNavigateToBgSample}
+        />
+      ),
+      insulinStats: (
+        <InsulinStatsRow
+          insulinData={insulinData}
+          basalProfileData={basalProfileData}
+          startDate={startOfDay}
+          endDate={endOfDay}
+        />
+      ),
+      chart: null,
+    };
+
+    return nodes;
+  }, [
+    activeBgStatsKey,
+    basalProfileData,
+    bgData,
+    endOfDay,
+    handleNavigateToBgSample,
+    insulinData,
+    startOfDay,
+  ]);
+
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
       <HomeHeaderSection
@@ -238,19 +299,12 @@ const Home: React.FC = () => {
         onToggle={handleToggleSection}
       />
 
-        {selectedSection === 'bgStats' ? <StatsRow bgData={bgData} /> : null}
-
-        {selectedSection === 'insulinStats' ? (
-          <InsulinStatsRow
-            insulinData={insulinData}
-            basalProfileData={basalProfileData}
-            startDate={startOfDay}
-            endDate={endOfDay}
-          />
-        ) : null}
+      {selectedSection && selectedSection !== HOME_SECTION_KEYS.chart
+        ? homeSectionNodes[selectedSection]
+        : null}
 
       <HomeChartSection
-        visible={selectedSection === 'chart'}
+        visible={selectedSection === HOME_SECTION_KEYS.chart}
         isZoomed={isZoomed}
         canPanLeft={canPanLeft}
         canPanRight={canPanRight}
@@ -266,21 +320,25 @@ const Home: React.FC = () => {
         testID={E2E_TEST_IDS.charts.cgmGraph}
       />
 
-        <CgmRows
-          onPullToRefreshRefresh={getUpdatedBgData}
-          isLoading={isLoading}
-          bgData={listBgData}
-          isToday={isShowingToday}
-        />
-        <DateNavigatorRow
-          isLoading={isLoading || currentDate !== debouncedCurrentDate}
-          date={currentDate}
-          isToday={isShowingToday}
-          setCustomDate={setCustomDate}
-          onGoBack={getPreviousDate}
-          onGoForward={getNextDate}
-          resetToCurrentDate={() => setCurrentDate(new Date())}
-        />
+      <CgmRows
+        onPullToRefreshRefresh={getUpdatedBgData}
+        isLoading={isLoading}
+        bgData={listBgData}
+        isToday={isShowingToday}
+        focusTargetDateMs={bgStatsFocusTargetDateMs}
+        focusHighlightDateMs={bgStatsHighlightDateMs}
+        focusToken={bgStatsFocusToken}
+      />
+
+      <DateNavigatorRow
+        isLoading={isLoading || currentDate !== debouncedCurrentDate}
+        date={currentDate}
+        isToday={isShowingToday}
+        setCustomDate={setCustomDate}
+        onGoBack={getPreviousDate}
+        onGoForward={getNextDate}
+        resetToCurrentDate={() => setCurrentDate(new Date())}
+      />
     </HomeContainer>
   );
 };

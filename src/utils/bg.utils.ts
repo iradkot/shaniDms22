@@ -24,14 +24,18 @@ export function findBiggestChangesInTimeRange(
   upChange: {
     fromValue: number;
     toValue: number;
-    fromTime: string;
-    toTime: string;
+    fromTimeMs: number;
+    toTimeMs: number;
+    fromTimeLabel: string;
+    toTimeLabel: string;
   };
   downChange: {
     fromValue: number;
     toValue: number;
-    fromTime: string;
-    toTime: string;
+    fromTimeMs: number;
+    toTimeMs: number;
+    fromTimeLabel: string;
+    toTimeLabel: string;
   };
 } {
   // Sort the bgSamples array by date in ascending order
@@ -39,8 +43,22 @@ export function findBiggestChangesInTimeRange(
 
   // Initialize maxChanges to { upChange: {...}, downChange: {...} }
   let maxChanges = {
-    upChange: {fromValue: 0, toValue: 0, fromTime: '', toTime: ''},
-    downChange: {fromValue: 0, toValue: 0, fromTime: '', toTime: ''},
+    upChange: {
+      fromValue: 0,
+      toValue: 0,
+      fromTimeMs: 0,
+      toTimeMs: 0,
+      fromTimeLabel: '',
+      toTimeLabel: '',
+    },
+    downChange: {
+      fromValue: 0,
+      toValue: 0,
+      fromTimeMs: 0,
+      toTimeMs: 0,
+      fromTimeLabel: '',
+      toTimeLabel: '',
+    },
   };
 
   for (let i = 1; i < sortedBgSamples.length; i++) {
@@ -62,8 +80,10 @@ export function findBiggestChangesInTimeRange(
         maxChanges.upChange = {
           fromValue: prevBgSample.sgv,
           toValue: bgSample.sgv,
-          fromTime: prevBgSample.dateString,
-          toTime: bgSample.dateString,
+          fromTimeMs: prevBgSample.date,
+          toTimeMs: bgSample.date,
+          fromTimeLabel: prevBgSample.dateString,
+          toTimeLabel: bgSample.dateString,
         };
       }
 
@@ -74,8 +94,10 @@ export function findBiggestChangesInTimeRange(
         maxChanges.downChange = {
           fromValue: prevBgSample.sgv,
           toValue: bgSample.sgv,
-          fromTime: prevBgSample.dateString,
-          toTime: bgSample.dateString,
+          fromTimeMs: prevBgSample.date,
+          toTimeMs: bgSample.date,
+          fromTimeLabel: prevBgSample.dateString,
+          toTimeLabel: bgSample.dateString,
         };
       }
     }

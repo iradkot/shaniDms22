@@ -1,4 +1,4 @@
-import React, {useMemo} from 'react';
+import React, {useEffect, useMemo, useRef} from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import DirectionArrows from 'app/components/DirectionArrows';
 import {BgSample} from 'app/types/day_bgs.types';
@@ -6,10 +6,11 @@ import {ThemeType} from 'app/types/theme';
 import DropShadow from 'react-native-drop-shadow';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import BgGradient from 'app/components/BgGradient';
-import {FlexAlignType} from 'react-native';
+import {Animated, FlexAlignType} from 'react-native';
 import LoadBars from 'app/components/LoadBars/LoadBars';
 import {LOAD_BARS_CONSTANTS} from 'app/utils/loadBars.utils';
 import {formatDistanceToNow} from 'date-fns';
+import {addOpacity} from 'app/style/styling.utils';
 
 const BG_DATA_CARD_CONSTANTS = {
   borderBottomWidth: 1,
@@ -29,6 +30,16 @@ interface BgDataCardProps {
   maxCobReference: number;
 
   /**
+   * When true, shows a temporary glow overlay.
+   */
+  highlight?: boolean;
+
+  /**
+   * Changes to this value retrigger the highlight animation.
+   */
+  highlightToken?: number;
+
+  /**
    * Presentation variant.
    * - `list`: compact row used in the CGM log list (default)
    * - `featured`: used for the latest/primary row (e.g. Home)
@@ -41,9 +52,12 @@ const BgDataCard = ({
   prevBgData,
   maxIobReference,
   maxCobReference,
+  highlight = false,
+  highlightToken,
   variant = 'list',
 }: BgDataCardProps) => {
   const theme = useTheme() as ThemeType;
+  const glowOpacity = useRef(new Animated.Value(0)).current;
 
   const bgStartColor = useMemo(() => {
     return prevBgData
@@ -83,6 +97,32 @@ const BgDataCard = ({
     };
   }, [theme, variant]);
 
+  const overlayBorderRadius = useMemo(() => {
+    return variant === 'featured'
+      ? theme.borderRadius
+      : BG_DATA_CARD_CONSTANTS.rowBorderRadius;
+  }, [theme.borderRadius, variant]);
+
+  useEffect(() => {
+    if (!highlight) return;
+
+    glowOpacity.setValue(0);
+    Animated.sequence([
+      Animated.timing(glowOpacity, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+      Animated.timing(glowOpacity, {
+        toValue: 0,
+        duration: 900,
+        delay: 350,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    // We want to retrigger on new tokens.
+  }, [glowOpacity, highlight, highlightToken]);
+
   const timeLabel = useMemo(() => {
     if (variant === 'featured') {
       return `${formatDistanceToNow(new Date(bgData.date))} ago`;
@@ -104,38 +144,61 @@ const BgDataCard = ({
 
   return (
     <DataRowContainer $variant={variant}>
-      <BgGradient
-        startColor={bgStartColor}
-        endColor={bgEndColor}
-        style={linearGradientStyle}>
-        <TimeBgSection>
-          <BgAndTrendRow>
-            <DropShadow style={dropShadowStyle}>
-              <BgValueText>{bgData.sgv}</BgValueText>
-            </DropShadow>
-            <DirectionArrows trendDirection={bgData.direction} />
-          </BgAndTrendRow>
-          <TimeText numberOfLines={1}>{timeLabel}</TimeText>
-        </TimeBgSection>
+      <RowWrapper>
+        <BgGradient
+          startColor={bgStartColor}
+          endColor={bgEndColor}
+          style={linearGradientStyle}>
+          <TimeBgSection>
+            <BgAndTrendRow>
+              <DropShadow style={dropShadowStyle}>
+                <BgValueText>{bgData.sgv}</BgValueText>
+              </DropShadow>
+              <DirectionArrows trendDirection={bgData.direction} />
+            </BgAndTrendRow>
+            <TimeText numberOfLines={1}>{timeLabel}</TimeText>
+          </TimeBgSection>
 
-        <DeltaSection>
-          <DeltaText numberOfLines={1}>{delta}</DeltaText>
-        </DeltaSection>
+          <DeltaSection>
+            <DeltaText numberOfLines={1}>{delta}</DeltaText>
+          </DeltaSection>
 
-        <BarsSection>
-          <LoadBars
-            iobTotal={bgData.iob}
-            iobBolus={bgData.iobBolus}
-            iobBasal={bgData.iobBasal}
-            cob={bgData.cob}
-            maxIobReference={maxIobReference}
-            maxCobReference={maxCobReference}
-          />
-        </BarsSection>
-      </BgGradient>
+          <BarsSection>
+            <LoadBars
+              iobTotal={bgData.iob}
+              iobBolus={bgData.iobBolus}
+              iobBasal={bgData.iobBasal}
+              cob={bgData.cob}
+              maxIobReference={maxIobReference}
+              maxCobReference={maxCobReference}
+            />
+          </BarsSection>
+        </BgGradient>
+
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            borderRadius: overlayBorderRadius,
+            borderWidth: 2,
+            borderColor: addOpacity(theme.accentColor, 0.55),
+            backgroundColor: addOpacity(theme.accentColor, 0.08),
+            opacity: glowOpacity,
+          }}
+        />
+      </RowWrapper>
     </DataRowContainer>
   );
 };
+
+const RowWrapper = styled.View`
+  width: 100%;
+  position: relative;
+`;
 
 const DataRowContainer = styled.View<{$variant: 'list' | 'featured'}>`
   flex-direction: row;
@@ -202,5 +265,7 @@ export default React.memo(
     prevProps?.bgData?.iobBolus === nextProps?.bgData?.iobBolus &&
     prevProps?.bgData?.iobBasal === nextProps?.bgData?.iobBasal &&
     prevProps?.maxIobReference === nextProps?.maxIobReference &&
-    prevProps?.maxCobReference === nextProps?.maxCobReference,
+    prevProps?.maxCobReference === nextProps?.maxCobReference &&
+    prevProps?.highlight === nextProps?.highlight &&
+    prevProps?.highlightToken === nextProps?.highlightToken,
 );

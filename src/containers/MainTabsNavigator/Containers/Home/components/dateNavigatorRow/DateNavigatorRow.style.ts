@@ -4,13 +4,13 @@ import styled from 'styled-components/native';
 import {TouchableOpacity} from 'react-native';
 
 export const Container = styled.View`
-  height: 100px;
+  height: 82px;
   flex-direction: row;
   justify-content: space-around;
   align-items: center;
   border-radius: 10px;
   background-color: white;
-  padding: 10px;
+  padding: 6px;
   shadow-color: #000;
   shadow-offset: 0px 4px;
   shadow-opacity: 0.3;
@@ -31,13 +31,13 @@ export const ButtonContainer = styled(TouchableOpacity).attrs({
   ${props => (props.flex ? `flex: ${props.flex}` : 'flex: 1')};
   ${props => props.disabled && 'opacity: 0.5;'}
   ${props => props.active && 'border-radius: 10px;'}
-  ${props => props.active && 'margin: 5px;'}
-  ${props => props.active && 'padding: 5px;'}
+  ${props => props.active && 'margin: 3px;'}
+  ${props => props.active && 'padding: 3px;'}
   ${props => props.active && 'box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);'}
   ${props => props.active && 'transition: 0.3s;'}
   ${props => props.active && '&:hover { transform: scale(1.1); }'}
-  ${props => !props.active && 'padding-left: 10px;'}
-  ${props => !props.active && 'padding-right: 10px;'}
+  ${props => !props.active && 'padding-left: 6px;'}
+  ${props => !props.active && 'padding-right: 6px;'}
 `;
 
 export const IconContainer = styled.View`

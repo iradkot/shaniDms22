@@ -1,13 +1,14 @@
 import React from 'react';
 import styled, {useTheme} from 'styled-components/native';
-import {Text, View} from 'react-native';
+import {Pressable, Text, View} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {BgSample} from 'app/types/day_bgs.types';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {
   calculateAverageAndStdDev,
   findBiggestChangesInTimeRange,
 } from 'app/utils/bg.utils';
-import {Theme} from 'app/types/theme';
+import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
 const BG_CHANGE_TIME_RANGE_MINUTES = 30;
@@ -15,7 +16,9 @@ const CARD_GAP = 8;
 const INLINE_ICON_FONT_SIZE = 18;
 const INLINE_ICON_MARGIN_HORIZONTAL = 6;
 
-const Section = styled.View.attrs({collapsable: false})<{theme: Theme}>`
+type ThemedProps = {theme: ThemeType};
+
+const Section = styled.View.attrs({collapsable: false})<{theme: ThemeType}>`
   padding-top: 6px;
   padding-right: 10px;
   padding-bottom: 6px;
@@ -28,31 +31,53 @@ const CardRow = styled.View.attrs({collapsable: false})`
   margin-bottom: 8px;
 `;
 
-const CardSurface = styled.View.attrs({collapsable: false})<{theme: Theme}>`
-  background-color: ${({theme}) => theme.white};
+const CardSurface = styled.View.attrs({collapsable: false})<{theme: ThemeType}>`
+  background-color: ${(props: ThemedProps) => props.theme.white};
   border-radius: 12px;
   padding: 12px;
   width: 100%;
 `;
 
-const CardTitle = styled.Text<{theme: Theme}>`
-  font-size: 12px;
-  font-weight: 700;
-  color: ${({theme}) => addOpacity(theme.black, 0.75)};
+const PressableCardSurface = styled(Pressable).attrs({collapsable: false})<{
+  active?: boolean;
+  theme: ThemeType;
+}>`
+  background-color: ${(props: ThemedProps) => props.theme.white};
+  border-radius: 12px;
+  padding: 12px;
+  width: 100%;
+  border-width: ${(props: {active?: boolean}) => (props.active ? 1 : 0)}px;
+  border-color: ${(props: {active?: boolean; theme: ThemeType}) =>
+    props.active
+      ? addOpacity(props.theme.accentColor, 0.45)
+      : 'transparent'};
 `;
 
-const CardValue = styled.Text<{theme: Theme; color?: string}>`
+const TitleRow = styled.View.attrs({collapsable: false})`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const CardTitle = styled.Text<{theme: ThemeType}>`
+  font-size: 12px;
+  font-weight: 700;
+  color: ${(props: ThemedProps) => addOpacity(props.theme.black, 0.75)};
+`;
+
+const CardValue = styled.Text<{theme: ThemeType; color?: string}>`
   margin-top: 6px;
   font-size: 18px;
   font-weight: 800;
-  color: ${({theme, color}) => color ?? theme.black};
+  color: ${(props: {theme: ThemeType; color?: string}) =>
+    props.color ?? props.theme.black};
 `;
 
-const CardSubtle = styled.Text<{theme: Theme}>`
+const CardSubtle = styled.Text<{theme: ThemeType}>`
   margin-top: 4px;
   font-size: 12px;
   font-weight: 600;
-  color: ${({theme}) => addOpacity(theme.black, 0.65)};
+  color: ${(props: ThemedProps) => addOpacity(props.theme.black, 0.65)};
 `;
 
 const InlineRow = styled.View.attrs({collapsable: false})`
@@ -61,13 +86,28 @@ const InlineRow = styled.View.attrs({collapsable: false})`
   justify-content: center;
 `;
 
+export type BgStatsKey = 'lowest' | 'highest' | 'biggestRise' | 'biggestFall';
+
+export type BgStatsNavigatePayload = {
+  key: BgStatsKey;
+  targetDateMs: number;
+  highlightDateMs: number[];
+};
+
 interface StatsRowProps {
   bgData: BgSample[];
   averageTitleTestID?: string;
+  activeKey?: BgStatsKey | null;
+  onNavigateToSample?: (payload: BgStatsNavigatePayload) => void;
 }
 
-export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) => {
-  const theme = useTheme() as Theme;
+export const StatsRow: React.FC<StatsRowProps> = ({
+  bgData,
+  averageTitleTestID,
+  activeKey,
+  onNavigateToSample,
+}) => {
+  const theme = useTheme() as ThemeType;
   const data = bgData ?? [];
   if (data.length === 0) return null;
 
@@ -95,6 +135,19 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
   const lowColor = theme.determineBgColorByGlucoseValue(lowestBg.sgv);
   const highColor = theme.determineBgColorByGlucoseValue(highestBg.sgv);
 
+  const canNavigate = !!onNavigateToSample;
+
+  const renderPressableChevron = (enabled: boolean) => {
+    if (!enabled) return null;
+    return (
+      <Icon
+        name="chevron-right"
+        size={18}
+        color={addOpacity(theme.textColor, 0.45)}
+      />
+    );
+  };
+
   return (
     <>
       <Section>
@@ -120,11 +173,26 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
               flex: 1,
               marginRight: CARD_GAP,
             }}>
-            <CardSurface>
-              <CardTitle>Lowest</CardTitle>
+            <PressableCardSurface
+              active={activeKey === 'lowest'}
+              disabled={!canNavigate}
+              accessibilityRole={canNavigate ? 'button' : undefined}
+              accessibilityLabel={canNavigate ? 'Lowest BG' : undefined}
+              accessibilityHint={canNavigate ? 'Scroll to this reading' : undefined}
+              onPress={() =>
+                onNavigateToSample?.({
+                  key: 'lowest',
+                  targetDateMs: lowestBg.date,
+                  highlightDateMs: [lowestBg.date],
+                })
+              }>
+              <TitleRow>
+                <CardTitle>Lowest</CardTitle>
+                {renderPressableChevron(canNavigate)}
+              </TitleRow>
               <CardValue color={lowColor}>{lowestBg.sgv}</CardValue>
               <CardSubtle>{formatDateToLocaleTimeString(lowestBg.date)}</CardSubtle>
-            </CardSurface>
+            </PressableCardSurface>
           </View>
 
           <View
@@ -132,11 +200,26 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
             style={{
               flex: 1,
             }}>
-            <CardSurface>
-              <CardTitle>Highest</CardTitle>
+            <PressableCardSurface
+              active={activeKey === 'highest'}
+              disabled={!canNavigate}
+              accessibilityRole={canNavigate ? 'button' : undefined}
+              accessibilityLabel={canNavigate ? 'Highest BG' : undefined}
+              accessibilityHint={canNavigate ? 'Scroll to this reading' : undefined}
+              onPress={() =>
+                onNavigateToSample?.({
+                  key: 'highest',
+                  targetDateMs: highestBg.date,
+                  highlightDateMs: [highestBg.date],
+                })
+              }>
+              <TitleRow>
+                <CardTitle>Highest</CardTitle>
+                {renderPressableChevron(canNavigate)}
+              </TitleRow>
               <CardValue color={highColor}>{highestBg.sgv}</CardValue>
               <CardSubtle>{formatDateToLocaleTimeString(highestBg.date)}</CardSubtle>
-            </CardSurface>
+            </PressableCardSurface>
           </View>
         </CardRow>
 
@@ -147,8 +230,25 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
               flex: 1,
               marginRight: CARD_GAP,
             }}>
-            <CardSurface>
-              <CardTitle>Biggest Rise</CardTitle>
+            <PressableCardSurface
+              active={activeKey === 'biggestRise'}
+              disabled={!canNavigate}
+              accessibilityRole={canNavigate ? 'button' : undefined}
+              accessibilityLabel={canNavigate ? 'Biggest rise' : undefined}
+              accessibilityHint={canNavigate ? 'Scroll to these readings' : undefined}
+              onPress={() =>
+                onNavigateToSample?.({
+                  key: 'biggestRise',
+                  targetDateMs: upChange.toTimeMs,
+                  highlightDateMs: [upChange.fromTimeMs, upChange.toTimeMs].filter(
+                    Boolean,
+                  ),
+                })
+              }>
+              <TitleRow>
+                <CardTitle>Biggest Rise</CardTitle>
+                {renderPressableChevron(canNavigate)}
+              </TitleRow>
               <InlineRow>
                 <CardValue>{upChange.fromValue}</CardValue>
                 <Text
@@ -162,9 +262,9 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
                 <CardValue>{upChange.toValue}</CardValue>
               </InlineRow>
               <CardSubtle>
-                {formatDateToLocaleTimeString(upChange.fromTime)} - {formatDateToLocaleTimeString(upChange.toTime)}
+                {formatDateToLocaleTimeString(upChange.fromTimeMs)} - {formatDateToLocaleTimeString(upChange.toTimeMs)}
               </CardSubtle>
-            </CardSurface>
+            </PressableCardSurface>
           </View>
 
           <View
@@ -172,8 +272,25 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
             style={{
               flex: 1,
             }}>
-            <CardSurface>
-              <CardTitle>Biggest Fall</CardTitle>
+            <PressableCardSurface
+              active={activeKey === 'biggestFall'}
+              disabled={!canNavigate}
+              accessibilityRole={canNavigate ? 'button' : undefined}
+              accessibilityLabel={canNavigate ? 'Biggest fall' : undefined}
+              accessibilityHint={canNavigate ? 'Scroll to these readings' : undefined}
+              onPress={() =>
+                onNavigateToSample?.({
+                  key: 'biggestFall',
+                  targetDateMs: downChange.toTimeMs,
+                  highlightDateMs: [downChange.fromTimeMs, downChange.toTimeMs].filter(
+                    Boolean,
+                  ),
+                })
+              }>
+              <TitleRow>
+                <CardTitle>Biggest Fall</CardTitle>
+                {renderPressableChevron(canNavigate)}
+              </TitleRow>
               <InlineRow>
                 <CardValue>{downChange.fromValue}</CardValue>
                 <Text
@@ -187,9 +304,9 @@ export const StatsRow: React.FC<StatsRowProps> = ({bgData, averageTitleTestID}) 
                 <CardValue>{downChange.toValue}</CardValue>
               </InlineRow>
               <CardSubtle>
-                {formatDateToLocaleTimeString(downChange.fromTime)} - {formatDateToLocaleTimeString(downChange.toTime)}
+                {formatDateToLocaleTimeString(downChange.fromTimeMs)} - {formatDateToLocaleTimeString(downChange.toTimeMs)}
               </CardSubtle>
-            </CardSurface>
+            </PressableCardSurface>
           </View>
         </CardRow>
       </Section>

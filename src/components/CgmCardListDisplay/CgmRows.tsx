@@ -1,4 +1,4 @@
-import React, {FC, useCallback, useMemo} from 'react';
+import React, {FC, useCallback, useEffect, useMemo, useRef} from 'react';
 import {FlatList, View} from 'react-native';
 import BgDataCard from 'app/components/CgmCardListDisplay/BgDataCard';
 import {BgSample} from 'app/types/day_bgs.types';
@@ -24,6 +24,22 @@ interface CgmCardListDisplayProps {
   isToday: boolean;
 
   /**
+   * When provided, the list will scroll to the closest matching BG sample date.
+   * Use `focusToken` to retrigger scrolling/highlighting for the same target.
+   */
+  focusTargetDateMs?: number | null;
+
+  /**
+   * One or more BG sample timestamps to highlight (glow).
+   */
+  focusHighlightDateMs?: number[];
+
+  /**
+   * Monotonic token that retriggers focus behaviors.
+   */
+  focusToken?: number;
+
+  /**
    * Whether to show the fullscreen button.
    * Defaults to true.
    */
@@ -35,9 +51,13 @@ const CgmRows: FC<CgmCardListDisplayProps> = ({
   onPullToRefreshRefresh,
   isLoading,
   isToday,
+  focusTargetDateMs,
+  focusHighlightDateMs,
+  focusToken,
   showFullScreenButton = true,
 }) => {
   const navigation = useNavigation();
+  const listRef = useRef<FlatList<BgSample> | null>(null);
 
   const openFullScreen = useCallback(() => {
     const params = {
@@ -65,6 +85,44 @@ const CgmRows: FC<CgmCardListDisplayProps> = ({
     [bgData],
   );
 
+  const highlightSet = useMemo(() => {
+    const dates = focusHighlightDateMs ?? [];
+    if (!dates.length) return null;
+    return new Set(dates);
+    // Intentionally key off focusToken so a repeat tap retriggers highlight.
+  }, [focusToken, focusHighlightDateMs]);
+
+  useEffect(() => {
+    if (!focusToken) return;
+    if (!focusTargetDateMs) return;
+    if (!bgData.length) return;
+
+    let bestIndex = 0;
+    let bestDiff = Number.POSITIVE_INFINITY;
+
+    for (let i = 0; i < bgData.length; i++) {
+      const diff = Math.abs(bgData[i].date - focusTargetDateMs);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIndex = i;
+      }
+      if (diff === 0) break;
+    }
+
+    try {
+      // Defer until FlatList is ready to avoid occasional scrollToIndex failures.
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToIndex({
+          index: bestIndex,
+          animated: true,
+          viewPosition: 0.15,
+        });
+      });
+    } catch {
+      // Best-effort: if scrollToIndex fails, we just skip.
+    }
+  }, [bgData, focusTargetDateMs, focusToken]);
+
   const bgDataKeyExtractor = useCallback((item: BgSample) => {
     return item.date.toString();
   }, []);
@@ -76,9 +134,11 @@ const CgmRows: FC<CgmCardListDisplayProps> = ({
         prevBgData={bgData[index + 1]}
         maxIobReference={maxIobReference}
         maxCobReference={maxCobReference}
+        highlight={!!highlightSet?.has(item.date)}
+        highlightToken={focusToken}
       />
     ),
-    [bgData, maxIobReference, maxCobReference],
+    [bgData, focusToken, highlightSet, maxIobReference, maxCobReference],
   );
 
   return (
@@ -94,6 +154,9 @@ const CgmRows: FC<CgmCardListDisplayProps> = ({
 
       <FlatList
         testID={E2E_TEST_IDS.glucoseLog.list}
+        ref={ref => {
+          listRef.current = ref;
+        }}
         keyExtractor={bgDataKeyExtractor}
         data={bgData}
         renderItem={renderItem}
