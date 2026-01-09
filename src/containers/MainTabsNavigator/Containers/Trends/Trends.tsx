@@ -3,6 +3,9 @@
 import React, {useCallback, useMemo, useState} from 'react';
 import {View, ScrollView, Text} from 'react-native';
 import {differenceInCalendarDays} from 'date-fns';
+import {useTheme} from 'styled-components/native';
+
+import {ThemeType} from 'app/types/theme';
 
 import { useTrendsData } from './hooks/useTrendsData';
 import { DayDetail, calculateTrendsMetrics } from './utils/trendsCalculations';
@@ -36,6 +39,8 @@ import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 type MetricType = 'tir' | 'hypos' | 'hypers';
 
 const Trends: React.FC = () => {
+  const theme = useTheme() as ThemeType;
+
   const [presetDays, setPresetDays] = useState<number>(7);
   const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
   const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
@@ -225,7 +230,7 @@ const Trends: React.FC = () => {
       />
 
       {/* 2. Current date range info */}
-      <View style={{alignItems: 'center', marginVertical: 10}}>
+      <View style={{alignItems: 'center', marginVertical: theme.spacing.sm + 2}}>
         <SectionTitle>Data Range</SectionTitle>
         <ExplanationText>
           {start.toDateString()} to {end.toDateString()} ({rangeDays} days)
@@ -247,14 +252,14 @@ const Trends: React.FC = () => {
 
       {/* 4. No data case */}
       {!isLoading && !fetchError && bgData.length === 0 && !fetchCancelled && (
-        <View style={{ alignItems: "center", marginVertical: 10 }}>
-          <Text>No BG data available for this period.</Text>
+        <View style={{alignItems: 'center', marginVertical: theme.spacing.sm + 2}}>
+          <Text style={{color: theme.textColor}}>No BG data available for this period.</Text>
         </View>
       )}
 
       {/* 5. Partial data if user canceled */}
       {!isLoading && fetchCancelled && finalMetrics.dailyDetails.length > 0 && (
-        <View style={{ alignItems: "center", marginVertical: 10 }}>
+        <View style={{alignItems: 'center', marginVertical: theme.spacing.sm + 2}}>
           <Text>
             Loading cancelled. Showing partial results for {daysFetched}/{rangeDays} days.
           </Text>
@@ -265,7 +270,7 @@ const Trends: React.FC = () => {
       {!isLoading && !fetchError && finalMetrics.dailyDetails.length > 0 && (
         <ScrollView removeClippedSubviews={false}>
           {/* (a) Time In Range */}
-          <View style={{ marginBottom: 15 }}>
+          <View style={{marginBottom: theme.spacing.lg - 1}}>
             <SectionTitle>Key Glucose Trends</SectionTitle>
             <TimeInRangeRow bgData={bgData} />
           </View>
@@ -273,7 +278,7 @@ const Trends: React.FC = () => {
           {/* (b) Quick Stats */}
           <View
             testID={E2E_TEST_IDS.trends.quickStatsSection}
-            style={{ marginBottom: 15 }}>
+            style={{marginBottom: theme.spacing.lg - 1}}>
             <SectionTitle>Quick Stats</SectionTitle>
             <QuickStatsRow
               avgTddUPerDay={quickStats.avgTddUPerDay}
@@ -287,7 +292,7 @@ const Trends: React.FC = () => {
           </View>
 
           {/* (c) AGP Summary */}
-          <View style={{ marginBottom: 15 }}>
+          <View style={{marginBottom: theme.spacing.lg - 1}}>
             <SectionTitle>AGP</SectionTitle>
             <AGPSummary bgData={bgData} testID={E2E_TEST_IDS.charts.agpSummary} />
           </View>
@@ -313,8 +318,13 @@ const Trends: React.FC = () => {
             title="Select Metric for Best/Worst Day"
             testID={E2E_TEST_IDS.trends.metricSelectorCollapsable}>
             <ExplanationText>Choose how to determine best/worst day:</ExplanationText>
-            <View style={{flexDirection: 'row', justifyContent: 'center', marginVertical: 10}}>
-              <View style={{ marginHorizontal: 5 }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'center',
+                marginVertical: theme.spacing.sm + 2,
+              }}>
+              <View style={{marginHorizontal: theme.spacing.xs + 1}}>
                 <MetricButton
                   selected={selectedMetric === 'tir'}
                   onPress={() => setSelectedMetric('tir')}
@@ -322,7 +332,7 @@ const Trends: React.FC = () => {
                   <MetricButtonText selected={selectedMetric === 'tir'}>TIR</MetricButtonText>
                 </MetricButton>
               </View>
-              <View style={{ marginHorizontal: 5 }}>
+              <View style={{marginHorizontal: theme.spacing.xs + 1}}>
                 <MetricButton
                   selected={selectedMetric === 'hypos'}
                   onPress={() => setSelectedMetric('hypos')}
@@ -330,7 +340,7 @@ const Trends: React.FC = () => {
                   <MetricButtonText selected={selectedMetric === 'hypos'}>Fewest Hypos</MetricButtonText>
                 </MetricButton>
               </View>
-              <View style={{ marginHorizontal: 5 }}>
+              <View style={{marginHorizontal: theme.spacing.xs + 1}}>
                 <MetricButton
                   selected={selectedMetric === 'hypers'}
                   onPress={() => setSelectedMetric('hypers')}

@@ -15,6 +15,10 @@ import {
 } from 'app/utils/datetime.utils';
 import {KeyboardType, ReturnKeyType, TextInput} from 'react-native';
 import {rules} from 'app/components/forms/rules/NotificationForm.rules';
+import {useTheme} from 'styled-components/native';
+
+import {ThemeType} from 'app/types/theme';
+import {addOpacity} from 'app/style/styling.utils';
 
 type Props = {
   notification: NotificationRequest | null;
@@ -27,6 +31,7 @@ const NotificationForm = ({
   onSubmit,
   submitHandlerRef,
 }: Props) => {
+  const theme = useTheme() as ThemeType;
   const [showTrendInfo, setShowTrendInfo] = React.useState(false);
   const {
     control,
@@ -274,7 +279,10 @@ const NotificationForm = ({
                       React.createElement(require('app/components/DirectionArrows').default, {
                         trendDirection: opt.value,
                         size: 32,
-                        color: value === opt.value ? '#1976d2' : '#888',
+                        color:
+                          value === opt.value
+                            ? theme.accentColor
+                            : addOpacity(theme.textColor, 0.55),
                       })
                     ) : null}
                   </S.TrendIconWrapper>

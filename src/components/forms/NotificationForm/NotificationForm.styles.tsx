@@ -1,3 +1,8 @@
+import styled, {css} from 'styled-components/native';
+
+import {ThemeType} from 'app/types/theme';
+import {addOpacity} from 'app/style/styling.utils';
+
 export const InfoIconTouchable = styled.TouchableOpacity`
   margin-left: 6px;
   padding: 2px 4px;
@@ -5,33 +10,32 @@ export const InfoIconTouchable = styled.TouchableOpacity`
 
 export const InfoIcon = styled.Text`
   font-size: 15px;
-  color: #1976d2;
+  color: ${({theme}: {theme: ThemeType}) => theme.accentColor};
   font-weight: bold;
 `;
 
 export const TrendInfoBox = styled.View`
-  background-color: #e3eafc;
+  background-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.accentColor, 0.12)};
   border-radius: 8px;
   padding: 10px 12px;
   margin: 8px 0 4px 0;
 `;
 
 export const TrendInfoText = styled.Text`
-  color: #222;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
   font-size: 14px;
 `;
 
 export const TrendInfoBullet = styled.Text`
-  color: #1976d2;
+  color: ${({theme}: {theme: ThemeType}) => theme.accentColor};
   font-size: 16px;
   font-weight: bold;
 `;
 
 export const Bold = styled.Text`
   font-weight: bold;
-  color: #222;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
-import { ScrollView } from 'react-native';
 export const TrendSelectorScroll = styled.ScrollView`
   flex-direction: row;
   margin: 12px 0 8px 0;
@@ -45,9 +49,11 @@ export const TrendOptionButton = styled.TouchableOpacity<{selected: boolean}>`
   margin-right: 12px;
   padding: 8px 10px;
   border-radius: 8px;
-  background-color: ${({selected}) => (selected ? '#e3f2fd' : 'transparent')};
+  background-color: ${({selected, theme}: {selected: boolean; theme: ThemeType}) =>
+    selected ? addOpacity(theme.accentColor, 0.12) : 'transparent'};
   border-width: ${({selected}) => (selected ? '2px' : '1px')};
-  border-color: ${({selected}) => (selected ? '#1976d2' : '#ccc')};
+  border-color: ${({selected, theme}: {selected: boolean; theme: ThemeType}) =>
+    selected ? theme.accentColor : theme.borderColor};
 `;
 
 export const TrendIconWrapper = styled.View`
@@ -56,15 +62,14 @@ export const TrendIconWrapper = styled.View`
 
 export const TrendOptionLabel = styled.Text<{selected: boolean}>`
   font-size: 13px;
-  color: ${({selected}) => (selected ? '#1976d2' : '#666')};
+  color: ${({selected, theme}: {selected: boolean; theme: ThemeType}) =>
+    selected ? theme.accentColor : addOpacity(theme.textColor, 0.6)};
   font-weight: ${({selected}) => (selected ? 'bold' : 'normal')};
 `;
-import React from 'react';
-import styled, {css} from 'styled-components/native';
 
 export const Container = styled.View`
   flex: 1;
-  background-color: #fff;
+  background-color: ${({theme}: {theme: ThemeType}) => theme.backgroundColor};
 `;
 
 export const InputWrapper = styled.View`
@@ -73,26 +78,25 @@ export const InputWrapper = styled.View`
 
 export const InputLabel = styled.Text`
   font-size: 15px;
-  color: #444;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.75)};
   margin-bottom: 4px;
   margin-left: 2px;
 `;
 
 export const TextInput = styled.TextInput`
   height: 44px;
-  border-color: #b0b0b0;
+  border-color: ${({theme}: {theme: ThemeType}) => theme.borderColor};
   border-width: 1px;
   border-radius: 8px;
   padding: 10px 12px;
-  background-color: #f7f8fa;
+  background-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.04)};
   font-size: 16px;
-  color: #222;
-  ${({theme}) => theme && theme.textColor ? `color: ${theme.textColor};` : ''}
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
 
 export const Button = styled.TouchableOpacity`
   height: 40px;
-  background-color: #ccc;
+  background-color: ${({theme}: {theme: ThemeType}) => theme.borderColor};
   padding: 10px;
   margin: 10px;
   align-items: center;
@@ -100,7 +104,7 @@ export const Button = styled.TouchableOpacity`
 `;
 
 export const ButtonText = styled.Text`
-  color: #fff;
+  color: ${({theme}: {theme: ThemeType}) => theme.buttonTextColor};
 `;
 
 export const Switch = styled.Switch`
@@ -110,7 +114,7 @@ export const Switch = styled.Switch`
 // Select and SelectItem are used for choosing trend
 export const Select = styled.View`
   min-height: 40px;
-  border-color: #ccc;
+  border-color: ${({theme}: {theme: ThemeType}) => theme.borderColor};
   border-width: 1px;
   padding: 10px;
   margin: 10px;
@@ -122,26 +126,26 @@ const SelectItemContainer = styled.TouchableOpacity`
   margin: 5px;
   align-items: center;
   justify-content: center;
-  border: 1px solid #ccc;
+  border: 1px solid ${({theme}: {theme: ThemeType}) => theme.borderColor};
   ${(props: {selected: boolean}) =>
     props.selected
       ? css`
-          background-color: #ccc;
+          background-color: ${({theme}: {theme: ThemeType}) => theme.borderColor};
         `
       : css`
-          background-color: #fff;
+          background-color: ${({theme}: {theme: ThemeType}) => theme.white};
         `}
 `;
 
 export const SelectItemText = styled.Text`
-  color: #fff;
+  color: ${({theme}: {theme: ThemeType}) => theme.buttonTextColor};
   ${(props: {selected: boolean}) =>
     props.selected
       ? css`
-          color: #fff;
+          color: ${({theme}: {theme: ThemeType}) => theme.buttonTextColor};
         `
       : css`
-          color: #000;
+          color: ${({theme}: {theme: ThemeType}) => theme.textColor};
         `}
 `;
 
@@ -164,7 +168,7 @@ export const SelectItem = ({
 };
 
 export const ErrorText = styled.Text`
-  color: #e53935;
+  color: ${({theme}: {theme: ThemeType}) => theme.belowRangeColor};
   margin: 6px 18px 0 18px;
   font-size: 13px;
 `;
@@ -179,18 +183,18 @@ export const TimePickerContainer = styled.View`
 export const TimePickerButton = styled.TouchableOpacity`
   flex: 1;
   height: 44px;
-  background-color: #e3eafc;
+  background-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.accentColor, 0.12)};
   border-radius: 8px;
   margin-right: 10px;
   align-items: center;
   justify-content: center;
   border-width: 1px;
-  border-color: #b0c4de;
+  border-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.accentColor, 0.4)};
   min-width: 0;
 `;
 
 export const TimePickerText = styled.Text`
-  color: #1a237e;
+  color: ${({theme}: {theme: ThemeType}) => theme.accentColor};
   font-size: 16px;
   font-weight: 600;
 `;
@@ -204,11 +208,12 @@ export const ToggleContainer = styled.View`
 export const ToggleButton = styled.TouchableOpacity<{selected: boolean}>`
   padding: 12px 20px;
   border-radius: 8px;
-  background-color: ${props => (props.selected ? '#4caf50' : '#f44336')};
+  background-color: ${({selected, theme}: {selected: boolean; theme: ThemeType}) =>
+    selected ? theme.inRangeColor : theme.belowRangeColor};
 `;
 
 export const ToggleButtonText = styled.Text<{selected: boolean}>`
-  color: #fff;
+  color: ${({theme}: {theme: ThemeType}) => theme.buttonTextColor};
   font-size: 16px;
   font-weight: bold;
 `;
