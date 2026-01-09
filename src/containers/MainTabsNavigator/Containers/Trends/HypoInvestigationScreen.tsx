@@ -15,6 +15,7 @@ import {
   enrichBgSamplesWithDeviceStatusForRange,
   fetchStackedChartsDataForRange,
 } from 'app/utils/stackedChartsData.utils';
+import {formatIobSplitLabel} from 'app/utils/tooltipFormatting.utils';
 
 import {
   extractHypoEvents,
@@ -200,8 +201,17 @@ const HypoInvestigationScreen: React.FC = () => {
 
     if (item.iobBolusU != null || item.iobBasalU != null) {
       const total = (item.iobBolusU ?? 0) + (item.iobBasalU ?? 0);
+
       subtitleParts.push(
-        `IOB ${total.toFixed(1)}U (${(item.iobBolusU ?? 0).toFixed(1)} bolus, ${(item.iobBasalU ?? 0).toFixed(1)} basal)`,
+        formatIobSplitLabel({
+          totalU: total,
+          bolusU: item.iobBolusU ?? 0,
+          basalU: item.iobBasalU ?? 0,
+          digits: 1,
+          formatTotal: u => `IOB ${u.toFixed(1)}U`,
+          formatBolus: u => `${u.toFixed(1)} bolus`,
+          formatBasal: u => `${u.toFixed(1)} basal`,
+        }),
       );
     }
 

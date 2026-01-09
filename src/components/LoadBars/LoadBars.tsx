@@ -8,6 +8,7 @@ import {
   toBarPercent,
 } from 'app/utils/loadBars.utils';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {formatIobSplitLabel} from 'app/utils/tooltipFormatting.utils';
 
 /**
  * Visualizes current "load" context for a BG entry.
@@ -79,12 +80,21 @@ const LoadBars: React.FC<Props> = ({
   );
 
   const iobLabel = useMemo(() => {
-    const totalText = formatIob(safeIobTotal);
-    if (!hasSplitIob) return totalText;
+    if (!hasSplitIob) return formatIob(safeIobTotal);
 
-    const bolus = typeof iobBolus === 'number' && Number.isFinite(iobBolus) ? Math.max(0, iobBolus) : 0;
-    const basal = typeof iobBasal === 'number' && Number.isFinite(iobBasal) ? Math.max(0, iobBasal) : 0;
-    return `${totalText} (${formatIob(bolus)} bolus, ${formatIob(basal)} basal)`;
+    const bolus =
+      typeof iobBolus === 'number' && Number.isFinite(iobBolus) ? Math.max(0, iobBolus) : 0;
+    const basal =
+      typeof iobBasal === 'number' && Number.isFinite(iobBasal) ? Math.max(0, iobBasal) : 0;
+
+    return formatIobSplitLabel({
+      totalU: safeIobTotal,
+      bolusU: bolus,
+      basalU: basal,
+      formatTotal: u => formatIob(u),
+      formatBolus: u => `${formatIob(u)} bolus`,
+      formatBasal: u => `${formatIob(u)} basal`,
+    });
   }, [hasSplitIob, iobBasal, iobBolus, safeIobTotal]);
 
   return (
