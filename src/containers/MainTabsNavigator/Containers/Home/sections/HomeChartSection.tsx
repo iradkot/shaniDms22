@@ -16,7 +16,7 @@ const ChartControlsRow = styled.View`
   flex-direction: row;
   align-items: center;
   justify-content: flex-end;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-bottom-width: 1px;
   border-bottom-color: ${(props: {theme: ThemeType}) =>
     addOpacity(props.theme.black, 0.08)};

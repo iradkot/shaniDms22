@@ -14,7 +14,7 @@ const SectionSwitcherRow = styled.View.attrs({collapsable: false})`
   flex-direction: row;
   align-items: center;
   justify-content: space-around;
-  padding: 10px 12px;
+  padding: 6px 12px;
   border-bottom-width: 1px;
   border-bottom-color: ${(props: {theme: ThemeType}) =>
     addOpacity(props.theme.black, 0.08)};
@@ -24,14 +24,14 @@ const SectionButton = styled(Pressable).attrs({collapsable: false})`
   flex: 1;
   align-items: center;
   justify-content: center;
-  padding-vertical: 6px;
+  padding-vertical: 4px;
 `;
 
 const SectionButtonInner = styled.View.attrs({collapsable: false})<{active: boolean}>`
   width: 100%;
   align-items: center;
   justify-content: center;
-  padding-vertical: 8px;
+  padding-vertical: 6px;
   border-radius: 12px;
   background-color: ${(props: {theme: ThemeType; active: boolean}) =>
     props.active ? addOpacity(props.theme.accentColor, 0.12) : 'transparent'};
