@@ -12,7 +12,7 @@ import {addOpacity} from 'app/style/styling.utils';
 import {calculateTimeInRangePercentages} from 'app/utils/glucose/timeInRange';
 
 const Container = styled.View`
-  margin: 10px 0;
+  margin: ${({theme}) => (theme as Theme).spacing.md - 2}px 0;
 `;
 
 const Bar = styled.View`
@@ -43,7 +43,7 @@ const Segment = styled(Animated.View)<{
     if (inRange) return t.inRangeColor;
     if (aboveRange) return t.aboveRangeColor;
     if (severeAboveRange) return t.severeAboveRange;
-    return 'yellow';
+    return t.aboveRangeColor;
   }};
 `;
 
@@ -59,7 +59,7 @@ const LegendRow = styled.View`
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  margin-top: 8px;
+  margin-top: ${({theme}) => (theme as Theme).spacing.sm}px;
 `;
 
 const LegendItem = styled.View`
@@ -72,7 +72,7 @@ const LegendDot = styled.View<{color: string}>`
   height: 8px;
   border-radius: 4px;
   background-color: ${({color}) => color};
-  margin-right: 6px;
+  margin-right: ${({theme}) => (theme as Theme).spacing.sm - 2}px;
 `;
 
 const LegendText = styled.Text`

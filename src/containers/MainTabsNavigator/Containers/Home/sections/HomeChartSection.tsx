@@ -16,7 +16,8 @@ const ChartControlsRow = styled.View`
   flex-direction: row;
   align-items: center;
   justify-content: flex-end;
-  padding: 6px 12px;
+  padding: ${(props: {theme: ThemeType}) => props.theme.spacing.sm - 2}px
+    ${(props: {theme: ThemeType}) => props.theme.spacing.md}px;
   border-bottom-width: 1px;
   border-bottom-color: ${(props: {theme: ThemeType}) =>
     addOpacity(props.theme.black, 0.08)};
@@ -26,44 +27,44 @@ const ChartControlButton = styled(Pressable)<{disabled?: boolean}>`
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  padding-vertical: 6px;
-  padding-horizontal: 10px;
-  margin-left: 8px;
+  padding-vertical: ${(props: {theme: ThemeType}) => props.theme.spacing.sm - 2}px;
+  padding-horizontal: ${(props: {theme: ThemeType}) => props.theme.spacing.md - 2}px;
+  margin-left: ${(props: {theme: ThemeType}) => props.theme.spacing.sm}px;
   border-width: 1px;
-  border-radius: 10px;
+  border-radius: ${(props: {theme: ThemeType}) => props.theme.borderRadius + 2}px;
   border-color: ${(props: {theme: ThemeType}) =>
     addOpacity(props.theme.textColor, 0.18)};
   opacity: ${(props: {disabled?: boolean}) => (props.disabled ? 0.4 : 1)};
 `;
 
 const ChartControlText = styled.Text`
-  margin-left: 6px;
-  font-size: 12px;
+  margin-left: ${(props: {theme: ThemeType}) => props.theme.spacing.sm - 2}px;
+  font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.xs}px;
   font-weight: 700;
   color: ${(props: {theme: ThemeType}) => props.theme.textColor};
 `;
 
 const ChartPlaceholder = styled(Animated.View)`
-  padding: 12px;
+  padding: ${(props: {theme: ThemeType}) => props.theme.spacing.md}px;
 `;
 
 const PlaceholderCard = styled.View`
-  border-radius: 12px;
+  border-radius: ${(props: {theme: ThemeType}) => props.theme.borderRadius + 4}px;
   border-width: 1px;
   background-color: ${(props: {theme: ThemeType}) => addOpacity(props.theme.white, 0.9)};
   border-color: ${(props: {theme: ThemeType}) => addOpacity(props.theme.textColor, 0.12)};
-  padding: 12px;
+  padding: ${(props: {theme: ThemeType}) => props.theme.spacing.md}px;
 `;
 
 const PlaceholderTitle = styled.Text`
-  font-size: 13px;
+  font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.sm - 1}px;
   font-weight: 800;
   color: ${(props: {theme: ThemeType}) => props.theme.textColor};
 `;
 
 const PlaceholderSub = styled.Text`
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: ${(props: {theme: ThemeType}) => props.theme.spacing.xs}px;
+  font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.xs}px;
   font-weight: 600;
   color: ${(props: {theme: ThemeType}) => addOpacity(props.theme.textColor, 0.65)};
 `;

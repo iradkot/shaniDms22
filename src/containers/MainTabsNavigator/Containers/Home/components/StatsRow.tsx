@@ -19,22 +19,22 @@ const INLINE_ICON_MARGIN_HORIZONTAL = 6;
 type ThemedProps = {theme: ThemeType};
 
 const Section = styled.View.attrs({collapsable: false})<{theme: ThemeType}>`
-  padding-top: 4px;
-  padding-right: 10px;
-  padding-bottom: 4px;
-  padding-left: 10px;
+  padding-top: ${(props: ThemedProps) => props.theme.spacing.xs}px;
+  padding-right: ${(props: ThemedProps) => props.theme.spacing.md - 2}px;
+  padding-bottom: ${(props: ThemedProps) => props.theme.spacing.xs}px;
+  padding-left: ${(props: ThemedProps) => props.theme.spacing.md - 2}px;
 `;
 
 const CardRow = styled.View.attrs({collapsable: false})`
   flex-direction: row;
   justify-content: flex-start;
-  margin-bottom: 8px;
+  margin-bottom: ${(props: ThemedProps) => props.theme.spacing.sm}px;
 `;
 
 const CardSurface = styled.View.attrs({collapsable: false})<{theme: ThemeType}>`
   background-color: ${(props: ThemedProps) => props.theme.white};
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: ${(props: ThemedProps) => props.theme.borderRadius + 4}px;
+  padding: ${(props: ThemedProps) => props.theme.spacing.md}px;
   width: 100%;
 `;
 
@@ -43,8 +43,8 @@ const PressableCardSurface = styled(Pressable).attrs({collapsable: false})<{
   theme: ThemeType;
 }>`
   background-color: ${(props: ThemedProps) => props.theme.white};
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: ${(props: ThemedProps) => props.theme.borderRadius + 4}px;
+  padding: ${(props: ThemedProps) => props.theme.spacing.md}px;
   width: 100%;
   border-width: ${(props: {active?: boolean}) => (props.active ? 1 : 0)}px;
   border-color: ${(props: {active?: boolean; theme: ThemeType}) =>
@@ -60,13 +60,13 @@ const TitleRow = styled.View.attrs({collapsable: false})`
 `;
 
 const CardTitle = styled.Text<{theme: ThemeType}>`
-  font-size: 12px;
+  font-size: ${(props: ThemedProps) => props.theme.typography.size.xs}px;
   font-weight: 700;
   color: ${(props: ThemedProps) => addOpacity(props.theme.black, 0.75)};
 `;
 
 const CardValue = styled.Text<{theme: ThemeType; color?: string}>`
-  margin-top: 2px;
+  margin-top: ${(props: ThemedProps) => props.theme.spacing.xs / 2}px;
   font-size: 18px;
   font-weight: 800;
   color: ${(props: {theme: ThemeType; color?: string}) =>
@@ -74,8 +74,8 @@ const CardValue = styled.Text<{theme: ThemeType; color?: string}>`
 `;
 
 const CardSubtle = styled.Text<{theme: ThemeType}>`
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: ${(props: ThemedProps) => props.theme.spacing.xs}px;
+  font-size: ${(props: ThemedProps) => props.theme.typography.size.xs}px;
   font-weight: 600;
   color: ${(props: ThemedProps) => addOpacity(props.theme.black, 0.65)};
 `;
@@ -156,7 +156,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({
             collapsable={false}
             style={{
               flex: 1,
-              marginRight: CARD_GAP,
+              marginRight: theme.spacing.sm,
             }}>
             <CardSurface testID={averageTitleTestID} collapsable={false}>
               <CardTitle>Average</CardTitle>
@@ -171,7 +171,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({
             collapsable={false}
             style={{
               flex: 1,
-              marginRight: CARD_GAP,
+              marginRight: theme.spacing.sm,
             }}>
             <PressableCardSurface
               active={activeKey === 'lowest'}

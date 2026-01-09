@@ -13,7 +13,8 @@ const SectionSwitcherRow = styled.View.attrs({collapsable: false})`
   flex-direction: row;
   align-items: center;
   justify-content: space-around;
-  padding: 6px 12px;
+  padding: ${(props: {theme: ThemeType}) => props.theme.spacing.sm - 2}px
+    ${(props: {theme: ThemeType}) => props.theme.spacing.md}px;
   border-bottom-width: 1px;
   border-bottom-color: ${(props: {theme: ThemeType}) =>
     addOpacity(props.theme.black, 0.08)};
@@ -23,15 +24,15 @@ const SectionButton = styled(Pressable).attrs({collapsable: false})`
   flex: 1;
   align-items: center;
   justify-content: center;
-  padding-vertical: 2px;
+  padding-vertical: ${(props: {theme: ThemeType}) => props.theme.spacing.xs / 2}px;
 `;
 
 const SectionButtonInner = styled.View.attrs({collapsable: false})<{active: boolean}>`
   width: 100%;
   align-items: center;
   justify-content: center;
-  padding-vertical: 4px;
-  border-radius: 12px;
+  padding-vertical: ${(props: {theme: ThemeType}) => props.theme.spacing.xs}px;
+  border-radius: ${(props: {theme: ThemeType}) => props.theme.borderRadius + 4}px;
   background-color: ${(props: {theme: ThemeType; active: boolean}) =>
     props.active ? addOpacity(props.theme.accentColor, 0.12) : 'transparent'};
   border-width: ${(props: {active: boolean}) => (props.active ? 1 : 0)};
@@ -42,11 +43,11 @@ const SectionButtonInner = styled.View.attrs({collapsable: false})<{active: bool
 const LabelRow = styled.View`
   flex-direction: row;
   align-items: center;
-  margin-top: 4px;
+  margin-top: ${(props: {theme: ThemeType}) => props.theme.spacing.xs}px;
 `;
 
 const SectionLabel = styled.Text<{active: boolean}>`
-  font-size: 12px;
+  font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.xs}px;
   font-weight: 700;
   color: ${(props: {theme: ThemeType; active: boolean}) =>
     props.active
