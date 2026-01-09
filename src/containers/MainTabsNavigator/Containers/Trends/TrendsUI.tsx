@@ -1,11 +1,11 @@
 // /Trends/TrendsUI.tsx
 
 import React from 'react';
-import { View, Dimensions } from 'react-native';
 import Collapsable from 'app/components/Collapsable';
 import { DayDetail } from './utils/trendsCalculations';
 import {useTheme} from 'styled-components/native';
 import {addOpacity} from 'app/style/styling.utils';
+import {ThemeType} from 'app/types/theme';
 
 // OPTIONAL: If you have a BG graph component
 // import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
@@ -19,8 +19,6 @@ import {
   ExplanationText,
   Row
 } from './styles/Trends.styles';
-
-const { width: screenWidth } = Dimensions.get('window');
 
 interface DayInsightsProps {
   bestDayDetail: DayDetail | null;
@@ -43,7 +41,7 @@ export const DayInsights: React.FC<DayInsightsProps> = ({
                                                         }) => {
   if (!bestDayDetail && !worstDayDetail) return null;
 
-  const theme = useTheme();
+  const theme = useTheme() as ThemeType;
 
   // Label text for "best" and "worst" day, depending on selected metric
   const bestMetricLabel = selectedMetric === 'tir' ? 'Highest TIR'

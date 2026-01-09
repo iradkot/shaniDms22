@@ -1,13 +1,17 @@
 // InsulinStatsRow.tsx
 import React from 'react';
 import styled from 'styled-components/native';
+import {useTheme} from 'styled-components/native';
+
+import {ThemeType} from 'app/types/theme';
+import {addOpacity} from 'app/style/styling.utils';
 import { GradientColumnComponent } from './GradientColumnComponent';
 import { computeInsulinStats } from './InsulinDataCalculations';
 import { InsulinDataEntry, BasalProfile } from 'app/types/insulin.types';
 
 const Container = styled.View`
     background-color: ${props => props.theme.backgroundColor};
-    padding: 10px;
+  padding: ${(props: {theme: ThemeType}) => props.theme.spacing.sm + 2}px;
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: space-around;
@@ -26,6 +30,8 @@ export const InsulinStatsRow: React.FC<InsulinStatsRowProps> = ({
                                                                   startDate,
                                                                   endDate,
                                                                 }) => {
+  const theme = useTheme() as ThemeType;
+
   const stats = computeInsulinStats(insulinData, basalProfileData, startDate, endDate);
 
   const basalRatioPercentage = stats.totalInsulin > 0
@@ -38,25 +44,25 @@ export const InsulinStatsRow: React.FC<InsulinStatsRowProps> = ({
         label="Total Basal"
         value={`${stats.totalBasal.toFixed(2)} U`}
         iconName="water-percent"
-        gradientColors={['#36D1DC', '#5B86E5']} // Blue gradient
+        gradientColors={[addOpacity(theme.colors.insulinSecondary, 0.9), theme.colors.insulin]}
       />
       <GradientColumnComponent
         label="Total Bolus"
         value={`${stats.totalBolus.toFixed(2)} U`}
         iconName="needle"
-        gradientColors={['#FF512F', '#DD2476']} // Red gradient
+        gradientColors={[addOpacity(theme.belowRangeColor, 0.9), theme.belowRangeColor]}
       />
       <GradientColumnComponent
         label="Basal/Bolus Ratio"
         value={`${basalRatioPercentage.toFixed(0)}%`}
         progress={basalRatioPercentage}
-        gradientColors={['#00b09b', '#96c93d']} // Green gradient
+        gradientColors={[addOpacity(theme.inRangeColor, 0.9), theme.inRangeColor]}
       />
       <GradientColumnComponent
         label="Total Insulin"
         value={`${stats.totalInsulin.toFixed(1)} U`}
         iconName="calculator"
-        gradientColors={['#f7971e', '#ffd200']} // Yellow gradient
+        gradientColors={[addOpacity(theme.aboveRangeColor, 0.9), theme.aboveRangeColor]}
       />
     </Container>
   );

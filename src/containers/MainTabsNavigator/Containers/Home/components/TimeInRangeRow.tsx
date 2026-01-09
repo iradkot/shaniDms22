@@ -261,7 +261,7 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
     <Container>
       <DropShadow
         style={{
-          shadowColor: '#000',
+          shadowColor: theme.shadowColor,
           shadowOffset: {width: 0, height: 2},
           shadowOpacity: 0.12,
           shadowRadius: 3,
