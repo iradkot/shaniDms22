@@ -8,6 +8,11 @@ import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {addOpacity, determineBgColorByGlucoseValue} from 'app/style/styling.utils';
 import {InsulinDataEntry} from 'app/types/insulin.types';
 import {CarbEvent} from 'app/components/charts/CgmGraph/utils/carbsUtils';
+import {
+  formatBolusCloseEventsDetails,
+  formatCarbCloseEventsDetails,
+  formatIobSplitLabel,
+} from 'app/utils/tooltipFormatting.utils';
 
 type Props = {
   anchorTimeMs: number;
@@ -89,22 +94,15 @@ const HomeChartsTooltip: React.FC<Props> = ({
   }, [bgSample?.direction]);
 
   const activeText = useMemo(() => {
-    if (activeInsulinU == null || !Number.isFinite(activeInsulinU)) return '—';
-    const totalText = `${activeInsulinU.toFixed(2)} U`;
-
-    const hasSplit =
-      (activeInsulinBolusU != null && Number.isFinite(activeInsulinBolusU)) ||
-      (activeInsulinBasalU != null && Number.isFinite(activeInsulinBasalU));
-    if (!hasSplit) return totalText;
-
-    const bolus = activeInsulinBolusU != null && Number.isFinite(activeInsulinBolusU)
-      ? activeInsulinBolusU
-      : 0;
-    const basal = activeInsulinBasalU != null && Number.isFinite(activeInsulinBasalU)
-      ? activeInsulinBasalU
-      : 0;
-
-    return `${totalText} (${bolus.toFixed(2)} bolus, ${basal.toFixed(2)} basal)`;
+    return formatIobSplitLabel({
+      totalU: activeInsulinU,
+      bolusU: activeInsulinBolusU,
+      basalU: activeInsulinBasalU,
+      digits: 2,
+      formatTotal: u => `${u.toFixed(2)} U`,
+      formatBolus: u => `${u.toFixed(2)} bolus`,
+      formatBasal: u => `${u.toFixed(2)} basal`,
+    });
   }, [activeInsulinBasalU, activeInsulinBolusU, activeInsulinU]);
   const basalText =
     basalRateUhr != null && Number.isFinite(basalRateUhr)
@@ -119,39 +117,11 @@ const HomeChartsTooltip: React.FC<Props> = ({
     carbsSummary.count > 0 ? `${Math.round(carbsSummary.totalG)} g (${carbsSummary.count})` : '—';
 
   const bolusDetailsText = useMemo(() => {
-    const events = bolusEvents ?? [];
-    if (!events.length) return null;
-
-    const parts = events
-      .map(e => {
-        const t = new Date(e.timestamp).getTime();
-        const time = Number.isFinite(t) ? formatDateToLocaleTimeString(t) : null;
-        const dose = typeof e.amount === 'number' && Number.isFinite(e.amount) ? e.amount : null;
-        if (!time) return null;
-        return dose != null ? `${time} (${dose.toFixed(2)}U)` : time;
-      })
-      .filter(Boolean) as string[];
-
-    if (!parts.length) return null;
-    return parts.join(', ');
+    return formatBolusCloseEventsDetails(bolusEvents ?? []);
   }, [bolusEvents]);
 
   const carbDetailsText = useMemo(() => {
-    const events = carbEvents ?? [];
-    if (!events.length) return null;
-
-    const parts = events
-      .map(e => {
-        const time = formatDateToLocaleTimeString(e.timestamp);
-        const g = typeof (e as any).carbs === 'number' && Number.isFinite((e as any).carbs)
-          ? (e as any).carbs
-          : null;
-        return g != null ? `${time} (${Math.round(g)}g)` : time;
-      })
-      .filter(Boolean) as string[];
-
-    if (!parts.length) return null;
-    return parts.join(', ');
+    return formatCarbCloseEventsDetails((carbEvents ?? []) as any);
   }, [carbEvents]);
 
   return (
