@@ -1,7 +1,11 @@
-import React, {FC, useState} from 'react';
+import React, {FC, useMemo, useState} from 'react';
 import Icon from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import {useTheme} from 'styled-components/native';
+
+import {ThemeType} from 'app/types/theme';
+import {addOpacity} from 'app/style/styling.utils';
 import {
     ButtonContainer,
     Container,
@@ -31,6 +35,19 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
     isLoading,
 }) => {
     const [isDateModalVisible, setIsDateModalVisible] = useState(false);
+    const theme = useTheme() as ThemeType;
+
+    const gradientColors = useMemo(
+        () => [addOpacity(theme.textColor, 0.8), addOpacity(theme.textColor, 0.6)],
+        [theme.textColor],
+    );
+
+    const gradientStyle = useMemo(
+        () => ({borderRadius: theme.spacing.sm + 2, padding: theme.spacing.xs - 1}),
+        [theme.spacing.sm, theme.spacing.xs],
+    );
+
+    const iconColor = useMemo(() => theme.white, [theme.white]);
 
     const onPickerConfirm = (newDate: Date) => {
         setCustomDate(newDate);
@@ -45,12 +62,12 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
 
             <ButtonContainer onPress={onGoBack} active={isToday} flex={1}>
                 <LinearGradient
-                    colors={['#333', '#666']}
+                    colors={gradientColors}
                     start={{x: 0, y: 0}}
                     end={{x: 1, y: 0}}
-                    style={{borderRadius: 10, padding: 3}}>
+                    style={gradientStyle}>
                     <IconContainer>
-                        <Icon name="chevron-back-outline" size={20} color="#fff" />
+                        <Icon name="chevron-back-outline" size={20} color={iconColor} />
                     </IconContainer>
                 </LinearGradient>
             </ButtonContainer>
@@ -71,12 +88,12 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
 
             <ButtonContainer onPress={onGoForward} disabled={isToday} flex={1}>
                 <LinearGradient
-                    colors={['#333', '#666']}
+                    colors={gradientColors}
                     start={{x: 0, y: 0}}
                     end={{x: 1, y: 0}}
-                    style={{borderRadius: 10, padding: 3}}>
+                    style={gradientStyle}>
                     <IconContainer>
-                        <Icon name="chevron-forward-outline" size={20} color="#fff" />
+                        <Icon name="chevron-forward-outline" size={20} color={iconColor} />
                     </IconContainer>
                 </LinearGradient>
             </ButtonContainer>
@@ -86,12 +103,12 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
                 disabled={isToday}
                 flex={1}>
                 <LinearGradient
-                    colors={['#333', '#666']}
+                    colors={gradientColors}
                     start={{x: 0, y: 0}}
                     end={{x: 1, y: 0}}
-                    style={{borderRadius: 10, padding: 3}}>
+                    style={gradientStyle}>
                     <IconContainer>
-                        <Icon name="refresh-outline" size={20} color="#fff" />
+                        <Icon name="refresh-outline" size={20} color={iconColor} />
                     </IconContainer>
                 </LinearGradient>
             </ButtonContainer>

@@ -1,6 +1,9 @@
 // /Trends/components/CompareSection.tsx
 import React from 'react';
 import { View, Button, ActivityIndicator } from 'react-native';
+import {useTheme} from 'styled-components/native';
+
+import {ThemeType} from 'app/types/theme';
 import {
   CompareBox,
   ExplanationText,
@@ -38,6 +41,8 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
   changeComparisonPeriod,
   hideComparison,
 }) => {
+  const theme = useTheme() as ThemeType;
+
   if (!currentMetrics.dailyDetails.length) return null;
 
   const renderComparisonValue = (
@@ -48,14 +53,9 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
   ) => {
     const diff = current - previous;
     const diffPercentage = previous !== 0 ? (diff / previous) * 100 : 0;
-    const color =
-      diff > 0
-        ? lowerIsBetter
-          ? 'green'
-          : 'red'
-        : lowerIsBetter
-        ? 'red'
-        : 'green';
+
+    const isImprovement = diff > 0 ? lowerIsBetter : !lowerIsBetter;
+    const color = isImprovement ? theme.inRangeColor : theme.belowRangeColor;
 
     return (
       <View>
@@ -73,15 +73,15 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
   };
 
   return (
-    <View style={{ marginVertical: 10 }}>
+    <View style={{ marginVertical: theme.spacing.sm + 2 }}>
       {!showComparison && !comparing && (
         <Button
           title="Compare With Previous Period"
           onPress={handleCompare}
-          color="#1890ff"
+          color={theme.accentColor}
         />
       )}
-      {comparing && <ActivityIndicator size="large" color="#1890ff" />}
+      {comparing && <ActivityIndicator size="large" color={theme.accentColor} />}
 
       {showComparison && previousMetrics && comparisonDateRange && (
         <CompareBox>
@@ -92,7 +92,11 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
               alignItems: 'center',
             }}>
             <ComparisonTitle>Comparison</ComparisonTitle>
-            <Button title="Hide" onPress={hideComparison} color="#ff4d4f" />
+            <Button
+              title="Hide"
+              onPress={hideComparison}
+              color={theme.belowRangeColor}
+            />
           </View>
           <ComparisonSubtitle>
             Current vs. Another {rangeDays}-Day Period
@@ -106,7 +110,7 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
             style={{
               flexDirection: 'row',
               justifyContent: 'space-around',
-              marginBottom: 10,
+              marginBottom: theme.spacing.sm + 2,
             }}>
             <Button
               title="< Shift Back"
@@ -157,7 +161,7 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
             )}
           </StatRow>
 
-          <ExplanationText style={{ marginTop: 15 }}>
+          <ExplanationText style={{ marginTop: theme.spacing.lg - 1 }}>
             Green indicates an improvement, while red suggests a decline. Use
             these insights to adjust your diabetes management plan.
           </ExplanationText>

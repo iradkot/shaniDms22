@@ -7,8 +7,6 @@ import {addOpacity} from 'app/style/styling.utils';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW, formatHourWindowLabel} from 'app/constants/GLUCOSE_WINDOWS';
 
-const CARD_GAP = 8;
-
 type Props = {
   avgTddUPerDay: number | null;
   basalPct: number | null;
@@ -21,16 +19,22 @@ type Props = {
 };
 
 const Section = styled.View.attrs({collapsable: false})`
-  padding-top: 6px;
-  padding-right: 10px;
-  padding-bottom: 6px;
-  padding-left: 10px;
+  padding-top: ${({theme}: {theme: ThemeType}) => theme.spacing.xs + 2}px;
+  padding-right: ${({theme}: {theme: ThemeType}) => theme.spacing.sm + 2}px;
+  padding-bottom: ${({theme}: {theme: ThemeType}) => theme.spacing.xs + 2}px;
+  padding-left: ${({theme}: {theme: ThemeType}) => theme.spacing.sm + 2}px;
 `;
 
 const CardRow = styled.View.attrs({collapsable: false})`
   flex-direction: row;
   justify-content: flex-start;
-  margin-bottom: 8px;
+  margin-bottom: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+`;
+
+const CardWrap = styled.View.attrs({collapsable: false})<{$withGap?: boolean}>`
+  flex: 1;
+  margin-right: ${({$withGap, theme}: {$withGap?: boolean; theme: ThemeType}) =>
+    $withGap ? theme.spacing.sm : 0}px;
 `;
 
 const CardSurface = styled.View.attrs({collapsable: false})`
@@ -47,14 +51,14 @@ const CardTitle = styled.Text`
 `;
 
 const CardValue = styled.Text<{color?: string}>`
-  margin-top: 6px;
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.xs + 2}px;
   font-size: 18px;
   font-weight: 800;
   color: ${({theme, color}: {theme: ThemeType; color?: string}) => color ?? theme.textColor};
 `;
 
 const CardSubtle = styled.Text`
-  margin-top: 4px;
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
   font-size: 12px;
   font-weight: 600;
   color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.65)};
@@ -93,23 +97,23 @@ export const QuickStatsRow: React.FC<Props> = ({
   return (
     <Section>
       <CardRow>
-        <View collapsable={false} style={{flex: 1, marginRight: CARD_GAP}}>
+        <CardWrap $withGap>
           <CardSurface testID={avgTddTestID} collapsable={false}>
             <CardTitle>Avg TDD</CardTitle>
             <CardValue>{fmtMaybe(avgTddRounded, ' U/day')}</CardValue>
             <CardSubtle>Basal + bolus</CardSubtle>
           </CardSurface>
-        </View>
+        </CardWrap>
 
-        <View collapsable={false} style={{flex: 1, marginRight: CARD_GAP}}>
+        <CardWrap $withGap>
           <CardSurface>
             <CardTitle>Basal / Bolus</CardTitle>
             <CardValue>{basalBolusText}</CardValue>
             <CardSubtle>Percent of total</CardSubtle>
           </CardSurface>
-        </View>
+        </CardWrap>
 
-        <View collapsable={false} style={{flex: 1}}>
+        <CardWrap>
           <CardSurface>
             <CardTitle>Severe Hypos</CardTitle>
             <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
@@ -117,25 +121,25 @@ export const QuickStatsRow: React.FC<Props> = ({
               Events &lt; {severeHypoThreshold} mg/dL
             </CardSubtle>
           </CardSurface>
-        </View>
+        </CardWrap>
       </CardRow>
 
       <CardRow>
-        <View collapsable={false} style={{flex: 1, marginRight: CARD_GAP}}>
+        <CardWrap $withGap>
           <CardSurface>
             <CardTitle>Night TIR</CardTitle>
             <CardValue>{fmtMaybe(nightTirPct !== null ? Math.round(nightTirPct) : null, '%')}</CardValue>
             <CardSubtle>{formatHourWindowLabel(DEFAULT_NIGHT_WINDOW)}</CardSubtle>
           </CardSurface>
-        </View>
+        </CardWrap>
 
-        <View collapsable={false} style={{flex: 1}}>
+        <CardWrap>
           <CardSurface>
             <CardTitle>Avg Carbs</CardTitle>
             <CardValue>{fmtMaybe(avgCarbsGPerDay !== null ? Math.round(avgCarbsGPerDay) : null, ' g/day')}</CardValue>
             <CardSubtle>Treatments carbs</CardSubtle>
           </CardSurface>
-        </View>
+        </CardWrap>
       </CardRow>
     </Section>
   );

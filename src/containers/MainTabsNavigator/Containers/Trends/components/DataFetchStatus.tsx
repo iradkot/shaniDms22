@@ -1,6 +1,9 @@
 // /Trends/components/DataFetchStatus.tsx
 import React from 'react';
 import { View, Text, ActivityIndicator, Button } from 'react-native';
+import {useTheme} from 'styled-components/native';
+
+import {ThemeType} from 'app/types/theme';
 import { loadingSteps } from '../Trends.constants';
 
 interface Props {
@@ -26,20 +29,28 @@ export const DataFetchStatus: React.FC<Props> = ({
                                                    showLongWaitWarning,
                                                    showMaxWaitReached,
                                                  }) => {
+  const theme = useTheme() as ThemeType;
+
   if (isLoading && !fetchError && !fetchCancelled) {
     return (
-      <View style={{ alignItems: "center", marginVertical: 10 }}>
-        <ActivityIndicator size="large" color="#0000ff" />
-        <Text>{loadingSteps[loadingStepIndex]}</Text>
-        <Text>Fetched {daysFetched} / {rangeDays} days so far...</Text>
+      <View style={{ alignItems: 'center', marginVertical: theme.spacing.sm + 2 }}>
+        <ActivityIndicator size="large" color={theme.accentColor} />
+        <Text style={{color: theme.textColor}}>{loadingSteps[loadingStepIndex]}</Text>
+        <Text style={{color: theme.textColor}}>
+          Fetched {daysFetched} / {rangeDays} days so far...
+        </Text>
         {showLongWaitWarning && (
-          <Text style={{ color:'orange', marginTop:5 }}>
+          <Text
+            style={{
+              color: theme.aboveRangeColor,
+              marginTop: theme.spacing.xs + 1,
+            }}>
             Taking longer than usual. You can wait or cancel.
           </Text>
         )}
         {showMaxWaitReached && (
-          <View style={{marginTop:5, alignItems:'center'}}>
-            <Text style={{color:'red'}}>
+          <View style={{marginTop: theme.spacing.xs + 1, alignItems: 'center'}}>
+            <Text style={{color: theme.belowRangeColor}}>
               Very long loading time. Maybe reduce the date range.
             </Text>
           </View>
@@ -51,8 +62,8 @@ export const DataFetchStatus: React.FC<Props> = ({
 
   if (!isLoading && fetchError) {
     return (
-      <View style={{ alignItems: "center", marginVertical: 10 }}>
-        <Text style={{color:'red'}}>
+      <View style={{ alignItems: 'center', marginVertical: theme.spacing.sm + 2 }}>
+        <Text style={{color: theme.belowRangeColor}}>
           Failed to fetch data: {fetchError}. Check your network and try again.
         </Text>
       </View>
