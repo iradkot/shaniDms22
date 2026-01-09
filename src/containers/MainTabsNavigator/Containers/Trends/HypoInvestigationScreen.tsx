@@ -6,9 +6,7 @@ import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import {addOpacity} from 'app/style/styling.utils';
 import {formatDateToDateAndTimeString} from 'app/utils/datetime.utils';
-import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
-import {StackActions, useNavigation, useRoute} from '@react-navigation/native';
-import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
+import {useNavigation, useRoute} from '@react-navigation/native';
 import {BasalProfile} from 'app/types/insulin.types';
 import {
   buildFullScreenStackedChartsParams,
@@ -16,6 +14,7 @@ import {
   fetchStackedChartsDataForRange,
 } from 'app/utils/stackedChartsData.utils';
 import {formatIobSplitLabel} from 'app/utils/tooltipFormatting.utils';
+import {pushFullScreenStackedCharts} from 'app/utils/fullscreenNavigation.utils';
 
 import {
   extractHypoEvents,
@@ -169,12 +168,7 @@ const HypoInvestigationScreen: React.FC = () => {
       fallbackAnchorTimeMs: anchorMs,
     });
 
-    const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, payload);
-    dispatchToParentOrSelf({
-      navigation,
-      action,
-      fallbackNavigate: () => (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, payload),
-    });
+    pushFullScreenStackedCharts({navigation, payload});
   }, [basalProfileData, enrichedBgData, navigation]);
 
   const formatDuration = (startMs: number, endMs: number) => {

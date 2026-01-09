@@ -9,19 +9,18 @@ import StatsRow, {
 } from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import {ThemeType} from 'app/types/theme';
-import {useNavigation, StackActions} from '@react-navigation/native';
+import {useNavigation} from '@react-navigation/native';
 import {useBgData} from 'app/hooks/useBgData';
 import {useFoodItems} from 'app/hooks/useFoodItems';
 import {bgSortFunction} from 'app/utils/bg.utils';
 import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
 import {useInsulinData} from 'app/hooks/useInsulinData';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
-import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {isE2E} from 'app/utils/e2e';
 import {makeE2EBgSamplesForDate} from 'app/utils/e2eFixtures';
 import {getLoadReferences} from 'app/utils/loadBars.utils';
 import {buildFullScreenStackedChartsParams} from 'app/utils/stackedChartsData.utils';
-import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
+import {pushFullScreenStackedCharts} from 'app/utils/fullscreenNavigation.utils';
 
 import HomeHeaderSection from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeHeaderSection';
 import HomeSectionSwitcher from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeSectionSwitcher';
@@ -208,13 +207,7 @@ const Home: React.FC = () => {
       fallbackAnchorTimeMs: headerLatestBgSample?.date ?? latestBgSample?.date,
     });
 
-    const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
-    dispatchToParentOrSelf({
-      navigation,
-      action,
-      fallbackNavigate: () =>
-        (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload),
-    });
+    pushFullScreenStackedCharts({navigation, payload: fullScreenPayload});
   }, [
     basalProfileData,
     chartFoodItems,
