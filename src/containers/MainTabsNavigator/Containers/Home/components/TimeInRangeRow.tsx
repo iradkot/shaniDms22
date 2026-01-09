@@ -47,7 +47,9 @@ const Segment = styled(Animated.View)<{
   }};
 `;
 
-const LargestLabelText = styled.Text<{color: string}>`
+const SegmentLabelText = styled.Text.attrs({numberOfLines: 1, ellipsizeMode: 'clip'})<
+  {color: string}
+>`
   font-size: 12px;
   font-weight: 800;
   color: ${({color}) => color};
@@ -167,9 +169,40 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
     return isTargetLargest && buckets.target >= 20;
   }, [buckets]);
 
+  const showLowInBar = useMemo(() => {
+    const lowTotal = buckets.severeLow + buckets.low;
+    const lowHostPct = Math.max(buckets.severeLow, buckets.low);
+    // Conservative thresholds: avoid cramped/clipped text inside narrow segments.
+    return lowTotal >= 20 && lowHostPct >= 12;
+  }, [buckets.low, buckets.severeLow]);
+
+  const showHighInBar = useMemo(() => {
+    const highTotal = buckets.high + buckets.severeHigh;
+    const highHostPct = Math.max(buckets.high, buckets.severeHigh);
+    return highTotal >= 20 && highHostPct >= 12;
+  }, [buckets.high, buckets.severeHigh]);
+
+  const lowLabelHost = useMemo(
+    () => (buckets.low >= buckets.severeLow ? 'low' : 'severeLow'),
+    [buckets.low, buckets.severeLow],
+  );
+  const highLabelHost = useMemo(
+    () => (buckets.high >= buckets.severeHigh ? 'high' : 'severeHigh'),
+    [buckets.high, buckets.severeHigh],
+  );
+
   const largestTargetLabel = useMemo(() => `${Math.round(buckets.target)}%`, [
     buckets.target,
   ]);
+
+  const lowLabel = useMemo(
+    () => `Low ${Math.round(buckets.severeLow + buckets.low)}%`,
+    [buckets.low, buckets.severeLow],
+  );
+  const highLabel = useMemo(
+    () => `High ${Math.round(buckets.high + buckets.severeHigh)}%`,
+    [buckets.high, buckets.severeHigh],
+  );
 
   useEffect(() => {
     const runAnimationTimeout = setTimeout(() => {
@@ -235,15 +268,31 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
           elevation: 2,
         }}>
         <Bar>
-          <Segment style={{width: severeLowWidth}} severeBelowRange />
-          <Segment style={{width: lowWidth}} belowRange />
-          <Segment style={{width: targetWidth}} inRange>
-            {showLargestInBar ? (
-              <LargestLabelText color={'white'}>{largestTargetLabel}</LargestLabelText>
+          <Segment style={{width: severeLowWidth}} severeBelowRange>
+            {showLowInBar && lowLabelHost === 'severeLow' ? (
+              <SegmentLabelText color={'white'}>{lowLabel}</SegmentLabelText>
             ) : null}
           </Segment>
-          <Segment style={{width: highWidth}} aboveRange />
-          <Segment style={{width: severeHighWidth}} severeAboveRange />
+          <Segment style={{width: lowWidth}} belowRange>
+            {showLowInBar && lowLabelHost === 'low' ? (
+              <SegmentLabelText color={'white'}>{lowLabel}</SegmentLabelText>
+            ) : null}
+          </Segment>
+          <Segment style={{width: targetWidth}} inRange>
+            {showLargestInBar ? (
+              <SegmentLabelText color={'white'}>{largestTargetLabel}</SegmentLabelText>
+            ) : null}
+          </Segment>
+          <Segment style={{width: highWidth}} aboveRange>
+            {showHighInBar && highLabelHost === 'high' ? (
+              <SegmentLabelText color={'white'}>{highLabel}</SegmentLabelText>
+            ) : null}
+          </Segment>
+          <Segment style={{width: severeHighWidth}} severeAboveRange>
+            {showHighInBar && highLabelHost === 'severeHigh' ? (
+              <SegmentLabelText color={'white'}>{highLabel}</SegmentLabelText>
+            ) : null}
+          </Segment>
         </Bar>
       </DropShadow>
 

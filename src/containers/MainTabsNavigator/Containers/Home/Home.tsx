@@ -1,18 +1,12 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
-import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
-import LatestCgmRow from 'app/containers/MainTabsNavigator/Containers/Home/components/LatestCgmRow';
-import SmartExpandableHeader from 'app/containers/MainTabsNavigator/Containers/Home/components/SmartExpandableHeader';
-import StackedHomeCharts from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
 import {cloneDeep} from 'lodash';
-import {Theme} from 'app/types/theme';
-import {Dimensions, Pressable, View} from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import {ThemeType} from 'app/types/theme';
 import {useNavigation, StackActions} from '@react-navigation/native';
 import {useBgData} from 'app/hooks/useBgData';
 import {useFoodItems} from 'app/hooks/useFoodItems';
@@ -26,75 +20,23 @@ import {makeE2EBgSamplesForDate} from 'app/utils/e2eFixtures';
 import {getLoadReferences} from 'app/utils/loadBars.utils';
 import {addOpacity} from 'app/style/styling.utils';
 
-const HomeContainer = styled.View<{theme: Theme}>`
+import HomeHeaderSection from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeHeaderSection';
+import HomeSectionSwitcher, {
+  type HomeSection,
+} from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeSectionSwitcher';
+import HomeChartSection from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeChartSection';
+import {useHomeChartViewport} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useHomeChartViewport';
+
+const HomeContainer = styled.View`
   flex: 1;
-  background-color: ${({theme}) => theme.backgroundColor};
-`;
-
-const SectionSwitcherRow = styled.View.attrs({collapsable: false})<{theme: Theme}>`
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-around;
-  padding: 10px 12px;
-  border-bottom-width: 1px;
-  border-bottom-color: ${({theme}) => addOpacity(theme.black, 0.08)};
-`;
-
-const SectionButton = styled(Pressable).attrs({collapsable: false})`
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  padding-vertical: 6px;
-`;
-
-const SectionLabel = styled.Text<{theme: Theme; active: boolean}>`
-  margin-top: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: ${({theme, active}) =>
-    active ? theme.textColor : addOpacity(theme.textColor, 0.55)};
-`;
-
-const ChartControlsRow = styled.View<{theme: Theme}>`
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 8px 12px;
-  border-bottom-width: 1px;
-  border-bottom-color: ${({theme}) => addOpacity(theme.black, 0.08)};
-`;
-
-const ChartControlButton = styled(Pressable)<{theme: Theme; disabled?: boolean}>`
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  padding-vertical: 6px;
-  padding-horizontal: 10px;
-  margin-left: 8px;
-  border-width: 1px;
-  border-radius: 10px;
-  border-color: ${({theme}) => addOpacity(theme.textColor, 0.18)};
-  opacity: ${({disabled}) => (disabled ? 0.4 : 1)};
-`;
-
-const ChartControlText = styled.Text<{theme: Theme}>`
-  margin-left: 6px;
-  font-size: 12px;
-  font-weight: 700;
-  color: ${({theme}) => theme.textColor};
+  background-color: ${(props: {theme: ThemeType}) => props.theme.backgroundColor};
 `;
 
 // create dummy home component with typescript
 const Home: React.FC = () => {
-  const theme = useTheme() as Theme;
   const navigation = useNavigation();
-  type HomeSection = 'bgStats' | 'insulinStats' | 'chart';
   const [selectedSection, setSelectedSection] = useState<HomeSection | null>(null);
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
-
-  const [chartViewportMs, setChartViewportMs] = useState<
-    {startMs: number; endMs: number} | null
-  >(null);
   const isShowingToday = useMemo(() => {
     const today = new Date();
     return (
@@ -128,10 +70,6 @@ const Home: React.FC = () => {
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(debouncedCurrentDate);
   endOfDay.setHours(23, 59, 59, 999);
-
-  const refreshAll = useCallback(async () => {
-    await Promise.all([getUpdatedBgData(), getUpdatedInsulinData()]);
-  }, [getUpdatedBgData, getUpdatedInsulinData]);
 
   useEffect(() => {
     setDebouncedCurrentDate(currentDate);
@@ -177,110 +115,6 @@ const Home: React.FC = () => {
     const maxMs = memoizedBgSamples[memoizedBgSamples.length - 1].date;
     return {minMs, maxMs};
   }, [memoizedBgSamples]);
-
-  const clampViewport = useCallback(
-    (viewport: {startMs: number; endMs: number}) => {
-      const {minMs, maxMs} = chartDataExtentMs;
-      const spanMs = Math.max(0, maxMs - minMs);
-      const windowMs = Math.max(1, viewport.endMs - viewport.startMs);
-
-      if (spanMs <= 0) {
-        return {startMs: minMs, endMs: maxMs};
-      }
-
-      if (windowMs >= spanMs) {
-        return {startMs: minMs, endMs: maxMs};
-      }
-
-      let startMs = viewport.startMs;
-      let endMs = viewport.endMs;
-
-      if (startMs < minMs) {
-        startMs = minMs;
-        endMs = minMs + windowMs;
-      }
-
-      if (endMs > maxMs) {
-        endMs = maxMs;
-        startMs = maxMs - windowMs;
-      }
-
-      return {startMs, endMs};
-    },
-    [chartDataExtentMs],
-  );
-
-  useEffect(() => {
-    // When the underlying data extent changes (e.g. refresh/new day),
-    // ensure the current viewport remains valid without causing render loops.
-    setChartViewportMs(prev => {
-      if (!prev) return prev;
-      const next = clampViewport(prev);
-      if (next.startMs === prev.startMs && next.endMs === prev.endMs) {
-        return prev;
-      }
-      return next;
-    });
-  }, [chartDataExtentMs.minMs, chartDataExtentMs.maxMs, clampViewport]);
-
-  const isZoomed = !!chartViewportMs;
-  const canPan = useMemo(() => {
-    if (!chartViewportMs) return false;
-    return chartViewportMs.endMs - chartViewportMs.startMs <
-      chartDataExtentMs.maxMs - chartDataExtentMs.minMs;
-  }, [chartViewportMs, chartDataExtentMs]);
-
-  const canPanLeft = useMemo(() => {
-    if (!chartViewportMs || !canPan) return false;
-    return chartViewportMs.startMs > chartDataExtentMs.minMs + 1;
-  }, [chartViewportMs, canPan, chartDataExtentMs]);
-
-  const canPanRight = useMemo(() => {
-    if (!chartViewportMs || !canPan) return false;
-    return chartViewportMs.endMs < chartDataExtentMs.maxMs - 1;
-  }, [chartViewportMs, canPan, chartDataExtentMs]);
-
-  const handleToggleZoom = useCallback(() => {
-    if (chartViewportMs) {
-      setChartViewportMs(null);
-      return;
-    }
-
-    const {minMs, maxMs} = chartDataExtentMs;
-    const anchorMs = headerLatestBgSample?.date ?? maxMs;
-    const zoomWindowMs = 3 * 60 * 60 * 1000; // 3 hours
-    const next = clampViewport({
-      startMs: anchorMs - zoomWindowMs / 2,
-      endMs: anchorMs + zoomWindowMs / 2,
-    });
-    setChartViewportMs(next);
-  }, [chartViewportMs, chartDataExtentMs, headerLatestBgSample, clampViewport]);
-
-  const handlePan = useCallback(
-    (direction: 'left' | 'right') => {
-      if (!chartViewportMs) return;
-      const windowMs = Math.max(1, chartViewportMs.endMs - chartViewportMs.startMs);
-      const stepMs = windowMs * 0.5;
-      const delta = direction === 'left' ? -stepMs : stepMs;
-      setChartViewportMs(prev =>
-        prev
-          ? clampViewport({
-              startMs: prev.startMs + delta,
-              endMs: prev.endMs + delta,
-            })
-          : prev,
-      );
-    },
-    [chartViewportMs, clampViewport],
-  );
-
-  const chartXDomain = useMemo(() => {
-    if (!chartViewportMs) return null;
-    return [new Date(chartViewportMs.startMs), new Date(chartViewportMs.endMs)] as [
-      Date,
-      Date,
-    ];
-  }, [chartViewportMs]);
 
   const listBgData = useMemo(() => {
     // In E2E, ensure the glucose log list has deterministic data even when the
@@ -330,6 +164,18 @@ const Home: React.FC = () => {
     return second;
   }, [latestPrevBgSample, listBgData]);
 
+  const {
+    chartXDomain,
+    isZoomed,
+    canPanLeft,
+    canPanRight,
+    handleToggleZoom,
+    handlePan,
+  } = useHomeChartViewport({
+    extentMs: chartDataExtentMs,
+    anchorMs: headerLatestBgSample?.date ?? latestBgSample?.date,
+  });
+
   const {maxIobReference, maxCobReference} = useMemo(
     () => getLoadReferences(listBgData),
     [listBgData],
@@ -367,80 +213,29 @@ const Home: React.FC = () => {
     navigation,
   ]);
 
+  const handleToggleSection = useCallback((section: HomeSection) => {
+    setSelectedSection(prev => (prev === section ? null : section));
+  }, []);
+
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
-        <TimeInRangeRow bgData={bgData} />
-        {isShowingToday ? (
-          <SmartExpandableHeader
-            fallbackLatestBgSample={headerLatestBgSample ?? undefined}
-            latestPrevBgSample={headerLatestPrevBgSample ?? undefined}
-            maxIobReference={maxIobReference}
-            maxCobReference={maxCobReference}
-          />
-        ) : (
-          <LatestCgmRow
-            latestPrevBgSample={latestPrevBgSample}
-            latestBgSample={latestBgSample}
-            allBgData={listBgData}
-            onRefresh={getUpdatedBgData}
-          />
-        )}
+      <HomeHeaderSection
+        bgData={bgData}
+        isShowingToday={isShowingToday}
+        headerLatestBgSample={headerLatestBgSample ?? undefined}
+        headerLatestPrevBgSample={headerLatestPrevBgSample ?? undefined}
+        latestBgSample={latestBgSample ?? undefined}
+        latestPrevBgSample={latestPrevBgSample ?? undefined}
+        listBgData={listBgData}
+        maxIobReference={maxIobReference}
+        maxCobReference={maxCobReference}
+        onRefreshBgData={getUpdatedBgData}
+      />
 
-        <SectionSwitcherRow>
-          <SectionButton
-            onPress={() =>
-              setSelectedSection(prev => (prev === 'bgStats' ? null : 'bgStats'))
-            }
-            accessibilityRole="button">
-            <Icon
-              name="chart-bar"
-              size={22}
-              color={
-                selectedSection === 'bgStats'
-                  ? theme.textColor
-                  : addOpacity(theme.textColor, 0.55)
-              }
-            />
-            <SectionLabel active={selectedSection === 'bgStats'}>BG Stats</SectionLabel>
-          </SectionButton>
-
-          <SectionButton
-            onPress={() =>
-              setSelectedSection(prev =>
-                prev === 'insulinStats' ? null : 'insulinStats',
-              )
-            }
-            accessibilityRole="button">
-            <Icon
-              name="needle"
-              size={22}
-              color={
-                selectedSection === 'insulinStats'
-                  ? theme.textColor
-                  : addOpacity(theme.textColor, 0.55)
-              }
-            />
-            <SectionLabel active={selectedSection === 'insulinStats'}>
-              Insulin
-            </SectionLabel>
-          </SectionButton>
-
-          <SectionButton
-            testID={E2E_TEST_IDS.charts.cgmSection}
-            onPress={() => setSelectedSection(prev => (prev === 'chart' ? null : 'chart'))}
-            accessibilityRole="button">
-            <Icon
-              name="chart-line"
-              size={22}
-              color={
-                selectedSection === 'chart'
-                  ? theme.textColor
-                  : addOpacity(theme.textColor, 0.55)
-              }
-            />
-            <SectionLabel active={selectedSection === 'chart'}>Chart</SectionLabel>
-          </SectionButton>
-        </SectionSwitcherRow>
+      <HomeSectionSwitcher
+        selectedSection={selectedSection}
+        onToggle={handleToggleSection}
+      />
 
         {selectedSection === 'bgStats' ? <StatsRow bgData={bgData} /> : null}
 
@@ -450,67 +245,25 @@ const Home: React.FC = () => {
             basalProfileData={basalProfileData}
             startDate={startOfDay}
             endDate={endOfDay}
-            onRefresh={refreshAll}
           />
         ) : null}
 
-        {selectedSection === 'chart' ? (
-          <View collapsable={false}>
-            <ChartControlsRow>
-              <ChartControlButton
-                accessibilityRole="button"
-                accessibilityLabel="Pan chart left"
-                disabled={!isZoomed || !canPanLeft}
-                onPress={() => handlePan('left')}>
-                <Icon
-                  name="chevron-left"
-                  size={20}
-                  color={theme.textColor}
-                />
-              </ChartControlButton>
-
-              <ChartControlButton
-                accessibilityRole="button"
-                accessibilityLabel={isZoomed ? 'Zoom out' : 'Zoom in'}
-                accessibilityHint="Toggles chart zoom"
-                onPress={handleToggleZoom}>
-                <Icon
-                  name={isZoomed ? 'magnify-minus-outline' : 'magnify-plus-outline'}
-                  size={18}
-                  color={theme.textColor}
-                />
-                <ChartControlText>{isZoomed ? 'Zoom out' : 'Zoom in'}</ChartControlText>
-              </ChartControlButton>
-
-              <ChartControlButton
-                accessibilityRole="button"
-                accessibilityLabel="Pan chart right"
-                disabled={!isZoomed || !canPanRight}
-                onPress={() => handlePan('right')}>
-                <Icon
-                  name="chevron-right"
-                  size={20}
-                  color={theme.textColor}
-                />
-              </ChartControlButton>
-            </ChartControlsRow>
-
-            <StackedHomeCharts
-              bgSamples={memoizedBgSamples}
-              foodItems={chartFoodItems}
-              insulinData={insulinData}
-              basalProfileData={basalProfileData}
-              width={Dimensions.get('window').width}
-              cgmHeight={200}
-              miniChartHeight={65}
-              xDomain={chartXDomain}
-              fallbackAnchorTimeMs={headerLatestBgSample?.date ?? latestBgSample?.date}
-              showFullScreenButton
-              onPressFullScreen={handleOpenStackedChartsFullScreen}
-              testID={E2E_TEST_IDS.charts.cgmGraph}
-            />
-          </View>
-        ) : null}
+      <HomeChartSection
+        visible={selectedSection === 'chart'}
+        isZoomed={isZoomed}
+        canPanLeft={canPanLeft}
+        canPanRight={canPanRight}
+        onPan={handlePan}
+        onToggleZoom={handleToggleZoom}
+        bgSamples={memoizedBgSamples}
+        foodItems={chartFoodItems}
+        insulinData={insulinData}
+        basalProfileData={basalProfileData}
+        xDomain={chartXDomain}
+        fallbackAnchorTimeMs={headerLatestBgSample?.date ?? latestBgSample?.date}
+        onPressFullScreen={handleOpenStackedChartsFullScreen}
+        testID={E2E_TEST_IDS.charts.cgmGraph}
+      />
 
         <CgmRows
           onPullToRefreshRefresh={getUpdatedBgData}

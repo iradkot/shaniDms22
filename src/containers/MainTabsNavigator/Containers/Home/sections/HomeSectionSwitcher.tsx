@@ -1,0 +1,123 @@
+import React, {useMemo} from 'react';
+
+import {Pressable} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import styled, {useTheme} from 'styled-components/native';
+
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {ThemeType} from 'app/types/theme';
+import {addOpacity} from 'app/style/styling.utils';
+
+export type HomeSection = 'bgStats' | 'insulinStats' | 'chart';
+
+const SectionSwitcherRow = styled.View.attrs({collapsable: false})`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  padding: 10px 12px;
+  border-bottom-width: 1px;
+  border-bottom-color: ${(props: {theme: ThemeType}) =>
+    addOpacity(props.theme.black, 0.08)};
+`;
+
+const SectionButton = styled(Pressable).attrs({collapsable: false})`
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding-vertical: 6px;
+`;
+
+const SectionButtonInner = styled.View.attrs({collapsable: false})<{active: boolean}>`
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  padding-vertical: 8px;
+  border-radius: 12px;
+  background-color: ${(props: {theme: ThemeType; active: boolean}) =>
+    props.active ? addOpacity(props.theme.accentColor, 0.12) : 'transparent'};
+  border-width: ${(props: {active: boolean}) => (props.active ? 1 : 0)};
+  border-color: ${(props: {theme: ThemeType; active: boolean}) =>
+    props.active ? addOpacity(props.theme.accentColor, 0.35) : 'transparent'};
+`;
+
+const LabelRow = styled.View`
+  flex-direction: row;
+  align-items: center;
+  margin-top: 4px;
+`;
+
+const SectionLabel = styled.Text<{active: boolean}>`
+  font-size: 12px;
+  font-weight: 700;
+  color: ${(props: {theme: ThemeType; active: boolean}) =>
+    props.active
+      ? props.theme.textColor
+      : addOpacity(props.theme.textColor, 0.55)};
+`;
+
+type SectionItem = {
+  key: HomeSection;
+  label: string;
+  iconName: string;
+  testID?: string;
+};
+
+type Props = {
+  selectedSection: HomeSection | null;
+  onToggle: (section: HomeSection) => void;
+};
+
+export const HomeSectionSwitcher: React.FC<Props> = ({selectedSection, onToggle}) => {
+  const theme = useTheme() as ThemeType;
+
+  const sections = useMemo<SectionItem[]>(
+    () => [
+      {key: 'bgStats', label: 'BG Stats', iconName: 'chart-bar'},
+      {key: 'insulinStats', label: 'Insulin', iconName: 'needle'},
+      {
+        key: 'chart',
+        label: 'Chart',
+        iconName: 'chart-line',
+        testID: E2E_TEST_IDS.charts.cgmSection,
+      },
+    ],
+    [],
+  );
+
+  return (
+    <SectionSwitcherRow>
+      {sections.map(section => {
+        const active = selectedSection === section.key;
+        const iconColor = active ? theme.accentColor : addOpacity(theme.textColor, 0.55);
+        const labelColor = active ? theme.textColor : addOpacity(theme.textColor, 0.55);
+        const chevronName = active ? 'chevron-up' : 'chevron-down';
+
+        return (
+          <SectionButton
+            key={section.key}
+            testID={section.testID}
+            onPress={() => onToggle(section.key)}
+            accessibilityRole="button"
+            accessibilityLabel={section.label}
+            accessibilityHint={active ? 'Tap to collapse' : 'Tap to expand'}
+            accessibilityState={{expanded: active}}>
+            <SectionButtonInner active={active}>
+              <Icon name={section.iconName} size={22} color={iconColor} />
+              <LabelRow>
+                <SectionLabel active={active}>{section.label}</SectionLabel>
+                <Icon
+                  name={chevronName}
+                  size={16}
+                  color={labelColor}
+                  style={{marginLeft: 2}}
+                />
+              </LabelRow>
+            </SectionButtonInner>
+          </SectionButton>
+        );
+      })}
+    </SectionSwitcherRow>
+  );
+};
+
+export default HomeSectionSwitcher;
