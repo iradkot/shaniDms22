@@ -13,6 +13,7 @@ import {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphSty
 import {useStackedChartsTooltipModel} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useStackedChartsTooltipModel';
 import {useBasalRateAtTime} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useBasalRateAtTime';
 import {useBgTooltipDerivedMetrics} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useBgTooltipDerivedMetrics';
+import {useTooltipEventsSummary} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useTooltipEventsSummary';
 
 import {BgSample} from 'app/types/day_bgs.types';
 import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
@@ -161,21 +162,10 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   const {activeInsulinU, activeInsulinBolusU, activeInsulinBasalU, cobG} =
     useBgTooltipDerivedMetrics(tooltipBgSample);
 
-  const bolusSummary = useMemo(() => {
-    const totalU = tooltipBolusEvents.reduce(
-      (sum, b) => sum + (typeof (b as any).amount === 'number' ? (b as any).amount : 0),
-      0,
-    );
-    return {count: tooltipBolusEvents.length, totalU};
-  }, [tooltipBolusEvents]);
-
-  const carbsSummary = useMemo(() => {
-    const totalG = tooltipCarbEvents.reduce(
-      (sum, c) => sum + (typeof (c as any).carbs === 'number' ? (c as any).carbs : 0),
-      0,
-    );
-    return {count: tooltipCarbEvents.length, totalG};
-  }, [tooltipCarbEvents]);
+  const {bolusSummary, carbsSummary} = useTooltipEventsSummary({
+    bolusEvents: tooltipBolusEvents as any,
+    carbEvents: tooltipCarbEvents as any,
+  });
 
   const basalRateUhr = useBasalRateAtTime({
     enabled: shouldShowTooltip,
