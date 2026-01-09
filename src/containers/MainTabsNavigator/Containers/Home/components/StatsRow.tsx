@@ -19,9 +19,9 @@ const INLINE_ICON_MARGIN_HORIZONTAL = 6;
 type ThemedProps = {theme: ThemeType};
 
 const Section = styled.View.attrs({collapsable: false})<{theme: ThemeType}>`
-  padding-top: 6px;
+  padding-top: 4px;
   padding-right: 10px;
-  padding-bottom: 6px;
+  padding-bottom: 4px;
   padding-left: 10px;
 `;
 
@@ -66,7 +66,7 @@ const CardTitle = styled.Text<{theme: ThemeType}>`
 `;
 
 const CardValue = styled.Text<{theme: ThemeType; color?: string}>`
-  margin-top: 6px;
+  margin-top: 2px;
   font-size: 18px;
   font-weight: 800;
   color: ${(props: {theme: ThemeType; color?: string}) =>

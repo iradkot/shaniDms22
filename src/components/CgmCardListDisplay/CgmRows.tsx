@@ -8,6 +8,19 @@ import FullScreenButton from 'app/components/common-ui/FullScreenButton/FullScre
 import {useNavigation} from '@react-navigation/native';
 import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {StackActions} from '@react-navigation/native';
+import styled from 'styled-components/native';
+import {ThemeType} from 'app/types/theme';
+
+const FullScreenButtonContainer = styled.View.attrs({collapsable: false})`
+  position: absolute;
+  top: 0px;
+  right: 0px;
+  width: 100%;
+  z-index: 1;
+  align-items: flex-end;
+  padding-top: ${(props: {theme: ThemeType}) => props.theme.spacing.sm}px;
+  padding-right: ${(props: {theme: ThemeType}) => props.theme.spacing.sm}px;
+`;
 
 const CGM_ROWS_CONSTANTS = {
   initialNumToRender: 10,
@@ -144,12 +157,12 @@ const CgmRows: FC<CgmCardListDisplayProps> = ({
   return (
     <View style={{flex: 1}}>
       {showFullScreenButton ? (
-        <View style={{alignItems: 'flex-end', paddingRight: 8, paddingTop: 8}}>
+        <FullScreenButtonContainer>
           <FullScreenButton
             testID={E2E_TEST_IDS.glucoseLog.fullScreenButton}
             onPress={openFullScreen}
           />
-        </View>
+        </FullScreenButtonContainer>
       ) : null}
 
       <FlatList

@@ -23,13 +23,14 @@ const SectionButton = styled(Pressable).attrs({collapsable: false})`
   flex: 1;
   align-items: center;
   justify-content: center;
+  padding-vertical: 2px;
 `;
 
 const SectionButtonInner = styled.View.attrs({collapsable: false})<{active: boolean}>`
   width: 100%;
   align-items: center;
   justify-content: center;
-  padding-vertical: 2px;
+  padding-vertical: 4px;
   border-radius: 12px;
   background-color: ${(props: {theme: ThemeType; active: boolean}) =>
     props.active ? addOpacity(props.theme.accentColor, 0.12) : 'transparent'};
