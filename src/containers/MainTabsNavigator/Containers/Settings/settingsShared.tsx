@@ -56,13 +56,18 @@ export function SectionHeader(props: {
       accessibilityRole="button"
       onPress={onToggle}
       style={sectionHeaderContainerStyle}
-      hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+      hitSlop={{
+        top: theme.spacing.sm,
+        bottom: theme.spacing.sm,
+        left: theme.spacing.sm,
+        right: theme.spacing.sm,
+      }}
     >
       <View style={sectionHeaderRowStyle}>
         <Text style={sectionHeaderTextStyle}>{title}</Text>
         <MaterialIcons
           name={expanded ? 'expand-less' : 'expand-more'}
-          size={24}
+          size={theme.typography.size.xxl}
           color={theme.textColor}
         />
       </View>

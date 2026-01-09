@@ -34,7 +34,11 @@ export function NightscoutSection(props: {
         <>
           <View style={rowStyle}>
             <View style={iconContainerStyle}>
-              <MaterialIcons name="cloud" size={20} color={theme.textColor} />
+              <MaterialIcons
+                name="cloud"
+                size={theme.typography.size.xl}
+                color={theme.textColor}
+              />
             </View>
             <View style={{flex: 1, paddingRight: theme.spacing.md}}>
               <Text style={{color: theme.textColor, fontSize: theme.typography.size.md}}>
@@ -88,7 +92,7 @@ export function NightscoutSection(props: {
                   <View style={iconContainerStyle}>
                     <MaterialIcons
                       name={isActive ? 'radio-button-checked' : 'radio-button-unchecked'}
-                      size={20}
+                      size={theme.typography.size.xl}
                       color={theme.textColor}
                     />
                   </View>

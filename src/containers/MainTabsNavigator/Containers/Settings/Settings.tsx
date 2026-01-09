@@ -106,7 +106,7 @@ const Settings: React.FC = () => {
     ).catch(() => {
       // Best-effort persistence.
     });
-  }, [uiLoaded, showDisplayedTabs, showRanges, showNightWindow]);
+  }, [uiLoaded, showDisplayedTabs, showNightscout, showRanges, showNightWindow]);
 
   const inputStyle = {
     borderWidth: 1,
@@ -214,7 +214,11 @@ const Settings: React.FC = () => {
           <>
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
-                <MaterialIcons name="home" size={20} color={theme.textColor} />
+                <MaterialIcons
+                  name="home"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
               </View>
               <Text style={labelStyle}>Home</Text>
               <Switch value={true} disabled={true} />
@@ -222,7 +226,11 @@ const Settings: React.FC = () => {
 
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
-                <MaterialIcons name="timeline" size={20} color={theme.textColor} />
+                <MaterialIcons
+                  name="timeline"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
               </View>
               <Text style={labelStyle}>Trends</Text>
               <Switch value={true} disabled={true} />
@@ -230,7 +238,11 @@ const Settings: React.FC = () => {
 
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
-                <MaterialIcons name="settings" size={20} color={theme.textColor} />
+                <MaterialIcons
+                  name="settings"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
               </View>
               <Text style={labelStyle}>Settings</Text>
               <Switch value={true} disabled={true} />
@@ -238,7 +250,11 @@ const Settings: React.FC = () => {
 
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
-                <MaterialIcons name="fastfood" size={20} color={theme.textColor} />
+                <MaterialIcons
+                  name="fastfood"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
               </View>
               <Text style={labelStyle}>Food Tracking</Text>
               <Switch
@@ -252,7 +268,7 @@ const Settings: React.FC = () => {
               <View style={iconContainerStyle}>
                 <MaterialIcons
                   name="directions-run"
-                  size={20}
+                  size={theme.typography.size.xl}
                   color={theme.textColor}
                 />
               </View>
@@ -266,7 +282,11 @@ const Settings: React.FC = () => {
 
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
-                <ADIcon name="notification" size={20} color={theme.textColor} />
+                <ADIcon
+                  name="notification"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
               </View>
               <Text style={labelStyle}>Notifications</Text>
               <Switch
@@ -305,7 +325,11 @@ const Settings: React.FC = () => {
           <>
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
-                <MaterialIcons name="trending-down" size={20} color={theme.textColor} />
+                <MaterialIcons
+                  name="trending-down"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
               </View>
               <Text style={labelStyle}>Severe Hypo (mg/dL)</Text>
               <TextInput
@@ -320,7 +344,11 @@ const Settings: React.FC = () => {
 
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
-                <MaterialIcons name="arrow-downward" size={20} color={theme.textColor} />
+                <MaterialIcons
+                  name="arrow-downward"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
               </View>
               <Text style={labelStyle}>Hypo (mg/dL)</Text>
               <TextInput
@@ -335,7 +363,11 @@ const Settings: React.FC = () => {
 
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
-                <MaterialIcons name="arrow-upward" size={20} color={theme.textColor} />
+                <MaterialIcons
+                  name="arrow-upward"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
               </View>
               <Text style={labelStyle}>Hyper (mg/dL)</Text>
               <TextInput
@@ -350,7 +382,11 @@ const Settings: React.FC = () => {
 
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
-                <MaterialIcons name="trending-up" size={20} color={theme.textColor} />
+                <MaterialIcons
+                  name="trending-up"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
               </View>
               <Text style={labelStyle}>Severe Hyper (mg/dL)</Text>
               <TextInput
@@ -387,7 +423,11 @@ const Settings: React.FC = () => {
           <>
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
-                <MaterialIcons name="nights-stay" size={20} color={theme.textColor} />
+                <MaterialIcons
+                  name="nights-stay"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
               </View>
               <Text style={labelStyle}>Night start (0–23)</Text>
               <TextInput
@@ -402,7 +442,11 @@ const Settings: React.FC = () => {
 
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
-                <MaterialIcons name="wb-sunny" size={20} color={theme.textColor} />
+                <MaterialIcons
+                  name="wb-sunny"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
               </View>
               <Text style={labelStyle}>Night end (0–23)</Text>
               <TextInput
