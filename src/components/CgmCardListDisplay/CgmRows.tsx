@@ -10,6 +10,7 @@ import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {StackActions} from '@react-navigation/native';
 import styled from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
+import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
 
 const FullScreenButtonContainer = styled.View.attrs({collapsable: false})`
   position: absolute;
@@ -81,16 +82,11 @@ const CgmRows: FC<CgmCardListDisplayProps> = ({
     };
 
     const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, params);
-    const parent = (navigation as any)?.getParent?.();
-    if (parent?.dispatch) {
-      parent.dispatch(action);
-      return;
-    }
-    if ((navigation as any)?.dispatch) {
-      (navigation as any).dispatch(action);
-      return;
-    }
-    (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, params);
+    dispatchToParentOrSelf({
+      navigation,
+      action,
+      fallbackNavigate: () => (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, params),
+    });
   }, [bgData, isLoading, isToday, navigation]);
 
   const {maxIobReference, maxCobReference} = useMemo(

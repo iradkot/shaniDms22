@@ -1,6 +1,7 @@
 import React from 'react';
-import {View} from 'react-native';
-import styled from 'styled-components/native';
+import {Pressable, View} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import styled, {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
@@ -16,6 +17,8 @@ type Props = {
   avgCarbsGPerDay: number | null;
 
   avgTddTestID?: string;
+
+  onPressSevereHypos?: () => void;
 };
 
 const Section = styled.View.attrs({collapsable: false})`
@@ -42,6 +45,19 @@ const CardSurface = styled.View.attrs({collapsable: false})`
   border-radius: 12px;
   padding: 12px;
   width: 100%;
+`;
+
+const PressableCardSurface = styled(Pressable).attrs({collapsable: false})`
+  background-color: ${({theme}: {theme: ThemeType}) => theme.white};
+  border-radius: 12px;
+  padding: 12px;
+  width: 100%;
+`;
+
+const TitleRow = styled.View.attrs({collapsable: false})`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
 `;
 
 const CardTitle = styled.Text`
@@ -77,7 +93,10 @@ export const QuickStatsRow: React.FC<Props> = ({
   nightTirPct,
   avgCarbsGPerDay,
   avgTddTestID,
+  onPressSevereHypos,
 }) => {
+  const theme = useTheme() as ThemeType;
+
   const avgTddRounded =
     typeof avgTddUPerDay === 'number' && Number.isFinite(avgTddUPerDay)
       ? Number(avgTddUPerDay.toFixed(1))
@@ -114,13 +133,31 @@ export const QuickStatsRow: React.FC<Props> = ({
         </CardWrap>
 
         <CardWrap>
-          <CardSurface>
-            <CardTitle>Severe Hypos</CardTitle>
-            <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
-            <CardSubtle>
-              Events &lt; {severeHypoThreshold} mg/dL
-            </CardSubtle>
-          </CardSurface>
+          {onPressSevereHypos ? (
+            <PressableCardSurface
+              accessibilityRole="button"
+              accessibilityLabel="Severe Hypos"
+              accessibilityHint="Opens hypo investigation"
+              onPress={onPressSevereHypos}
+            >
+              <TitleRow>
+                <CardTitle>Severe Hypos</CardTitle>
+                <Icon
+                  name="chevron-right"
+                  size={18}
+                  color={addOpacity(theme.textColor, 0.45)}
+                />
+              </TitleRow>
+              <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
+              <CardSubtle>Events &lt; {severeHypoThreshold} mg/dL</CardSubtle>
+            </PressableCardSurface>
+          ) : (
+            <CardSurface>
+              <CardTitle>Severe Hypos</CardTitle>
+              <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
+              <CardSubtle>Events &lt; {severeHypoThreshold} mg/dL</CardSubtle>
+            </CardSurface>
+          )}
         </CardWrap>
       </CardRow>
 

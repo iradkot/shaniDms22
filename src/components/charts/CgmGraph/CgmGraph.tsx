@@ -1,8 +1,7 @@
-import React, {useEffect, useMemo, useRef} from 'react';
+import React, {useMemo, useRef} from 'react';
 import {View} from 'react-native';
 import Svg, {G, Line} from 'react-native-svg';
 import styled from 'styled-components/native';
-import {BgSample} from 'app/types/day_bgs.types';
 import XGridAndAxis from './components/XGridAndAxis';
 import YGridAndAxis from './components/YGridAndAxis';
 import CGMSamplesRenderer from './components/CGMSamplesRenderer';
@@ -13,102 +12,35 @@ import {
   useGraphStyleContext,
 } from './contextStores/GraphStyleContext';
 import {useTouchContext} from './contextStores/TouchContext';
-import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
-import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
 import SgvTooltip from 'app/components/charts/CgmGraph/components/Tooltips/SgvTooltip';
 import {useTheme} from 'styled-components/native';
 import FullScreenButton from 'app/components/common-ui/FullScreenButton/FullScreenButton';
 import {StackActions, useNavigation} from '@react-navigation/native';
 import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
 import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
-import {InsulinDataEntry} from 'app/types/insulin.types';
 import BolusItemsRenderer from 'app/components/charts/CgmGraph/components/Bolus/BolusItemsRenderer';
-import {
-  findBolusEventsInTooltipWindow,
-  findClosestBolus,
-} from 'app/components/charts/CgmGraph/utils/bolusUtils';
 import MultiBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/MultiBolusTooltip';
 import CombinedBgBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/CombinedBgBolusTooltip';
 import CombinedBgMultiBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/CombinedBgMultiBolusTooltip';
-import {
-  findCarbEventsInTooltipWindow,
-  findClosestCarbEvent,
-} from 'app/components/charts/CgmGraph/utils/carbsUtils';
 import {addOpacity} from 'app/style/styling.utils';
 
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
+import type {CgmGraphProps, CGMGraphExternalTooltipPayload} from './CgmGraph.types';
+import {useCgmGraphTooltipModel} from './hooks/useCgmGraphTooltipModel';
+import {
+  clamp,
+  computeTouchTimeMsFromLocationX,
+} from './utils/externalTooltipTouch.utils';
 
-interface Props {
-  bgSamples: BgSample[];
-  foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
-  insulinData?: InsulinDataEntry[];
-  width: number;
-  height: number;
-
-  /**
-   * Optional margin override so stacked charts can share exact x-axis alignment.
-   */
-  margin?: {top: number; right: number; bottom: number; left: number};
-
-  /**
-   * Optional override for the x-axis time domain.
-   *
-   * When not provided, the domain is derived from the BG sample extent.
-   */
-  xDomain?: [Date, Date] | null;
-  
-  /**
-   * Optional E2E selector.
-   *
-   * We keep this optional so the chart can be reused in lists/cards without forcing unique IDs.
-   */
-  testID?: string;
-
-  /**
-   * Whether to show the fullscreen button.
-   * Defaults to true.
-   */
-  showFullScreenButton?: boolean;
-
-  /**
-   * Tooltip rendering mode.
-   * - internal: render the SVG tooltip inside this chart (default)
-   * - external: suppress internal tooltip; emit tooltip info via `onTooltipChange`
-   */
-  tooltipMode?: 'internal' | 'external';
-
-  /**
-   * When `tooltipMode="external"`, emits tooltip timing info so a parent can
-   * render a single unified tooltip for multiple charts.
-   */
-  onTooltipChange?: (payload: CGMGraphExternalTooltipPayload | null) => void;
-
-  /**
-   * Optional external cursor time (ms).
-   *
-   * When provided together with `tooltipMode="external"`, this becomes the single
-   * source of truth for the vertical focus line and focused marker windows.
-   *
-   * Why:
-   * - Stacked charts (Home) want one shared cursor time so all charts align.
-   * - This also prevents a 1-render lag that can happen when the parent derives
-   *   cursor state from a callback that runs after render.
-   */
-  cursorTimeMs?: number | null;
-}
-
-export type CGMGraphExternalTooltipPayload = {
-  touchTimeMs: number;
-  anchorTimeMs: number;
-};
+export type {CGMGraphExternalTooltipPayload} from './CgmGraph.types';
 
 const StyledSvg = styled(Svg)`
   height: 100%;
   width: 100%;
 `;
 
-const CGMGraph: React.FC<Props> = ({
+const CGMGraph: React.FC<CgmGraphProps> = ({
   bgSamples,
   width,
   height,
@@ -122,6 +54,12 @@ const CGMGraph: React.FC<Props> = ({
   onTooltipChange,
   cursorTimeMs,
 }) => {
+  if (!bgSamples || bgSamples.length === 0) {
+    // For E2E we still want a stable anchor in the view hierarchy.
+    // Rendering an empty container avoids flakiness when an account has no CGM data.
+    return testID ? <View style={{width, height}} testID={testID} /> : null;
+  }
+
   const containerRef = useRef<View>(null);
   const [graphStyleContextValue, setGraphStyleContextValue] =
     useGraphStyleContext(width, height, bgSamples, xDomain, margin);
@@ -155,10 +93,26 @@ const CGMGraph: React.FC<Props> = ({
     ? graphStyleContextValue.xScale.invert(xTouchPosition).getTime()
     : null;
 
-  const closestBgSample =
-    isTouchActive && touchTimeMs != null
-      ? findClosestBgSample(touchTimeMs, bgSamples)
-      : null;
+  const {
+    closestBgSample,
+    cgmAnchorTimeMs,
+    tooltipBolusEvents,
+    tooltipCarbEvents,
+    focusedFoodItemIds,
+    focusedBolusTimestamps,
+    showCombined,
+    showCombinedMulti,
+    showBgOnly,
+    showBolusOnly,
+  } = useCgmGraphTooltipModel({
+    bgSamples,
+    foodItems,
+    insulinData,
+    tooltipMode,
+    cursorTimeMs,
+    isTouchActive,
+    touchTimeMs,
+  });
 
   const fullScreenPayload = useMemo(
     () => ({
@@ -173,91 +127,14 @@ const CGMGraph: React.FC<Props> = ({
   const openFullScreen = useMemo(() => {
     const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
     return () => {
-      const parent = (navigation as any)?.getParent?.();
-      if (parent?.dispatch) {
-        parent.dispatch(action);
-        return;
-      }
-      if ((navigation as any)?.dispatch) {
-        (navigation as any).dispatch(action);
-        return;
-      }
-      (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
+      dispatchToParentOrSelf({
+        navigation,
+        action,
+        fallbackNavigate: () =>
+          (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload),
+      });
     };
   }, [fullScreenPayload, navigation]);
-
-  if (!bgSamples || bgSamples.length === 0) {
-    // For E2E we still want a stable anchor in the view hierarchy.
-    // Rendering an empty container avoids flakiness when an account has no CGM data.
-    return testID ? <View style={{width, height}} testID={testID} /> : null;
-  }
-
-  const shouldUseExternalCursor = tooltipMode === 'external' && cursorTimeMs != null;
-
-  const closestBolus = useMemo(() => {
-    // In external mode, cursor snapping/windowing is expected to be driven by the parent.
-    if (shouldUseExternalCursor) return null;
-    if (!isTouchActive || touchTimeMs == null) return null;
-    if (!insulinData?.length) return null;
-    return findClosestBolus(touchTimeMs, insulinData);
-  }, [insulinData, isTouchActive, shouldUseExternalCursor, touchTimeMs]);
-
-  const closestCarb = useMemo(() => {
-    if (shouldUseExternalCursor) return null;
-    if (!isTouchActive || touchTimeMs == null) return null;
-    if (!foodItems?.length) return null;
-    return findClosestCarbEvent(touchTimeMs, foodItems);
-  }, [foodItems, isTouchActive, shouldUseExternalCursor, touchTimeMs]);
-
-  const anchorTimeMs = useMemo(() => {
-    if (!isTouchActive) return null;
-    if (touchTimeMs == null) return null;
-
-    if (shouldUseExternalCursor) {
-      return cursorTimeMs as number;
-    }
-
-    if (closestBolus?.timestamp != null) {
-      const t = new Date(closestBolus.timestamp).getTime();
-      return Number.isFinite(t) ? t : touchTimeMs;
-    }
-    if (closestCarb?.timestamp != null) {
-      return closestCarb.timestamp;
-    }
-    return touchTimeMs;
-  }, [closestBolus?.timestamp, closestCarb?.timestamp, cursorTimeMs, isTouchActive, shouldUseExternalCursor, touchTimeMs]);
-
-  const tooltipBolusEvents = useMemo(() => {
-    if (!isTouchActive) return [];
-    if (anchorTimeMs == null) return [];
-    if (!insulinData?.length) return [];
-
-    return findBolusEventsInTooltipWindow({
-      anchorTimeMs,
-      insulinData,
-    });
-  }, [anchorTimeMs, insulinData, isTouchActive]);
-
-  const tooltipCarbEvents = useMemo(() => {
-    if (!isTouchActive) return [];
-    if (!foodItems?.length) return [];
-
-    if (anchorTimeMs == null) return [];
-
-    return findCarbEventsInTooltipWindow({anchorTimeMs, foodItems});
-  }, [anchorTimeMs, foodItems, isTouchActive]);
-
-  // Avoid prop identity churn during touch-move renders.
-  const focusedFoodItemIds = useMemo(
-    () => tooltipCarbEvents.map(c => c.id),
-    [tooltipCarbEvents],
-  );
-
-  const focusedBolusTimestamps = useMemo(
-    () => tooltipBolusEvents.map(b => b.timestamp),
-    [tooltipBolusEvents],
-  );
-
   const handleTouchStartWithTooltip = useMemo(() => {
     if (tooltipMode !== 'external' || !onTooltipChange) {
       return handleTouchStart;
@@ -267,15 +144,13 @@ const CGMGraph: React.FC<Props> = ({
       handleTouchStart(event);
 
       const rawX = event?.nativeEvent?.locationX;
-      if (typeof rawX !== 'number' || !Number.isFinite(rawX)) return;
-
-      const localX = clamp(
-        rawX - graphStyleContextValue.margin.left,
-        0,
-        Math.max(0, graphStyleContextValue.graphWidth),
-      );
-      const t = graphStyleContextValue.xScale.invert(localX).getTime();
-      if (!Number.isFinite(t)) return;
+      const t = computeTouchTimeMsFromLocationX({
+        rawX,
+        plotMarginLeft: graphStyleContextValue.margin.left,
+        plotWidth: graphStyleContextValue.graphWidth,
+        xScale: graphStyleContextValue.xScale,
+      });
+      if (t == null) return;
 
       // In external mode we emit the raw touch time; the parent can snap it.
       onTooltipChange({touchTimeMs: t, anchorTimeMs: t});
@@ -291,15 +166,13 @@ const CGMGraph: React.FC<Props> = ({
       handleTouchMove(event);
 
       const rawX = event?.nativeEvent?.locationX;
-      if (typeof rawX !== 'number' || !Number.isFinite(rawX)) return;
-
-      const localX = clamp(
-        rawX - graphStyleContextValue.margin.left,
-        0,
-        Math.max(0, graphStyleContextValue.graphWidth),
-      );
-      const t = graphStyleContextValue.xScale.invert(localX).getTime();
-      if (!Number.isFinite(t)) return;
+      const t = computeTouchTimeMsFromLocationX({
+        rawX,
+        plotMarginLeft: graphStyleContextValue.margin.left,
+        plotWidth: graphStyleContextValue.graphWidth,
+        xScale: graphStyleContextValue.xScale,
+      });
+      if (t == null) return;
 
       onTooltipChange({touchTimeMs: t, anchorTimeMs: t});
     };
@@ -316,14 +189,9 @@ const CGMGraph: React.FC<Props> = ({
     };
   }, [handleTouchEnd, onTooltipChange, tooltipMode]);
 
-  const showCombined = !!closestBgSample && tooltipBolusEvents.length === 1;
-  const showCombinedMulti = !!closestBgSample && tooltipBolusEvents.length > 1;
-  const showBgOnly = !!closestBgSample && tooltipBolusEvents.length === 0;
-  const showBolusOnly = !closestBgSample && tooltipBolusEvents.length > 0;
-
   const focusX =
-    tooltipMode === 'external' && anchorTimeMs != null
-      ? graphStyleContextValue.xScale(new Date(anchorTimeMs))
+    tooltipMode === 'external' && cgmAnchorTimeMs != null
+      ? graphStyleContextValue.xScale(new Date(cgmAnchorTimeMs))
       : xTouchPosition;
 
   const shouldShowFocus =

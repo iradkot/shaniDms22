@@ -60,33 +60,56 @@ const ActiveInsulinMiniGraph: React.FC<Props> = ({
     [graphWidth, xDomainResolved],
   );
 
-  const iobPoints = useMemo(() => {
-    const out: Array<{x: number; y: number}> = [];
-    for (const s of bgSamples ?? []) {
-      // "Active insulin" should represent total IOB in the body.
-      // Prefer total IOB; fall back to split sum when available.
-      let raw: number | null = null;
-      if (typeof s.iob === 'number') {
-        raw = s.iob;
-      } else if (typeof s.iobBolus === 'number' || typeof s.iobBasal === 'number') {
-        raw = (typeof s.iobBolus === 'number' ? s.iobBolus : 0) +
-          (typeof s.iobBasal === 'number' ? s.iobBasal : 0);
-      }
-      if (raw == null || !Number.isFinite(raw)) continue;
+  const iobSeries = useMemo(() => {
+    const total: Array<{x: number; y: number}> = [];
+    const split: Array<{x: number; bolus: number; basal: number; total: number}> = [];
 
+    for (const s of bgSamples ?? []) {
       const ts = typeof s.date === 'number' ? s.date : Date.parse(String(s.date));
       if (!Number.isFinite(ts)) continue;
 
-      out.push({x: ts, y: Math.max(0, raw)});
+      const hasSplit =
+        typeof s.iobBolus === 'number' ||
+        typeof s.iobBasal === 'number';
+
+      // Total IOB (preferred when explicitly provided)
+      let totalRaw: number | null = null;
+      if (typeof s.iob === 'number') {
+        totalRaw = s.iob;
+      } else if (hasSplit) {
+        totalRaw = (typeof s.iobBolus === 'number' ? s.iobBolus : 0) +
+          (typeof s.iobBasal === 'number' ? s.iobBasal : 0);
+      }
+      if (totalRaw != null && Number.isFinite(totalRaw)) {
+        total.push({x: ts, y: Math.max(0, totalRaw)});
+      }
+
+      if (hasSplit) {
+        const bolus = typeof s.iobBolus === 'number' && Number.isFinite(s.iobBolus) ? Math.max(0, s.iobBolus) : 0;
+        const basal = typeof s.iobBasal === 'number' && Number.isFinite(s.iobBasal) ? Math.max(0, s.iobBasal) : 0;
+        const sum = bolus + basal;
+        if (Number.isFinite(sum)) {
+          split.push({x: ts, bolus, basal, total: sum});
+        }
+      }
     }
-    // Ensure time order for d3 line.
-    out.sort((a, b) => a.x - b.x);
+
+    total.sort((a, b) => a.x - b.x);
+    split.sort((a, b) => a.x - b.x);
 
     const [domainStart, domainEnd] = xDomainResolved;
     const startMs = domainStart.getTime();
     const endMs = domainEnd.getTime();
-    return out.filter(p => p.x >= startMs && p.x <= endMs);
+    return {
+      total: total.filter(p => p.x >= startMs && p.x <= endMs),
+      split: split.filter(p => p.x >= startMs && p.x <= endMs),
+    };
   }, [bgSamples, xDomainResolved]);
+
+  const iobPoints = iobSeries.total;
+  const splitPoints = iobSeries.split;
+
+  const hasSplitPoints = useMemo(() => splitPoints.length > 0, [splitPoints.length]);
 
   const latestPoint = useMemo(() => {
     if (!iobPoints.length) return null;
@@ -116,6 +139,30 @@ const ActiveInsulinMiniGraph: React.FC<Props> = ({
 
     return line(iobPoints) || null;
   }, [iobPoints, xScale, yScale]);
+
+  const basalAreaPath = useMemo(() => {
+    if (!hasSplitPoints) return null;
+    const area = d3
+      .area<{x: number; basal: number}>()
+      .x(d => xScale(new Date(d.x)))
+      .y0(() => yScale(0))
+      .y1(d => yScale(d.basal))
+      .curve(d3.curveMonotoneX);
+
+    return area(splitPoints as any) || null;
+  }, [hasSplitPoints, splitPoints, xScale, yScale]);
+
+  const bolusAreaPath = useMemo(() => {
+    if (!hasSplitPoints) return null;
+    const area = d3
+      .area<{x: number; bolus: number; basal: number}>()
+      .x(d => xScale(new Date(d.x)))
+      .y0(d => yScale(d.basal))
+      .y1(d => yScale(d.basal + d.bolus))
+      .curve(d3.curveMonotoneX);
+
+    return area(splitPoints as any) || null;
+  }, [hasSplitPoints, splitPoints, xScale, yScale]);
 
   const gridTicks = useMemo(() => {
     const ticks = 3;
@@ -191,6 +238,23 @@ const ActiveInsulinMiniGraph: React.FC<Props> = ({
           })}
 
           {iobPath ? (
+            <>
+              {basalAreaPath ? (
+                <Path
+                  d={basalAreaPath}
+                  fill={addOpacity(theme.colors.insulinSecondary, 0.28)}
+                  stroke="none"
+                />
+              ) : null}
+
+              {bolusAreaPath ? (
+                <Path
+                  d={bolusAreaPath}
+                  fill={addOpacity(theme.colors.insulin, 0.22)}
+                  stroke="none"
+                />
+              ) : null}
+
             <Path
               d={iobPath}
               fill="none"
@@ -198,6 +262,7 @@ const ActiveInsulinMiniGraph: React.FC<Props> = ({
               strokeWidth={2.5}
               opacity={0.9}
             />
+            </>
           ) : null}
 
           {cursorTimeMs != null ? (

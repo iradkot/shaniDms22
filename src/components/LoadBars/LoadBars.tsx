@@ -35,6 +35,12 @@ const LoadBars: React.FC<Props> = ({
 }) => {
   const theme = useTheme() as ThemeType;
 
+  const hasSplitIob = useMemo(() => {
+    const bolusOk = typeof iobBolus === 'number' && Number.isFinite(iobBolus);
+    const basalOk = typeof iobBasal === 'number' && Number.isFinite(iobBasal);
+    return bolusOk || basalOk;
+  }, [iobBasal, iobBolus]);
+
   const safeIobBolus = useMemo(() => {
     const value = typeof iobBolus === 'number' ? iobBolus : undefined;
     if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, value);
@@ -72,11 +78,20 @@ const LoadBars: React.FC<Props> = ({
     [safeCob, maxCobReference],
   );
 
+  const iobLabel = useMemo(() => {
+    const totalText = formatIob(safeIobTotal);
+    if (!hasSplitIob) return totalText;
+
+    const bolus = typeof iobBolus === 'number' && Number.isFinite(iobBolus) ? Math.max(0, iobBolus) : 0;
+    const basal = typeof iobBasal === 'number' && Number.isFinite(iobBasal) ? Math.max(0, iobBasal) : 0;
+    return `${totalText} (${formatIob(bolus)} bolus, ${formatIob(basal)} basal)`;
+  }, [hasSplitIob, iobBasal, iobBolus, safeIobTotal]);
+
   return (
     <Container testID={E2E_TEST_IDS.loadBars.container}>
       <BarRow>
         <ValueText testID={E2E_TEST_IDS.loadBars.iobText} numberOfLines={1}>
-          {formatIob(safeIobTotal)}
+          {iobLabel}
         </ValueText>
         <LabelGap />
         <Track $color={theme.colors.barTrack}>

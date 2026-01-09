@@ -20,6 +20,8 @@ import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {isE2E} from 'app/utils/e2e';
 import {makeE2EBgSamplesForDate} from 'app/utils/e2eFixtures';
 import {getLoadReferences} from 'app/utils/loadBars.utils';
+import {buildFullScreenStackedChartsParams} from 'app/utils/stackedChartsData.utils';
+import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
 
 import HomeHeaderSection from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeHeaderSection';
 import HomeSectionSwitcher from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeSectionSwitcher';
@@ -197,22 +199,22 @@ const Home: React.FC = () => {
       ? {startMs: chartXDomain[0].getTime(), endMs: chartXDomain[1].getTime()}
       : null;
 
-    const fullScreenPayload = {
-      mode: 'stackedCharts' as const,
+    const fullScreenPayload = buildFullScreenStackedChartsParams({
       bgSamples: memoizedBgSamples,
       foodItems: chartFoodItems,
       insulinData,
       basalProfileData,
       xDomainMs,
       fallbackAnchorTimeMs: headerLatestBgSample?.date ?? latestBgSample?.date,
-    };
+    });
 
-    try {
-      const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
-      (navigation as any).dispatch(action);
-    } catch (e) {
-      (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
-    }
+    const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload);
+    dispatchToParentOrSelf({
+      navigation,
+      action,
+      fallbackNavigate: () =>
+        (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, fullScreenPayload),
+    });
   }, [
     basalProfileData,
     chartFoodItems,

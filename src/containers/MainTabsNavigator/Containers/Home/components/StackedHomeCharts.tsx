@@ -1,7 +1,5 @@
 import React, {useMemo, useState} from 'react';
 
-const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-
 import {Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import styled, {useTheme} from 'styled-components/native';
@@ -10,11 +8,11 @@ import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import type {CGMGraphExternalTooltipPayload} from 'app/components/charts/CgmGraph/CgmGraph';
 import BasalMiniGraph from 'app/components/charts/BasalMiniGraph/BasalMiniGraph';
 import ActiveInsulinMiniGraph from 'app/components/charts/ActiveInsulinMiniGraph/ActiveInsulinMiniGraph';
-import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
-import {findBolusEventsInTooltipWindow, findClosestBolus} from 'app/components/charts/CgmGraph/utils/bolusUtils';
-import {findCarbEventsInTooltipWindow, findClosestCarbEvent} from 'app/components/charts/CgmGraph/utils/carbsUtils';
 import HomeChartsTooltip from 'app/containers/MainTabsNavigator/Containers/Home/components/HomeChartsTooltip';
 import {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
+import {useStackedChartsTooltipModel} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useStackedChartsTooltipModel';
+import {useBasalRateAtTime} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useBasalRateAtTime';
+import {useBgTooltipDerivedMetrics} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useBgTooltipDerivedMetrics';
 
 import {BgSample} from 'app/types/day_bgs.types';
 import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
@@ -138,107 +136,30 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     [marginOverride],
   );
 
-  const shouldShowTooltip = chartsTooltip != null;
+  const {
+    shouldShowTooltip,
+    cgmAnchorTimeMs,
+    eventsAnchorTimeMs,
+    cursorTimeMs,
+    resolvedTooltipAlign,
+    tooltipBgSample,
+    tooltipBolusEvents,
+    tooltipCarbEvents,
+  } = useStackedChartsTooltipModel({
+    chartsTooltip,
+    bgSamples,
+    foodItems,
+    insulinData,
+    fallbackAnchorTimeMs,
+    width,
+    marginLeft: stackedChartsMargin.left,
+    marginRight: stackedChartsMargin.right,
+    xDomain,
+    tooltipAlign,
+  });
 
-  const fallbackAnchorResolvedMs = useMemo(() => {
-    return typeof fallbackAnchorTimeMs === 'number' && Number.isFinite(fallbackAnchorTimeMs)
-      ? fallbackAnchorTimeMs
-      : null;
-  }, [fallbackAnchorTimeMs]);
-
-  const latestBgTimeMs = useMemo(() => {
-    if (fallbackAnchorResolvedMs != null) return fallbackAnchorResolvedMs;
-    if (!bgSamples?.length) return Date.now();
-    let best = bgSamples[0]?.date ?? Date.now();
-    for (const s of bgSamples) {
-      if (typeof s?.date === 'number' && s.date > best) {
-        best = s.date;
-      }
-    }
-    return best;
-  }, [bgSamples, fallbackAnchorResolvedMs]);
-
-  const tooltipAnchorTimeMs = useMemo(() => {
-    // When touching, treat `touchTimeMs` as the input signal and compute a stable anchor.
-    // This prevents the tooltip / focus-line from lagging a render behind.
-    if (chartsTooltip?.touchTimeMs != null) {
-      const touchTimeMs = chartsTooltip.touchTimeMs;
-
-      const closestBolus = insulinData?.length ? findClosestBolus(touchTimeMs, insulinData) : null;
-      if (closestBolus?.timestamp) {
-        const t = Date.parse(closestBolus.timestamp);
-        if (Number.isFinite(t)) return t;
-      }
-
-      const closestCarb = foodItems?.length ? findClosestCarbEvent(touchTimeMs, foodItems) : null;
-      if (closestCarb?.timestamp != null) {
-        return closestCarb.timestamp;
-      }
-
-      return touchTimeMs;
-    }
-    if (fallbackAnchorResolvedMs != null) return fallbackAnchorResolvedMs;
-    return latestBgTimeMs;
-  }, [chartsTooltip?.touchTimeMs, fallbackAnchorResolvedMs, foodItems, insulinData, latestBgTimeMs]);
-
-  const cursorTimeMs = useMemo(() => {
-    // Show the cross-chart focus only while touching.
-    return shouldShowTooltip ? tooltipAnchorTimeMs : null;
-  }, [shouldShowTooltip, tooltipAnchorTimeMs]);
-
-  const resolvedTooltipAlign = useMemo<'left' | 'right'>(() => {
-    if (tooltipAlign !== 'auto') return tooltipAlign;
-    if (!shouldShowTooltip || cursorTimeMs == null) return 'right';
-
-    const graphWidth = Math.max(1, width - stackedChartsMargin.left - stackedChartsMargin.right);
-
-    const startMs = xDomain?.[0] ? xDomain[0].getTime() : NaN;
-    const endMs = xDomain?.[1] ? xDomain[1].getTime() : NaN;
-    const spanMs = Number.isFinite(startMs) && Number.isFinite(endMs) ? endMs - startMs : NaN;
-    if (!(spanMs > 0)) return 'right';
-
-    const t = clamp01((cursorTimeMs - startMs) / spanMs);
-    const cursorX = t * graphWidth;
-
-    // If the user is focusing the right side, dock tooltip left (and vice versa).
-    return cursorX > graphWidth / 2 ? 'left' : 'right';
-  }, [cursorTimeMs, shouldShowTooltip, stackedChartsMargin.left, stackedChartsMargin.right, tooltipAlign, width, xDomain]);
-
-  const tooltipBgSample = useMemo(() => {
-    if (!shouldShowTooltip) return null;
-    if (!bgSamples?.length) return null;
-    return findClosestBgSample(tooltipAnchorTimeMs, bgSamples);
-  }, [bgSamples, shouldShowTooltip, tooltipAnchorTimeMs]);
-
-  const activeInsulinU = useMemo(() => {
-    if (!tooltipBgSample) return null;
-    if (typeof tooltipBgSample.iob === 'number') return tooltipBgSample.iob;
-    if (
-      typeof tooltipBgSample.iobBolus === 'number' ||
-      typeof tooltipBgSample.iobBasal === 'number'
-    ) {
-      return (typeof tooltipBgSample.iobBolus === 'number' ? tooltipBgSample.iobBolus : 0) +
-        (typeof tooltipBgSample.iobBasal === 'number' ? tooltipBgSample.iobBasal : 0);
-    }
-    return null;
-  }, [tooltipBgSample]);
-
-  const cobG = useMemo(() => {
-    if (!tooltipBgSample) return null;
-    return typeof tooltipBgSample.cob === 'number' ? tooltipBgSample.cob : null;
-  }, [tooltipBgSample]);
-
-  const tooltipBolusEvents = useMemo(() => {
-    if (!shouldShowTooltip) return [];
-    if (!insulinData?.length) return [];
-    return findBolusEventsInTooltipWindow({anchorTimeMs: tooltipAnchorTimeMs, insulinData});
-  }, [insulinData, shouldShowTooltip, tooltipAnchorTimeMs]);
-
-  const tooltipCarbEvents = useMemo(() => {
-    if (!shouldShowTooltip) return [];
-    if (!foodItems?.length) return [];
-    return findCarbEventsInTooltipWindow({anchorTimeMs: tooltipAnchorTimeMs, foodItems});
-  }, [foodItems, shouldShowTooltip, tooltipAnchorTimeMs]);
+  const {activeInsulinU, activeInsulinBolusU, activeInsulinBasalU, cobG} =
+    useBgTooltipDerivedMetrics(tooltipBgSample);
 
   const bolusSummary = useMemo(() => {
     const totalU = tooltipBolusEvents.reduce(
@@ -256,55 +177,12 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     return {count: tooltipCarbEvents.length, totalG};
   }, [tooltipCarbEvents]);
 
-  const basalRateUhr = useMemo(() => {
-    if (!shouldShowTooltip) return null;
-    const ms = tooltipAnchorTimeMs;
-
-    const tempBasals = (insulinData ?? [])
-      .filter(e => e.type === 'tempBasal')
-      .map(e => {
-        const startMs = e.startTime ? Date.parse(e.startTime) : e.timestamp ? Date.parse(e.timestamp) : NaN;
-        const durationMin = typeof e.duration === 'number' && Number.isFinite(e.duration) ? e.duration : 0;
-        const endMs = e.endTime
-          ? Date.parse(e.endTime)
-          : Number.isFinite(startMs) && durationMin > 0
-            ? startMs + durationMin * 60_000
-            : NaN;
-        const rate = typeof e.rate === 'number' && Number.isFinite(e.rate) ? e.rate : NaN;
-        return {startMs, endMs, rate};
-      })
-      .filter(x => Number.isFinite(x.startMs) && Number.isFinite(x.rate));
-
-    const activeTemp = tempBasals
-      .filter(x => Number.isFinite(x.endMs) && ms >= x.startMs && ms <= x.endMs)
-      .sort((a, b) => b.startMs - a.startMs)[0];
-
-    if (activeTemp && Number.isFinite(activeTemp.rate)) {
-      return activeTemp.rate;
-    }
-
-    if (!basalProfileData?.length) return null;
-
-    const d = new Date(ms);
-    const seconds = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
-    const sorted = [...basalProfileData]
-      .map(e => ({
-        value: e.value,
-        sec:
-          typeof e.timeAsSeconds === 'number' && Number.isFinite(e.timeAsSeconds)
-            ? e.timeAsSeconds
-            : (() => {
-                const [hh, mm] = String(e.time).split(':');
-                const h = parseInt(hh, 10);
-                const m = parseInt(mm, 10);
-                return (Number.isFinite(h) ? h : 0) * 3600 + (Number.isFinite(m) ? m : 0) * 60;
-              })(),
-      }))
-      .sort((a, b) => a.sec - b.sec);
-
-    const match = [...sorted].reverse().find(e => e.sec <= seconds) ?? sorted[sorted.length - 1];
-    return typeof match?.value === 'number' && Number.isFinite(match.value) ? match.value : null;
-  }, [basalProfileData, insulinData, shouldShowTooltip, tooltipAnchorTimeMs]);
+  const basalRateUhr = useBasalRateAtTime({
+    enabled: shouldShowTooltip,
+    timeMs: cgmAnchorTimeMs,
+    insulinData,
+    basalProfileData,
+  });
 
   const tooltipOverlayTestID = testID ? `${testID}.tooltipOverlay` : undefined;
   const tooltipDockTestID = testID ? `${testID}.tooltipDock` : undefined;
@@ -323,13 +201,17 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
               style={{justifyContent: resolvedTooltipAlign === 'right' ? 'flex-end' : 'flex-start'}}
             >
               <HomeChartsTooltip
-                anchorTimeMs={tooltipAnchorTimeMs}
+                anchorTimeMs={cgmAnchorTimeMs}
                 bgSample={tooltipBgSample}
                 activeInsulinU={activeInsulinU}
+                activeInsulinBolusU={activeInsulinBolusU}
+                activeInsulinBasalU={activeInsulinBasalU}
                 cobG={cobG}
                 basalRateUhr={basalRateUhr}
                 bolusSummary={bolusSummary}
                 carbsSummary={carbsSummary}
+                bolusEvents={tooltipBolusEvents}
+                carbEvents={tooltipCarbEvents}
                 fullWidth={tooltipFullWidth}
                 maxWidthPx={tooltipMaxWidthPx}
               />

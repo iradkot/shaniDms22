@@ -28,6 +28,7 @@ import {
   LOGIN_SCREEN,
   MAIN_TAB_NAVIGATOR,
   FULL_SCREEN_VIEW_SCREEN,
+  HYPO_INVESTIGATION_SCREEN,
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 import {TabsSettingsProvider} from 'app/contexts/TabsSettingsContext';
@@ -51,6 +52,7 @@ import {SportItemsProvider} from 'app/contexts/SportItemsContext';
 import EditFoodItemScreen from './containers/forms/Food/EditFoodItemScreen';
 import EditSportItem from './containers/forms/Sport/EditSportItem';
 import FullScreenViewScreen from 'app/containers/FullScreen/FullScreenViewScreen';
+import HypoInvestigationScreen from 'app/containers/MainTabsNavigator/Containers/Trends/HypoInvestigationScreen';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TouchProvider} from './components/charts/CgmGraph/contextStores/TouchContext';
 import {isE2E} from 'app/utils/e2e';
@@ -222,6 +224,12 @@ const App: () => React.ReactElement = () => {
                                 options={{headerShown: false}}
                                 name={FULL_SCREEN_VIEW_SCREEN}
                                 component={FullScreenViewScreen}
+                              />
+
+                              <Stack.Screen
+                                options={{headerShown: true, headerTitle: 'Hypo investigation'}}
+                                name={HYPO_INVESTIGATION_SCREEN}
+                                component={HypoInvestigationScreen}
                               />
                               </Stack.Navigator>
                             </NavigationContainer>

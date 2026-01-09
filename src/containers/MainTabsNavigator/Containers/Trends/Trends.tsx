@@ -4,6 +4,8 @@ import React, {useCallback, useMemo, useState} from 'react';
 import {View, ScrollView, Text} from 'react-native';
 import {differenceInCalendarDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
+import {StackActions, useNavigation} from '@react-navigation/native';
+import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
 
 import {ThemeType} from 'app/types/theme';
 
@@ -35,11 +37,14 @@ import {
   MetricButtonText
 } from './styles/Trends.styles';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
+import {HYPO_INVESTIGATION_SCREEN} from 'app/constants/SCREEN_NAMES';
 
 type MetricType = 'tir' | 'hypos' | 'hypers';
 
 const Trends: React.FC = () => {
   const theme = useTheme() as ThemeType;
+  const navigation = useNavigation();
 
   const [presetDays, setPresetDays] = useState<number>(7);
   const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
@@ -103,12 +108,31 @@ const Trends: React.FC = () => {
 
   const {stats: quickStats} = useTrendsQuickStats({bgData, start, end, rangeDays});
 
+  const severeHypoThreshold = useMemo(() => {
+    const raw = cgmRange[CGM_STATUS_CODES.EXTREME_LOW];
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : cgmRange.TARGET.min;
+  }, []);
+
+  const openHypoInvestigation = useCallback(() => {
+    const payload = {
+      bgData,
+      startMs: start.getTime(),
+      endMs: end.getTime(),
+      lowThreshold: severeHypoThreshold,
+    };
+
+    const action = StackActions.push(HYPO_INVESTIGATION_SCREEN, payload);
+    dispatchToParentOrSelf({
+      navigation,
+      action,
+      fallbackNavigate: () => (navigation as any).navigate?.(HYPO_INVESTIGATION_SCREEN, payload),
+    });
+  }, [bgData, end, navigation, severeHypoThreshold, start]);
+
   // 3) Compare logic
   const [showComparison, setShowComparison] = useState(false);
   const [comparing, setComparing] = useState(false);
-  const [previousMetrics, setPreviousMetrics] = useState<ReturnType<
-    typeof finalMetrics
-  > | null>(null);
+  const [previousMetrics, setPreviousMetrics] = useState<typeof finalMetrics | null>(null);
   const [comparisonOffset, setComparisonOffset] = useState(rangeDays);
   const [comparisonDateRange, setComparisonDateRange] = useState<{
     start: Date;
@@ -288,6 +312,7 @@ const Trends: React.FC = () => {
               nightTirPct={quickStats.nightTirPct}
               avgCarbsGPerDay={quickStats.avgCarbsGPerDay}
               avgTddTestID={E2E_TEST_IDS.trends.quickStatsAvgTdd}
+              onPressSevereHypos={openHypoInvestigation}
             />
           </View>
 

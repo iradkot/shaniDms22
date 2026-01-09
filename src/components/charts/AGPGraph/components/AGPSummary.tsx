@@ -11,6 +11,7 @@ import AGPChart from './AGPChart';
 import AGPKeyMetrics from './AGPKeyMetrics';
 import FullScreenButton from 'app/components/common-ui/FullScreenButton/FullScreenButton';
 import {FULL_SCREEN_VIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 const Container = styled.View``;
@@ -71,16 +72,11 @@ const AGPSummary: React.FC<AGPSummaryProps> = ({
     const action = StackActions.push(FULL_SCREEN_VIEW_SCREEN, params);
 
     return () => {
-      const parent = (navigation as any)?.getParent?.();
-      if (parent?.dispatch) {
-        parent.dispatch(action);
-        return;
-      }
-      if ((navigation as any)?.dispatch) {
-        (navigation as any).dispatch(action);
-        return;
-      }
-      (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, params);
+      dispatchToParentOrSelf({
+        navigation,
+        action,
+        fallbackNavigate: () => (navigation as any).navigate?.(FULL_SCREEN_VIEW_SCREEN, params),
+      });
     };
   }, [bgData, navigation]);
 

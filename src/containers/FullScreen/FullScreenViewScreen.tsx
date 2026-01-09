@@ -42,6 +42,7 @@ type FullScreenRouteParams =
     }
   | {
       mode: 'stackedCharts';
+      title?: string;
       bgSamples: BgSample[];
       foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
       insulinData?: InsulinDataEntry[];
@@ -129,7 +130,10 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
   const headerTitle = useMemo(() => {
     if (mode === 'cgmRows') return 'Glucose Log';
     if (mode === 'cgmGraph') return 'CGM Graph';
-    if (mode === 'stackedCharts') return 'Charts';
+    if (mode === 'stackedCharts') {
+      const t = (params as any)?.title;
+      return typeof t === 'string' && t.trim() ? t : 'Charts';
+    }
     return 'AGP Graph';
   }, [mode]);
 
