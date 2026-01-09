@@ -1,14 +1,13 @@
-import React, {useMemo} from 'react';
+import React from 'react';
 
 import {Pressable} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import styled, {useTheme} from 'styled-components/native';
 
-import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
-export type HomeSection = 'bgStats' | 'insulinStats' | 'chart';
+import {HOME_SECTIONS, type HomeSection} from 'app/containers/MainTabsNavigator/Containers/Home/homeSections';
 
 const SectionSwitcherRow = styled.View.attrs({collapsable: false})`
   flex-direction: row;
@@ -24,14 +23,13 @@ const SectionButton = styled(Pressable).attrs({collapsable: false})`
   flex: 1;
   align-items: center;
   justify-content: center;
-  padding-vertical: 4px;
 `;
 
 const SectionButtonInner = styled.View.attrs({collapsable: false})<{active: boolean}>`
   width: 100%;
   align-items: center;
   justify-content: center;
-  padding-vertical: 6px;
+  padding-vertical: 2px;
   border-radius: 12px;
   background-color: ${(props: {theme: ThemeType; active: boolean}) =>
     props.active ? addOpacity(props.theme.accentColor, 0.12) : 'transparent'};
@@ -55,13 +53,6 @@ const SectionLabel = styled.Text<{active: boolean}>`
       : addOpacity(props.theme.textColor, 0.55)};
 `;
 
-type SectionItem = {
-  key: HomeSection;
-  label: string;
-  iconName: string;
-  testID?: string;
-};
-
 type Props = {
   selectedSection: HomeSection | null;
   onToggle: (section: HomeSection) => void;
@@ -70,23 +61,9 @@ type Props = {
 export const HomeSectionSwitcher: React.FC<Props> = ({selectedSection, onToggle}) => {
   const theme = useTheme() as ThemeType;
 
-  const sections = useMemo<SectionItem[]>(
-    () => [
-      {key: 'bgStats', label: 'BG Stats', iconName: 'chart-bar'},
-      {key: 'insulinStats', label: 'Insulin', iconName: 'needle'},
-      {
-        key: 'chart',
-        label: 'Chart',
-        iconName: 'chart-line',
-        testID: E2E_TEST_IDS.charts.cgmSection,
-      },
-    ],
-    [],
-  );
-
   return (
     <SectionSwitcherRow>
-      {sections.map(section => {
+      {HOME_SECTIONS.map(section => {
         const active = selectedSection === section.key;
         const iconColor = active ? theme.accentColor : addOpacity(theme.textColor, 0.55);
         const labelColor = active ? theme.textColor : addOpacity(theme.textColor, 0.55);

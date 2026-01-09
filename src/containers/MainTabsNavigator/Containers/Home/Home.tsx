@@ -22,22 +22,18 @@ import {makeE2EBgSamplesForDate} from 'app/utils/e2eFixtures';
 import {getLoadReferences} from 'app/utils/loadBars.utils';
 
 import HomeHeaderSection from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeHeaderSection';
-import HomeSectionSwitcher, {
-  type HomeSection,
-} from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeSectionSwitcher';
+import HomeSectionSwitcher from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeSectionSwitcher';
 import HomeChartSection from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeChartSection';
 import {useHomeChartViewport} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useHomeChartViewport';
+import {
+  HOME_SECTION_KEYS,
+  type HomeSection,
+} from 'app/containers/MainTabsNavigator/Containers/Home/homeSections';
 
 const HomeContainer = styled.View`
   flex: 1;
   background-color: ${(props: {theme: ThemeType}) => props.theme.backgroundColor};
 `;
-
-const HOME_SECTION_KEYS = {
-  bgStats: 'bgStats',
-  insulinStats: 'insulinStats',
-  chart: 'chart',
-} as const;
 
 // create dummy home component with typescript
 const Home: React.FC = () => {
