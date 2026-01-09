@@ -5,7 +5,6 @@ import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
-import {cloneDeep} from 'lodash';
 import {ThemeType} from 'app/types/theme';
 import {useNavigation, StackActions} from '@react-navigation/native';
 import {useBgData} from 'app/hooks/useBgData';
@@ -102,7 +101,7 @@ const Home: React.FC = () => {
         ? makeE2EBgSamplesForDate(debouncedCurrentDate)
         : bgData;
 
-    return cloneDeep(effectiveBgData).sort(bgSortFunction(true));
+    return Array.from(effectiveBgData).sort(bgSortFunction(true));
   }, [bgData, debouncedCurrentDate]);
 
   const chartDataExtentMs = useMemo(() => {
@@ -120,9 +119,7 @@ const Home: React.FC = () => {
     // In E2E, ensure the glucose log list has deterministic data even when the
     // account/environment has no CGM entries.
     if (bgData.length === 0 && isE2E) {
-      return cloneDeep(makeE2EBgSamplesForDate(debouncedCurrentDate)).sort(
-        bgSortFunction(true),
-      );
+      return Array.from(makeE2EBgSamplesForDate(debouncedCurrentDate)).sort(bgSortFunction(true));
     }
     return bgData;
   }, [bgData, debouncedCurrentDate]);
@@ -175,6 +172,10 @@ const Home: React.FC = () => {
     extentMs: chartDataExtentMs,
     anchorMs: headerLatestBgSample?.date ?? latestBgSample?.date,
   });
+
+  const fullXDomain = useMemo<[Date, Date]>(() => {
+    return [new Date(chartDataExtentMs.minMs), new Date(chartDataExtentMs.maxMs)];
+  }, [chartDataExtentMs.maxMs, chartDataExtentMs.minMs]);
 
   const {maxIobReference, maxCobReference} = useMemo(
     () => getLoadReferences(listBgData),
@@ -259,7 +260,7 @@ const Home: React.FC = () => {
         foodItems={chartFoodItems}
         insulinData={insulinData}
         basalProfileData={basalProfileData}
-        xDomain={chartXDomain}
+        xDomain={chartXDomain ?? fullXDomain}
         fallbackAnchorTimeMs={headerLatestBgSample?.date ?? latestBgSample?.date}
         onPressFullScreen={handleOpenStackedChartsFullScreen}
         testID={E2E_TEST_IDS.charts.cgmGraph}

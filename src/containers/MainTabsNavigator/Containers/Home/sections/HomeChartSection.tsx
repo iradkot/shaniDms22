@@ -1,6 +1,6 @@
-import React, {useMemo} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 
-import {Dimensions, Pressable, View} from 'react-native';
+import {Animated, Dimensions, InteractionManager, Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import styled, {useTheme} from 'styled-components/native';
 
@@ -43,6 +43,31 @@ const ChartControlText = styled.Text`
   color: ${(props: {theme: ThemeType}) => props.theme.textColor};
 `;
 
+const ChartPlaceholder = styled(Animated.View)`
+  padding: 12px;
+`;
+
+const PlaceholderCard = styled.View`
+  border-radius: 12px;
+  border-width: 1px;
+  background-color: ${(props: {theme: ThemeType}) => addOpacity(props.theme.white, 0.9)};
+  border-color: ${(props: {theme: ThemeType}) => addOpacity(props.theme.textColor, 0.12)};
+  padding: 12px;
+`;
+
+const PlaceholderTitle = styled.Text`
+  font-size: 13px;
+  font-weight: 800;
+  color: ${(props: {theme: ThemeType}) => props.theme.textColor};
+`;
+
+const PlaceholderSub = styled.Text`
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: ${(props: {theme: ThemeType}) => addOpacity(props.theme.textColor, 0.65)};
+`;
+
 type Props = {
   visible: boolean;
 
@@ -83,11 +108,67 @@ export const HomeChartSection: React.FC<Props> = ({
 
   const chartWidth = useMemo(() => Dimensions.get('window').width, []);
 
-  if (!visible) return null;
+  const [hasEverOpened, setHasEverOpened] = useState(false);
+  const [shouldRenderCharts, setShouldRenderCharts] = useState(false);
+
+  const placeholderOpacity = useRef(new Animated.Value(0)).current;
+  const chartsOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!visible) return;
+
+    setHasEverOpened(true);
+
+    // Let the UI commit the expanded layout first, then mount the heavy chart tree.
+    // This reduces the perceived “stuck” moment.
+    const task = InteractionManager.runAfterInteractions(() => {
+      setShouldRenderCharts(true);
+    });
+
+    return () => {
+      task.cancel?.();
+    };
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      placeholderOpacity.stopAnimation();
+      chartsOpacity.stopAnimation();
+      placeholderOpacity.setValue(0);
+      chartsOpacity.setValue(0);
+      return;
+    }
+
+    if (!shouldRenderCharts) {
+      placeholderOpacity.setValue(0);
+      Animated.timing(placeholderOpacity, {
+        toValue: 1,
+        duration: 160,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+
+    // Fade charts in once mounted.
+    chartsOpacity.setValue(0);
+    Animated.timing(chartsOpacity, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+  }, [chartsOpacity, placeholderOpacity, shouldRenderCharts, visible]);
+
+  if (!visible && !hasEverOpened) return null;
+
+  const collapsed = !visible;
 
   return (
-    <View collapsable={false}>
-      <ChartControlsRow>
+    <View
+      collapsable={false}
+      pointerEvents={collapsed ? 'none' : 'auto'}
+      style={collapsed ? {height: 0, overflow: 'hidden'} : undefined}>
+      {!collapsed ? (
+        <ChartControlsRow>
         <ChartControlButton
           accessibilityRole="button"
           accessibilityLabel="Pan chart left"
@@ -117,21 +198,35 @@ export const HomeChartSection: React.FC<Props> = ({
           <Icon name="chevron-right" size={20} color={theme.textColor} />
         </ChartControlButton>
       </ChartControlsRow>
+      ) : null}
 
-      <StackedHomeCharts
-        bgSamples={bgSamples}
-        foodItems={foodItems}
-        insulinData={insulinData}
-        basalProfileData={basalProfileData}
-        width={chartWidth}
-        cgmHeight={200}
-        miniChartHeight={65}
-        xDomain={xDomain}
-        fallbackAnchorTimeMs={fallbackAnchorTimeMs}
-        showFullScreenButton
-        onPressFullScreen={onPressFullScreen}
-        testID={testID}
-      />
+      {!shouldRenderCharts && !collapsed ? (
+        <ChartPlaceholder style={{opacity: placeholderOpacity}}>
+          <PlaceholderCard>
+            <PlaceholderTitle>Loading charts…</PlaceholderTitle>
+            <PlaceholderSub>Tap and drag to explore once ready.</PlaceholderSub>
+          </PlaceholderCard>
+        </ChartPlaceholder>
+      ) : null}
+
+      {shouldRenderCharts ? (
+        <Animated.View style={{opacity: chartsOpacity}}>
+          <StackedHomeCharts
+            bgSamples={bgSamples}
+            foodItems={foodItems}
+            insulinData={insulinData}
+            basalProfileData={basalProfileData}
+            width={chartWidth}
+            cgmHeight={200}
+            miniChartHeight={65}
+            xDomain={xDomain}
+            fallbackAnchorTimeMs={fallbackAnchorTimeMs}
+            showFullScreenButton
+            onPressFullScreen={onPressFullScreen}
+            testID={testID}
+          />
+        </Animated.View>
+      ) : null}
     </View>
   );
 };

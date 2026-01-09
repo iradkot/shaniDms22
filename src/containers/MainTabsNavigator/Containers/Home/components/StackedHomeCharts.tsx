@@ -138,7 +138,16 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     [marginOverride],
   );
 
+  const shouldShowTooltip = chartsTooltip != null;
+
+  const fallbackAnchorResolvedMs = useMemo(() => {
+    return typeof fallbackAnchorTimeMs === 'number' && Number.isFinite(fallbackAnchorTimeMs)
+      ? fallbackAnchorTimeMs
+      : null;
+  }, [fallbackAnchorTimeMs]);
+
   const latestBgTimeMs = useMemo(() => {
+    if (fallbackAnchorResolvedMs != null) return fallbackAnchorResolvedMs;
     if (!bgSamples?.length) return Date.now();
     let best = bgSamples[0]?.date ?? Date.now();
     for (const s of bgSamples) {
@@ -147,33 +156,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
       }
     }
     return best;
-  }, [bgSamples]);
-
-  const xDomainResolvedMs = useMemo(() => {
-    if (xDomain?.[0] && xDomain?.[1]) {
-      const startMs = xDomain[0].getTime();
-      const endMs = xDomain[1].getTime();
-      if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) {
-        return {startMs, endMs};
-      }
-    }
-
-    // Fallback: derive from BG samples.
-    if (!bgSamples?.length) {
-      const now = Date.now();
-      return {startMs: now, endMs: now};
-    }
-
-    let min = bgSamples[0]?.date ?? Date.now();
-    let max = min;
-    for (const s of bgSamples) {
-      const t = typeof s?.date === 'number' ? s.date : NaN;
-      if (!Number.isFinite(t)) continue;
-      if (t < min) min = t;
-      if (t > max) max = t;
-    }
-    return {startMs: min, endMs: max};
-  }, [bgSamples, xDomain]);
+  }, [bgSamples, fallbackAnchorResolvedMs]);
 
   const tooltipAnchorTimeMs = useMemo(() => {
     // When touching, treat `touchTimeMs` as the input signal and compute a stable anchor.
@@ -194,36 +177,38 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
       return touchTimeMs;
     }
-    if (typeof fallbackAnchorTimeMs === 'number' && Number.isFinite(fallbackAnchorTimeMs)) {
-      return fallbackAnchorTimeMs;
-    }
+    if (fallbackAnchorResolvedMs != null) return fallbackAnchorResolvedMs;
     return latestBgTimeMs;
-  }, [chartsTooltip?.touchTimeMs, fallbackAnchorTimeMs, foodItems, insulinData, latestBgTimeMs]);
+  }, [chartsTooltip?.touchTimeMs, fallbackAnchorResolvedMs, foodItems, insulinData, latestBgTimeMs]);
 
   const cursorTimeMs = useMemo(() => {
     // Show the cross-chart focus only while touching.
-    return chartsTooltip ? tooltipAnchorTimeMs : null;
-  }, [chartsTooltip, tooltipAnchorTimeMs]);
+    return shouldShowTooltip ? tooltipAnchorTimeMs : null;
+  }, [shouldShowTooltip, tooltipAnchorTimeMs]);
 
   const resolvedTooltipAlign = useMemo<'left' | 'right'>(() => {
     if (tooltipAlign !== 'auto') return tooltipAlign;
-    if (cursorTimeMs == null) return 'right';
+    if (!shouldShowTooltip || cursorTimeMs == null) return 'right';
 
     const graphWidth = Math.max(1, width - stackedChartsMargin.left - stackedChartsMargin.right);
-    const spanMs = xDomainResolvedMs.endMs - xDomainResolvedMs.startMs;
+
+    const startMs = xDomain?.[0] ? xDomain[0].getTime() : NaN;
+    const endMs = xDomain?.[1] ? xDomain[1].getTime() : NaN;
+    const spanMs = Number.isFinite(startMs) && Number.isFinite(endMs) ? endMs - startMs : NaN;
     if (!(spanMs > 0)) return 'right';
 
-    const t = clamp01((cursorTimeMs - xDomainResolvedMs.startMs) / spanMs);
+    const t = clamp01((cursorTimeMs - startMs) / spanMs);
     const cursorX = t * graphWidth;
 
     // If the user is focusing the right side, dock tooltip left (and vice versa).
     return cursorX > graphWidth / 2 ? 'left' : 'right';
-  }, [cursorTimeMs, stackedChartsMargin.left, stackedChartsMargin.right, tooltipAlign, width, xDomainResolvedMs.endMs, xDomainResolvedMs.startMs]);
+  }, [cursorTimeMs, shouldShowTooltip, stackedChartsMargin.left, stackedChartsMargin.right, tooltipAlign, width, xDomain]);
 
   const tooltipBgSample = useMemo(() => {
+    if (!shouldShowTooltip) return null;
     if (!bgSamples?.length) return null;
     return findClosestBgSample(tooltipAnchorTimeMs, bgSamples);
-  }, [bgSamples, tooltipAnchorTimeMs]);
+  }, [bgSamples, shouldShowTooltip, tooltipAnchorTimeMs]);
 
   const activeInsulinU = useMemo(() => {
     if (!tooltipBgSample) return null;
@@ -244,14 +229,16 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   }, [tooltipBgSample]);
 
   const tooltipBolusEvents = useMemo(() => {
+    if (!shouldShowTooltip) return [];
     if (!insulinData?.length) return [];
     return findBolusEventsInTooltipWindow({anchorTimeMs: tooltipAnchorTimeMs, insulinData});
-  }, [insulinData, tooltipAnchorTimeMs]);
+  }, [insulinData, shouldShowTooltip, tooltipAnchorTimeMs]);
 
   const tooltipCarbEvents = useMemo(() => {
+    if (!shouldShowTooltip) return [];
     if (!foodItems?.length) return [];
     return findCarbEventsInTooltipWindow({anchorTimeMs: tooltipAnchorTimeMs, foodItems});
-  }, [foodItems, tooltipAnchorTimeMs]);
+  }, [foodItems, shouldShowTooltip, tooltipAnchorTimeMs]);
 
   const bolusSummary = useMemo(() => {
     const totalU = tooltipBolusEvents.reduce(
@@ -270,6 +257,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   }, [tooltipCarbEvents]);
 
   const basalRateUhr = useMemo(() => {
+    if (!shouldShowTooltip) return null;
     const ms = tooltipAnchorTimeMs;
 
     const tempBasals = (insulinData ?? [])
@@ -316,9 +304,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
     const match = [...sorted].reverse().find(e => e.sec <= seconds) ?? sorted[sorted.length - 1];
     return typeof match?.value === 'number' && Number.isFinite(match.value) ? match.value : null;
-  }, [basalProfileData, insulinData, tooltipAnchorTimeMs]);
-
-  const shouldShowTooltip = chartsTooltip != null;
+  }, [basalProfileData, insulinData, shouldShowTooltip, tooltipAnchorTimeMs]);
 
   const tooltipOverlayTestID = testID ? `${testID}.tooltipOverlay` : undefined;
   const tooltipDockTestID = testID ? `${testID}.tooltipDock` : undefined;
