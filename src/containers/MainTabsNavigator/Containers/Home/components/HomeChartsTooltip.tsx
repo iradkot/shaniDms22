@@ -205,8 +205,8 @@ const BgPill = styled.View`
   flex-direction: row;
   align-items: center;
   border-width: 1px;
-  padding-vertical: 6px;
-  padding-horizontal: 10px;
+  padding-vertical: ${({theme}: {theme: ThemeType}) => theme.spacing.sm - 2}px;
+  padding-horizontal: ${({theme}: {theme: ThemeType}) => theme.spacing.md - 2}px;
   border-radius: 999px;
   background-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.white, 0.95)};
 `;
@@ -245,7 +245,7 @@ const StatLabel = styled.Text`
 `;
 
 const StatValue = styled.Text`
-  margin-top: 2px;
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.xs / 2}px;
   font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.lg}px;
   font-weight: 900;
   color: ${({theme}: {theme: ThemeType}) => theme.textColor};

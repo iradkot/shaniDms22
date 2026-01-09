@@ -307,7 +307,7 @@ const BgValueText = styled.Text<{theme: ThemeType}>`
 `;
 
 const TimeText = styled.Text<{theme: ThemeType}>`
-  margin-top: 2px;
+  margin-top: ${(props: {theme: ThemeType}) => props.theme.spacing.xs / 2}px;
   font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.xs}px;
   color: ${(props: {theme: ThemeType}) => props.theme.textColor};
 `;
