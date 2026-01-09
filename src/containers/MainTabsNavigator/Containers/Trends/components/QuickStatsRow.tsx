@@ -1,5 +1,5 @@
 import React from 'react';
-import {Pressable, View} from 'react-native';
+import {ActivityIndicator, Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import styled, {useTheme} from 'styled-components/native';
 
@@ -19,6 +19,8 @@ type Props = {
   avgTddTestID?: string;
 
   onPressSevereHypos?: () => void;
+
+  isSevereHyposLoading?: boolean;
 };
 
 const Section = styled.View.attrs({collapsable: false})`
@@ -47,11 +49,17 @@ const CardSurface = styled.View.attrs({collapsable: false})`
   width: 100%;
 `;
 
-const PressableCardSurface = styled(Pressable).attrs({collapsable: false})`
-  background-color: ${({theme}: {theme: ThemeType}) => theme.white};
+const PressableCardSurface = styled(Pressable).attrs(({theme}: {theme: ThemeType}) => ({
+  collapsable: false,
+  android_ripple: {color: addOpacity(theme.accentColor, 0.12)},
+}))`
+  background-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.accentColor, 0.04)};
   border-radius: 12px;
   padding: 12px;
   width: 100%;
+  border-width: 1px;
+  border-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.accentColor, 0.35)};
+  overflow: hidden;
 `;
 
 const TitleRow = styled.View.attrs({collapsable: false})`
@@ -60,7 +68,9 @@ const TitleRow = styled.View.attrs({collapsable: false})`
   justify-content: space-between;
 `;
 
-const CardTitle = styled.Text`
+const CardTitle = styled.Text.attrs({numberOfLines: 1, allowFontScaling: false})`
+  flex: 1;
+  margin-right: 8px;
   font-size: 12px;
   font-weight: 700;
   color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.75)};
@@ -80,6 +90,24 @@ const CardSubtle = styled.Text`
   color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.65)};
 `;
 
+const Pill = styled.View`
+  padding: 4px 8px;
+  border-radius: 999px;
+  background-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.accentColor, 0.12)};
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  max-width: 140px;
+  flex-shrink: 0;
+  overflow: hidden;
+`;
+
+const PillText = styled.Text.attrs({numberOfLines: 1, allowFontScaling: false})`
+  font-size: 11px;
+  font-weight: 800;
+  color: ${({theme}: {theme: ThemeType}) => theme.accentColor};
+`;
+
 function fmtMaybe(value: number | null, suffix = ''): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
   return `${value}${suffix}`;
@@ -94,6 +122,7 @@ export const QuickStatsRow: React.FC<Props> = ({
   avgCarbsGPerDay,
   avgTddTestID,
   onPressSevereHypos,
+  isSevereHyposLoading,
 }) => {
   const theme = useTheme() as ThemeType;
 
@@ -138,18 +167,34 @@ export const QuickStatsRow: React.FC<Props> = ({
               accessibilityRole="button"
               accessibilityLabel="Severe Hypos"
               accessibilityHint="Opens hypo investigation"
+              accessibilityState={{disabled: Boolean(isSevereHyposLoading)}}
+              disabled={Boolean(isSevereHyposLoading)}
               onPress={onPressSevereHypos}
+              style={({pressed}: {pressed: boolean}) => ({
+                opacity: isSevereHyposLoading ? 0.6 : pressed ? 0.86 : 1,
+                transform: [{scale: pressed ? 0.99 : 1}],
+              })}
             >
               <TitleRow>
                 <CardTitle>Severe Hypos</CardTitle>
-                <Icon
-                  name="chevron-right"
-                  size={18}
-                  color={addOpacity(theme.textColor, 0.45)}
-                />
+                {isSevereHyposLoading ? (
+                  <ActivityIndicator size="small" color={theme.accentColor} />
+                ) : (
+                  <Pill>
+                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                      <PillText>Investigate</PillText>
+                      <View style={{width: 4}} />
+                      <Icon name="chevron-right" size={16} color={theme.accentColor} />
+                    </View>
+                  </Pill>
+                )}
               </TitleRow>
               <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
-              <CardSubtle>Events &lt; {severeHypoThreshold} mg/dL</CardSubtle>
+              <CardSubtle>
+                {isSevereHyposLoading
+                  ? 'Opening…'
+                  : `Events < ${severeHypoThreshold} mg/dL`}
+              </CardSubtle>
             </PressableCardSurface>
           ) : (
             <CardSurface>

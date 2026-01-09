@@ -227,7 +227,13 @@ const App: () => React.ReactElement = () => {
                               />
 
                               <Stack.Screen
-                                options={{headerShown: true, headerTitle: 'Hypo investigation'}}
+                                options={{
+                                  headerShown: true,
+                                  headerTitle: 'Hypo investigation',
+                                  headerTopInsetEnabled: false,
+                                  headerStyle: {height: 48},
+                                  headerTitleStyle: {fontSize: 16, fontWeight: '700'},
+                                }}
                                 name={HYPO_INVESTIGATION_SCREEN}
                                 component={HypoInvestigationScreen}
                               />

@@ -1,6 +1,6 @@
 // /Trends/TrendsContainer.tsx
 
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {View, ScrollView, Text} from 'react-native';
 import {differenceInCalendarDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
@@ -108,14 +108,26 @@ const Trends: React.FC = () => {
 
   const {stats: quickStats} = useTrendsQuickStats({bgData, start, end, rangeDays});
 
+  const hypoInvestigationNavLockRef = useRef(false);
+  const hypoInvestigationUnlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isOpeningHypoInvestigation, setIsOpeningHypoInvestigation] = useState(false);
+
   const severeHypoThreshold = useMemo(() => {
     const raw = cgmRange[CGM_STATUS_CODES.EXTREME_LOW];
     return typeof raw === 'number' && Number.isFinite(raw) ? raw : cgmRange.TARGET.min;
   }, []);
 
   const openHypoInvestigation = useCallback(() => {
+    if (hypoInvestigationNavLockRef.current) return;
+    hypoInvestigationNavLockRef.current = true;
+    setIsOpeningHypoInvestigation(true);
+
+    if (hypoInvestigationUnlockTimeoutRef.current != null) {
+      clearTimeout(hypoInvestigationUnlockTimeoutRef.current);
+      hypoInvestigationUnlockTimeoutRef.current = null;
+    }
+
     const payload = {
-      bgData,
       startMs: start.getTime(),
       endMs: end.getTime(),
       lowThreshold: severeHypoThreshold,
@@ -127,7 +139,49 @@ const Trends: React.FC = () => {
       action,
       fallbackNavigate: () => (navigation as any).navigate?.(HYPO_INVESTIGATION_SCREEN, payload),
     });
-  }, [bgData, end, navigation, severeHypoThreshold, start]);
+
+    // Safety: if navigation fails for any reason, unlock after a short delay.
+    hypoInvestigationUnlockTimeoutRef.current = setTimeout(() => {
+      hypoInvestigationNavLockRef.current = false;
+      setIsOpeningHypoInvestigation(false);
+      hypoInvestigationUnlockTimeoutRef.current = null;
+    }, 4000);
+  }, [end, navigation, severeHypoThreshold, start]);
+
+  useEffect(() => {
+    const unsubscribeFocus = (navigation as any)?.addListener?.('focus', () => {
+      hypoInvestigationNavLockRef.current = false;
+      setIsOpeningHypoInvestigation(false);
+
+      if (hypoInvestigationUnlockTimeoutRef.current != null) {
+        clearTimeout(hypoInvestigationUnlockTimeoutRef.current);
+        hypoInvestigationUnlockTimeoutRef.current = null;
+      }
+    });
+
+    const unsubscribeBlur = (navigation as any)?.addListener?.('blur', () => {
+      // If we successfully navigated away, stop showing loading.
+      // The lock is also safe to release because the user can't spam the button
+      // while this screen is not focused.
+      hypoInvestigationNavLockRef.current = false;
+      setIsOpeningHypoInvestigation(false);
+
+      if (hypoInvestigationUnlockTimeoutRef.current != null) {
+        clearTimeout(hypoInvestigationUnlockTimeoutRef.current);
+        hypoInvestigationUnlockTimeoutRef.current = null;
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribeFocus === 'function') unsubscribeFocus();
+      if (typeof unsubscribeBlur === 'function') unsubscribeBlur();
+
+      if (hypoInvestigationUnlockTimeoutRef.current != null) {
+        clearTimeout(hypoInvestigationUnlockTimeoutRef.current);
+        hypoInvestigationUnlockTimeoutRef.current = null;
+      }
+    };
+  }, [navigation]);
 
   // 3) Compare logic
   const [showComparison, setShowComparison] = useState(false);
@@ -313,6 +367,7 @@ const Trends: React.FC = () => {
               avgCarbsGPerDay={quickStats.avgCarbsGPerDay}
               avgTddTestID={E2E_TEST_IDS.trends.quickStatsAvgTdd}
               onPressSevereHypos={openHypoInvestigation}
+              isSevereHyposLoading={isOpeningHypoInvestigation}
             />
           </View>
 
