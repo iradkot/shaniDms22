@@ -22,6 +22,12 @@ export const configureNightscoutInstance = (config: NightscoutAxiosConfig) => {
   }
 };
 
+/** Clears Nightscout base URL and auth header (used when no profile is active). */
+export const clearNightscoutInstance = () => {
+  delete (nightscoutInstance.defaults as any).baseURL;
+  delete (nightscoutInstance.defaults.headers.common as any)['api-secret'];
+};
+
 export const getNightscoutBaseUrl = () => nightscoutInstance.defaults.baseURL;
 
 export const isNightscoutConfigured = () => !!nightscoutInstance.defaults.baseURL;

@@ -97,7 +97,8 @@ export const normalizeNightscoutApiSecretToSha1 = (raw: string): string | null =
 
 const makeId = () => `ns_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-const labelFromBaseUrl = (baseUrl: string) => {
+/** Derives a user-friendly label from the Nightscout base URL (best-effort). */
+export const labelFromNightscoutBaseUrl = (baseUrl: string): string => {
   try {
     const url = new URL(baseUrl);
     return url.hostname;
@@ -169,7 +170,7 @@ export const createNightscoutProfile = (params: {
   const createdAt = Date.now();
   return {
     id: makeId(),
-    label: params.label?.trim() ? params.label.trim() : labelFromBaseUrl(baseUrl),
+    label: params.label?.trim() ? params.label.trim() : labelFromNightscoutBaseUrl(baseUrl),
     baseUrl,
     apiSecretSha1,
     createdAt,

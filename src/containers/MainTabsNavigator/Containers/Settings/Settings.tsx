@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {ScrollView, Switch, Text, TextInput, TouchableOpacity, View} from 'react-native';
+import {ScrollView, Switch, Text, TextInput, View} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {theme} from 'app/style/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
@@ -10,68 +10,8 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import ADIcon from 'react-native-vector-icons/AntDesign';
 import {useNavigation} from '@react-navigation/native';
 import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
-
-const rowStyle = {
-  flexDirection: 'row' as const,
-  alignItems: 'center' as const,
-  paddingVertical: theme.spacing.md,
-  paddingHorizontal: theme.spacing.lg,
-  borderBottomWidth: 1,
-  borderBottomColor: theme.borderColor,
-};
-
-const iconContainerStyle = {
-  width: 28,
-  alignItems: 'center' as const,
-  marginRight: theme.spacing.md,
-};
-
-const labelStyle = {
-  color: theme.textColor,
-  fontSize: theme.typography.size.md,
-  flex: 1,
-  paddingRight: theme.spacing.md,
-};
-
-const sectionHeaderRowStyle = {
-  flexDirection: 'row' as const,
-  alignItems: 'center' as const,
-  justifyContent: 'space-between' as const,
-};
-
-const sectionHeaderTextStyle = {
-  color: theme.textColor,
-  fontSize: theme.typography.size.lg,
-  fontWeight: '600' as const,
-};
-
-const sectionHeaderContainerStyle = {
-  paddingHorizontal: theme.spacing.lg,
-  paddingTop: theme.spacing.lg,
-  paddingBottom: theme.spacing.sm,
-};
-
-function SectionHeader(props: {title: string; expanded: boolean; onToggle: () => void}) {
-  const {title, expanded, onToggle} = props;
-
-  return (
-    <TouchableOpacity
-      accessibilityRole="button"
-      onPress={onToggle}
-      style={sectionHeaderContainerStyle}
-      hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
-    >
-      <View style={sectionHeaderRowStyle}>
-        <Text style={sectionHeaderTextStyle}>{title}</Text>
-        <MaterialIcons
-          name={expanded ? 'expand-less' : 'expand-more'}
-          size={24}
-          color={theme.textColor}
-        />
-      </View>
-    </TouchableOpacity>
-  );
-}
+import {NightscoutSection} from './sections/NightscoutSection';
+import {iconContainerStyle, labelStyle, rowStyle, SectionHeader} from './settingsShared';
 
 const UI_STORAGE_KEY = 'settings.ui.v1';
 
@@ -80,7 +20,7 @@ const Settings: React.FC = () => {
   const {settings, setSetting} = useTabsSettings();
   const {settings: glucoseSettings, setSetting: setGlucoseSetting, isLoaded: glucoseLoaded} =
     useGlucoseSettings();
-  const {profiles, activeProfile, setActiveProfileId} = useNightscoutConfig();
+  const {profiles, activeProfile, setActiveProfileId, deleteProfile} = useNightscoutConfig();
 
   const [showDisplayedTabs, setShowDisplayedTabs] = useState(true);
   const [showNightscout, setShowNightscout] = useState(false);
@@ -339,105 +279,20 @@ const Settings: React.FC = () => {
         )}
       </View>
 
-      <View>
-        <SectionHeader
-          title="Nightscout"
-          expanded={showNightscout}
-          onToggle={() => setShowNightscout(v => !v)}
-        />
-
-        {showNightscout && (
-          <>
-            <View style={rowStyle}>
-              <View style={iconContainerStyle}>
-                <MaterialIcons name="cloud" size={20} color={theme.textColor} />
-              </View>
-              <View style={{flex: 1, paddingRight: theme.spacing.md}}>
-                <Text style={{color: theme.textColor, fontSize: theme.typography.size.md}}>
-                  Active profile
-                </Text>
-                <Text
-                  style={{
-                    color: theme.textColor,
-                    fontSize: theme.typography.size.sm,
-                    opacity: 0.8,
-                    marginTop: 2,
-                  }}
-                >
-                  {activeProfile ? `${activeProfile.label} (${activeProfile.baseUrl})` : 'Not configured'}
-                </Text>
-              </View>
-            </View>
-
-            {profiles.map(p => {
-              const isActive = activeProfile?.id === p.id;
-              return (
-                <TouchableOpacity
-                  key={p.id}
-                  accessibilityRole="button"
-                  onPress={() => setActiveProfileId(p.id)}
-                  style={rowStyle}
-                >
-                  <View style={iconContainerStyle}>
-                    <MaterialIcons
-                      name={isActive ? 'radio-button-checked' : 'radio-button-unchecked'}
-                      size={20}
-                      color={theme.textColor}
-                    />
-                  </View>
-                  <View style={{flex: 1, paddingRight: theme.spacing.md}}>
-                    <Text style={{color: theme.textColor, fontSize: theme.typography.size.md}}>
-                      {p.label}
-                    </Text>
-                    <Text
-                      style={{
-                        color: theme.textColor,
-                        fontSize: theme.typography.size.sm,
-                        opacity: 0.8,
-                        marginTop: 2,
-                      }}
-                    >
-                      {p.baseUrl}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-
-            <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md}}>
-              <TouchableOpacity
-                accessibilityRole="button"
-                onPress={() => navigation.navigate(NIGHTSCOUT_SETUP_SCREEN)}
-                style={{
-                  paddingVertical: theme.spacing.md,
-                  paddingHorizontal: theme.spacing.lg,
-                  backgroundColor: theme.accentColor,
-                  borderRadius: theme.borderRadius,
-                  alignSelf: 'flex-start',
-                }}
-              >
-                <Text style={{color: theme.buttonTextColor, fontWeight: '600'}}>
-                  Add Nightscout profile
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {!profiles.length && (
-              <Text
-                style={{
-                  color: theme.textColor,
-                  fontSize: theme.typography.size.sm,
-                  opacity: 0.8,
-                  paddingHorizontal: theme.spacing.lg,
-                  paddingTop: theme.spacing.sm,
-                }}
-              >
-                You need at least one Nightscout profile to view data.
-              </Text>
-            )}
-          </>
-        )}
-      </View>
+      <NightscoutSection
+        expanded={showNightscout}
+        onToggleExpanded={() => setShowNightscout(v => !v)}
+        profiles={profiles}
+        activeProfile={activeProfile}
+        onSelectProfile={id => setActiveProfileId(id)}
+        onEditProfile={id => navigation.navigate(NIGHTSCOUT_SETUP_SCREEN, {profileId: id})}
+        onDeleteProfile={id => {
+          deleteProfile(id).catch(() => {
+            // Best-effort; avoid crashing Settings.
+          });
+        }}
+        onAddProfile={() => navigation.navigate(NIGHTSCOUT_SETUP_SCREEN)}
+      />
 
       <View>
         <SectionHeader

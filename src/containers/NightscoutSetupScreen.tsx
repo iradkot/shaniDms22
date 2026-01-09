@@ -1,6 +1,6 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View} from 'react-native';
-import {NavigationProp, useNavigation} from '@react-navigation/native';
+import {NavigationProp, useNavigation, useRoute} from '@react-navigation/native';
 import {theme} from 'app/style/theme';
 import {useNightscoutConfig} from 'app/contexts/NightscoutConfigContext';
 import {MAIN_TAB_NAVIGATOR} from 'app/constants/SCREEN_NAMES';
@@ -15,12 +15,28 @@ const inputStyle = {
   backgroundColor: theme.white,
 };
 
+/**
+ * Nightscout configuration screen.
+ *
+ * - When opened without params, adds a new profile.
+ * - When opened with `{profileId}`, edits that existing profile.
+ */
 const NightscoutSetupScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<any>>();
-  const {addProfile} = useNightscoutConfig();
+  const route = useRoute<any>();
+  const {addProfile, updateProfile, profiles} = useNightscoutConfig();
 
-  const [urlInput, setUrlInput] = useState('');
+  const profileId: string | undefined = route?.params?.profileId;
+  const editingProfile = profileId ? profiles.find(p => p.id === profileId) : undefined;
+
+  const [urlInput, setUrlInput] = useState(editingProfile?.baseUrl ?? '');
   const [secretInput, setSecretInput] = useState('');
+    useEffect(() => {
+      // Prefill after async profile load, but don't clobber user edits.
+      if (editingProfile?.baseUrl && !urlInput.trim()) {
+        setUrlInput(editingProfile.baseUrl);
+      }
+    }, [editingProfile?.baseUrl, urlInput]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -29,7 +45,11 @@ const NightscoutSetupScreen: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      await addProfile({urlInput, secretInput});
+      if (editingProfile) {
+        await updateProfile({profileId: editingProfile.id, urlInput, secretInput});
+      } else {
+        await addProfile({urlInput, secretInput});
+      }
 
       if (typeof (navigation as any).canGoBack === 'function' && (navigation as any).canGoBack()) {
         navigation.goBack();
@@ -63,7 +83,7 @@ const NightscoutSetupScreen: React.FC = () => {
           marginBottom: theme.spacing.md,
         }}
       >
-        Connect Nightscout
+        {editingProfile ? 'Edit Nightscout' : 'Connect Nightscout'}
       </Text>
 
       <Text style={{color: theme.textColor, opacity: 0.8, marginBottom: theme.spacing.lg}}>
@@ -89,7 +109,7 @@ const NightscoutSetupScreen: React.FC = () => {
       <TextInput
         value={secretInput}
         onChangeText={setSecretInput}
-        placeholder="API secret"
+        placeholder={editingProfile ? 'Leave blank to keep current' : 'API secret'}
         placeholderTextColor={theme.textColor}
         autoCapitalize="none"
         autoCorrect={false}
