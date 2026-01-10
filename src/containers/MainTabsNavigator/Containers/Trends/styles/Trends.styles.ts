@@ -5,7 +5,7 @@ import {TouchableOpacity} from 'react-native';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
-export const TrendsContainer = styled.View<{theme: ThemeType}>`
+export const TrendsContainer = styled.View.attrs({collapsable: false})<{theme: ThemeType}>`
   flex: 1;
   background-color: ${({theme}) => theme.backgroundColor};
   padding: ${({theme}) => theme.spacing.sm + 2}px;
@@ -86,11 +86,6 @@ export const InteractiveRowText = styled.Text`
 export const Emoji = styled.Text`
   font-size: 16px;
 `;
-
-interface StyledViewProps {
-  alignItems?: 'flex-start' | 'flex-end' | 'center' | 'stretch' | 'baseline';
-  marginBottom?: number;
-}
 
 export const Row = styled.View`
   flex-direction: row;

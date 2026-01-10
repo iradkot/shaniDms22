@@ -52,98 +52,115 @@ appId: com.shanidms22
       id: oracle.events.list
     timeout: 30000
 
-# Tap first event.
-- tapOn:
-    id: oracle.events.row.0
-
-# Ensure chart renders (may be below the fold on smaller devices).
-- scrollUntilVisible:
-    element:
-      id: chart.oracle.ghostGraph
-    direction: DOWN
-    timeout: 30000
-
-# Ensure strategies section appears (may be below the fold).
-- scrollUntilVisible:
-    element:
-      id: oracle.strategies.list
-    direction: DOWN
-    timeout: 30000
-
-- assertVisible:
-    id: oracle.strategies.list
-
-- scrollUntilVisible:
-    element:
-      id: oracle.disclaimer
-    direction: DOWN
-    timeout: 30000
-
-- assertVisible:
-    id: oracle.disclaimer
-
-# Ensure previous events section appears (may be below the fold).
-- scrollUntilVisible:
-    element:
-      id: oracle.previous.list
-    direction: DOWN
-    timeout: 30000
-
-- assertVisible:
-    id: oracle.previous.list
-
-# Try to bring either the "no matches" empty state or the first row into view.
-- scrollUntilVisible:
-    element:
-      id: oracle.previous.noMatches
-    direction: UP
-    timeout: 8000
+# Either we have events (tap the first), or we show the empty state.
+- extendedWaitUntil:
+    visible:
+      id: oracle.events.row.0
+    timeout: 15000
     optional: true
 
-- scrollUntilVisible:
-    element:
-      id: oracle.previous.noMatches
-    direction: DOWN
-    timeout: 8000
-    optional: true
-
-- scrollUntilVisible:
-    element:
-      id: oracle.previous.row.0
-    direction: UP
-    timeout: 8000
-    optional: true
-
-- scrollUntilVisible:
-    element:
-      id: oracle.previous.row.0
-    direction: DOWN
-    timeout: 8000
-    optional: true
-
-# If there are no matches, we expect the explicit empty state.
 - runFlow:
     when:
       visible:
-        id: oracle.previous.noMatches
-    commands:
-      - assertVisible:
-          id: oracle.previous.noMatches
-
-# If at least one previous event exists, tap it and verify details.
-- runFlow:
-    when:
-      visible:
-        id: oracle.previous.row.0
+        id: oracle.events.row.0
     commands:
       - tapOn:
-          id: oracle.previous.row.0
+          id: oracle.events.row.0
+
+      # Ensure chart renders (may be below the fold on smaller devices).
       - scrollUntilVisible:
           element:
-            id: oracle.previous.details
+            id: chart.oracle.ghostGraph
           direction: DOWN
           timeout: 30000
-      - assertVisible:
-          id: oracle.previous.details
 
-- takeScreenshot: oracle-events
+      # Ensure strategies section appears (may be below the fold).
+      - scrollUntilVisible:
+          element:
+            id: oracle.strategies.list
+          direction: DOWN
+          timeout: 30000
+
+      - assertVisible:
+          id: oracle.strategies.list
+
+      - scrollUntilVisible:
+          element:
+            id: oracle.disclaimer
+          direction: DOWN
+          timeout: 30000
+
+      - assertVisible:
+          id: oracle.disclaimer
+
+      # Ensure previous events section appears (may be below the fold).
+      - scrollUntilVisible:
+          element:
+            id: oracle.previous.list
+          direction: DOWN
+          timeout: 30000
+
+      - assertVisible:
+          id: oracle.previous.list
+
+      # Try to bring either the "no matches" empty state or the first row into view.
+      - scrollUntilVisible:
+          element:
+            id: oracle.previous.noMatches
+          direction: UP
+          timeout: 8000
+          optional: true
+
+      - scrollUntilVisible:
+          element:
+            id: oracle.previous.noMatches
+          direction: DOWN
+          timeout: 8000
+          optional: true
+
+      - scrollUntilVisible:
+          element:
+            id: oracle.previous.row.0
+          direction: UP
+          timeout: 8000
+          optional: true
+
+      - scrollUntilVisible:
+          element:
+            id: oracle.previous.row.0
+          direction: DOWN
+          timeout: 8000
+          optional: true
+
+      # If there are no matches, we expect the explicit empty state.
+      - runFlow:
+          when:
+            visible:
+              id: oracle.previous.noMatches
+          commands:
+            - assertVisible:
+                id: oracle.previous.noMatches
+
+      # If at least one previous event exists, tap it and verify details.
+      - runFlow:
+          when:
+            visible:
+              id: oracle.previous.row.0
+          commands:
+            - tapOn:
+                id: oracle.previous.row.0
+            - scrollUntilVisible:
+                element:
+                  id: oracle.previous.details
+                direction: DOWN
+                timeout: 30000
+            - assertVisible:
+                id: oracle.previous.details
+
+      - takeScreenshot: oracle-events
+
+- runFlow:
+    when:
+      visible: "No recent events yet."
+    commands:
+      - takeScreenshot: oracle-no-recent-events

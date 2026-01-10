@@ -147,6 +147,9 @@ keys/*
 /home-header-expandable.png
 /nightscout-scan.png
 /oracle-events.png
+/oracle-no-recent-events.png
+/hypo-investigation-screen.png
+/trends-date-range-controls.png
 /trends-quick-stats-after-expand.png
 /trends-quick-stats-average-visible.png
 /trends-quick-stats-before-expand.png

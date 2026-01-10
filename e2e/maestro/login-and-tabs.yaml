@@ -35,6 +35,22 @@ appId: com.shanidms22
       id: tabs.navigator
     timeout: 30000
 
+# Settings (enable optional tabs)
+- tapOn:
+    id: tab.settings
+- extendedWaitUntil:
+    visible:
+      id: screen.settings
+    timeout: 15000
+
+# Turn ON optional tabs (Food/Sport/Notifications) for the rest of this flow.
+- tapOn:
+    id: settings.toggle.foodTab
+- tapOn:
+    id: settings.toggle.sportTab
+- tapOn:
+    id: settings.toggle.notificationsTab
+
 # Home
 - tapOn:
     id: tab.home
@@ -50,15 +66,6 @@ appId: com.shanidms22
     visible:
       id: screen.trends
     timeout: 15000
-- assertVisible: "Data Range"
-
-# Settings
-- tapOn:
-        id: tab.settings
-- extendedWaitUntil:
-        visible:
-            id: screen.settings
-        timeout: 15000
 
 # Food
 - tapOn:

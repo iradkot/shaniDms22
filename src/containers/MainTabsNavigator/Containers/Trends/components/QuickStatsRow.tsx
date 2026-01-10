@@ -7,6 +7,7 @@ import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW, formatHourWindowLabel} from 'app/constants/GLUCOSE_WINDOWS';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 type Props = {
   avgTddUPerDay: number | null;
@@ -15,6 +16,8 @@ type Props = {
   hyposPerWeek: number;
   nightTirPct: number | null;
   avgCarbsGPerDay: number | null;
+
+  longestHypoDurationLabel?: string | null;
 
   avgTddTestID?: string;
 
@@ -47,6 +50,8 @@ const CardSurface = styled.View.attrs({collapsable: false})`
   border-radius: 12px;
   padding: 12px;
   width: 100%;
+  border-width: 1px;
+  border-color: transparent;
 `;
 
 const PressableCardSurface = styled(Pressable).attrs(({theme}: {theme: ThemeType}) => ({
@@ -62,18 +67,16 @@ const PressableCardSurface = styled(Pressable).attrs(({theme}: {theme: ThemeType
   overflow: hidden;
 `;
 
-const TitleRow = styled.View.attrs({collapsable: false})`
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
+const TitleWrap = styled.View.attrs({collapsable: false})`
+  position: relative;
 `;
 
-const CardTitle = styled.Text.attrs({numberOfLines: 1, allowFontScaling: false})`
-  flex: 1;
-  margin-right: 8px;
+const CardTitle = styled.Text`
   font-size: 12px;
   font-weight: 700;
-  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.75)};
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.8)};
 `;
 
 const CardValue = styled.Text<{color?: string}>`
@@ -90,22 +93,16 @@ const CardSubtle = styled.Text`
   color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.65)};
 `;
 
-const Pill = styled.View`
-  padding: 4px 8px;
-  border-radius: 999px;
-  background-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.accentColor, 0.12)};
-  flex-direction: row;
+const RightIconWrap = styled.View`
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
   align-items: center;
   justify-content: center;
-  max-width: 140px;
-  flex-shrink: 0;
-  overflow: hidden;
-`;
-
-const PillText = styled.Text.attrs({numberOfLines: 1, allowFontScaling: false})`
-  font-size: 11px;
-  font-weight: 800;
-  color: ${({theme}: {theme: ThemeType}) => theme.accentColor};
+  background-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.accentColor, 0.10)};
+  position: absolute;
+  right: 0px;
+  top: -4px;
 `;
 
 function fmtMaybe(value: number | null, suffix = ''): string {
@@ -120,6 +117,7 @@ export const QuickStatsRow: React.FC<Props> = ({
   hyposPerWeek,
   nightTirPct,
   avgCarbsGPerDay,
+  longestHypoDurationLabel,
   avgTddTestID,
   onPressSevereHypos,
   isSevereHyposLoading,
@@ -147,23 +145,30 @@ export const QuickStatsRow: React.FC<Props> = ({
       <CardRow>
         <CardWrap $withGap>
           <CardSurface testID={avgTddTestID} collapsable={false}>
-            <CardTitle>Avg TDD</CardTitle>
+            <CardTitle numberOfLines={1}>Avg TDD</CardTitle>
             <CardValue>{fmtMaybe(avgTddRounded, ' U/day')}</CardValue>
             <CardSubtle>Basal + bolus</CardSubtle>
           </CardSurface>
         </CardWrap>
 
-        <CardWrap $withGap>
+        <CardWrap>
           <CardSurface>
-            <CardTitle>Basal / Bolus</CardTitle>
+            <CardTitle numberOfLines={1}>Basal / Bolus</CardTitle>
             <CardValue>{basalBolusText}</CardValue>
             <CardSubtle>Percent of total</CardSubtle>
           </CardSurface>
         </CardWrap>
+      </CardRow>
 
-        <CardWrap>
+      <SectionLabelWrap>
+        <SectionLabel>Hypo investigation</SectionLabel>
+      </SectionLabelWrap>
+
+      <CardRow>
+        <CardWrap $withGap>
           {onPressSevereHypos ? (
             <PressableCardSurface
+              testID={E2E_TEST_IDS.trends.quickStatsSevereHyposCard}
               accessibilityRole="button"
               accessibilityLabel="Severe Hypos"
               accessibilityHint="Opens hypo investigation"
@@ -175,20 +180,20 @@ export const QuickStatsRow: React.FC<Props> = ({
                 transform: [{scale: pressed ? 0.99 : 1}],
               })}
             >
-              <TitleRow>
-                <CardTitle>Severe Hypos</CardTitle>
+              <TitleWrap>
+                <View style={{paddingRight: 32}}>
+                  <CardTitle numberOfLines={1}>Severe Hypos</CardTitle>
+                </View>
                 {isSevereHyposLoading ? (
-                  <ActivityIndicator size="small" color={theme.accentColor} />
+                  <RightIconWrap>
+                    <ActivityIndicator size="small" color={theme.accentColor} />
+                  </RightIconWrap>
                 ) : (
-                  <Pill>
-                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                      <PillText>Investigate</PillText>
-                      <View style={{width: 4}} />
-                      <Icon name="chevron-right" size={16} color={theme.accentColor} />
-                    </View>
-                  </Pill>
+                  <RightIconWrap>
+                    <Icon name="chevron-right" size={18} color={theme.accentColor} />
+                  </RightIconWrap>
                 )}
-              </TitleRow>
+              </TitleWrap>
               <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
               <CardSubtle>
                 {isSevereHyposLoading
@@ -198,9 +203,50 @@ export const QuickStatsRow: React.FC<Props> = ({
             </PressableCardSurface>
           ) : (
             <CardSurface>
-              <CardTitle>Severe Hypos</CardTitle>
+              <CardTitle numberOfLines={1}>Severe Hypos</CardTitle>
               <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
               <CardSubtle>Events &lt; {severeHypoThreshold} mg/dL</CardSubtle>
+            </CardSurface>
+          )}
+        </CardWrap>
+
+        <CardWrap>
+          {onPressSevereHypos ? (
+            <PressableCardSurface
+              testID={E2E_TEST_IDS.trends.quickStatsLongestHypoCard}
+              accessibilityRole="button"
+              accessibilityLabel="Longest hypo"
+              accessibilityHint="Opens hypo investigation"
+              accessibilityState={{disabled: Boolean(isSevereHyposLoading)}}
+              disabled={Boolean(isSevereHyposLoading)}
+              onPress={onPressSevereHypos}
+              style={({pressed}: {pressed: boolean}) => ({
+                opacity: isSevereHyposLoading ? 0.6 : pressed ? 0.86 : 1,
+                transform: [{scale: pressed ? 0.99 : 1}],
+              })}
+            >
+              <TitleWrap>
+                <View style={{paddingRight: 32}}>
+                  <CardTitle numberOfLines={1}>Longest hypo</CardTitle>
+                </View>
+                {isSevereHyposLoading ? (
+                  <RightIconWrap>
+                    <ActivityIndicator size="small" color={theme.accentColor} />
+                  </RightIconWrap>
+                ) : (
+                  <RightIconWrap>
+                    <Icon name="chevron-right" size={18} color={theme.accentColor} />
+                  </RightIconWrap>
+                )}
+              </TitleWrap>
+              <CardValue>{longestHypoDurationLabel ?? '—'}</CardValue>
+              <CardSubtle>In this range</CardSubtle>
+            </PressableCardSurface>
+          ) : (
+            <CardSurface>
+              <CardTitle numberOfLines={1}>Longest hypo</CardTitle>
+              <CardValue>{longestHypoDurationLabel ?? '—'}</CardValue>
+              <CardSubtle>In this range</CardSubtle>
             </CardSurface>
           )}
         </CardWrap>
@@ -209,7 +255,7 @@ export const QuickStatsRow: React.FC<Props> = ({
       <CardRow>
         <CardWrap $withGap>
           <CardSurface>
-            <CardTitle>Night TIR</CardTitle>
+            <CardTitle numberOfLines={1}>Night TIR</CardTitle>
             <CardValue>{fmtMaybe(nightTirPct !== null ? Math.round(nightTirPct) : null, '%')}</CardValue>
             <CardSubtle>{formatHourWindowLabel(DEFAULT_NIGHT_WINDOW)}</CardSubtle>
           </CardSurface>
@@ -217,7 +263,7 @@ export const QuickStatsRow: React.FC<Props> = ({
 
         <CardWrap>
           <CardSurface>
-            <CardTitle>Avg Carbs</CardTitle>
+            <CardTitle numberOfLines={1}>Avg Carbs</CardTitle>
             <CardValue>{fmtMaybe(avgCarbsGPerDay !== null ? Math.round(avgCarbsGPerDay) : null, ' g/day')}</CardValue>
             <CardSubtle>Treatments carbs</CardSubtle>
           </CardSurface>
@@ -226,5 +272,17 @@ export const QuickStatsRow: React.FC<Props> = ({
     </Section>
   );
 };
+
+const SectionLabelWrap = styled.View`
+  padding-left: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
+  padding-right: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
+  padding-bottom: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
+`;
+
+const SectionLabel = styled.Text`
+  font-size: 12px;
+  font-weight: 800;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.7)};
+`;
 
 export default QuickStatsRow;

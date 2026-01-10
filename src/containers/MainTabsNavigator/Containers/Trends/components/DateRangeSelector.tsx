@@ -1,12 +1,12 @@
 // /Trends/components/DateRangeSelector.tsx
-import React, {useMemo, useState} from 'react';
-import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import React, {useCallback, useMemo} from 'react';
+import {Alert} from 'react-native';
+import {DateTimePickerAndroid} from '@react-native-community/datetimepicker';
 import styled from 'styled-components/native';
 
-import {
-  ExplanationText,
-} from '../styles/Trends.styles';
 import {addOpacity} from 'app/style/styling.utils';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {isE2E} from 'app/utils/e2e';
 
 interface Props {
   presetDays: number;
@@ -18,8 +18,6 @@ interface Props {
   onEndDateChange: (date: Date) => void;
 }
 
-type PickerType = 'start' | 'end' | null;
-
 export const DateRangeSelector: React.FC<Props> = ({
   presetDays,
   onPresetDaysChange,
@@ -28,63 +26,106 @@ export const DateRangeSelector: React.FC<Props> = ({
   onStartDateChange,
   onEndDateChange,
 }) => {
-  const [activePicker, setActivePicker] = useState<PickerType>(null);
-
   const today = useMemo(() => new Date(), []);
   const startLabel = useMemo(() => startDate.toLocaleDateString(), [startDate]);
   const endLabel = useMemo(() => endDate.toLocaleDateString(), [endDate]);
+
+  const addDays = useCallback((date: Date, deltaDays: number) => {
+    const next = new Date(date);
+    next.setDate(next.getDate() + deltaDays);
+    return next;
+  }, []);
+
+  const clampDate = useCallback((date: Date, min: Date, max: Date) => {
+    const time = Math.min(max.getTime(), Math.max(min.getTime(), date.getTime()));
+    return new Date(time);
+  }, []);
+
+  const openStartPicker = useCallback(() => {
+    if (isE2E) {
+      const max = endDate > today ? today : endDate;
+      onStartDateChange(clampDate(addDays(startDate, -1), new Date(0), max));
+      return;
+    }
+
+    try {
+      DateTimePickerAndroid.open({
+        value: startDate,
+        mode: 'date',
+        maximumDate: endDate > today ? today : endDate,
+        onChange: (event, selectedDate) => {
+          if (event?.type !== 'set' || !selectedDate) return;
+          onStartDateChange(selectedDate);
+        },
+      });
+    } catch (e) {
+      Alert.alert(
+        'Date picker unavailable',
+        'The native date picker module is not available in this build. Please rebuild the Android app.',
+      );
+    }
+  }, [addDays, clampDate, endDate, onStartDateChange, startDate, today]);
+
+  const openEndPicker = useCallback(() => {
+    if (isE2E) {
+      onEndDateChange(clampDate(addDays(endDate, 1), startDate, today));
+      return;
+    }
+
+    try {
+      DateTimePickerAndroid.open({
+        value: endDate,
+        mode: 'date',
+        minimumDate: startDate,
+        maximumDate: today,
+        onChange: (event, selectedDate) => {
+          if (event?.type !== 'set' || !selectedDate) return;
+          onEndDateChange(selectedDate);
+        },
+      });
+    } catch (e) {
+      Alert.alert(
+        'Date picker unavailable',
+        'The native date picker module is not available in this build. Please rebuild the Android app.',
+      );
+    }
+  }, [addDays, clampDate, endDate, onEndDateChange, startDate, today]);
 
   return (
     <Container>
       <PillRow>
         <Pill>
-          <PillSegment selected={presetDays === 7} onPress={() => onPresetDaysChange(7)}>
+          <PillSegment
+            testID={E2E_TEST_IDS.trends.dateRangePreset7}
+            selected={presetDays === 7}
+            onPress={() => onPresetDaysChange(7)}>
             <PillSegmentText selected={presetDays === 7}>7 Days</PillSegmentText>
           </PillSegment>
-          <PillSegment selected={presetDays === 14} onPress={() => onPresetDaysChange(14)}>
+          <PillSegment
+            testID={E2E_TEST_IDS.trends.dateRangePreset14}
+            selected={presetDays === 14}
+            onPress={() => onPresetDaysChange(14)}>
             <PillSegmentText selected={presetDays === 14}>14 Days</PillSegmentText>
           </PillSegment>
-          <PillSegment selected={presetDays === 30} onPress={() => onPresetDaysChange(30)}>
+          <PillSegment
+            testID={E2E_TEST_IDS.trends.dateRangePreset30}
+            selected={presetDays === 30}
+            onPress={() => onPresetDaysChange(30)}>
             <PillSegmentText selected={presetDays === 30}>30 Days</PillSegmentText>
           </PillSegment>
         </Pill>
       </PillRow>
 
       <CustomRow>
-        <RangeButton onPress={() => setActivePicker('start')}>
+        <RangeButton testID={E2E_TEST_IDS.trends.dateRangeFromButton} onPress={openStartPicker}>
           <RangeButtonText>From: {startLabel}</RangeButtonText>
         </RangeButton>
-        <RangeButton onPress={() => setActivePicker('end')}>
+        <RangeButton testID={E2E_TEST_IDS.trends.dateRangeToButton} onPress={openEndPicker}>
           <RangeButtonText>To: {endLabel}</RangeButtonText>
         </RangeButton>
       </CustomRow>
 
       <HelpText>Or pick exact dates</HelpText>
-
-      <DateTimePickerModal
-        isVisible={activePicker === 'start'}
-        date={startDate}
-        mode="date"
-        maximumDate={endDate > today ? today : endDate}
-        onConfirm={date => {
-          setActivePicker(null);
-          onStartDateChange(date);
-        }}
-        onCancel={() => setActivePicker(null)}
-      />
-
-      <DateTimePickerModal
-        isVisible={activePicker === 'end'}
-        date={endDate}
-        mode="date"
-        minimumDate={startDate}
-        maximumDate={today}
-        onConfirm={date => {
-          setActivePicker(null);
-          onEndDateChange(date);
-        }}
-        onCancel={() => setActivePicker(null)}
-      />
     </Container>
   );
 };
@@ -125,9 +166,11 @@ const CustomRow = styled.View`
   justify-content: center;
 `;
 
-const HelpText = styled(ExplanationText)`
+const HelpText = styled.Text`
   text-align: center;
   margin-top: 6px;
+  font-size: 14px;
+  color: ${({theme}) => addOpacity(theme.textColor, 0.9)};
 `;
 
 const RangeButton = styled.TouchableOpacity`

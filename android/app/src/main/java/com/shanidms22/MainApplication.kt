@@ -11,6 +11,7 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
+import com.reactcommunity.rndatetimepicker.RNDateTimePickerPackage
 import com.shanidms22.e2e.E2EConfigPackage
 
 class MainApplication : Application(), ReactApplication {
@@ -21,6 +22,10 @@ class MainApplication : Application(), ReactApplication {
             PackageList(this).packages.apply {
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())
+              val hasDateTimePicker = any { it.javaClass.name == RNDateTimePickerPackage::class.java.name }
+              if (!hasDateTimePicker) {
+                add(RNDateTimePickerPackage())
+              }
               add(E2EConfigPackage())
             }
 

@@ -20,7 +20,6 @@ import { DataFetchStatus } from './components/DataFetchStatus';
 import { DateRangeSelector } from './components/DateRangeSelector';
 import { CompareSection } from './components/CompareSection';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
-import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
 // (If you have insulin data, pass it in above.)
 
 import Collapsable from 'app/components/Collapsable';
@@ -28,6 +27,7 @@ import { DayInsights } from './TrendsUI'; // <--- Now it exists for real!
 import {AGPSummary} from 'app/components/charts/AGPGraph';
 import QuickStatsRow from './components/QuickStatsRow';
 import {useTrendsQuickStats} from './hooks/useTrendsQuickStats';
+import {extractHypoEvents} from 'app/containers/MainTabsNavigator/Containers/Trends/utils/hypoInvestigation.utils';
 
 import {
   TrendsContainer,
@@ -116,6 +116,18 @@ const Trends: React.FC = () => {
     const raw = cgmRange[CGM_STATUS_CODES.EXTREME_LOW];
     return typeof raw === 'number' && Number.isFinite(raw) ? raw : cgmRange.TARGET.min;
   }, []);
+
+  const longestSevereHypoDurationLabel = useMemo(() => {
+    if (!bgData?.length) return null;
+    const events = extractHypoEvents({bgData, lowThreshold: severeHypoThreshold});
+    if (!events.length) return null;
+    const maxMs = events.reduce((m, e) => Math.max(m, Math.max(0, e.endMs - e.startMs)), 0);
+    const minutes = Math.max(1, Math.round(maxMs / 60_000));
+    if (minutes < 60) return `${minutes}m`;
+    const h = Math.floor(minutes / 60);
+    const mm = minutes % 60;
+    return mm ? `${h}h ${mm}m` : `${h}h`;
+  }, [bgData, severeHypoThreshold]);
 
   const openHypoInvestigation = useCallback(() => {
     if (hypoInvestigationNavLockRef.current) return;
@@ -307,14 +319,6 @@ const Trends: React.FC = () => {
         onEndDateChange={handleCustomEndChange}
       />
 
-      {/* 2. Current date range info */}
-      <View style={{alignItems: 'center', marginVertical: theme.spacing.sm + 2}}>
-        <SectionTitle>Data Range</SectionTitle>
-        <ExplanationText>
-          {start.toDateString()} to {end.toDateString()} ({rangeDays} days)
-        </ExplanationText>
-      </View>
-
       {/* 3. Loading/Error/No data status */}
       <DataFetchStatus
         isLoading={isLoading}
@@ -365,6 +369,7 @@ const Trends: React.FC = () => {
               hyposPerWeek={quickStats.hyposPerWeek}
               nightTirPct={quickStats.nightTirPct}
               avgCarbsGPerDay={quickStats.avgCarbsGPerDay}
+              longestHypoDurationLabel={longestSevereHypoDurationLabel}
               avgTddTestID={E2E_TEST_IDS.trends.quickStatsAvgTdd}
               onPressSevereHypos={openHypoInvestigation}
               isSevereHyposLoading={isOpeningHypoInvestigation}

@@ -36,12 +36,12 @@ appId: com.shanidms22
       id: tabs.navigator
     timeout: 30000
 
-# Defaults should be ON after clearState.
-- assertVisible:
+# Defaults should be OFF after clearState.
+- assertNotVisible:
     id: tab.food
-- assertVisible:
+- assertNotVisible:
     id: tab.sport
-- assertVisible:
+- assertNotVisible:
     id: tab.notifications
 
 # Go to Settings.
@@ -60,15 +60,15 @@ appId: com.shanidms22
 - tapOn:
     id: settings.toggle.notificationsTab
 
-# Tabs should disappear from the tab bar.
-- assertNotVisible:
+# Tabs should now appear in the tab bar.
+- assertVisible:
     id: tab.food
-- assertNotVisible:
+- assertVisible:
     id: tab.sport
-- assertNotVisible:
+- assertVisible:
     id: tab.notifications
 
-# Turn them back ON.
+# Turn them back OFF.
 - tapOn:
     id: settings.toggle.foodTab
 - tapOn:
@@ -76,9 +76,9 @@ appId: com.shanidms22
 - tapOn:
     id: settings.toggle.notificationsTab
 
-- assertVisible:
+- assertNotVisible:
     id: tab.food
-- assertVisible:
+- assertNotVisible:
     id: tab.sport
-- assertVisible:
+- assertNotVisible:
     id: tab.notifications

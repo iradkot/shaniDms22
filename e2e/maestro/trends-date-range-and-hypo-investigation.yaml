@@ -1,0 +1,119 @@
+appId: com.shanidms22
+---
+# Validates Trends date range controls (From/To) don't crash and
+# that hypo investigation entry points navigate correctly.
+
+- launchApp:
+    clearState: true
+
+# Either we land on tabs (already authenticated) or we land on login.
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 15000
+    optional: true
+
+- extendedWaitUntil:
+    visible:
+      id: login.screen
+    timeout: 15000
+    optional: true
+
+# Deterministic E2E login (only available in E2E-enabled builds).
+- runFlow:
+    when:
+      visible:
+        id: login.screen
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: login.e2eButton
+          timeout: 15000
+      - tapOn:
+          id: login.e2eButton
+
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 30000
+
+# Go to Trends.
+- tapOn:
+    id: tab.trends
+
+- extendedWaitUntil:
+    visible:
+      id: screen.trends
+    timeout: 20000
+
+# Date range preset buttons are tappable.
+- tapOn:
+    id: trends.dateRange.preset.14
+
+- tapOn:
+    id: trends.dateRange.preset.7
+
+# From/To should be tappable without crashing.
+# In E2E builds we avoid opening the system picker dialog (too flaky) and instead
+# adjust the date deterministically.
+- tapOn:
+    id: trends.dateRange.from
+
+- extendedWaitUntil:
+    visible:
+      id: screen.trends
+    timeout: 20000
+
+- tapOn:
+    id: trends.dateRange.to
+
+- extendedWaitUntil:
+    visible:
+      id: screen.trends
+    timeout: 20000
+
+- takeScreenshot: trends-date-range-controls
+
+# Hypo investigation quick stats entry points.
+- scrollUntilVisible:
+    element:
+      id: trends.quickStats.section
+    direction: DOWN
+    timeout: 20000
+
+- scrollUntilVisible:
+    element:
+      id: trends.quickStats.severeHypos
+    direction: DOWN
+    visibilityPercentage: 50
+    timeout: 20000
+
+- tapOn:
+    id: trends.quickStats.severeHypos
+
+- extendedWaitUntil:
+    visible:
+      id: screen.hypoInvestigation
+    timeout: 20000
+
+- takeScreenshot: hypo-investigation-screen
+
+- pressKey: BACK
+
+# Longest hypo card should also navigate.
+- scrollUntilVisible:
+    element:
+      id: trends.quickStats.longestHypo
+    direction: DOWN
+    visibilityPercentage: 50
+    timeout: 20000
+
+- tapOn:
+    id: trends.quickStats.longestHypo
+
+- extendedWaitUntil:
+    visible:
+      id: screen.hypoInvestigation
+    timeout: 20000
+
+- pressKey: BACK

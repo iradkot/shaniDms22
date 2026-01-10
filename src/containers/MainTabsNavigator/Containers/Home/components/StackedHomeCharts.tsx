@@ -3,6 +3,7 @@ import React, {useMemo, useState} from 'react';
 import {Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import styled, {useTheme} from 'styled-components/native';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import type {CGMGraphExternalTooltipPayload} from 'app/components/charts/CgmGraph/CgmGraph';
@@ -140,7 +141,6 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   const {
     shouldShowTooltip,
     cgmAnchorTimeMs,
-    eventsAnchorTimeMs,
     cursorTimeMs,
     resolvedTooltipAlign,
     tooltipBgSample,
@@ -212,6 +212,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
         {showFullScreenButton && onPressFullScreen ? (
           <FullScreenButtonOverlay>
             <FullScreenButton
+              testID={E2E_TEST_IDS.charts.cgmGraphFullScreenButton}
               onPress={onPressFullScreen}
               accessibilityRole="button"
               accessibilityLabel="Full screen"

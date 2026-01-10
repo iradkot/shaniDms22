@@ -152,6 +152,19 @@ export const E2E_TEST_IDS = {
     quickStatsAverageTitle: 'trends.quickStats.average.title',
     quickStatsAvgTdd: 'trends.quickStats.avgTdd',
     metricSelectorCollapsable: 'trends.metricSelector.collapsable',
+
+    dateRangeFromButton: 'trends.dateRange.from',
+    dateRangeToButton: 'trends.dateRange.to',
+    dateRangePreset7: 'trends.dateRange.preset.7',
+    dateRangePreset14: 'trends.dateRange.preset.14',
+    dateRangePreset30: 'trends.dateRange.preset.30',
+
+    quickStatsSevereHyposCard: 'trends.quickStats.severeHypos',
+    quickStatsLongestHypoCard: 'trends.quickStats.longestHypo',
+  },
+
+  hypoInvestigation: {
+    screen: 'screen.hypoInvestigation',
   },
 } as const;
 

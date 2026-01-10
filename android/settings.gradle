@@ -4,3 +4,9 @@ extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autoli
 rootProject.name = 'shaniDms22'
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')
+
+// Manual linking: @react-native-community/datetimepicker is not currently picked up by autolinking
+// (android entry shows as null in android/build/generated/autolinking/autolinking.json), which
+// causes TurboModuleRegistry errors for RNCDatePicker.
+include ':react-native-community_datetimepicker'
+project(':react-native-community_datetimepicker').projectDir = new File(rootProject.projectDir, '../node_modules/@react-native-community/datetimepicker/android')

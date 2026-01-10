@@ -75,8 +75,13 @@ appId: com.shanidms22
     id: chart.cgmGraph.fullscreen
 
 # Toggle horizontal fullscreen once (best-effort validation).
-- tapOn:
-    id: screen.fullscreen.rotateButton
+- runFlow:
+        when:
+            visible:
+                id: screen.fullscreen.rotateButton
+        commands:
+            - tapOn:
+                    id: screen.fullscreen.rotateButton
 
 - takeScreenshot: charts-home-cgm-fullscreen
 

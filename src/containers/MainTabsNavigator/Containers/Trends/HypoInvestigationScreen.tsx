@@ -21,6 +21,7 @@ import {
   HYPO_INVESTIGATION_CONSTANTS,
   HypoEvent,
 } from 'app/containers/MainTabsNavigator/Containers/Trends/utils/hypoInvestigation.utils';
+import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 type RouteParams = {
   bgData?: BgSample[];
@@ -194,7 +195,7 @@ const HypoInvestigationScreen: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [rangeStartMs]);
+  }, [rangeEndMs, rangeStartMs]);
 
   const hypoEvents = useMemo(() => {
     return extractHypoEvents({bgData: enrichedBgData, lowThreshold});
@@ -367,7 +368,7 @@ const HypoInvestigationScreen: React.FC = () => {
   const keyExtractor = (item: HypoEvent) => item.id;
 
   return (
-    <Screen>
+    <Screen testID={E2E_TEST_IDS.hypoInvestigation.screen}>
       <Header>
         <SubTitle>Severe hypos: events &lt; {lowThreshold} mg/dL</SubTitle>
         {avgDurationLabel ? <SubTitle>Avg duration: {avgDurationLabel}</SubTitle> : null}
@@ -429,7 +430,7 @@ const HypoInvestigationScreen: React.FC = () => {
   );
 };
 
-const Screen = styled.View`
+const Screen = styled.View.attrs({collapsable: false})`
   flex: 1;
   background-color: ${({theme}: {theme: ThemeType}) => theme.backgroundColor};
 `;
