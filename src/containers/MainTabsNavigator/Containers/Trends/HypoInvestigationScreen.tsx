@@ -29,6 +29,51 @@ type RouteParams = {
   lowThreshold: number;
 };
 
+function safeFiniteNumber(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+function deriveIobCobFromSample(sample: BgSample | null): {
+  totalIobU: number | null;
+  bolusIobU: number | null;
+  basalIobU: number | null;
+  cobG: number | null;
+  hasSplitIob: boolean;
+} {
+  if (!sample) {
+    return {
+      totalIobU: null,
+      bolusIobU: null,
+      basalIobU: null,
+      cobG: null,
+      hasSplitIob: false,
+    };
+  }
+
+  const totalIobU = safeFiniteNumber((sample as any).iob);
+  const bolusIobU = safeFiniteNumber((sample as any).iobBolus);
+  const basalIobU = safeFiniteNumber((sample as any).iobBasal);
+  const cobG = safeFiniteNumber((sample as any).cob);
+
+  const hasSplitIob = bolusIobU != null || basalIobU != null;
+
+  if (totalIobU != null) {
+    return {totalIobU, bolusIobU, basalIobU, cobG, hasSplitIob};
+  }
+
+  if (hasSplitIob) {
+    return {
+      totalIobU: (bolusIobU ?? 0) + (basalIobU ?? 0),
+      bolusIobU,
+      basalIobU,
+      cobG,
+      hasSplitIob,
+    };
+  }
+
+  return {totalIobU: null, bolusIobU: null, basalIobU: null, cobG, hasSplitIob: false};
+}
+
 const HypoInvestigationScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation();
@@ -289,28 +334,27 @@ const HypoInvestigationScreen: React.FC = () => {
         ? `${Math.round(item.nadirSgv)}`
         : '—';
 
-    const totalIobU =
-      item.iobBolusU != null || item.iobBasalU != null
-        ? (item.iobBolusU ?? 0) + (item.iobBasalU ?? 0)
-        : null;
-
-    const iobTotalLabel = totalIobU != null ? `${totalIobU.toFixed(1)}U` : '—';
-    const iobSplitLabel =
-      totalIobU != null
-        ? `${(item.iobBolusU ?? 0).toFixed(1)} bolus • ${(item.iobBasalU ?? 0).toFixed(1)} basal`
+    const derived = deriveIobCobFromSample(item.nadirSample);
+    const iobTotalLabel = derived.totalIobU != null ? `${derived.totalIobU.toFixed(1)}U` : '—';
+    const splitLabel = derived.hasSplitIob
+      ? `${(derived.bolusIobU ?? 0).toFixed(1)} bolus • ${(derived.basalIobU ?? 0).toFixed(1)} basal`
+      : derived.totalIobU != null
+        ? 'Total only'
         : 'IOB unavailable';
+    const cobLabel = derived.cobG != null ? `${Math.round(derived.cobG)}g COB` : 'COB —';
+    const insulinAndCarbsSubLabel = `${splitLabel} • ${cobLabel}`;
     const HIGH_TOTAL_IOB_U = 2.0;
     const HIGH_BOLUS_IOB_U = 1.2;
     const HIGH_BASAL_IOB_U = 1.2;
 
     const badges: Array<{label: string; tone: 'danger' | 'info' | 'neutral'}> = [];
-    if (totalIobU != null && totalIobU >= HIGH_TOTAL_IOB_U) {
+    if (derived.totalIobU != null && derived.totalIobU >= HIGH_TOTAL_IOB_U) {
       badges.push({label: 'High IOB', tone: 'danger'});
     }
-    if (item.iobBolusU != null && item.iobBolusU >= HIGH_BOLUS_IOB_U) {
+    if (derived.bolusIobU != null && derived.bolusIobU >= HIGH_BOLUS_IOB_U) {
       badges.push({label: 'High bolus IOB', tone: 'info'});
     }
-    if (item.iobBasalU != null && item.iobBasalU >= HIGH_BASAL_IOB_U) {
+    if (derived.basalIobU != null && derived.basalIobU >= HIGH_BASAL_IOB_U) {
       badges.push({label: 'High basal IOB', tone: 'info'});
     }
     if (item.driver) {
@@ -345,9 +389,9 @@ const HypoInvestigationScreen: React.FC = () => {
           </StatBlock>
 
           <StatBlock $align="right">
-            <StatLabel>Active insulin</StatLabel>
+            <StatLabel>Insulin / Carbs</StatLabel>
             <StatValue>{iobTotalLabel}</StatValue>
-            <StatSub numberOfLines={1}>{iobSplitLabel}</StatSub>
+            <StatSub numberOfLines={2}>{insulinAndCarbsSubLabel}</StatSub>
           </StatBlock>
         </EventStatsRow>
 
