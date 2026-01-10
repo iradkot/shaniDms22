@@ -1,19 +1,26 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, FlatList, Pressable, View} from 'react-native';
 import styled, {useTheme} from 'styled-components/native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import {addOpacity} from 'app/style/styling.utils';
 import {formatDateToDateAndTimeString, formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {useNavigation, useRoute} from '@react-navigation/native';
-import {BasalProfile} from 'app/types/insulin.types';
+import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
+import {FoodItemDTO} from 'app/types/food.types';
 import {
   buildFullScreenStackedChartsParams,
   enrichBgSamplesWithDeviceStatusForRange,
   fetchStackedChartsDataForRange,
 } from 'app/utils/stackedChartsData.utils';
 import {pushFullScreenStackedCharts} from 'app/utils/fullscreenNavigation.utils';
+import {fetchTreatmentsForDateRangeUncached} from 'app/api/apiRequests';
+import {
+  mapNightscoutTreatmentsToCarbFoodItems,
+  mapNightscoutTreatmentsToInsulinDataEntries,
+} from 'app/utils/nightscoutTreatments.utils';
 
 import {
   extractHypoEvents,
@@ -74,6 +81,67 @@ function deriveIobCobFromSample(sample: BgSample | null): {
   return {totalIobU: null, bolusIobU: null, basalIobU: null, cobG, hasSplitIob: false};
 }
 
+function safeDateParseMs(v: unknown): number | null {
+  if (typeof v !== 'string') return null;
+  const ms = Date.parse(v);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function summarizeBolusesInRange(params: {
+  boluses: InsulinDataEntry[];
+  startMs: number;
+  endMs: number;
+}): {count: number; totalU: number} {
+  const {boluses, startMs, endMs} = params;
+  let count = 0;
+  let totalU = 0;
+
+  for (const e of boluses ?? []) {
+    if (e?.type !== 'bolus') continue;
+    const ts = safeDateParseMs((e as any).timestamp);
+    if (ts == null || ts < startMs || ts > endMs) continue;
+    const amount = safeFiniteNumber((e as any).amount);
+    if (amount == null || amount <= 0) continue;
+    count += 1;
+    totalU += amount;
+  }
+
+  return {count, totalU};
+}
+
+function summarizeCarbsInRange(params: {
+  foodItems: FoodItemDTO[];
+  startMs: number;
+  endMs: number;
+}): {count: number; totalG: number} {
+  const {foodItems, startMs, endMs} = params;
+  let count = 0;
+  let totalG = 0;
+
+  for (const f of foodItems ?? []) {
+    const ts = safeFiniteNumber((f as any).timestamp);
+    if (ts == null || ts < startMs || ts > endMs) continue;
+    const carbs = safeFiniteNumber((f as any).carbs);
+    if (carbs == null || carbs <= 0) continue;
+    count += 1;
+    totalG += carbs;
+  }
+
+  return {count, totalG};
+}
+
+function formatBolusSummary(summary: {count: number; totalU: number}): string {
+  if (!summary.count) return '—';
+  const u = summary.totalU;
+  const value = u >= 10 ? u.toFixed(1) : u.toFixed(2);
+  return `${value} U (${summary.count})`;
+}
+
+function formatCarbsSummary(summary: {count: number; totalG: number}): string {
+  if (!summary.count) return '—';
+  return `${Math.round(summary.totalG)} g (${summary.count})`;
+}
+
 const HypoInvestigationScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation();
@@ -94,6 +162,9 @@ const HypoInvestigationScreen: React.FC = () => {
   const [isEnriching, setIsEnriching] = useState(false);
   const [basalProfileData, setBasalProfileData] = useState<BasalProfile>([]);
   const [openingEventId, setOpeningEventId] = useState<string | null>(null);
+  const [rangeInsulinData, setRangeInsulinData] = useState<InsulinDataEntry[]>([]);
+  const [rangeFoodItems, setRangeFoodItems] = useState<FoodItemDTO[]>([]);
+  const [isFetchingTreatments, setIsFetchingTreatments] = useState(false);
 
   const isStillFetchingBg = isFetchingBg && enrichedBgData.length === 0;
 
@@ -217,6 +288,36 @@ const HypoInvestigationScreen: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
 
+    async function fetchTreatments() {
+      if (rangeStartMs == null || rangeEndMs == null) return;
+
+      setIsFetchingTreatments(true);
+      try {
+        const treatments = await fetchTreatmentsForDateRangeUncached(
+          new Date(rangeStartMs),
+          new Date(rangeEndMs),
+        );
+        if (cancelled) return;
+        setRangeInsulinData(mapNightscoutTreatmentsToInsulinDataEntries(treatments));
+        setRangeFoodItems(mapNightscoutTreatmentsToCarbFoodItems(treatments));
+      } catch (e) {
+        if (cancelled) return;
+        setRangeInsulinData([]);
+        setRangeFoodItems([]);
+      } finally {
+        if (!cancelled) setIsFetchingTreatments(false);
+      }
+    }
+
+    fetchTreatments();
+    return () => {
+      cancelled = true;
+    };
+  }, [rangeEndMs, rangeStartMs]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function fetchBasalProfile() {
       if (rangeStartMs == null || rangeEndMs == null) return;
       try {
@@ -335,14 +436,33 @@ const HypoInvestigationScreen: React.FC = () => {
         : '—';
 
     const derived = deriveIobCobFromSample(item.nadirSample);
-    const iobTotalLabel = derived.totalIobU != null ? `${derived.totalIobU.toFixed(1)}U` : '—';
-    const splitLabel = derived.hasSplitIob
-      ? `${(derived.bolusIobU ?? 0).toFixed(1)} bolus • ${(derived.basalIobU ?? 0).toFixed(1)} basal`
-      : derived.totalIobU != null
-        ? 'Total only'
-        : 'IOB unavailable';
-    const cobLabel = derived.cobG != null ? `${Math.round(derived.cobG)}g COB` : 'COB —';
-    const insulinAndCarbsSubLabel = `${splitLabel} • ${cobLabel}`;
+    const iobAtNadirLabel = derived.totalIobU != null ? `${derived.totalIobU.toFixed(1)} U` : '—';
+    const cobAtNadirLabel = derived.cobG != null ? `${Math.round(derived.cobG)} g` : '—';
+
+    const WINDOW_1H_MS = 60 * 60 * 1000;
+    const WINDOW_2H_MS = 2 * 60 * 60 * 1000;
+    const WINDOW_3H_MS = 3 * 60 * 60 * 1000;
+
+    const bolusBefore = summarizeBolusesInRange({
+      boluses: rangeInsulinData,
+      startMs: item.startMs - WINDOW_1H_MS,
+      endMs: item.startMs,
+    });
+    const carbsBefore = summarizeCarbsInRange({
+      foodItems: rangeFoodItems,
+      startMs: item.startMs - WINDOW_2H_MS,
+      endMs: item.startMs,
+    });
+    const carbsDuring = summarizeCarbsInRange({
+      foodItems: rangeFoodItems,
+      startMs: item.startMs,
+      endMs: item.endMs,
+    });
+    const bolusAfter = summarizeBolusesInRange({
+      boluses: rangeInsulinData,
+      startMs: item.endMs,
+      endMs: item.endMs + WINDOW_3H_MS,
+    });
     const HIGH_TOTAL_IOB_U = 2.0;
     const HIGH_BOLUS_IOB_U = 1.2;
     const HIGH_BASAL_IOB_U = 1.2;
@@ -389,11 +509,49 @@ const HypoInvestigationScreen: React.FC = () => {
           </StatBlock>
 
           <StatBlock $align="right">
-            <StatLabel>Insulin / Carbs</StatLabel>
-            <StatValue>{iobTotalLabel}</StatValue>
-            <StatSub numberOfLines={2}>{insulinAndCarbsSubLabel}</StatSub>
+            <StatLabel>At nadir</StatLabel>
+            <StatValue>{`IOB ${iobAtNadirLabel}`}</StatValue>
+            <StatSub numberOfLines={1}>{`COB ${cobAtNadirLabel}`}</StatSub>
           </StatBlock>
         </EventStatsRow>
+
+        <TreatmentsGrid>
+          <TreatmentCell>
+            <TreatmentLabelRow>
+              <Icon name="needle" size={14} color={theme.colors.insulinSecondary} />
+              <TreatmentLabel>Bolus</TreatmentLabel>
+              <TreatmentWindow>−1h</TreatmentWindow>
+            </TreatmentLabelRow>
+            <TreatmentValue>{isFetchingTreatments ? '…' : formatBolusSummary(bolusBefore)}</TreatmentValue>
+          </TreatmentCell>
+
+          <TreatmentCell>
+            <TreatmentLabelRow>
+              <Icon name="bread-slice-outline" size={14} color={theme.colors.carbs} />
+              <TreatmentLabel>Carbs</TreatmentLabel>
+              <TreatmentWindow>−2h</TreatmentWindow>
+            </TreatmentLabelRow>
+            <TreatmentValue>{isFetchingTreatments ? '…' : formatCarbsSummary(carbsBefore)}</TreatmentValue>
+          </TreatmentCell>
+
+          <TreatmentCell>
+            <TreatmentLabelRow>
+              <Icon name="food-apple" size={14} color={theme.colors.carbs} />
+              <TreatmentLabel>Carbs</TreatmentLabel>
+              <TreatmentWindow>during</TreatmentWindow>
+            </TreatmentLabelRow>
+            <TreatmentValue>{isFetchingTreatments ? '…' : formatCarbsSummary(carbsDuring)}</TreatmentValue>
+          </TreatmentCell>
+
+          <TreatmentCell>
+            <TreatmentLabelRow>
+              <Icon name="needle" size={14} color={theme.colors.insulinSecondary} />
+              <TreatmentLabel>Bolus</TreatmentLabel>
+              <TreatmentWindow>+3h</TreatmentWindow>
+            </TreatmentLabelRow>
+            <TreatmentValue>{isFetchingTreatments ? '…' : formatBolusSummary(bolusAfter)}</TreatmentValue>
+          </TreatmentCell>
+        </TreatmentsGrid>
 
         <BadgesRow>
           {badges.slice(0, 3).map(b => (
@@ -617,7 +775,8 @@ const EventStatsRow = styled.View`
 
 const StatBlock = styled.View<{$align?: 'left' | 'right'}>`
   flex: 1;
-  align-items: ${({$align}) => ($align === 'right' ? 'flex-end' : 'flex-start')};
+  align-items: ${({$align}: {$align?: 'left' | 'right'}) =>
+    $align === 'right' ? 'flex-end' : 'flex-start'};
 `;
 
 const StatLabel = styled.Text`
@@ -638,6 +797,48 @@ const StatSub = styled.Text`
   font-size: 12px;
   font-weight: 700;
   color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.62)};
+`;
+
+const TreatmentsGrid = styled.View`
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
+`;
+
+const TreatmentCell = styled.View`
+  width: 48.5%;
+  padding: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  border-radius: ${({theme}: {theme: ThemeType}) => theme.borderRadius + 4}px;
+  border-width: 1px;
+  border-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.1)};
+  background-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.03)};
+`;
+
+const TreatmentLabelRow = styled.View`
+  flex-direction: row;
+  align-items: center;
+`;
+
+const TreatmentLabel = styled.Text`
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 900;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.8)};
+`;
+
+const TreatmentWindow = styled.Text`
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.6)};
+`;
+
+const TreatmentValue = styled.Text`
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 900;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
 
 const BadgesRow = styled.View`
