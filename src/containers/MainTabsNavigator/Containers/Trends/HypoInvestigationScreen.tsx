@@ -6,7 +6,11 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import {addOpacity} from 'app/style/styling.utils';
-import {formatDateToDateAndTimeString, formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
+import {
+  formatDateToDateAndTimeString,
+  formatDateToLocaleTimeString,
+  getRelativeDateText,
+} from 'app/utils/datetime.utils';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {FoodItemDTO} from 'app/types/food.types';
@@ -425,7 +429,9 @@ const HypoInvestigationScreen: React.FC = () => {
 
   const renderItem = ({item}: {item: HypoEvent}) => {
     const isOpening = openingEventId === item.id;
-    const title = formatDateToDateAndTimeString(item.nadirMs);
+    const nadirTimeLabel = formatDateToLocaleTimeString(item.nadirMs);
+    const relativeDateLabel = getRelativeDateText(new Date(item.nadirMs));
+    const absoluteDateTimeLabel = formatDateToDateAndTimeString(item.nadirMs);
     const durationLabel = formatDuration(item.startMs, item.endMs);
     const timeRangeLabel = `${formatDateToLocaleTimeString(item.startMs)}–${formatDateToLocaleTimeString(
       item.endMs,
@@ -494,7 +500,10 @@ const HypoInvestigationScreen: React.FC = () => {
         })}
       >
         <EventTopRow>
-          <EventTitle numberOfLines={1}>{title}</EventTitle>
+          <EventTitleWrap>
+            <EventTitlePrimary numberOfLines={1}>{`${relativeDateLabel} • ${nadirTimeLabel}`}</EventTitlePrimary>
+            <EventTitleSecondary numberOfLines={1}>{absoluteDateTimeLabel}</EventTitleSecondary>
+          </EventTitleWrap>
           <BgPill>
             <BgPillValue>{nadirLabel}</BgPillValue>
             <BgPillUnit>mg/dL</BgPillUnit>
@@ -735,12 +744,22 @@ const EventTopRow = styled.View`
   justify-content: space-between;
 `;
 
-const EventTitle = styled.Text`
+const EventTitleWrap = styled.View`
   flex: 1;
   margin-right: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+`;
+
+const EventTitlePrimary = styled.Text`
   font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.sm}px;
   font-weight: 900;
   color: ${({theme}: {theme: ThemeType}) => theme.textColor};
+`;
+
+const EventTitleSecondary = styled.Text`
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.6)};
 `;
 
 const BgPill = styled.View`
