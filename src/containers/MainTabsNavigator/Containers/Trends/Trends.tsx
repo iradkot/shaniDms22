@@ -51,6 +51,11 @@ const Trends: React.FC = () => {
   const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('tir');
 
+  const isCustomRange = useMemo(
+    () => Boolean(customStartDate && customEndDate),
+    [customEndDate, customStartDate],
+  );
+
   // 1) Calculate date range
   const {start, end, rangeDays} = useMemo(() => {
     const today = new Date();
@@ -313,6 +318,8 @@ const Trends: React.FC = () => {
       <DateRangeSelector
         presetDays={presetDays}
         onPresetDaysChange={handlePresetDaysChange}
+        isCustomRange={isCustomRange}
+        rangeDays={rangeDays}
         startDate={start}
         endDate={end}
         onStartDateChange={handleCustomStartChange}

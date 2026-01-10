@@ -12,6 +12,9 @@ interface Props {
   presetDays: number;
   onPresetDaysChange: (days: number) => void;
 
+  isCustomRange: boolean;
+  rangeDays: number;
+
   startDate: Date;
   endDate: Date;
   onStartDateChange: (date: Date) => void;
@@ -21,6 +24,8 @@ interface Props {
 export const DateRangeSelector: React.FC<Props> = ({
   presetDays,
   onPresetDaysChange,
+  isCustomRange,
+  rangeDays,
   startDate,
   endDate,
   onStartDateChange,
@@ -91,28 +96,36 @@ export const DateRangeSelector: React.FC<Props> = ({
     }
   }, [addDays, clampDate, endDate, onEndDateChange, startDate, today]);
 
+  const isPresetMode = !isCustomRange;
+
   return (
     <Container>
       <PillRow>
         <Pill>
           <PillSegment
             testID={E2E_TEST_IDS.trends.dateRangePreset7}
-            selected={presetDays === 7}
+            selected={isPresetMode && presetDays === 7}
             onPress={() => onPresetDaysChange(7)}>
-            <PillSegmentText selected={presetDays === 7}>7 Days</PillSegmentText>
+            <PillSegmentText selected={isPresetMode && presetDays === 7}>7 Days</PillSegmentText>
           </PillSegment>
           <PillSegment
             testID={E2E_TEST_IDS.trends.dateRangePreset14}
-            selected={presetDays === 14}
+            selected={isPresetMode && presetDays === 14}
             onPress={() => onPresetDaysChange(14)}>
-            <PillSegmentText selected={presetDays === 14}>14 Days</PillSegmentText>
+            <PillSegmentText selected={isPresetMode && presetDays === 14}>14 Days</PillSegmentText>
           </PillSegment>
           <PillSegment
             testID={E2E_TEST_IDS.trends.dateRangePreset30}
-            selected={presetDays === 30}
+            selected={isPresetMode && presetDays === 30}
             onPress={() => onPresetDaysChange(30)}>
-            <PillSegmentText selected={presetDays === 30}>30 Days</PillSegmentText>
+            <PillSegmentText selected={isPresetMode && presetDays === 30}>30 Days</PillSegmentText>
           </PillSegment>
+
+          {isCustomRange ? (
+            <PillSegmentPassive selected>
+              <PillSegmentText selected>{`Custom (${rangeDays}d)`}</PillSegmentText>
+            </PillSegmentPassive>
+          ) : null}
         </Pill>
       </PillRow>
 
@@ -125,7 +138,7 @@ export const DateRangeSelector: React.FC<Props> = ({
         </RangeButton>
       </CustomRow>
 
-      <HelpText>Or pick exact dates</HelpText>
+      <HelpText>{isCustomRange ? `Custom range selected (${rangeDays} days)` : 'Or pick exact dates'}</HelpText>
     </Container>
   );
 };
@@ -149,6 +162,13 @@ const Pill = styled.View`
 `;
 
 const PillSegment = styled.TouchableOpacity<{selected?: boolean}>`
+  padding: 8px 12px;
+  border-radius: 999px;
+  background-color: ${({selected, theme}) =>
+    selected ? theme.buttonBackgroundColor : 'transparent'};
+`;
+
+const PillSegmentPassive = styled.View<{selected?: boolean}>`
   padding: 8px 12px;
   border-radius: 999px;
   background-color: ${({selected, theme}) =>

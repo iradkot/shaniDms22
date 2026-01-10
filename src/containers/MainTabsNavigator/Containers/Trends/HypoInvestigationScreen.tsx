@@ -5,7 +5,7 @@ import styled, {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import {addOpacity} from 'app/style/styling.utils';
-import {formatDateToDateAndTimeString} from 'app/utils/datetime.utils';
+import {formatDateToDateAndTimeString, formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import {BasalProfile} from 'app/types/insulin.types';
 import {
@@ -13,7 +13,6 @@ import {
   enrichBgSamplesWithDeviceStatusForRange,
   fetchStackedChartsDataForRange,
 } from 'app/utils/stackedChartsData.utils';
-import {formatIobSplitLabel} from 'app/utils/tooltipFormatting.utils';
 import {pushFullScreenStackedCharts} from 'app/utils/fullscreenNavigation.utils';
 
 import {
@@ -282,6 +281,9 @@ const HypoInvestigationScreen: React.FC = () => {
     const isOpening = openingEventId === item.id;
     const title = formatDateToDateAndTimeString(item.nadirMs);
     const durationLabel = formatDuration(item.startMs, item.endMs);
+    const timeRangeLabel = `${formatDateToLocaleTimeString(item.startMs)}–${formatDateToLocaleTimeString(
+      item.endMs,
+    )}`;
     const nadirLabel =
       typeof item.nadirSgv === 'number' && Number.isFinite(item.nadirSgv)
         ? `${Math.round(item.nadirSgv)}`
@@ -291,19 +293,12 @@ const HypoInvestigationScreen: React.FC = () => {
       item.iobBolusU != null || item.iobBasalU != null
         ? (item.iobBolusU ?? 0) + (item.iobBasalU ?? 0)
         : null;
-    const iobLabel =
-      totalIobU != null
-        ? formatIobSplitLabel({
-            totalU: totalIobU,
-            bolusU: item.iobBolusU ?? 0,
-            basalU: item.iobBasalU ?? 0,
-            digits: 1,
-            formatTotal: u => `${u.toFixed(1)}U IOB`,
-            formatBolus: u => `${u.toFixed(1)} bolus`,
-            formatBasal: u => `${u.toFixed(1)} basal`,
-          })
-        : null;
 
+    const iobTotalLabel = totalIobU != null ? `${totalIobU.toFixed(1)}U` : '—';
+    const iobSplitLabel =
+      totalIobU != null
+        ? `${(item.iobBolusU ?? 0).toFixed(1)} bolus • ${(item.iobBasalU ?? 0).toFixed(1)} basal`
+        : 'IOB unavailable';
     const HIGH_TOTAL_IOB_U = 2.0;
     const HIGH_BOLUS_IOB_U = 1.2;
     const HIGH_BASAL_IOB_U = 1.2;
@@ -342,10 +337,19 @@ const HypoInvestigationScreen: React.FC = () => {
           </BgPill>
         </EventTopRow>
 
-        <EventMeta numberOfLines={2}>
-          Duration {durationLabel}
-          {iobLabel ? `  •  ${iobLabel}` : ''}
-        </EventMeta>
+        <EventStatsRow>
+          <StatBlock>
+            <StatLabel>Duration</StatLabel>
+            <StatValue>{durationLabel}</StatValue>
+            <StatSub numberOfLines={1}>{timeRangeLabel}</StatSub>
+          </StatBlock>
+
+          <StatBlock $align="right">
+            <StatLabel>Active insulin</StatLabel>
+            <StatValue>{iobTotalLabel}</StatValue>
+            <StatSub numberOfLines={1}>{iobSplitLabel}</StatSub>
+          </StatBlock>
+        </EventStatsRow>
 
         <BadgesRow>
           {badges.slice(0, 3).map(b => (
@@ -560,11 +564,36 @@ const BgPillUnit = styled.Text`
   color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.severeBelowRange, 0.8)};
 `;
 
-const EventMeta = styled.Text`
+const EventStatsRow = styled.View`
   margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+`;
+
+const StatBlock = styled.View<{$align?: 'left' | 'right'}>`
+  flex: 1;
+  align-items: ${({$align}) => ($align === 'right' ? 'flex-end' : 'flex-start')};
+`;
+
+const StatLabel = styled.Text`
   font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: 800;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.6)};
+`;
+
+const StatValue = styled.Text`
+  margin-top: 2px;
+  font-size: 18px;
+  font-weight: 900;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
+`;
+
+const StatSub = styled.Text`
+  margin-top: 2px;
+  font-size: 12px;
   font-weight: 700;
-  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.68)};
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.62)};
 `;
 
 const BadgesRow = styled.View`
