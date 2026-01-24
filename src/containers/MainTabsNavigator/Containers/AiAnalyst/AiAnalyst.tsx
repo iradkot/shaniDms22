@@ -26,6 +26,12 @@ import {createLlmProvider} from 'app/services/llm/llmClient';
 import {LlmChatMessage} from 'app/services/llm/llmTypes';
 import {buildHypoDetectiveContext} from 'app/services/aiAnalyst/hypoDetectiveContextBuilder';
 import {AiAnalystToolName, runAiAnalystTool} from 'app/services/aiAnalyst/aiAnalystLocalTools';
+import {
+  clearAiAnalystHistory,
+  deleteAiAnalystConversation,
+  loadAiAnalystHistory,
+  upsertAiAnalystConversationSnapshot,
+} from 'app/services/aiAnalyst/aiAnalystHistory';
 
 const Container = styled.View`
   flex: 1;
@@ -146,6 +152,8 @@ type MissionKey = 'hypoDetective';
 type ScreenState =
   | {mode: 'locked'}
   | {mode: 'dashboard'}
+  | {mode: 'history'}
+  | {mode: 'historyDetail'; id: string}
   | {mode: 'mission'; mission: MissionKey};
 
 type ToolEnvelope =
@@ -171,6 +179,10 @@ function tryParseToolEnvelope(text: string): ToolEnvelope | null {
 
 function makeDisclosureText() {
   return 'AI Analyst sends your diabetes data (BG, treatments, device status) to an external LLM provider to generate insights.';
+}
+
+function makeConversationId(): string {
+  return `ai-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function parseRangeDaysFromText(text: string): number | null {
@@ -244,6 +256,10 @@ const AiAnalyst: React.FC = () => {
   const [isBusy, setIsBusy] = useState(false);
   const [progressText, setProgressText] = useState<string>('');
   const [errorText, setErrorText] = useState<string | null>(null);
+
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [historyItems, setHistoryItems] = useState<any[]>([]);
+  const [historyBusy, setHistoryBusy] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -421,6 +437,31 @@ const AiAnalyst: React.FC = () => {
     navigation.navigate(SCREEN_NAMES.SETTINGS_TAB_SCREEN);
   }, [navigation]);
 
+  const refreshHistory = useCallback(async () => {
+    setHistoryBusy(true);
+    try {
+      const items = await loadAiAnalystHistory();
+      setHistoryItems(items);
+    } finally {
+      setHistoryBusy(false);
+    }
+  }, []);
+
+  const persistHistorySnapshot = useCallback(
+    async (nextMessages: LlmChatMessage[]) => {
+      if (!conversationId) return;
+      const mission = state.mode === 'mission' ? state.mission : undefined;
+      await upsertAiAnalystConversationSnapshot({
+        id: conversationId,
+        mission,
+        messages: (nextMessages ?? [])
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content})),
+      });
+    },
+    [conversationId, state],
+  );
+
   const startHypoDetective = useCallback(async () => {
     if (!provider) return;
     setErrorText(null);
@@ -429,6 +470,8 @@ const AiAnalyst: React.FC = () => {
     setUiMessages([]);
     setLlmMessages([]);
     setInput('');
+    const nextId = makeConversationId();
+    setConversationId(nextId);
 
     try {
       const {contextJson} = await buildHypoDetectiveContext({
@@ -465,6 +508,13 @@ const AiAnalyst: React.FC = () => {
       setUiMessages([assistantMessage]);
       setLlmMessages([...baseLlmMessages, assistantMessage]);
 
+      // Snapshot text-only UI messages (no JSON/tool payloads).
+      await upsertAiAnalystConversationSnapshot({
+        id: nextId,
+        mission: 'hypoDetective',
+        messages: [{role: 'assistant', content: assistantMessage.content}],
+      });
+
       setState({mode: 'mission', mission: 'hypoDetective'});
       setProgressText('');
 
@@ -486,7 +536,13 @@ const AiAnalyst: React.FC = () => {
     setIsBusy(true);
 
     // Always show the user's message immediately.
-    setUiMessages(prev => [...prev, {role: 'user', content: trimmed}]);
+    const userUiMessage = {role: 'user', content: trimmed} satisfies LlmChatMessage;
+    setUiMessages(prev => {
+      const next = [...prev, userUiMessage];
+      // Persist opportunistically (small + capped).
+      void persistHistorySnapshot(next);
+      return next;
+    });
 
     let workingLlmMessages: LlmChatMessage[] = [...llmMessages, {role: 'user', content: trimmed}];
     setLlmMessages(workingLlmMessages);
@@ -562,7 +618,16 @@ const AiAnalyst: React.FC = () => {
         setLlmMessages(workingLlmMessages);
       }
 
-      setUiMessages(prev => [...prev, {role: 'assistant', content: (finalText ?? '').trim()}]);
+      const assistantUiMessage = {
+        role: 'assistant',
+        content: (finalText ?? '').trim(),
+      } satisfies LlmChatMessage;
+
+      setUiMessages(prev => {
+        const next = [...prev, assistantUiMessage];
+        void persistHistorySnapshot(next);
+        return next;
+      });
       setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 50);
     } catch (e: any) {
       setErrorText(e?.message ? String(e.message) : 'Failed to send message');
@@ -606,6 +671,26 @@ const AiAnalyst: React.FC = () => {
 
         <Card>
           <CardRow
+            onPress={async () => {
+              await refreshHistory();
+              setState({mode: 'history'});
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Conversation History"
+          >
+            <CardIcon>
+              <MaterialIcons name="history" size={22} color={theme.accentColor} />
+            </CardIcon>
+            <View style={{flex: 1}}>
+              <CardTitle>Conversation history</CardTitle>
+              <CardSubtitle>Saved text only (limited)</CardSubtitle>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
+          </CardRow>
+
+          <View style={{height: theme.spacing.md}} />
+
+          <CardRow
             testID={E2E_TEST_IDS.aiAnalyst.missionHypoDetective}
             onPress={() => startHypoDetective()}
             disabled={isBusy}
@@ -638,6 +723,121 @@ const AiAnalyst: React.FC = () => {
       </ScrollView>
     </Container>
   );
+
+  const renderHistory = () => (
+    <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
+      <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
+        <Title>History</Title>
+        <Subtle>Text-only snapshots. Old items are pruned automatically.</Subtle>
+      </View>
+
+      <ScrollView style={{flex: 1}} contentContainerStyle={{paddingBottom: theme.spacing.xl * 2}}>
+        <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md}}>
+          <Pressable
+            onPress={async () => {
+              setHistoryBusy(true);
+              try {
+                await clearAiAnalystHistory();
+                await refreshHistory();
+              } finally {
+                setHistoryBusy(false);
+              }
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={{color: theme.belowRangeColor}}>Clear history</Text>
+          </Pressable>
+        </View>
+
+        {historyBusy ? (
+          <View style={{marginTop: 12, paddingHorizontal: theme.spacing.lg, flexDirection: 'row', alignItems: 'center'}}>
+            <ActivityIndicator />
+            <Text style={{marginLeft: 10, color: addOpacity(theme.textColor, 0.75)}}>Loading…</Text>
+          </View>
+        ) : null}
+
+        {(historyItems ?? []).length === 0 && !historyBusy ? (
+          <View style={{padding: theme.spacing.lg}}>
+            <Text style={{color: addOpacity(theme.textColor, 0.8)}}>No saved conversations yet.</Text>
+          </View>
+        ) : null}
+
+        {(historyItems ?? []).map((item: any) => (
+          <Card key={item.id}>
+            <CardRow
+              onPress={() => setState({mode: 'historyDetail', id: item.id})}
+              accessibilityRole="button"
+              accessibilityLabel="Open conversation"
+            >
+              <CardIcon>
+                <MaterialIcons name="chat" size={22} color={theme.accentColor} />
+              </CardIcon>
+              <View style={{flex: 1}}>
+                <CardTitle>{item.title || 'Conversation'}</CardTitle>
+                <CardSubtitle>
+                  {item.mission ? `${item.mission} · ` : ''}
+                  {new Date(item.updatedAt).toLocaleString()}
+                </CardSubtitle>
+              </View>
+              <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
+            </CardRow>
+          </Card>
+        ))}
+      </ScrollView>
+
+      <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md}}>
+        <Pressable onPress={() => setState({mode: 'dashboard'})} accessibilityRole="button">
+          <Text style={{color: addOpacity(theme.textColor, 0.7)}}>Back</Text>
+        </Pressable>
+      </View>
+    </Container>
+  );
+
+  const renderHistoryDetail = (id: string) => {
+    const item = (historyItems ?? []).find((x: any) => x.id === id);
+    const messages = (item?.messages ?? []) as Array<{role: 'user' | 'assistant'; content: string}>;
+    return (
+      <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
+        <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
+          <Title>{item?.title || 'Conversation'}</Title>
+          <Subtle>{item?.updatedAt ? new Date(item.updatedAt).toLocaleString() : ''}</Subtle>
+        </View>
+
+        <ScrollView style={{flex: 1}} contentContainerStyle={{paddingBottom: theme.spacing.xl * 2}}>
+          {messages.map((m, idx) => (
+            <MessageBubble key={String(idx)} role={m.role === 'user' ? 'user' : 'assistant'}>
+              <MessageText selectable>{m.content}</MessageText>
+            </MessageBubble>
+          ))}
+        </ScrollView>
+
+        <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md, gap: theme.spacing.sm}}>
+          <Pressable
+            onPress={() => setState({mode: 'history'})}
+            accessibilityRole="button"
+          >
+            <Text style={{color: addOpacity(theme.textColor, 0.7)}}>Back to history</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={async () => {
+              setHistoryBusy(true);
+              try {
+                await deleteAiAnalystConversation(id);
+                await refreshHistory();
+                setState({mode: 'history'});
+              } finally {
+                setHistoryBusy(false);
+              }
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={{color: theme.belowRangeColor}}>Delete conversation</Text>
+          </Pressable>
+        </View>
+      </Container>
+    );
+  };
 
   const renderMission = () => (
     <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
@@ -747,6 +947,8 @@ const AiAnalyst: React.FC = () => {
   }
 
   if (!hasKey) return renderLocked();
+  if (state.mode === 'history') return renderHistory();
+  if (state.mode === 'historyDetail') return renderHistoryDetail(state.id);
   if (state.mode === 'mission') return renderMission();
   return renderDashboard();
 };
