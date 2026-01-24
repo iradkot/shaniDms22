@@ -14,6 +14,7 @@ import FoodTracker from 'app/containers/MainTabsNavigator/Containers/FoodTracker
 import SportTracker from './Containers/SportTracker/SportTracker';
 import Trends from 'app/containers/MainTabsNavigator/Containers/Trends';
 import Oracle from 'app/containers/MainTabsNavigator/Containers/Oracle';
+import AiAnalyst from 'app/containers/MainTabsNavigator/Containers/AiAnalyst';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import SettingsNavigator from 'app/containers/MainTabsNavigator/Containers/Settings/SettingsNavigator';
 import {useTabsSettings} from 'app/contexts/TabsSettingsContext';
@@ -66,7 +67,6 @@ const MainTabsNavigator: React.FC = () => {
               <MaterialIcons name="home" color={color} size={size} />
             ),
             tabBarLabel: 'Home',
-            tabBarTestID: E2E_TEST_IDS.tabs.home,
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.home),
           }}
         />
@@ -78,7 +78,6 @@ const MainTabsNavigator: React.FC = () => {
               <MaterialIcons name="timeline" color={color} size={size} />
             ),
             tabBarLabel: 'Trends',
-            tabBarTestID: E2E_TEST_IDS.tabs.trends,
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.trends),
           }}
         />
@@ -91,8 +90,20 @@ const MainTabsNavigator: React.FC = () => {
               <MaterialIcons name="insights" color={color} size={size} />
             ),
             tabBarLabel: 'Oracle',
-            tabBarTestID: E2E_TEST_IDS.tabs.oracle,
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.oracle),
+          }}
+        />
+
+        <Tab.Screen
+          name={SCREEN_NAMES.AI_ANALYST_TAB_SCREEN}
+          component={AiAnalyst}
+          options={{
+            ...(settings.showAiAnalyst ? {} : hiddenTabOptions),
+            tabBarIcon: ({color, size}: {color: string; size: number}) => (
+              <MaterialIcons name="smart-toy" color={color} size={size} />
+            ),
+            tabBarLabel: 'AI Analyst',
+            tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.aiAnalyst),
           }}
         />
 
@@ -104,7 +115,6 @@ const MainTabsNavigator: React.FC = () => {
               <MaterialIcons name="settings" color={color} size={size} />
             ),
             tabBarLabel: 'Settings',
-            tabBarTestID: E2E_TEST_IDS.tabs.settings,
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.settings),
           }}
         />
@@ -118,7 +128,6 @@ const MainTabsNavigator: React.FC = () => {
               <MaterialIcons name="fastfood" color={color} size={size} />
             ),
             tabBarLabel: 'Food Tracking',
-            tabBarTestID: E2E_TEST_IDS.tabs.food,
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.food),
           }}
         />
@@ -131,7 +140,6 @@ const MainTabsNavigator: React.FC = () => {
               <MaterialIcons name="directions-run" color={color} size={size} />
             ),
             tabBarLabel: 'Sport Tracking',
-            tabBarTestID: E2E_TEST_IDS.tabs.sport,
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.sport),
           }}
         />
@@ -144,7 +152,6 @@ const MainTabsNavigator: React.FC = () => {
               <ADIcon name="notification" color={color} size={size} />
             ),
             tabBarLabel: 'Notifications',
-            tabBarTestID: E2E_TEST_IDS.tabs.notifications,
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.notifications),
           }}
         />

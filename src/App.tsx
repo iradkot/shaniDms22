@@ -59,6 +59,7 @@ import {isE2E} from 'app/utils/e2e';
 import {NightscoutConfigProvider} from 'app/contexts/NightscoutConfigContext';
 import NightscoutSetupScreen from 'app/containers/NightscoutSetupScreen';
 import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {AiSettingsProvider} from 'app/contexts/AiSettingsContext';
 
 // Suppress deprecation warnings from Firebase React Native v21 with Hermes
 LogBox.ignoreLogs([
@@ -173,6 +174,7 @@ const App: () => React.ReactElement = () => {
                       <NightscoutConfigProvider>
                         <TabsSettingsProvider>
                           <GlucoseSettingsProvider>
+                            <AiSettingsProvider>
                             <NavigationContainer>
                               <Stack.Navigator screenOptions={{headerShown: false}}>
                                 <Stack.Screen name="initScreen" component={AppInitScreen} />
@@ -239,6 +241,7 @@ const App: () => React.ReactElement = () => {
                               />
                               </Stack.Navigator>
                             </NavigationContainer>
+                            </AiSettingsProvider>
                           </GlucoseSettingsProvider>
                         </TabsSettingsProvider>
                       </NightscoutConfigProvider>

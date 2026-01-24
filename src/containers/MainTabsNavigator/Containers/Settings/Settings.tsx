@@ -1,15 +1,25 @@
-import React, {useEffect, useState} from 'react';
-import {ScrollView, Switch, Text, TextInput, View} from 'react-native';
+import React, {useEffect, useMemo, useState} from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {theme} from 'app/style/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {useTabsSettings} from 'app/contexts/TabsSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {useNightscoutConfig} from 'app/contexts/NightscoutConfigContext';
+import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import ADIcon from 'react-native-vector-icons/AntDesign';
 import {useNavigation} from '@react-navigation/native';
 import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {validateOpenAiApiKey} from 'app/services/llm/providers/openaiProvider';
 import {NightscoutSection} from './sections/NightscoutSection';
 import {iconContainerStyle, labelStyle, rowStyle, SectionHeader} from './settingsShared';
 
@@ -21,12 +31,25 @@ const Settings: React.FC = () => {
   const {settings: glucoseSettings, setSetting: setGlucoseSetting, isLoaded: glucoseLoaded} =
     useGlucoseSettings();
   const {profiles, activeProfile, setActiveProfileId, deleteProfile} = useNightscoutConfig();
+  const {settings: aiSettings, setSetting: setAiSetting, isLoaded: aiLoaded} = useAiSettings();
 
   const [showDisplayedTabs, setShowDisplayedTabs] = useState(true);
   const [showNightscout, setShowNightscout] = useState(false);
   const [showRanges, setShowRanges] = useState(false);
   const [showNightWindow, setShowNightWindow] = useState(false);
+  const [showAi, setShowAi] = useState(false);
   const [uiLoaded, setUiLoaded] = useState(false);
+
+  const [aiApiKeyText, setAiApiKeyText] = useState('');
+  const [aiModelText, setAiModelText] = useState('');
+  const [aiModelPreset, setAiModelPreset] = useState<string>('gpt-4o-mini');
+  const [aiKeyStatus, setAiKeyStatus] = useState<
+    | {state: 'idle'}
+    | {state: 'checking'}
+    | {state: 'valid'; message: string}
+    | {state: 'invalid'; message: string}
+    | {state: 'error'; message: string}
+  >({state: 'idle'});
 
   const [severeHypoText, setSevereHypoText] = useState('');
   const [hypoText, setHypoText] = useState('');
@@ -35,6 +58,17 @@ const Settings: React.FC = () => {
   const [nightStartText, setNightStartText] = useState('');
   const [nightEndText, setNightEndText] = useState('');
   const [rangeError, setRangeError] = useState<string | null>(null);
+
+  const openAiModelOptions = useMemo(
+    () => [
+      {id: 'gpt-4o-mini', label: 'gpt-4o-mini (fast + cheap)'} as const,
+      {id: 'gpt-4o', label: 'gpt-4o (best general)'} as const,
+      {id: 'gpt-4.1-mini', label: 'gpt-4.1-mini (strong + efficient)'} as const,
+      {id: 'gpt-4.1', label: 'gpt-4.1 (strongest reasoning)'} as const,
+      {id: 'o3-mini', label: 'o3-mini (reasoning, budget)'} as const,
+    ],
+    [],
+  );
 
   useEffect(() => {
     if (!glucoseLoaded) return;
@@ -45,6 +79,30 @@ const Settings: React.FC = () => {
     setNightStartText(String(glucoseSettings.nightStartHour));
     setNightEndText(String(glucoseSettings.nightEndHour));
   }, [glucoseLoaded, glucoseSettings]);
+
+  useEffect(() => {
+    if (!aiLoaded) return;
+
+    setAiApiKeyText(aiSettings.apiKey || '');
+
+    const storedModel = (aiSettings.openAiModel || '').trim();
+    const presetIds = new Set(openAiModelOptions.map(o => o.id));
+
+    if (storedModel && presetIds.has(storedModel as any)) {
+      setAiModelPreset(storedModel);
+      setAiModelText(storedModel);
+      return;
+    }
+
+    if (storedModel) {
+      setAiModelPreset('custom');
+      setAiModelText(storedModel);
+      return;
+    }
+
+    setAiModelPreset('gpt-4o-mini');
+    setAiModelText('gpt-4o-mini');
+  }, [aiLoaded, aiSettings.apiKey, aiSettings.openAiModel, openAiModelOptions]);
 
   useEffect(() => {
     let isMounted = true;
@@ -64,6 +122,7 @@ const Settings: React.FC = () => {
           showNightscout: boolean;
           showRanges: boolean;
           showNightWindow: boolean;
+          showAi: boolean;
         }>;
 
         if (typeof parsed.showDisplayedTabs === 'boolean') {
@@ -77,6 +136,9 @@ const Settings: React.FC = () => {
         }
         if (typeof parsed.showNightWindow === 'boolean') {
           setShowNightWindow(parsed.showNightWindow);
+        }
+        if (typeof parsed.showAi === 'boolean') {
+          setShowAi(parsed.showAi);
         }
       } catch (e) {
         // Best-effort: keep defaults.
@@ -102,11 +164,12 @@ const Settings: React.FC = () => {
         showNightscout,
         showRanges,
         showNightWindow,
+        showAi,
       }),
     ).catch(() => {
       // Best-effort persistence.
     });
-  }, [uiLoaded, showDisplayedTabs, showNightscout, showRanges, showNightWindow]);
+  }, [uiLoaded, showDisplayedTabs, showNightscout, showRanges, showNightWindow, showAi]);
 
   const inputStyle = {
     borderWidth: 1,
@@ -169,6 +232,54 @@ const Settings: React.FC = () => {
     setRangeError(null);
     setGlucoseSetting('nightStartHour', start);
     setGlucoseSetting('nightEndHour', end);
+  };
+
+  const persistAiSettings = () => {
+    const trimmedKey = (aiApiKeyText ?? '').trim();
+    const selectedModel =
+      aiModelPreset === 'custom' ? (aiModelText ?? '').trim() : (aiModelPreset ?? '').trim();
+
+    setAiSetting('provider', 'openai');
+    setAiSetting('apiKey', trimmedKey);
+    if (selectedModel) {
+      setAiSetting('openAiModel', selectedModel);
+    }
+  };
+
+  const checkAndSaveOpenAiKey = async () => {
+    const trimmedKey = (aiApiKeyText ?? '').trim();
+    if (!trimmedKey) {
+      setAiKeyStatus({state: 'invalid', message: 'Please enter an API key first.'});
+      return;
+    }
+
+    setAiKeyStatus({state: 'checking'});
+    const result = await validateOpenAiApiKey(trimmedKey);
+
+    if (result.ok) {
+      persistAiSettings();
+      setAiKeyStatus({state: 'valid', message: 'Key looks valid. Saved.'});
+      return;
+    }
+
+    if (result.reason === 'unauthorized') {
+      setAiKeyStatus({state: 'invalid', message: 'Invalid key (unauthorized). Please retry.'});
+      return;
+    }
+
+    if (result.reason === 'rate_limited') {
+      persistAiSettings();
+      setAiKeyStatus({
+        state: 'valid',
+        message: 'Key saved, but OpenAI returned 429 (quota/rate limit).',
+      });
+      return;
+    }
+
+    setAiKeyStatus({
+      state: 'error',
+      message: result.message || 'Could not verify key. Please retry.',
+    });
   };
 
   return (
@@ -295,6 +406,217 @@ const Settings: React.FC = () => {
                 onValueChange={v => setSetting('showNotifications', v)}
               />
             </View>
+
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons
+                  name="smart-toy"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
+              </View>
+              <Text style={labelStyle}>AI Analyst</Text>
+              <Switch
+                testID={E2E_TEST_IDS.settings.toggleAiAnalystTab}
+                value={settings.showAiAnalyst}
+                onValueChange={v => setSetting('showAiAnalyst', v)}
+              />
+            </View>
+          </>
+        )}
+      </View>
+
+      <View>
+        <SectionHeader title="AI Analyst" expanded={showAi} onToggle={() => setShowAi(v => !v)} />
+
+        {showAi && (
+          <>
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="toggle-on" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>Enable AI Analyst</Text>
+              <Switch
+                testID={E2E_TEST_IDS.settings.aiEnabledToggle}
+                value={aiSettings.enabled}
+                onValueChange={v => setAiSetting('enabled', v)}
+              />
+            </View>
+
+            <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.xs}}>
+              <Text style={{color: theme.textColor, opacity: 0.75, fontSize: theme.typography.size.sm}}>
+                Requires your own OpenAI key. We don’t provide free LLM tokens.
+              </Text>
+            </View>
+
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="vpn-key" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>OpenAI API key</Text>
+              <TextInput
+                testID={E2E_TEST_IDS.settings.aiApiKeyInput}
+                value={aiApiKeyText}
+                onChangeText={text => {
+                  setAiApiKeyText(text);
+                  if (aiKeyStatus.state !== 'idle') setAiKeyStatus({state: 'idle'});
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                secureTextEntry={true}
+                placeholder="sk-..."
+                placeholderTextColor={theme.textColor}
+                style={{...inputStyle, minWidth: 160, textAlign: 'left'}}
+              />
+            </View>
+
+            <View style={{flexDirection: 'row', paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm}}>
+              <Pressable
+                testID={E2E_TEST_IDS.settings.aiSaveKeyButton}
+                accessibilityRole="button"
+                onPress={persistAiSettings}
+                style={({pressed}) => ({
+                  flex: 1,
+                  marginRight: theme.spacing.sm,
+                  paddingVertical: theme.spacing.md,
+                  borderRadius: theme.borderRadius,
+                  borderWidth: 1,
+                  borderColor: theme.borderColor,
+                  backgroundColor: pressed ? theme.borderColor : theme.white,
+                  alignItems: 'center',
+                })}
+              >
+                <Text style={{color: theme.textColor, fontWeight: '600'}}>Save</Text>
+              </Pressable>
+
+              <Pressable
+                testID={E2E_TEST_IDS.settings.aiCheckKeyButton}
+                accessibilityRole="button"
+                disabled={aiKeyStatus.state === 'checking'}
+                onPress={checkAndSaveOpenAiKey}
+                style={({pressed}) => ({
+                  flex: 1,
+                  paddingVertical: theme.spacing.md,
+                  borderRadius: theme.borderRadius,
+                  borderWidth: 1,
+                  borderColor: theme.borderColor,
+                  backgroundColor:
+                    aiKeyStatus.state === 'checking'
+                      ? theme.borderColor
+                      : pressed
+                        ? theme.borderColor
+                        : theme.white,
+                  alignItems: 'center',
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                })}
+              >
+                {aiKeyStatus.state === 'checking' ? (
+                  <ActivityIndicator size="small" color={theme.textColor} />
+                ) : (
+                  <MaterialIcons name="check-circle" size={18} color={theme.textColor} />
+                )}
+                <Text style={{color: theme.textColor, fontWeight: '600', marginLeft: theme.spacing.sm}}>
+                  {aiKeyStatus.state === 'checking' ? 'Checking…' : 'Check key'}
+                </Text>
+              </Pressable>
+            </View>
+
+            {aiKeyStatus.state !== 'idle' && (
+              <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm}}>
+                <Text
+                  style={{
+                    color:
+                      aiKeyStatus.state === 'valid'
+                        ? theme.aboveRangeColor
+                        : aiKeyStatus.state === 'checking'
+                          ? theme.textColor
+                          : theme.belowRangeColor,
+                    fontSize: theme.typography.size.sm,
+                    opacity: aiKeyStatus.state === 'checking' ? 0.9 : 1,
+                  }}
+                >
+                  {aiKeyStatus.state === 'checking'
+                    ? 'Verifying your key with OpenAI…'
+                    : aiKeyStatus.message}
+                </Text>
+              </View>
+            )}
+
+            <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
+              <Text style={{color: theme.textColor, fontSize: theme.typography.size.md, fontWeight: '600'}}>
+                Model
+              </Text>
+              <Text style={{color: theme.textColor, opacity: 0.75, fontSize: theme.typography.size.sm, paddingTop: theme.spacing.xs}}>
+                Choose a preset or Custom.
+              </Text>
+            </View>
+
+            {openAiModelOptions.map(opt => {
+              const selected = aiModelPreset === opt.id;
+              return (
+                <Pressable
+                  key={opt.id}
+                  testID={`${E2E_TEST_IDS.settings.aiModelPreset}.${opt.id}`}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setAiModelPreset(opt.id);
+                    setAiModelText(opt.id);
+                  }}
+                  style={({pressed}) => ({
+                    ...rowStyle,
+                    backgroundColor: pressed ? theme.borderColor : 'transparent',
+                  })}
+                >
+                  <View style={iconContainerStyle}>
+                    <MaterialIcons
+                      name={selected ? 'radio-button-checked' : 'radio-button-unchecked'}
+                      size={theme.typography.size.lg}
+                      color={theme.textColor}
+                    />
+                  </View>
+                  <Text style={labelStyle}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
+
+            <Pressable
+              testID={`${E2E_TEST_IDS.settings.aiModelPreset}.custom`}
+              accessibilityRole="button"
+              onPress={() => setAiModelPreset('custom')}
+              style={({pressed}) => ({
+                ...rowStyle,
+                backgroundColor: pressed ? theme.borderColor : 'transparent',
+              })}
+            >
+              <View style={iconContainerStyle}>
+                <MaterialIcons
+                  name={aiModelPreset === 'custom' ? 'radio-button-checked' : 'radio-button-unchecked'}
+                  size={theme.typography.size.lg}
+                  color={theme.textColor}
+                />
+              </View>
+              <Text style={labelStyle}>Custom model</Text>
+            </Pressable>
+
+            {aiModelPreset === 'custom' && (
+              <View style={rowStyle}>
+                <View style={iconContainerStyle}>
+                  <MaterialIcons name="tune" size={theme.typography.size.xl} color={theme.textColor} />
+                </View>
+                <Text style={labelStyle}>Custom model id</Text>
+                <TextInput
+                  testID={E2E_TEST_IDS.settings.aiModelCustomInput}
+                  value={aiModelText}
+                  onChangeText={setAiModelText}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="gpt-4o-mini"
+                  placeholderTextColor={theme.textColor}
+                  style={{...inputStyle, minWidth: 160, textAlign: 'left'}}
+                />
+              </View>
+            )}
           </>
         )}
       </View>

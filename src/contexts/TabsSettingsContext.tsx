@@ -5,6 +5,7 @@ export type TabsSettings = {
   showFoodTracking: boolean;
   showSportTracking: boolean;
   showNotifications: boolean;
+  showAiAnalyst: boolean;
 };
 
 type TabsSettingsContextValue = {
@@ -20,6 +21,7 @@ const DEFAULT_SETTINGS: TabsSettings = {
   showFoodTracking: false,
   showSportTracking: false,
   showNotifications: false,
+  showAiAnalyst: true,
 };
 
 const TabsSettingsContext = createContext<TabsSettingsContextValue>({

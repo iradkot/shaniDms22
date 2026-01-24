@@ -13,6 +13,9 @@ export const EDIT_SPORT_ITEM_SCREEN: string = 'EditSportItemScreen';
 // ORACLE (Insights)
 export const ORACLE_TAB_SCREEN: string = 'OracleTabScreen';
 
+// AI Analyst (LLM)
+export const AI_ANALYST_TAB_SCREEN: string = 'AiAnalystTabScreen';
+
 // FOOD
 export const Food_Tracking_TAB_SCREEN: string = 'FoodTrackingTabScreen';
 export const ADD_FOOD_ITEM_SCREEN: string = 'AddFoodItemScreen';

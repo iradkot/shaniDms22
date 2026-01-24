@@ -15,6 +15,7 @@ export const E2E_TEST_IDS = {
     home: 'tab.home',
     trends: 'tab.trends',
     oracle: 'tab.oracle',
+    aiAnalyst: 'tab.aiAnalyst',
     settings: 'tab.settings',
     food: 'tab.food',
     sport: 'tab.sport',
@@ -25,6 +26,7 @@ export const E2E_TEST_IDS = {
     home: 'screen.home',
     trends: 'screen.trends',
     oracle: 'screen.oracle',
+    aiAnalyst: 'screen.aiAnalyst',
     settings: 'screen.settings',
     food: 'screen.food',
     sport: 'screen.sport',
@@ -38,6 +40,16 @@ export const E2E_TEST_IDS = {
     toggleFoodTab: 'settings.toggle.foodTab',
     toggleSportTab: 'settings.toggle.sportTab',
     toggleNotificationsTab: 'settings.toggle.notificationsTab',
+    toggleAiAnalystTab: 'settings.toggle.aiAnalystTab',
+
+    aiApiKeyInput: 'settings.input.ai.apiKey',
+    aiEnabledToggle: 'settings.toggle.ai.enabled',
+
+    aiSaveKeyButton: 'settings.button.ai.saveKey',
+    aiCheckKeyButton: 'settings.button.ai.checkKey',
+
+    aiModelPreset: 'settings.select.ai.model.preset',
+    aiModelCustomInput: 'settings.input.ai.model.custom',
 
     severeHypoInput: 'settings.input.severeHypo',
     hypoInput: 'settings.input.hypo',
@@ -45,6 +57,12 @@ export const E2E_TEST_IDS = {
     severeHyperInput: 'settings.input.severeHyper',
     nightStartHourInput: 'settings.input.nightStartHour',
     nightEndHourInput: 'settings.input.nightEndHour',
+  },
+
+  aiAnalyst: {
+    missionHypoDetective: 'aiAnalyst.mission.hypoDetective',
+    chatInput: 'aiAnalyst.chat.input',
+    sendButton: 'aiAnalyst.chat.send',
   },
 
   notifications: {

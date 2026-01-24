@@ -1,0 +1,72 @@
+appId: com.shanidms22
+---
+- launchApp:
+    clearState: true
+
+# Either we land on tabs (already authenticated) or we land on login.
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 15000
+    optional: true
+
+- extendedWaitUntil:
+    visible:
+      id: login.screen
+    timeout: 15000
+    optional: true
+
+# Deterministic E2E login (only available in E2E-enabled builds).
+- runFlow:
+    when:
+      visible:
+        id: login.screen
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: login.e2eButton
+          timeout: 15000
+      - tapOn:
+          id: login.e2eButton
+
+# Wait for tabs to be available
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 30000
+
+# Go to Settings
+- tapOn:
+    id: tab.settings
+- extendedWaitUntil:
+    visible:
+      id: screen.settings
+    timeout: 15000
+
+# Expand AI Analyst section
+- tapOn: "AI Analyst"
+
+# Enable AI
+- tapOn:
+    id: settings.toggle.ai.enabled
+
+# Enter a deterministic E2E key and verify it
+- tapOn:
+    id: settings.input.ai.apiKey
+- inputText: "e2e-openai-valid"
+- tapOn:
+    id: settings.button.ai.checkKey
+- assertVisible: "Key looks valid. Saved."
+
+# Select a known model preset
+- tapOn:
+    id: settings.select.ai.model.preset.gpt-4o-mini
+
+# Switch to custom model, set a value, then Save
+- tapOn:
+    id: settings.select.ai.model.preset.custom
+- tapOn:
+    id: settings.input.ai.model.custom
+- inputText: "gpt-4o-mini"
+- tapOn:
+    id: settings.button.ai.saveKey
