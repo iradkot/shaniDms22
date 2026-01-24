@@ -38,6 +38,11 @@ node_modules/
 npm-debug.log
 yarn-error.log
 
+# Env files (secrets)
+.env
+.env.*
+!.env.example
+
 # npm lockfile (repo uses Yarn)
 /package-lock.json
 

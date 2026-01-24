@@ -1,5 +1,14 @@
 import React, {useCallback, useMemo, useRef, useState} from 'react';
-import {ActivityIndicator, Pressable, ScrollView, Text, TextInput, View} from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import styled, {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useNavigation} from '@react-navigation/native';
@@ -16,6 +25,7 @@ import {AI_ANALYST_SYSTEM_PROMPT} from 'app/services/llm/systemPrompts';
 import {createLlmProvider} from 'app/services/llm/llmClient';
 import {LlmChatMessage} from 'app/services/llm/llmTypes';
 import {buildHypoDetectiveContext} from 'app/services/aiAnalyst/hypoDetectiveContextBuilder';
+import {AiAnalystToolName, runAiAnalystTool} from 'app/services/aiAnalyst/aiAnalystLocalTools';
 
 const Container = styled.View`
   flex: 1;
@@ -138,6 +148,27 @@ type ScreenState =
   | {mode: 'dashboard'}
   | {mode: 'mission'; mission: MissionKey};
 
+type ToolEnvelope =
+  | {type: 'tool_call'; name: AiAnalystToolName; args?: any}
+  | {type: 'final'; content: string};
+
+function tryParseToolEnvelope(text: string): ToolEnvelope | null {
+  const trimmed = (text ?? '').trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
+  try {
+    const obj = JSON.parse(trimmed);
+    if (obj?.type === 'tool_call' && typeof obj?.name === 'string') {
+      return {type: 'tool_call', name: obj.name, args: obj.args};
+    }
+    if (obj?.type === 'final' && typeof obj?.content === 'string') {
+      return {type: 'final', content: obj.content};
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function makeDisclosureText() {
   return 'AI Analyst sends your diabetes data (BG, treatments, device status) to an external LLM provider to generate insights.';
 }
@@ -165,7 +196,8 @@ const AiAnalyst: React.FC = () => {
     setTimeout(() => setState({mode: 'locked'}), 0);
   }
 
-  const [messages, setMessages] = useState<LlmChatMessage[]>([]);
+  const [uiMessages, setUiMessages] = useState<LlmChatMessage[]>([]);
+  const [llmMessages, setLlmMessages] = useState<LlmChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [progressText, setProgressText] = useState<string>('');
@@ -319,6 +351,23 @@ const AiAnalyst: React.FC = () => {
     }
   }, [aiSettings]);
 
+  const toolSystemPrompt = useMemo(
+    () =>
+      `Tooling (optional):\n` +
+      `You can request additional app data via LOCAL TOOLS. Use tools when the user asks for more CGM/insulin/treatments data or when needed to answer accurately.\n\n` +
+      `Available tools (use exactly these names):\n` +
+      `- getCgmSamples: {rangeDays: number (1-180), maxSamples?: number (50-2000), includeDeviceStatus?: boolean}\n` +
+      `- getTreatments: {rangeDays: number (1-180)}\n` +
+      `- getInsulinSummary: {rangeDays: number (1-90)}\n` +
+      `- getHypoDetectiveContext: {rangeDays: number (1-180), lowThresholdMgdl?: number, maxEvents?: number}\n\n` +
+      `How to call a tool:\n` +
+      `- Respond with ONLY a single-line JSON object: {"type":"tool_call","name":"getCgmSamples","args":{...}}\n` +
+      `- After you receive a message starting with "Tool result (NAME):", respond with ONLY: {"type":"final","content":"..."}.\n` +
+      `- If you don't need a tool, respond with {"type":"final","content":"..."}.\n` +
+      `- Content may include Markdown.\n`,
+    [],
+  );
+
   const openSettings = useCallback(() => {
     navigation.navigate(SCREEN_NAMES.SETTINGS_TAB_SCREEN);
   }, [navigation]);
@@ -328,7 +377,8 @@ const AiAnalyst: React.FC = () => {
     setErrorText(null);
     setIsBusy(true);
     setProgressText('Starting…');
-    setMessages([]);
+    setUiMessages([]);
+    setLlmMessages([]);
     setInput('');
 
     try {
@@ -351,16 +401,16 @@ const AiAnalyst: React.FC = () => {
       const res = await provider.sendChat({
         model: aiSettings.openAiModel,
         messages: [
-          {role: 'system', content: AI_ANALYST_SYSTEM_PROMPT},
+          {role: 'system', content: AI_ANALYST_SYSTEM_PROMPT + '\n' + toolSystemPrompt},
           {role: 'user', content: userPrompt},
         ],
         temperature: 0.2,
         maxOutputTokens: 800,
       });
 
-      setMessages([
-        {role: 'assistant', content: res.content.trim()},
-      ]);
+      const assistantMessage = {role: 'assistant', content: res.content.trim()} satisfies LlmChatMessage;
+      setUiMessages([assistantMessage]);
+      setLlmMessages([assistantMessage]);
 
       setState({mode: 'mission', mission: 'hypoDetective'});
       setProgressText('');
@@ -372,7 +422,7 @@ const AiAnalyst: React.FC = () => {
       setIsBusy(false);
       setProgressText('');
     }
-  }, [provider, glucoseSettings.severeHypo, aiSettings.openAiModel]);
+  }, [provider, glucoseSettings.severeHypo, aiSettings.openAiModel, toolSystemPrompt]);
 
   const sendFollowUp = useCallback(async () => {
     if (!provider) return;
@@ -382,30 +432,64 @@ const AiAnalyst: React.FC = () => {
     setErrorText(null);
     setIsBusy(true);
 
-    const nextMessages: LlmChatMessage[] = [
-      ...messages,
-      {role: 'user', content: trimmed},
-    ];
+    // Always show the user's message immediately.
+    setUiMessages(prev => [...prev, {role: 'user', content: trimmed}]);
 
-    setMessages(nextMessages);
+    let workingLlmMessages: LlmChatMessage[] = [...llmMessages, {role: 'user', content: trimmed}];
+    setLlmMessages(workingLlmMessages);
     setInput('');
 
     try {
-      const res = await provider.sendChat({
-        model: aiSettings.openAiModel,
-        messages: [{role: 'system', content: AI_ANALYST_SYSTEM_PROMPT}, ...nextMessages],
-        temperature: 0.2,
-        maxOutputTokens: 800,
-      });
+      const MAX_TOOL_CALLS = 2;
+      let toolCalls = 0;
+      let finalText: string | null = null;
 
-      setMessages(prev => [...prev, {role: 'assistant', content: res.content.trim()}]);
+      while (finalText == null) {
+        const res = await provider.sendChat({
+          model: aiSettings.openAiModel,
+          messages: [
+            {role: 'system', content: AI_ANALYST_SYSTEM_PROMPT + '\n' + toolSystemPrompt},
+            ...workingLlmMessages,
+          ],
+          temperature: 0.2,
+          maxOutputTokens: 800,
+        });
+
+        const raw = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
+        const env = tryParseToolEnvelope(raw);
+
+        if (env?.type === 'tool_call' && toolCalls < MAX_TOOL_CALLS) {
+          toolCalls += 1;
+          setProgressText(`Running ${env.name}…`);
+
+          const toolResult = await runAiAnalystTool(env.name, env.args);
+
+          workingLlmMessages = [
+            ...workingLlmMessages,
+            {role: 'assistant', content: raw},
+            {
+              role: 'user',
+              content: `Tool result (${env.name}):\n${JSON.stringify(toolResult)}`,
+            },
+          ];
+          setLlmMessages(workingLlmMessages);
+          continue;
+        }
+
+        finalText = env?.type === 'final' ? env.content : raw;
+        workingLlmMessages = [...workingLlmMessages, {role: 'assistant', content: finalText.trim()}];
+        setLlmMessages(workingLlmMessages);
+      }
+
+      setUiMessages(prev => [...prev, {role: 'assistant', content: (finalText ?? '').trim()}]);
       setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 50);
     } catch (e: any) {
       setErrorText(e?.message ? String(e.message) : 'Failed to send message');
     } finally {
       setIsBusy(false);
+      setProgressText('');
     }
-  }, [provider, input, messages, aiSettings.openAiModel]);
+  }, [provider, input, llmMessages, aiSettings.openAiModel, toolSystemPrompt]);
 
   const renderLocked = () => (
     <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
@@ -476,79 +560,88 @@ const AiAnalyst: React.FC = () => {
 
   const renderMission = () => (
     <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
-      <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
-        <Title>Hypo Detective</Title>
-        <Subtle>{makeDisclosureText()}</Subtle>
-      </View>
-
-      <ScrollView
-        ref={scrollRef}
-        style={{flex: 1, marginTop: theme.spacing.sm}}
-        contentContainerStyle={{paddingBottom: theme.spacing.lg}}
+      <KeyboardAvoidingView
+        style={{flex: 1}}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {messages.map((m, idx) => (
-          <MessageBubble key={String(idx)} role={m.role === 'user' ? 'user' : 'assistant'}>
-            {m.role === 'assistant' ? (
-              <Markdown
-                markdownit={markdownItInstance}
-                rules={selectableMarkdownRules}
-                style={markdownStyle}
-              >
-                {m.content}
-              </Markdown>
-            ) : (
-              <MessageText selectable>{m.content}</MessageText>
-            )}
-          </MessageBubble>
-        ))}
+        <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
+          <Title>Hypo Detective</Title>
+          <Subtle>{makeDisclosureText()}</Subtle>
+        </View>
 
-        {isBusy ? (
-          <View style={{marginTop: 6, marginLeft: 12, flexDirection: 'row', alignItems: 'center'}}>
-            <ActivityIndicator />
-            <Text style={{marginLeft: 10, color: addOpacity(theme.textColor, 0.75)}}>
-              Thinking…
+        <ScrollView
+          ref={scrollRef}
+          style={{flex: 1, marginTop: theme.spacing.sm}}
+          contentContainerStyle={{paddingBottom: theme.spacing.lg}}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
+          {uiMessages.map((m, idx) => (
+            <MessageBubble key={String(idx)} role={m.role === 'user' ? 'user' : 'assistant'}>
+              {m.role === 'assistant' ? (
+                <Markdown
+                  markdownit={markdownItInstance}
+                  rules={selectableMarkdownRules}
+                  style={markdownStyle}
+                >
+                  {m.content}
+                </Markdown>
+              ) : (
+                <MessageText selectable>{m.content}</MessageText>
+              )}
+            </MessageBubble>
+          ))}
+
+          {isBusy ? (
+            <View style={{marginTop: 6, marginLeft: 12, flexDirection: 'row', alignItems: 'center'}}>
+              <ActivityIndicator />
+              <Text style={{marginLeft: 10, color: addOpacity(theme.textColor, 0.75)}}>
+                {progressText ? progressText : 'Thinking…'}
+              </Text>
+            </View>
+          ) : null}
+
+          {!!errorText ? (
+            <Text style={{marginTop: 10, marginLeft: 12, color: theme.belowRangeColor}}>
+              {errorText}
             </Text>
-          </View>
-        ) : null}
+          ) : null}
+        </ScrollView>
 
-        {!!errorText ? (
-          <Text style={{marginTop: 10, marginLeft: 12, color: theme.belowRangeColor}}>
-            {errorText}
-          </Text>
-        ) : null}
-      </ScrollView>
+        <InputRow>
+          <ChatInput
+            testID={E2E_TEST_IDS.aiAnalyst.chatInput}
+            value={input}
+            onChangeText={setInput}
+            onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 50)}
+            placeholder="Ask a follow-up…"
+            placeholderTextColor={addOpacity(theme.textColor, 0.5)}
+            editable={!isBusy}
+          />
+          <SendButton
+            testID={E2E_TEST_IDS.aiAnalyst.sendButton}
+            onPress={sendFollowUp}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityLabel="Send"
+          >
+            <MaterialIcons name="send" size={18} color={theme.white} />
+          </SendButton>
+        </InputRow>
 
-      <InputRow>
-        <ChatInput
-          testID={E2E_TEST_IDS.aiAnalyst.chatInput}
-          value={input}
-          onChangeText={setInput}
-          placeholder="Ask a follow-up…"
-          placeholderTextColor={addOpacity(theme.textColor, 0.5)}
-          editable={!isBusy}
-        />
-        <SendButton
-          testID={E2E_TEST_IDS.aiAnalyst.sendButton}
-          onPress={sendFollowUp}
-          disabled={isBusy}
-          accessibilityRole="button"
-          accessibilityLabel="Send"
-        >
-          <MaterialIcons name="send" size={18} color={theme.white} />
-        </SendButton>
-      </InputRow>
-
-      <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md}}>
-        <Pressable
-          onPress={() => {
-            setMessages([]);
-            setState({mode: 'dashboard'});
-          }}
-          accessibilityRole="button"
-        >
-          <Text style={{color: addOpacity(theme.textColor, 0.7)}}>Back to missions</Text>
-        </Pressable>
-      </View>
+        <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md}}>
+          <Pressable
+            onPress={() => {
+              setUiMessages([]);
+              setLlmMessages([]);
+              setState({mode: 'dashboard'});
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={{color: addOpacity(theme.textColor, 0.7)}}>Back to missions</Text>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
     </Container>
   );
 
