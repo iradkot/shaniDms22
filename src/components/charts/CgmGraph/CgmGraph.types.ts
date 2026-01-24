@@ -37,6 +37,16 @@ export interface CgmGraphProps {
   xDomain?: [Date, Date] | null;
 
   /**
+   * Optional formatter for x-axis tick labels.
+   *
+   * When not provided, ticks default to locale time strings.
+   */
+  xTickLabelFormatter?: ((date: Date) => string) | null;
+
+  /** Whether to show the date labels row at the top of the plot. Defaults to true. */
+  showDateLabels?: boolean;
+
+  /**
    * Optional E2E selector.
    *
    * We keep this optional so the chart can be reused in lists/cards without forcing unique IDs.

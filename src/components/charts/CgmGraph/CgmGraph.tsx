@@ -47,6 +47,8 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   insulinData,
   xDomain,
   margin,
+  xTickLabelFormatter,
+  showDateLabels = true,
   testID,
   showFullScreenButton = true,
   tooltipMode = 'internal',
@@ -203,9 +205,9 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
           <G
             x={graphStyleContextValue.margin?.left}
             y={graphStyleContextValue.margin?.top}>
-            <XGridAndAxis />
+            <XGridAndAxis xTickLabelFormatter={xTickLabelFormatter ?? undefined} />
             <YGridAndAxis highestBgThreshold={300} />
-            <GraphDateDisplay />
+            {showDateLabels ? <GraphDateDisplay /> : null}
             <CGMSamplesRenderer
               focusedSampleDateString={closestBgSample?.dateString}
             />

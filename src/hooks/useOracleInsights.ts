@@ -1,19 +1,20 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {fetchBgDataForDateRange} from 'app/api/apiRequests';
 import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
 import {BgSample} from 'app/types/day_bgs.types';
 import {TrendDirectionString} from 'app/types/notifications';
 
-import {syncOracleCache} from 'app/services/oracle/oracleCache';
+import {loadOracleCache, OracleCacheSyncProgress, syncOracleCache} from 'app/services/oracle/oracleCache';
 import {
   computeOracleInsights,
+  computeOracleInsightsProgressive,
+  OracleComputeProgress,
   findLoadAtTs,
   slopeAtLeastSquares,
   trendBucket,
 } from 'app/services/oracle/oracleMatching';
 import {
-  ORACLE_CACHE_DAYS,
   ORACLE_HOUR_MS,
   ORACLE_MINUTE_MS,
   ORACLE_RECENT_WINDOW_HOURS,
@@ -30,6 +31,7 @@ type OracleInsightsStatus =
   | {state: 'idle'}
   | {state: 'loading'; message: string}
   | {state: 'syncing'; message: string; hasHistory: boolean}
+  | {state: 'computing'; message: string}
   | {state: 'ready'}
   | {state: 'error'; message: string};
 
@@ -130,11 +132,35 @@ export function useOracleInsights(params?: {
   includeLoadInMatching?: boolean;
   /** Number of sample points ("dots") for slope regression. */
   slopePointCount?: number;
+  /** History window (days) to keep in the local cache, used when running a sync. */
+  cacheDays?: number;
+  /** When true, Execute will re-sync cache before analyzing. */
+  refreshCacheOnExecute?: boolean;
 }): {
   insights: OracleInsights | null;
   events: OracleInvestigateEvent[];
   selectedEvent: OracleInvestigateEvent | null;
   isLoading: boolean;
+  /** True while (re)computing matches/insights on the JS thread. */
+  isComputingInsights: boolean;
+  /** Progress for scanning the local history cache (if available). */
+  computeProgress: OracleComputeProgress | null;
+  /** Progress for syncing the local history cache from the network. */
+  syncProgress: OracleCacheSyncProgress | null;
+  /** Tracks the last compute duration (ms) for UI/debug. */
+  lastComputeMs: number | null;
+  /** Current slope point count after debouncing. */
+  effectiveSlopePointCount: number | undefined;
+  /** Whether the user has run Execute at least once in this session. */
+  hasExecuted: boolean;
+  /** The exact config used for the last execution (stable even if UI settings change). */
+  lastRunConfig: {
+    cacheDays: number;
+    includeLoadInMatching: boolean;
+    slopePointCount: number | undefined;
+    refreshCacheOnExecute: boolean;
+    selectedEventTs: number | null;
+  } | null;
   error: unknown;
   lastSyncedMs: number | null;
   /** Number of BG entries currently available in the 90-day local cache. */
@@ -143,12 +169,26 @@ export function useOracleInsights(params?: {
   isSyncing: boolean;
   /** High-level status intended for UI display. */
   status: OracleInsightsStatus;
-  /** Re-runs cache sync and refreshes recent BG window. */
-  retry: () => void;
+  /** Starts cache collection (optional) + analysis using the current UI settings. */
+  execute: () => void;
 } {
   const selectedEventTs = params?.selectedEventTs ?? null;
   const includeLoadInMatching = params?.includeLoadInMatching !== false;
   const slopePointCount = params?.slopePointCount;
+  const cacheDays = typeof params?.cacheDays === 'number' && Number.isFinite(params.cacheDays)
+    ? Math.max(1, Math.round(params.cacheDays))
+    : 90;
+  const refreshCacheOnExecute = params?.refreshCacheOnExecute !== false;
+
+  // Debounce the slope-point count. Users tend to tap +/- quickly; this avoids
+  // repeated heavy recomputes while still updating the control immediately.
+  const [effectiveSlopePointCount, setEffectiveSlopePointCount] = useState<number | undefined>(
+    slopePointCount,
+  );
+  useEffect(() => {
+    const t = setTimeout(() => setEffectiveSlopePointCount(slopePointCount), 250);
+    return () => clearTimeout(t);
+  }, [slopePointCount]);
 
   const {snapshot, isLoading: snapshotLoading, error: snapshotError} =
     useLatestNightscoutSnapshot({pollingEnabled: true});
@@ -158,44 +198,35 @@ export function useOracleInsights(params?: {
   const [deviceStatus, setDeviceStatus] = useState<OracleCachedDeviceStatus[]>([]);
   const [lastSyncedMs, setLastSyncedMs] = useState<number | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<OracleCacheSyncProgress | null>(null);
   const [syncError, setSyncError] = useState<unknown>(null);
   const [didFullSync, setDidFullSync] = useState<boolean>(false);
-  const [syncNonce, setSyncNonce] = useState(0);
 
   const [recentBg, setRecentBg] = useState<BgSample[]>([]);
   const [recentError, setRecentError] = useState<unknown>(null);
   const [isLoadingRecent, setIsLoadingRecent] = useState(false);
 
-  const retry = useCallback(() => {
-    setSyncNonce(n => n + 1);
-  }, []);
-
-  // 1) Keep a 90-day local cache synced.
+  // Load whatever cache we have on disk. This is fast and does not hit the network.
   useEffect(() => {
     let active = true;
     (async () => {
-      setIsSyncing(true);
-      setSyncError(null);
       try {
-        const res = await syncOracleCache({days: ORACLE_CACHE_DAYS});
+        const cached = await loadOracleCache();
         if (!active) return;
-        setHistory(res.entries);
-        setTreatments(res.treatments);
-        setDeviceStatus(res.deviceStatus);
-        setLastSyncedMs(res.meta.lastSyncedMs);
-        setDidFullSync(!!res.didFullSync);
+        setHistory(cached.entries);
+        setTreatments(cached.treatments);
+        setDeviceStatus(cached.deviceStatus);
+        setLastSyncedMs(cached.meta?.lastSyncedMs ?? null);
       } catch (e) {
+        // Best-effort; keep screen usable.
         if (!active) return;
         setSyncError(e);
-      } finally {
-        if (active) setIsSyncing(false);
       }
     })();
-
     return () => {
       active = false;
     };
-  }, [syncNonce]);
+  }, []);
 
   const anchorNow = useMemo(() => {
     // Prefer live snapshot when available.
@@ -334,7 +365,7 @@ export function useOracleInsights(params?: {
     }
 
     return fallbackEvents;
-  }, [deviceStatus, recentBg]);
+  }, [deviceStatus, recentBg, slopePointCount]);
 
   const selectedEvent = useMemo(() => {
     if (!events.length) return null;
@@ -345,60 +376,240 @@ export function useOracleInsights(params?: {
     return events[0];
   }, [events, selectedEventTs]);
 
-  const computed = useMemo(() => {
-    if (!selectedEvent) return {insights: null as OracleInsights | null, computeError: null as unknown};
+  const [insights, setInsights] = useState<OracleInsights | null>(null);
+  const [computeError, setComputeError] = useState<unknown>(null);
+  const [isComputingInsights, setIsComputingInsights] = useState(false);
+  const [lastComputeMs, setLastComputeMs] = useState<number | null>(null);
+  const [computeProgress, setComputeProgress] = useState<OracleComputeProgress | null>(null);
+  const [hasExecuted, setHasExecuted] = useState(false);
+  const [lastRunConfig, setLastRunConfig] = useState<{
+    cacheDays: number;
+    includeLoadInMatching: boolean;
+    slopePointCount: number | undefined;
+    refreshCacheOnExecute: boolean;
+    selectedEventTs: number | null;
+  } | null>(null);
 
-    const anchor: BgSample = {
-      sgv: selectedEvent.sgv,
-      date: selectedEvent.date,
-      dateString: new Date(selectedEvent.date).toISOString(),
-      trend: 0,
-      direction: ORACLE_DIRECTION_NOT_COMPUTABLE,
-      device: 'oracle-anchor',
-      type: 'sgv',
-    } as BgSample;
+  const [runNonce, setRunNonce] = useState(0);
+  const runIdRef = useRef(0);
+  const runConfigRef = useRef<{
+    cacheDays: number;
+    includeLoadInMatching: boolean;
+    slopePointCount: number | undefined;
+    refreshCacheOnExecute: boolean;
+    selectedEventTs: number | null;
+  } | null>(null);
 
-    const startMs = Date.now();
-    try {
-      const res = computeOracleInsights({
-        anchor,
-        recentBg,
-        history,
-        treatments,
-        deviceStatus,
-        includeLoadInMatching,
-        slopePointCount,
-      });
+  // Refs to keep the Execute pipeline independent from render-driven dependencies.
+  // This avoids accidentally re-running analysis when background state updates.
+  const historyRef = useRef(history);
+  const treatmentsRef = useRef(treatments);
+  const deviceStatusRef = useRef(deviceStatus);
+  const recentBgRef = useRef(recentBg);
+  const eventsRef = useRef(events);
+  const selectedEventRef = useRef(selectedEvent);
 
-      const elapsed = Date.now() - startMs;
-      if (elapsed > 1500) {
-        console.warn(
-          `Oracle: computeOracleInsights took ${elapsed}ms for ${history.length} points`,
-        );
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+  useEffect(() => {
+    treatmentsRef.current = treatments;
+  }, [treatments]);
+  useEffect(() => {
+    deviceStatusRef.current = deviceStatus;
+  }, [deviceStatus]);
+  useEffect(() => {
+    recentBgRef.current = recentBg;
+  }, [recentBg]);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+  useEffect(() => {
+    selectedEventRef.current = selectedEvent;
+  }, [selectedEvent]);
+
+  const execute = useCallback(() => {
+    // Snapshot config + the currently selected event.
+    runConfigRef.current = {
+      cacheDays,
+      includeLoadInMatching,
+      slopePointCount: effectiveSlopePointCount,
+      refreshCacheOnExecute,
+      selectedEventTs: selectedEvent?.date ?? null,
+    };
+    setLastRunConfig(runConfigRef.current);
+    setHasExecuted(true);
+    runIdRef.current += 1;
+    setRunNonce(n => n + 1);
+  }, [
+    cacheDays,
+    effectiveSlopePointCount,
+    includeLoadInMatching,
+    refreshCacheOnExecute,
+    selectedEvent?.date,
+  ]);
+
+  // Main execution pipeline: (optional) cache sync -> compute insights.
+  useEffect(() => {
+    const runId = runIdRef.current;
+    const cfg = runConfigRef.current;
+    if (!cfg) return;
+
+    let active = true;
+
+    (async () => {
+      setSyncError(null);
+      setComputeError(null);
+      setSyncProgress(null);
+      setComputeProgress(null);
+      setLastComputeMs(null);
+
+      const selectedTs = cfg.selectedEventTs;
+      if (typeof selectedTs !== 'number') {
+        setInsights(null);
+        setComputeError(new Error('Pick an event before executing'));
+        return;
       }
 
-      return {insights: res, computeError: null as unknown};
-    } catch (e) {
-      console.warn('Oracle: computeOracleInsights failed', e);
-      return {insights: null, computeError: e};
-    }
-  }, [history, recentBg, selectedEvent, treatments, deviceStatus, includeLoadInMatching, slopePointCount]);
+      // 1) Optionally sync cache.
+      let nextHistory = historyRef.current;
+      let nextTreatments = treatmentsRef.current;
+      let nextDeviceStatus = deviceStatusRef.current;
 
-  const error = snapshotError ?? syncError ?? recentError ?? computed.computeError;
+      if (cfg.refreshCacheOnExecute) {
+        setIsSyncing(true);
+        try {
+          const res = await syncOracleCache({
+            days: cfg.cacheDays,
+            chunkDays: 14,
+            onProgress: p => {
+              if (!active) return;
+              // Ignore stale runs.
+              if (runIdRef.current !== runId) return;
+              setSyncProgress(p);
+            },
+            shouldAbort: () => !active || runIdRef.current !== runId,
+          });
+
+          if (!active || runIdRef.current !== runId) return;
+          nextHistory = res.entries;
+          nextTreatments = res.treatments;
+          nextDeviceStatus = res.deviceStatus;
+          setHistory(res.entries);
+          setTreatments(res.treatments);
+          setDeviceStatus(res.deviceStatus);
+          setLastSyncedMs(res.meta.lastSyncedMs);
+          setDidFullSync(!!res.didFullSync);
+        } catch (e) {
+          if (!active || runIdRef.current !== runId) return;
+          setSyncError(e);
+        } finally {
+          if (!active || runIdRef.current !== runId) return;
+          setIsSyncing(false);
+        }
+      }
+
+      // 2) Compute insights.
+      setIsComputingInsights(true);
+      try {
+        const selected = eventsRef.current.find(e => e.date === selectedTs) ?? null;
+        const anchorEvent = selected ?? selectedEventRef.current;
+        if (!anchorEvent) {
+          throw new Error('Unable to resolve selected event for analysis');
+        }
+
+        const anchor: BgSample = {
+          sgv: anchorEvent.sgv,
+          date: anchorEvent.date,
+          dateString: new Date(anchorEvent.date).toISOString(),
+          trend: 0,
+          direction: ORACLE_DIRECTION_NOT_COMPUTABLE,
+          device: 'oracle-anchor',
+          type: 'sgv',
+        } as BgSample;
+
+        const startMs = Date.now();
+        const useProgressive = Array.isArray(nextHistory) && nextHistory.length >= 2000;
+
+        if (useProgressive) {
+          const res = await computeOracleInsightsProgressive(
+            {
+              anchor,
+              recentBg: recentBgRef.current,
+              history: nextHistory,
+              treatments: nextTreatments,
+              deviceStatus: nextDeviceStatus,
+              includeLoadInMatching: cfg.includeLoadInMatching,
+              slopePointCount: cfg.slopePointCount,
+            },
+            {
+              onProgress: p => {
+                if (!active || runIdRef.current !== runId) return;
+                setComputeProgress(p);
+              },
+              onPartialInsights: partial => {
+                if (!active || runIdRef.current !== runId) return;
+                setInsights(partial);
+              },
+              shouldAbort: () => !active || runIdRef.current !== runId,
+            },
+          );
+
+          if (!active || runIdRef.current !== runId) return;
+          setInsights(res);
+          setLastComputeMs(Date.now() - startMs);
+          return;
+        }
+
+        const res = computeOracleInsights({
+          anchor,
+          recentBg: recentBgRef.current,
+          history: nextHistory,
+          treatments: nextTreatments,
+          deviceStatus: nextDeviceStatus,
+          includeLoadInMatching: cfg.includeLoadInMatching,
+          slopePointCount: cfg.slopePointCount,
+        });
+
+        if (!active || runIdRef.current !== runId) return;
+        setInsights(res);
+        setLastComputeMs(Date.now() - startMs);
+      } catch (e) {
+        if (!active || runIdRef.current !== runId) return;
+        setInsights(null);
+        setComputeError(e);
+      } finally {
+        if (!active || runIdRef.current !== runId) return;
+        setIsComputingInsights(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [runNonce]);
+
+  const error = snapshotError ?? syncError ?? recentError ?? computeError;
   const isLoading = snapshotLoading || isSyncing || isLoadingRecent;
 
   const status: OracleInsightsStatus = useMemo(() => {
+    if (!hasExecuted) {
+      return {state: 'idle'};
+    }
+
     if (snapshotLoading && history.length === 0) {
       return {state: 'loading', message: 'Loading recent data…'};
     }
 
     if (isSyncing) {
       const hasHistory = history.length > 0;
-      const message = hasHistory
-        ? 'Updating history cache…'
-        : didFullSync
-          ? 'Building your 90‑day history cache…'
-          : 'Syncing history cache…';
+      const message =
+        syncProgress?.message ??
+        (hasHistory
+          ? 'Updating history cache…'
+          : didFullSync
+            ? 'Building your history cache…'
+            : 'Syncing history cache…');
       return {state: 'syncing', message, hasHistory};
     }
 
@@ -414,19 +625,50 @@ export function useOracleInsights(params?: {
       return {state: 'loading', message: 'Waiting for data…'};
     }
 
+    if (isComputingInsights) {
+      const msg =
+        computeProgress?.stage === 'scanning'
+          ? 'Scanning history for similar events…'
+          : computeProgress?.stage === 'finalizing'
+            ? 'Finalizing insights…'
+            : 'Analyzing similar events…';
+      return {state: 'computing', message: msg};
+    }
+
     return {state: 'ready'};
-  }, [anchorNow, didFullSync, error, events.length, history.length, isLoading, isSyncing, recentBg.length, snapshotLoading]);
+  }, [
+    anchorNow,
+    computeProgress?.stage,
+    didFullSync,
+    error,
+    events.length,
+    hasExecuted,
+    history.length,
+    isComputingInsights,
+    isLoading,
+    isSyncing,
+    recentBg.length,
+    snapshotLoading,
+    syncProgress?.message,
+  ]);
 
   return {
-    insights: computed.insights,
+    insights,
     events,
     selectedEvent,
     isLoading,
+    isComputingInsights,
+    computeProgress,
+    syncProgress,
+    lastComputeMs,
+    effectiveSlopePointCount,
+    hasExecuted,
+    lastRunConfig,
     error,
     lastSyncedMs,
     historyCount: history.length,
     isSyncing,
     status,
-    retry,
+    execute,
   };
 }

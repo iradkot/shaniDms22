@@ -116,6 +116,23 @@ const ActiveInsulinMiniGraph: React.FC<Props> = ({
     return iobPoints[iobPoints.length - 1];
   }, [iobPoints]);
 
+  const cursorPoint = useMemo(() => {
+    if (!iobPoints.length) return null;
+    if (cursorTimeMs == null) return null;
+
+    // Nearest point (fast enough for our small series).
+    let best = iobPoints[0];
+    let bestDist = Math.abs(best.x - cursorTimeMs);
+    for (const p of iobPoints) {
+      const d = Math.abs(p.x - cursorTimeMs);
+      if (d < bestDist) {
+        best = p;
+        bestDist = d;
+      }
+    }
+    return best;
+  }, [cursorTimeMs, iobPoints]);
+
   const yMax = useMemo(() => {
     let max = 0;
     for (const p of iobPoints) {
@@ -274,6 +291,17 @@ const ActiveInsulinMiniGraph: React.FC<Props> = ({
               stroke={addOpacity(theme.textColor, 0.45)}
               strokeWidth={2}
               opacity={1}
+            />
+          ) : null}
+
+          {cursorPoint ? (
+            <Circle
+              cx={xScale(new Date(cursorPoint.x))}
+              cy={yScale(cursorPoint.y)}
+              r={4}
+              fill={theme.colors.insulin}
+              stroke={theme.white}
+              strokeWidth={1.25}
             />
           ) : null}
 

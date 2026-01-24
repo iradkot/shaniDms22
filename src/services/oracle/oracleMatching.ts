@@ -198,6 +198,7 @@ function buildTrace(
   anchorTs: number,
   anchorSgv: number,
   slope: number,
+  deviceStatus?: OracleCachedDeviceStatus[],
 ): OracleMatchTrace {
   const points: OracleSeriesPoint[] = [];
 
@@ -208,7 +209,14 @@ function buildTrace(
     points.push({tMin, sgv});
   }
 
-  return {anchorTs, anchorSgv, points, slope};
+  const loadPoints = deviceStatus?.length ? buildLoadPoints(deviceStatus, anchorTs) : undefined;
+  return {
+    anchorTs,
+    anchorSgv,
+    points,
+    slope,
+    ...(loadPoints?.length ? {loadPoints} : null),
+  };
 }
 
 function getSgvAtMinute(points: OracleSeriesPoint[], tMin: number): number | null {
@@ -230,11 +238,16 @@ function getSgvAtMinute(points: OracleSeriesPoint[], tMin: number): number | nul
  *
  * Picks the nearest device-status point within a small time window.
  */
-export function findLoadAtTs(
+function findDeviceStatusAtTs(
   deviceStatus: OracleCachedDeviceStatus[],
   ts: number,
-): {iob: number | null; cob: number | null} {
-  if (!deviceStatus.length) return {iob: null, cob: null};
+): {
+  iob: number | null;
+  iobBolus: number | null;
+  iobBasal: number | null;
+  cob: number | null;
+} {
+  if (!deviceStatus.length) return {iob: null, iobBolus: null, iobBasal: null, cob: null};
   const i = lowerBoundByTs(deviceStatus, ts);
   const prev = i > 0 ? deviceStatus[i - 1] : null;
   const next = i < deviceStatus.length ? deviceStatus[i] : null;
@@ -244,12 +257,57 @@ export function findLoadAtTs(
   const nextDist = next ? Math.abs(ts - next.ts) : Number.POSITIVE_INFINITY;
   const best = prevDist <= nextDist ? prev : next;
   const bestDist = Math.min(prevDist, nextDist);
-  if (!best || bestDist > maxGapMs) return {iob: null, cob: null};
+  if (!best || bestDist > maxGapMs) {
+    return {iob: null, iobBolus: null, iobBasal: null, cob: null};
+  }
 
   return {
     iob: typeof best.iob === 'number' ? best.iob : null,
+    iobBolus: typeof best.iobBolus === 'number' ? best.iobBolus : null,
+    iobBasal: typeof best.iobBasal === 'number' ? best.iobBasal : null,
     cob: typeof best.cob === 'number' ? best.cob : null,
   };
+}
+
+export function findLoadAtTs(
+  deviceStatus: OracleCachedDeviceStatus[],
+  ts: number,
+): {iob: number | null; cob: number | null} {
+  const best = findDeviceStatusAtTs(deviceStatus, ts);
+  return {iob: best.iob, cob: best.cob};
+}
+
+const ORACLE_LOAD_SERIES_STEP_MIN = 5;
+
+function buildLoadPoints(
+  deviceStatus: OracleCachedDeviceStatus[],
+  anchorTs: number,
+): NonNullable<OracleMatchTrace['loadPoints']> {
+  const loadPoints: NonNullable<OracleMatchTrace['loadPoints']> = [];
+
+  for (
+    let tMin = -ORACLE_CHART_PAST_MIN;
+    tMin <= ORACLE_CHART_FUTURE_MIN;
+    tMin += ORACLE_LOAD_SERIES_STEP_MIN
+  ) {
+    const ts = anchorTs + tMin * ORACLE_MINUTE_MS;
+    const best = findDeviceStatusAtTs(deviceStatus, ts);
+    const hasAny =
+      typeof best.iob === 'number' ||
+      typeof best.iobBolus === 'number' ||
+      typeof best.iobBasal === 'number' ||
+      typeof best.cob === 'number';
+    if (!hasAny) continue;
+    loadPoints.push({
+      tMin,
+      iob: best.iob,
+      iobBolus: best.iobBolus,
+      iobBasal: best.iobBasal,
+      cob: best.cob,
+    });
+  }
+
+  return loadPoints;
 }
 
 /**
@@ -506,7 +564,7 @@ export function computeOracleInsights(params: {
       }
     }
 
-    const trace = buildTrace(sortedHistory, t0, entry.sgv, pastSlope);
+    const trace = buildTrace(sortedHistory, t0, entry.sgv, pastSlope, sortedDeviceStatus);
 
     // Require at least a minimal amount of future data to avoid misleading one-point "matches".
     let futurePoints = 0;
@@ -604,4 +662,322 @@ export function computeOracleInsights(params: {
     strategies,
     disclaimerText: ORACLE_DISCLAIMER_TEXT,
   };
+}
+
+export type OracleComputeProgress = {
+  stage: 'scanning' | 'finalizing';
+  scanned: number;
+  total: number;
+  matchCount: number;
+  percent: number;
+};
+
+function clampPercent01(v: number): number {
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(1, v));
+}
+
+/**
+ * Progressive version of `computeOracleInsights`.
+ *
+ * Why: scanning 90 days of CGM history can take long enough that the UI feels frozen.
+ * This yields to the JS event loop, emits progress, and can emit partial insights
+ * so the UI can present incremental matches.
+ */
+export async function computeOracleInsightsProgressive(
+  params: {
+    anchor: BgSample;
+    recentBg: BgSample[];
+    history: OracleCachedBgEntry[];
+    treatments: OracleCachedTreatment[];
+    deviceStatus: OracleCachedDeviceStatus[];
+    includeLoadInMatching?: boolean;
+    slopePointCount?: number;
+  },
+  opts?: {
+    chunkSize?: number;
+    /** Max frequency for `onPartialInsights` updates (ms). */
+    partialThrottleMs?: number;
+    /** Called as scanning progresses. */
+    onProgress?: (p: OracleComputeProgress) => void;
+    /** Called with partial insights as matches accumulate. */
+    onPartialInsights?: (insights: OracleInsights) => void;
+    /** Return true to cancel this run. */
+    shouldAbort?: () => boolean;
+  },
+): Promise<OracleInsights> {
+  const {anchor, recentBg, history, treatments, deviceStatus} = params;
+  const includeLoadInMatching = params.includeLoadInMatching !== false;
+  const slopePointCount = params.slopePointCount;
+  const chunkSize = Math.max(50, Math.round(opts?.chunkSize ?? 600));
+  const partialThrottleMs = Math.max(50, Math.round(opts?.partialThrottleMs ?? 300));
+
+  // --- Same preparation as computeOracleInsights (kept in-sync intentionally).
+  const historyClean: OracleCachedBgEntry[] = Array.isArray(history)
+    ? (history.filter(
+        e =>
+          !!e &&
+          typeof (e as any).date === 'number' &&
+          Number.isFinite((e as any).date) &&
+          typeof (e as any).sgv === 'number' &&
+          Number.isFinite((e as any).sgv),
+      ) as OracleCachedBgEntry[])
+    : [];
+
+  const treatmentsClean: OracleCachedTreatment[] = Array.isArray(treatments)
+    ? (treatments.filter(
+        t => !!t && typeof (t as any).ts === 'number' && Number.isFinite((t as any).ts),
+      ) as OracleCachedTreatment[])
+    : [];
+
+  const deviceStatusClean: OracleCachedDeviceStatus[] = Array.isArray(deviceStatus)
+    ? (deviceStatus.filter(
+        d => !!d && typeof (d as any).ts === 'number' && Number.isFinite((d as any).ts),
+      ) as OracleCachedDeviceStatus[])
+    : [];
+
+  const sortedHistory = isSortedBy(historyClean, e => e.date)
+    ? historyClean
+    : [...historyClean].sort((a, b) => a.date - b.date);
+  const sortedTreatments = isSortedBy(treatmentsClean, t => t.ts)
+    ? treatmentsClean
+    : [...treatmentsClean].sort((a, b) => a.ts - b.ts);
+  const sortedDeviceStatus = isSortedBy(deviceStatusClean, d => d.ts)
+    ? deviceStatusClean
+    : [...deviceStatusClean].sort((a, b) => a.ts - b.ts);
+
+  const nowTs = anchor.date;
+  const nowSgv = anchor.sgv;
+
+  const recentSlim: OracleCachedBgEntry[] = (Array.isArray(recentBg) ? recentBg : [])
+    .filter(
+      e =>
+        typeof e?.date === 'number' &&
+        Number.isFinite(e.date) &&
+        typeof e?.sgv === 'number' &&
+        Number.isFinite(e.sgv),
+    )
+    .map(e => ({date: e.date, sgv: e.sgv}))
+    .sort((a, b) => a.date - b.date);
+
+  const slopeSource = recentSlim.length ? recentSlim : sortedHistory;
+  const currentSlope =
+    slopeAtLeastSquares(slopeSource, nowTs, {sampleCount: slopePointCount}) ?? 0;
+  const currentBucket = trendBucket(currentSlope);
+
+  const nowMinutes = minutesFromMidnightLocal(nowTs);
+  const bgTol = Math.max(ORACLE_BG_TOLERANCE_FIXED, nowSgv * ORACLE_BG_TOLERANCE_PERCENT);
+
+  const anchorLoad = findLoadAtTs(sortedDeviceStatus, nowTs);
+
+  const currentSeries: OracleSeriesPoint[] = [];
+  const currentWindow = recentSlim.length ? recentSlim : history;
+  for (const e of currentWindow) {
+    const tMin = Math.round((e.date - nowTs) / ORACLE_MINUTE_MS);
+    if (tMin < -ORACLE_CHART_PAST_MIN || tMin > 0) continue;
+    currentSeries.push({tMin, sgv: e.sgv});
+  }
+  currentSeries.push({tMin: 0, sgv: nowSgv});
+  currentSeries.sort((a, b) => a.tMin - b.tMin);
+  const deduped = new Map<number, number>();
+  for (const p of currentSeries) deduped.set(p.tMin, p.sgv);
+  currentSeries.length = 0;
+  for (const [tMin, sgv] of deduped.entries()) currentSeries.push({tMin, sgv});
+  currentSeries.sort((a, b) => a.tMin - b.tMin);
+
+  // --- Scan history in chunks.
+  const endExclusive = lowerBoundByDate(sortedHistory, nowTs);
+  const total = Math.max(0, endExclusive);
+  const matches: OracleMatchTrace[] = [];
+
+  let lastPartialEmitMs = 0;
+  let scanned = 0;
+
+  const emitProgress = (stage: OracleComputeProgress['stage']) => {
+    const percent = total > 0 ? clampPercent01(scanned / total) : 1;
+    opts?.onProgress?.({stage, scanned, total, matchCount: matches.length, percent});
+  };
+
+  const emitPartialInsights = () => {
+    const now = Date.now();
+    if (now - lastPartialEmitMs < partialThrottleMs) return;
+    lastPartialEmitMs = now;
+    opts?.onPartialInsights?.({
+      matchCount: matches.length,
+      // Copy so React state updates reliably.
+      matches: [...matches],
+      anchorIob: typeof anchorLoad.iob === 'number' ? anchorLoad.iob : null,
+      anchorCob: typeof anchorLoad.cob === 'number' ? anchorLoad.cob : null,
+      usedLoadInMatching: includeLoadInMatching,
+      currentSeries,
+      medianSeries: [],
+      strategies: [],
+      disclaimerText: ORACLE_DISCLAIMER_TEXT,
+    });
+  };
+
+  emitProgress('scanning');
+  emitPartialInsights();
+
+  // Scan newest -> oldest so the UI can show recent matches first.
+  for (let idx = endExclusive - 1; idx >= 0; idx--) {
+    if (opts?.shouldAbort?.()) break;
+
+    const entry = sortedHistory[idx];
+    const t0 = entry.date;
+
+    // Must be able to compute slope for the past entry.
+    const pastSlope = slopeAtLeastSquares(sortedHistory, t0, {sampleCount: slopePointCount});
+    if (pastSlope === null) {
+      scanned += 1;
+      continue;
+    }
+
+    // Filter A: Time of day.
+    const pastMinutes = minutesFromMidnightLocal(t0);
+    if (circularMinuteDiff(nowMinutes, pastMinutes) > ORACLE_TIME_WINDOW_MIN) {
+      scanned += 1;
+      continue;
+    }
+
+    // Filter B: Glucose proximity.
+    if (Math.abs(nowSgv - entry.sgv) > bgTol) {
+      scanned += 1;
+      continue;
+    }
+
+    // Filter C: Trend alignment.
+    const pastBucket = trendBucket(pastSlope);
+    if (pastBucket !== currentBucket) {
+      scanned += 1;
+      continue;
+    }
+    if (Math.abs(currentSlope - pastSlope) > ORACLE_SLOPE_TOLERANCE) {
+      scanned += 1;
+      continue;
+    }
+
+    // Ensure we can draw a future trace (at least some points past +4h).
+    const endNeedTs = t0 + ORACLE_CHART_FUTURE_MIN * ORACLE_MINUTE_MS;
+    const endIdx = lowerBoundByDate(sortedHistory, endNeedTs);
+    if (endIdx >= sortedHistory.length) {
+      scanned += 1;
+      continue;
+    }
+
+    const matchLoad = findLoadAtTs(sortedDeviceStatus, t0);
+    if (includeLoadInMatching) {
+      if (
+        typeof anchorLoad.iob === 'number' &&
+        typeof matchLoad.iob === 'number' &&
+        Math.abs(anchorLoad.iob - matchLoad.iob) > ORACLE_IOB_TOLERANCE_U
+      ) {
+        scanned += 1;
+        continue;
+      }
+
+      if (
+        typeof anchorLoad.cob === 'number' &&
+        typeof matchLoad.cob === 'number' &&
+        Math.abs(anchorLoad.cob - matchLoad.cob) > ORACLE_COB_TOLERANCE_G
+      ) {
+        scanned += 1;
+        continue;
+      }
+    }
+
+    const trace = buildTrace(sortedHistory, t0, entry.sgv, pastSlope, sortedDeviceStatus);
+
+    // Require at least a minimal amount of future data to avoid misleading one-point "matches".
+    let futurePoints = 0;
+    for (const p of trace.points) {
+      if (p.tMin > 0) futurePoints += 1;
+      if (futurePoints >= 10) break;
+    }
+    if (futurePoints < 10) {
+      scanned += 1;
+      continue;
+    }
+
+    const tir2h = computeTir(trace.points, 0, 120);
+
+    // Attach treatment markers and 30m action summary.
+    const actionEndTs = t0 + ORACLE_ACTION_WINDOW_MIN * ORACLE_MINUTE_MS;
+    const startIdx = lowerBoundByTs(sortedTreatments, t0);
+    const endIdx2 = lowerBoundByTs(sortedTreatments, actionEndTs + 1);
+    const relevant = sortedTreatments.slice(startIdx, endIdx2);
+    let insulin = 0;
+    let carbs = 0;
+    let bolusCount = 0;
+    let carbsCount = 0;
+    const markers: Array<{tMin: number; kind: 'insulin' | 'carbs'}> = [];
+    for (const t of relevant) {
+      const tMin = Math.round((t.ts - t0) / ORACLE_MINUTE_MS);
+      if (tMin < 0 || tMin > ORACLE_ACTION_WINDOW_MIN) continue;
+      if (typeof t.insulin === 'number' && t.insulin > 0) {
+        insulin += t.insulin;
+        bolusCount += 1;
+        markers.push({tMin, kind: 'insulin'});
+      }
+      if (typeof t.carbs === 'number' && t.carbs > 0) {
+        carbs += t.carbs;
+        carbsCount += 1;
+        markers.push({tMin, kind: 'carbs'});
+      }
+    }
+
+    matches.push({
+      ...trace,
+      iob: typeof matchLoad.iob === 'number' ? matchLoad.iob : null,
+      cob: typeof matchLoad.cob === 'number' ? matchLoad.cob : null,
+      treatments30m: relevant.length ? relevant : undefined,
+      actions30m: {insulin: Number(insulin.toFixed(2)), carbs: Number(carbs.toFixed(2))},
+      actionCounts30m: {boluses: bolusCount, carbs: carbsCount},
+      tir2h,
+      actionMarkers: markers.length ? markers : undefined,
+    });
+
+    scanned += 1;
+
+    if (scanned % chunkSize === 0) {
+      emitProgress('scanning');
+      emitPartialInsights();
+      // Yield back to the event loop so the UI can update.
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+
+  // Final emit for scanning.
+  emitProgress('finalizing');
+  emitPartialInsights();
+
+  // Median series for [0..+4h]
+  const medianSeries: OracleSeriesPoint[] = [];
+  for (let tMin = 0; tMin <= ORACLE_CHART_FUTURE_MIN; tMin += 1) {
+    const values: number[] = [];
+    for (const m of matches) {
+      const p = m.points.find(pp => pp.tMin === tMin);
+      if (p) values.push(p.sgv);
+    }
+    if (values.length === 0) continue;
+    medianSeries.push({tMin, sgv: median(values)});
+  }
+
+  const strategies = buildStrategies(matches);
+
+  const result: OracleInsights = {
+    matchCount: matches.length,
+    matches,
+    anchorIob: typeof anchorLoad.iob === 'number' ? anchorLoad.iob : null,
+    anchorCob: typeof anchorLoad.cob === 'number' ? anchorLoad.cob : null,
+    usedLoadInMatching: includeLoadInMatching,
+    currentSeries,
+    medianSeries,
+    strategies,
+    disclaimerText: ORACLE_DISCLAIMER_TEXT,
+  };
+
+  opts?.onPartialInsights?.(result);
+  emitProgress('finalizing');
+  return result;
 }

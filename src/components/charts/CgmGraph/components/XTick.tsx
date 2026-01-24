@@ -11,6 +11,7 @@ interface TickProps {
   lineStyle?: any;
   textStyle?: any;
   roundTicks?: boolean;
+  labelFormatter?: (date: Date) => string;
 }
 
 const StyledLine = styled(Line)`
@@ -24,12 +25,15 @@ const StyledText = styled(Text)`
   fontFamily: ${({theme}) => theme.fontFamily};
 `;
 
-const XTick = ({ x, withDate, lineStyle, textStyle, roundTicks }: TickProps) => {
+const XTick = ({ x, withDate, lineStyle, textStyle, roundTicks, labelFormatter }: TickProps) => {
   const [{ xScale, graphHeight }] = useContext(GraphStyleContext);
   const dateTick = xScale.invert(x);
   const roundHourOffset = new Date(dateTick).getMinutes() % 60;
   const roundHourDate = new Date(subMinutes(dateTick, roundHourOffset));
   const tickX = xScale(roundTicks ? roundHourDate : (dateTick as any));
+  const label = labelFormatter
+    ? labelFormatter(roundHourDate)
+    : formatDateToLocaleTimeString(roundHourDate);
 
   return (
     <G>
@@ -48,7 +52,7 @@ const XTick = ({ x, withDate, lineStyle, textStyle, roundTicks }: TickProps) => 
           fontWeight="bold"
           textAnchor="middle"
           {...textStyle}>
-          {formatDateToLocaleTimeString(roundHourDate)}
+          {label}
         </StyledText>
       )}
     </G>

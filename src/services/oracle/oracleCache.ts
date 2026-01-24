@@ -23,6 +23,30 @@ const ORACLE_CACHE_META_KEY = 'oracle.meta.v2';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+export type OracleCacheSyncProgress = {
+  stage: 'bg' | 'treatments' | 'deviceStatus' | 'saving';
+  chunkIndex: number;
+  chunkCount: number;
+  workDone: number;
+  workTotal: number;
+  percent: number;
+  rangeStartMs: number;
+  rangeEndMs: number;
+  message: string;
+};
+
+function clampPercent01(v: number): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(1, v));
+}
+
+function formatRange(startMs: number, endMs: number): string {
+  const start = new Date(startMs);
+  const end = new Date(endMs);
+  // Keep locale formatting to avoid importing date utils into services.
+  return `${start.toLocaleDateString()} → ${end.toLocaleDateString()}`;
+}
+
 function clampFiniteNumber(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   return value;
@@ -130,6 +154,11 @@ async function saveOracleCache(params: {
 export async function syncOracleCache(params: {
   nowMs?: number;
   days?: number;
+  /** Chunk size (days) for network fetches; smaller = more progress updates. */
+  chunkDays?: number;
+  onProgress?: (p: OracleCacheSyncProgress) => void;
+  /** Return true to cancel this sync. */
+  shouldAbort?: () => boolean;
 } = {}): Promise<{
   entries: OracleCachedBgEntry[];
   treatments: OracleCachedTreatment[];
@@ -139,6 +168,7 @@ export async function syncOracleCache(params: {
 }> {
   const nowMs = clampFiniteNumber(params.nowMs) ?? Date.now();
   const days = clampFiniteNumber(params.days) ?? 90;
+  const chunkDays = clampFiniteNumber(params.chunkDays) ?? 14;
 
   const startMs = nowMs - days * DAY_MS;
 
@@ -157,75 +187,143 @@ export async function syncOracleCache(params: {
 
   const didFullSync = !hasUsableCache;
 
-  const fetchStart = didFullSync
-    ? new Date(startMs)
-    : new Date(Math.max(startMs, lastSyncedMs - 5 * 60 * 1000));
-  const fetchEnd = new Date(nowMs);
+  const fetchStartMs = didFullSync
+    ? startMs
+    : Math.max(startMs, (clampFiniteNumber(lastSyncedMs) ?? nowMs) - 5 * 60 * 1000);
+  const fetchEndMs = nowMs;
 
-  const fetched = await fetchBgDataForDateRangeUncached(fetchStart, fetchEnd, {
-    // For 90 days we expect ~26k points; keep some slack.
-    count: 100000,
-  });
+  const chunkMs = Math.max(1, chunkDays) * DAY_MS;
+  const totalSpan = Math.max(0, fetchEndMs - fetchStartMs);
+  const chunkCount = Math.max(1, Math.ceil(totalSpan / chunkMs));
 
-  const fetchedSlim: OracleCachedBgEntry[] = fetched
-    .filter(e => typeof e?.date === 'number' && typeof e?.sgv === 'number')
-    .map(e => ({date: e.date, sgv: e.sgv}));
+  // Work units: 3 fetches per chunk + 1 save.
+  const workTotal = chunkCount * 3 + 1;
+  let workDone = 0;
 
-  const mergedAll = uniqAndSortByDate([...cachedEntries, ...fetchedSlim]).filter(
+  const report = (
+    stage: OracleCacheSyncProgress['stage'],
+    chunkIndex: number,
+    rangeStartMs: number,
+    rangeEndMs: number,
+  ) => {
+    const percent = clampPercent01(workDone / workTotal);
+    const stageLabel =
+      stage === 'bg'
+        ? 'BG'
+        : stage === 'treatments'
+          ? 'Treatments'
+          : stage === 'deviceStatus'
+            ? 'Device status'
+            : 'Saving';
+    const message =
+      stage === 'saving'
+        ? 'Saving Oracle cache…'
+        : `Fetching ${stageLabel} (${chunkIndex + 1}/${chunkCount}) • ${formatRange(rangeStartMs, rangeEndMs)}`;
+
+    params.onProgress?.({
+      stage,
+      chunkIndex,
+      chunkCount,
+      workDone,
+      workTotal,
+      percent,
+      rangeStartMs,
+      rangeEndMs,
+      message,
+    });
+  };
+
+  const fetchedSlimAll: OracleCachedBgEntry[] = [];
+  const fetchedTreatmentsSlimAll: OracleCachedTreatment[] = [];
+  const fetchedDeviceStatusSlimAll: OracleCachedDeviceStatus[] = [];
+
+  for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
+    if (params.shouldAbort?.()) throw new Error('Oracle cache sync aborted');
+
+    const rangeStartMs = fetchStartMs + chunkIndex * chunkMs;
+    const rangeEndMs = Math.min(fetchEndMs, rangeStartMs + chunkMs);
+    const fetchStart = new Date(rangeStartMs);
+    const fetchEnd = new Date(rangeEndMs);
+
+    report('bg', chunkIndex, rangeStartMs, rangeEndMs);
+    const fetched = await fetchBgDataForDateRangeUncached(fetchStart, fetchEnd, {
+      // For 90 days we expect ~26k points; keep some slack.
+      count: 100000,
+    });
+    fetchedSlimAll.push(
+      ...fetched
+        .filter(e => typeof e?.date === 'number' && typeof e?.sgv === 'number')
+        .map(e => ({date: e.date, sgv: e.sgv})),
+    );
+    workDone += 1;
+
+    if (params.shouldAbort?.()) throw new Error('Oracle cache sync aborted');
+    report('treatments', chunkIndex, rangeStartMs, rangeEndMs);
+    const fetchedTreatments = await fetchTreatmentsForDateRangeUncached(fetchStart, fetchEnd);
+    const fetchedTreatmentsSlim: OracleCachedTreatment[] = fetchedTreatments
+      .map(t => {
+        const ts = parseTreatmentTsMs(t);
+        if (ts == null) return null;
+        const insulin =
+          clampNonNegativeNumber(t?.insulin) ?? clampNonNegativeNumber(t?.amount);
+        const carbs = clampNonNegativeNumber(t?.carbs);
+        const eventType = typeof t?.eventType === 'string' ? t.eventType : undefined;
+        return {ts, insulin, carbs, eventType} satisfies OracleCachedTreatment;
+      })
+      .filter(Boolean) as OracleCachedTreatment[];
+    fetchedTreatmentsSlimAll.push(...fetchedTreatmentsSlim);
+    workDone += 1;
+
+    if (params.shouldAbort?.()) throw new Error('Oracle cache sync aborted');
+    report('deviceStatus', chunkIndex, rangeStartMs, rangeEndMs);
+    const fetchedDeviceStatus = await fetchDeviceStatusForDateRangeUncached(fetchStart, fetchEnd);
+    const fetchedDeviceStatusSlim: OracleCachedDeviceStatus[] = fetchedDeviceStatus
+      .map(s => {
+        const ts = getDeviceStatusTimestampMs(s);
+        if (typeof ts !== 'number' || !Number.isFinite(ts)) return null;
+        const load = extractLoad(s);
+        if (
+          load.iob == null &&
+          load.cob == null &&
+          load.iobBolus == null &&
+          load.iobBasal == null
+        ) {
+          return null;
+        }
+        return {
+          ts,
+          iob: load.iob,
+          iobBolus: load.iobBolus,
+          iobBasal: load.iobBasal,
+          cob: load.cob,
+        } satisfies OracleCachedDeviceStatus;
+      })
+      .filter(Boolean) as OracleCachedDeviceStatus[];
+    fetchedDeviceStatusSlimAll.push(...fetchedDeviceStatusSlim);
+    workDone += 1;
+  }
+
+  const mergedAll = uniqAndSortByDate([...cachedEntries, ...fetchedSlimAll]).filter(
     e => e.date >= startMs && e.date <= nowMs,
   );
 
-  const fetchedTreatments = await fetchTreatmentsForDateRangeUncached(fetchStart, fetchEnd);
-  const fetchedTreatmentsSlim: OracleCachedTreatment[] = fetchedTreatments
-    .map(t => {
-      const ts = parseTreatmentTsMs(t);
-      if (ts == null) return null;
-      const insulin =
-        clampNonNegativeNumber(t?.insulin) ?? clampNonNegativeNumber(t?.amount);
-      const carbs = clampNonNegativeNumber(t?.carbs);
-      const eventType = typeof t?.eventType === 'string' ? t.eventType : undefined;
-      return {ts, insulin, carbs, eventType} satisfies OracleCachedTreatment;
-    })
-    .filter(Boolean) as OracleCachedTreatment[];
-
   const mergedTreatments = uniqAndSortByTs([
     ...cachedTreatments,
-    ...fetchedTreatmentsSlim,
+    ...fetchedTreatmentsSlimAll,
   ]).filter(t => t.ts >= startMs && t.ts <= nowMs);
-
-  const fetchedDeviceStatus = await fetchDeviceStatusForDateRangeUncached(fetchStart, fetchEnd);
-  const fetchedDeviceStatusSlim: OracleCachedDeviceStatus[] = fetchedDeviceStatus
-    .map(s => {
-      const ts = getDeviceStatusTimestampMs(s);
-      if (typeof ts !== 'number' || !Number.isFinite(ts)) return null;
-      const load = extractLoad(s);
-      if (
-        load.iob == null &&
-        load.cob == null &&
-        load.iobBolus == null &&
-        load.iobBasal == null
-      ) {
-        return null;
-      }
-      return {
-        ts,
-        iob: load.iob,
-        iobBolus: load.iobBolus,
-        iobBasal: load.iobBasal,
-        cob: load.cob,
-      } satisfies OracleCachedDeviceStatus;
-    })
-    .filter(Boolean) as OracleCachedDeviceStatus[];
 
   const mergedDeviceStatus = uniqAndSortByTs([
     ...cachedDeviceStatus,
-    ...fetchedDeviceStatusSlim,
+    ...fetchedDeviceStatusSlimAll,
   ]).filter(s => s.ts >= startMs && s.ts <= nowMs);
 
   const meta: OracleCacheMeta = {
     version: 2,
     lastSyncedMs: nowMs,
   };
+
+  report('saving', chunkCount - 1, fetchStartMs, fetchEndMs);
+  workDone += 1;
 
   await saveOracleCache({
     entries: mergedAll,

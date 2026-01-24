@@ -46,6 +46,24 @@ appId: com.shanidms22
       id: screen.oracle
     timeout: 30000
 
+# Keep this flow deterministic: disable network cache refresh.
+# Note: app state is cleared on launch, so this starts as ON by default.
+- scrollUntilVisible:
+    element:
+      id: oracle.header.refreshOnExecuteToggle
+    direction: UP
+    timeout: 8000
+    optional: true
+
+- scrollUntilVisible:
+    element:
+      id: oracle.header.refreshOnExecuteToggle
+    direction: DOWN
+    timeout: 15000
+
+- tapOn:
+    id: oracle.header.refreshOnExecuteToggle
+
 # Recent events list should appear.
 - extendedWaitUntil:
     visible:
@@ -67,12 +85,29 @@ appId: com.shanidms22
       - tapOn:
           id: oracle.events.row.0
 
+      # Insights no longer auto-run on selection; Execute starts collection + analysis.
+      - scrollUntilVisible:
+          element:
+            id: oracle.execute.button
+          direction: UP
+          timeout: 12000
+          optional: true
+
+      - scrollUntilVisible:
+          element:
+            id: oracle.execute.button
+          direction: DOWN
+          timeout: 20000
+
+      - tapOn:
+          id: oracle.execute.button
+
       # Ensure chart renders (may be below the fold on smaller devices).
       - scrollUntilVisible:
           element:
             id: chart.oracle.ghostGraph
           direction: DOWN
-          timeout: 30000
+          timeout: 60000
 
       # Ensure strategies section appears (may be below the fold).
       - scrollUntilVisible:

@@ -51,6 +51,33 @@ export function oracleSeriesToBgSamples(params: {
   return samples;
 }
 
+export function oracleLoadPointsToBgSamples(params: {
+  /** Timestamp (ms) of t=0 for this series. */
+  anchorTs: number;
+  loadPoints: OracleMatchTrace['loadPoints'] | undefined;
+}): BgSample[] {
+  const {anchorTs, loadPoints} = params;
+  if (!loadPoints?.length) return [];
+
+  const samples: BgSample[] = [];
+  for (const p of loadPoints) {
+    const ts = anchorTs + p.tMin * ORACLE_MINUTE_MS;
+    if (!Number.isFinite(ts)) continue;
+
+    // Fill required `BgSample` fields even though load-only charts won't use them.
+    const base = toBgSample({ts, sgv: 0});
+    samples.push({
+      ...base,
+      iob: typeof p.iob === 'number' ? p.iob : undefined,
+      iobBolus: typeof p.iobBolus === 'number' ? p.iobBolus : undefined,
+      iobBasal: typeof p.iobBasal === 'number' ? p.iobBasal : undefined,
+      cob: typeof p.cob === 'number' ? p.cob : undefined,
+    });
+  }
+
+  return samples;
+}
+
 export function oracleTreatmentsToCgmInputs(params: {
   treatments: OracleCachedTreatment[] | undefined;
   /** Used to generate stable IDs (e.g. match anchor timestamp). */

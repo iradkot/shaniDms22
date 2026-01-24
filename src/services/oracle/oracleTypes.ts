@@ -59,6 +59,20 @@ export type OracleMatchTrace = {
   iob?: number | null;
   /** Best-effort COB at the matching anchor time (grams). */
   cob?: number | null;
+
+  /**
+   * Optional load series around the match anchor.
+   *
+   * Intended for UI charts like Active insulin / COB in the match details view.
+   * Values are best-effort and may be sparse depending on device-status availability.
+   */
+  loadPoints?: Array<{
+    tMin: number;
+    iob?: number | null;
+    iobBolus?: number | null;
+    iobBasal?: number | null;
+    cob?: number | null;
+  }>;
   /**
    * Raw treatment events observed shortly after the historical anchor.
    *
