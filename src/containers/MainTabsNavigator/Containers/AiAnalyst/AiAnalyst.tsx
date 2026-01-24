@@ -355,6 +355,7 @@ const AiAnalyst: React.FC = () => {
     () =>
       `Tooling (optional):\n` +
       `You can request additional app data via LOCAL TOOLS. Use tools when the user asks for more CGM/insulin/treatments data or when needed to answer accurately.\n\n` +
+      `If the user asks about a different time window than the data you currently have (e.g. "last 5 months"), call an appropriate tool first.\n\n` +
       `Available tools (use exactly these names):\n` +
       `- getCgmSamples: {rangeDays: number (1-180), maxSamples?: number (50-2000), includeDeviceStatus?: boolean}\n` +
       `- getTreatments: {rangeDays: number (1-180)}\n` +
@@ -398,6 +399,10 @@ const AiAnalyst: React.FC = () => {
         `Disclosure: ${disclosure}\n\n` +
         `Data (JSON):\n${JSON.stringify(contextJson)}`;
 
+      // Keep the full mission context in the LLM conversation so follow-ups stay grounded.
+      const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
+      setLlmMessages(baseLlmMessages);
+
       const res = await provider.sendChat({
         model: aiSettings.openAiModel,
         messages: [
@@ -410,7 +415,7 @@ const AiAnalyst: React.FC = () => {
 
       const assistantMessage = {role: 'assistant', content: res.content.trim()} satisfies LlmChatMessage;
       setUiMessages([assistantMessage]);
-      setLlmMessages([assistantMessage]);
+      setLlmMessages([...baseLlmMessages, assistantMessage]);
 
       setState({mode: 'mission', mission: 'hypoDetective'});
       setProgressText('');
@@ -572,7 +577,7 @@ const AiAnalyst: React.FC = () => {
         <ScrollView
           ref={scrollRef}
           style={{flex: 1, marginTop: theme.spacing.sm}}
-          contentContainerStyle={{paddingBottom: theme.spacing.lg}}
+          contentContainerStyle={{paddingBottom: theme.spacing.xl * 3}}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         >
