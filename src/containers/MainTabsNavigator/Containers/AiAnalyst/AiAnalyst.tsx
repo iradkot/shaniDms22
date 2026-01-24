@@ -173,6 +173,48 @@ function makeDisclosureText() {
   return 'AI Analyst sends your diabetes data (BG, treatments, device status) to an external LLM provider to generate insights.';
 }
 
+function parseRangeDaysFromText(text: string): number | null {
+  const t = (text ?? '').toLowerCase();
+
+  const month = t.match(/(\d{1,2})\s*(month|months)/);
+  if (month) return Math.max(1, Math.min(180, Number(month[1]) * 30));
+
+  const week = t.match(/(\d{1,2})\s*(week|weeks)/);
+  if (week) return Math.max(1, Math.min(180, Number(week[1]) * 7));
+
+  const day = t.match(/(\d{1,3})\s*(day|days)/);
+  if (day) return Math.max(1, Math.min(180, Number(day[1])));
+
+  // Basic Hebrew support: "חודש" / "חודשים".
+  const hebMonth = (text ?? '').match(/(\d{1,2})\s*(חודש|חודשים)/);
+  if (hebMonth) return Math.max(1, Math.min(180, Number(hebMonth[1]) * 30));
+
+  return null;
+}
+
+function looksLikeHyperQuestion(text: string): boolean {
+  const t = (text ?? '').toLowerCase();
+  return (
+    t.includes('hyper') ||
+    t.includes('hypers') ||
+    t.includes('high') ||
+    t.includes('highs') ||
+    t.includes('above range') ||
+    t.includes('היפר') ||
+    t.includes('גבוה')
+  );
+}
+
+function looksLikeHypoQuestion(text: string): boolean {
+  const t = (text ?? '').toLowerCase();
+  return t.includes('hypo') || t.includes('hypos') || t.includes('low') || t.includes('lows') || t.includes('היפו') || t.includes('נמוך');
+}
+
+function wantsCountWithDates(text: string): boolean {
+  const t = (text ?? '').toLowerCase();
+  return t.includes('how many') || t.includes('count') || t.includes('כמה') || t.includes('מתי') || t.includes('dates') || t.includes('תאריכים');
+}
+
 const AiAnalyst: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation<any>();
@@ -357,10 +399,16 @@ const AiAnalyst: React.FC = () => {
       `You can request additional app data via LOCAL TOOLS. Use tools when the user asks for more CGM/insulin/treatments data or when needed to answer accurately.\n\n` +
       `If the user asks about a different time window than the data you currently have (e.g. "last 5 months"), call an appropriate tool first.\n\n` +
       `Available tools (use exactly these names):\n` +
+      `- getCgmData (alias of getCgmSamples): {rangeDays: number (1-180), maxSamples?: number (50-2000), includeDeviceStatus?: boolean}\n` +
       `- getCgmSamples: {rangeDays: number (1-180), maxSamples?: number (50-2000), includeDeviceStatus?: boolean}\n` +
       `- getTreatments: {rangeDays: number (1-180)}\n` +
       `- getInsulinSummary: {rangeDays: number (1-90)}\n` +
+      `- getPumpProfile: {dateIso?: string}\n` +
       `- getHypoDetectiveContext: {rangeDays: number (1-180), lowThresholdMgdl?: number, maxEvents?: number}\n\n` +
+      `- getGlycemicEvents: {kind: "hypo"|"hyper", rangeDays: number (1-180), thresholdMgdl: number, maxEvents?: number}\n\n` +
+      `Tool choice guidance:\n` +
+      `- If the user asks about hypers/highs, do NOT call getHypoDetectiveContext. Use getGlycemicEvents(kind="hyper") or getCgmData.\n` +
+      `- If the user asks about hypos/lows, use getGlycemicEvents(kind="hypo") or getHypoDetectiveContext (only for the Hypo Detective mission).\n\n` +
       `How to call a tool:\n` +
       `- Respond with ONLY a single-line JSON object: {"type":"tool_call","name":"getCgmSamples","args":{...}}\n` +
       `- After you receive a message starting with "Tool result (NAME):", respond with ONLY: {"type":"final","content":"..."}.\n` +
@@ -445,6 +493,34 @@ const AiAnalyst: React.FC = () => {
     setInput('');
 
     try {
+      // Lightweight client-side router for count/range questions.
+      // This prevents the model from choosing an irrelevant tool (e.g. hypo tool for hyper question).
+      const rangeDays = parseRangeDaysFromText(trimmed);
+      const wantsDates = wantsCountWithDates(trimmed);
+      const isHyper = looksLikeHyperQuestion(trimmed) && !looksLikeHypoQuestion(trimmed);
+      const isHypo = looksLikeHypoQuestion(trimmed) && !isHyper;
+
+      if ((isHyper || isHypo) && rangeDays != null) {
+        const kind = isHyper ? 'hyper' : 'hypo';
+        const thresholdMgdl = isHyper ? glucoseSettings.hyper : glucoseSettings.hypo;
+        setProgressText(`Running getGlycemicEvents…`);
+        const toolResult = await runAiAnalystTool('getGlycemicEvents', {
+          kind,
+          rangeDays,
+          thresholdMgdl,
+          maxEvents: wantsDates ? 120 : 60,
+        });
+
+        workingLlmMessages = [
+          ...workingLlmMessages,
+          {
+            role: 'user',
+            content: `Tool result (getGlycemicEvents):\n${JSON.stringify(toolResult)}`,
+          },
+        ];
+        setLlmMessages(workingLlmMessages);
+      }
+
       const MAX_TOOL_CALLS = 2;
       let toolCalls = 0;
       let finalText: string | null = null;
