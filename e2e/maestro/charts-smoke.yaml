@@ -74,15 +74,6 @@ appId: com.shanidms22
 - assertVisible:
     id: chart.cgmGraph.fullscreen
 
-# Toggle horizontal fullscreen once (best-effort validation).
-- runFlow:
-        when:
-            visible:
-                id: screen.fullscreen.rotateButton
-        commands:
-            - tapOn:
-                    id: screen.fullscreen.rotateButton
-
 - takeScreenshot: charts-home-cgm-fullscreen
 
 - tapOn:
@@ -173,9 +164,6 @@ appId: com.shanidms22
 
 - assertVisible:
     id: chart.agpGraph.fullscreen
-
-- tapOn:
-    id: screen.fullscreen.rotateButton
 
 - takeScreenshot: charts-trends-agp-fullscreen
 

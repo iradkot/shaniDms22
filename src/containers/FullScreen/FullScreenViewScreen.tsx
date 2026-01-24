@@ -63,7 +63,6 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
   const params = (route as any)?.params as FullScreenRouteParams | undefined;
   const mode: Mode = params?.mode ?? 'cgmRows';
 
-  const [preferLandscape, setPreferLandscape] = useState(false);
   const [contentLayoutHeight, setContentLayoutHeight] = useState<number | null>(null);
 
   const contentHeight = useMemo(() => {
@@ -85,28 +84,38 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
     return contentHeight;
   }, [contentHeight, contentLayoutHeight, insets.bottom]);
 
-  const shouldAllowLandscapeToggle = mode === 'cgmGraph' || mode === 'agpGraph';
-
-  const showLandscape = shouldAllowLandscapeToggle && preferLandscape;
-
   const isDeviceLandscape = screenWidth > screenHeight;
 
-  const graphFrame = useMemo(() => {
-    // Normal portrait fullscreen
-    const wPortrait = screenWidth;
-    const hPortrait = contentInnerHeight || FULL_SCREEN_CONSTANTS.defaultCgmGraphHeightFallback;
+  const contentWidth = useMemo(() => {
+    // Give charts some breathing room from the screen edges.
+    const padding = theme.spacing.lg;
+    return Math.max(1, Math.floor(screenWidth - padding * 2));
+  }, [screenWidth, theme.spacing.lg]);
 
-    // Landscape fullscreen: we rotate the chart content to feel like horizontal fullscreen.
-    // We keep it centered within the screen.
-    const wLandscape = hPortrait;
-    const hLandscape = wPortrait;
+  const cgmGraphFrame = useMemo(() => {
+    const hAvailable = contentInnerHeight || FULL_SCREEN_CONSTANTS.defaultCgmGraphHeightFallback;
+
+    // In portrait, avoid an overly tall/stretchy feel by capping height relative to width.
+    // In landscape, use the available height (device rotation already provides the wide layout).
+    const hPortrait = Math.min(hAvailable, Math.max(260, Math.floor(contentWidth * 0.95)));
 
     return {
-      width: showLandscape ? wLandscape : wPortrait,
-      height: showLandscape ? hLandscape : hPortrait,
-      rotate: showLandscape,
+      width: contentWidth,
+      height: isDeviceLandscape ? hAvailable : hPortrait,
     };
-  }, [contentInnerHeight, screenWidth, showLandscape]);
+  }, [contentInnerHeight, contentWidth, isDeviceLandscape]);
+
+  const agpGraphFrame = useMemo(() => {
+    const hAvailable = contentInnerHeight || FULL_SCREEN_CONSTANTS.defaultCgmGraphHeightFallback;
+
+    // AGP looks awkward when it fills the entire portrait height; keep a sane aspect.
+    const hPortrait = Math.min(hAvailable, Math.max(320, Math.floor(contentWidth * 1.1)));
+
+    return {
+      width: Math.max(FULL_SCREEN_CONSTANTS.agpMinWidth, contentWidth),
+      height: isDeviceLandscape ? hAvailable : hPortrait,
+    };
+  }, [contentInnerHeight, contentWidth, isDeviceLandscape]);
 
   const handleBack = () => {
     // In some navigation states (or E2E automation timing), goBack() can be a no-op
@@ -204,21 +213,7 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
           </Title>
 
           <RightActions>
-            {shouldAllowLandscapeToggle ? (
-              <IconButton
-                testID={E2E_TEST_IDS.fullscreen.rotateButton}
-                onPress={() => setPreferLandscape(v => !v)}
-                hitSlop={FULL_SCREEN_CONSTANTS.hitSlop}
-              >
-                <MaterialIcons
-                  name={preferLandscape ? 'screen-lock-portrait' : 'screen-rotation'}
-                  size={FULL_SCREEN_CONSTANTS.iconSize}
-                  color={theme.textColor}
-                />
-              </IconButton>
-            ) : (
-              <Spacer />
-            )}
+            <Spacer />
           </RightActions>
         </HeaderRow>
       </Header>
@@ -240,22 +235,14 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
           <Centered>
             <RotatableFrame
               testID={E2E_TEST_IDS.charts.cgmGraphFullScreen}
-              style={
-                graphFrame.rotate
-                  ? {
-                      width: graphFrame.width,
-                      height: graphFrame.height,
-                      transform: [{rotate: '90deg'}],
-                    }
-                  : {width: graphFrame.width, height: graphFrame.height}
-              }
+              style={{width: cgmGraphFrame.width, height: cgmGraphFrame.height}}
             >
               <CgmGraph
                 bgSamples={(params as any)?.bgSamples ?? []}
                 foodItems={(params as any)?.foodItems ?? null}
                 insulinData={(params as any)?.insulinData}
-                width={Math.max(1, Math.floor(graphFrame.width))}
-                height={Math.max(1, Math.floor(graphFrame.height))}
+                width={Math.max(1, Math.floor(cgmGraphFrame.width))}
+                height={Math.max(1, Math.floor(cgmGraphFrame.height))}
                 showFullScreenButton={false}
               />
             </RotatableFrame>
@@ -263,13 +250,13 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
         ) : null}
 
         {mode === 'stackedCharts' ? (
-          <View testID={E2E_TEST_IDS.charts.cgmGraphFullScreen}>
+          <View testID={E2E_TEST_IDS.charts.cgmGraphFullScreen} style={{alignItems: 'center'}}>
             <StackedHomeCharts
               bgSamples={(params as any)?.bgSamples ?? []}
               foodItems={(params as any)?.foodItems ?? null}
               insulinData={(params as any)?.insulinData}
               basalProfileData={(params as any)?.basalProfileData}
-              width={Math.max(1, Math.floor(screenWidth))}
+              width={Math.max(1, Math.floor(contentWidth))}
               cgmHeight={stackedHeights.cgmHeight}
               miniChartHeight={stackedHeights.miniHeight}
               xDomain={stackedXDomain}
@@ -278,7 +265,7 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
               tooltipPlacement="inside"
               tooltipAlign={isDeviceLandscape ? 'auto' : 'left'}
               tooltipFullWidth={!isDeviceLandscape}
-              tooltipMaxWidthPx={isDeviceLandscape ? Math.floor(screenWidth * 0.5) : undefined}
+              tooltipMaxWidthPx={isDeviceLandscape ? Math.floor(contentWidth * 0.5) : undefined}
             />
           </View>
         ) : null}
@@ -287,20 +274,12 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
           <Centered>
             <AgpChartContainer
               testID={E2E_TEST_IDS.charts.agpGraphFullScreen}
-              style={
-                graphFrame.rotate
-                  ? {
-                      width: graphFrame.width,
-                      height: graphFrame.height,
-                      transform: [{rotate: '90deg'}],
-                    }
-                  : {width: graphFrame.width, height: graphFrame.height}
-              }
+              style={{width: agpGraphFrame.width, height: agpGraphFrame.height}}
             >
               <AgpFullScreenChart
                 bgData={(params as any)?.bgData ?? []}
-                width={Math.max(FULL_SCREEN_CONSTANTS.agpMinWidth, Math.floor(graphFrame.width))}
-                height={Math.max(1, Math.floor(graphFrame.height))}
+                width={Math.max(FULL_SCREEN_CONSTANTS.agpMinWidth, Math.floor(agpGraphFrame.width))}
+                height={Math.max(1, Math.floor(agpGraphFrame.height))}
               />
             </AgpChartContainer>
           </Centered>

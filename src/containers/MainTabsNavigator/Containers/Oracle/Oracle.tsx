@@ -238,7 +238,6 @@ const Oracle: React.FC = () => {
   const [includeLoadInMatching, setIncludeLoadInMatching] = useState(true);
   const [slopePointCount, setSlopePointCount] = useState<number>(ORACLE_SLOPE_POINTS_DEFAULT);
   const [cacheDays, setCacheDays] = useState<number>(90);
-  const [refreshCacheOnExecute, setRefreshCacheOnExecute] = useState<boolean>(true);
 
   useEffect(() => {
     let active = true;
@@ -258,9 +257,6 @@ const Oracle: React.FC = () => {
         if (typeof parsed?.cacheDays === 'number' && Number.isFinite(parsed.cacheDays)) {
           setCacheDays(clampInt(parsed.cacheDays, ORACLE_CACHE_DAYS_MIN, ORACLE_CACHE_DAYS_MAX));
         }
-        if (typeof parsed?.refreshCacheOnExecute === 'boolean') {
-          setRefreshCacheOnExecute(parsed.refreshCacheOnExecute);
-        }
       } catch {
         // Ignore settings load failures.
       }
@@ -275,11 +271,11 @@ const Oracle: React.FC = () => {
     const t = setTimeout(() => {
       AsyncStorage.setItem(
         ORACLE_SETTINGS_STORAGE_KEY,
-        JSON.stringify({includeLoadInMatching, slopePointCount, cacheDays, refreshCacheOnExecute}),
+        JSON.stringify({includeLoadInMatching, slopePointCount, cacheDays}),
       ).catch(() => undefined);
     }, 250);
     return () => clearTimeout(t);
-  }, [cacheDays, includeLoadInMatching, refreshCacheOnExecute, slopePointCount]);
+  }, [cacheDays, includeLoadInMatching, slopePointCount]);
   const {
     insights,
     events,
@@ -304,7 +300,6 @@ const Oracle: React.FC = () => {
       includeLoadInMatching,
       slopePointCount,
       cacheDays,
-      refreshCacheOnExecute,
     });
 
   const isPendingSlope = effectiveSlopePointCount !== slopePointCount;
@@ -382,15 +377,13 @@ const Oracle: React.FC = () => {
     return (
       lastRunConfig.cacheDays !== cacheDays ||
       lastRunConfig.includeLoadInMatching !== includeLoadInMatching ||
-      (lastRunConfig.slopePointCount ?? null) !== (effectiveSlopePointCount ?? null) ||
-      lastRunConfig.refreshCacheOnExecute !== refreshCacheOnExecute
+      (lastRunConfig.slopePointCount ?? null) !== (effectiveSlopePointCount ?? null)
     );
   }, [
     cacheDays,
     effectiveSlopePointCount,
     includeLoadInMatching,
     lastRunConfig,
-    refreshCacheOnExecute,
   ]);
 
   const loadSummaryText = useMemo(() => {
@@ -637,24 +630,6 @@ const Oracle: React.FC = () => {
                 />
               </ToggleRow>
 
-              <ToggleRow>
-                <ToggleLabel>
-                  Refresh history cache before Execute
-                </ToggleLabel>
-                <Switch
-                  testID={E2E_TEST_IDS.oracle.refreshOnExecuteToggle}
-                  accessibilityLabel={E2E_TEST_IDS.oracle.refreshOnExecuteToggle}
-                  value={refreshCacheOnExecute}
-                  onValueChange={setRefreshCacheOnExecute}
-                  disabled={isBusy}
-                  trackColor={{
-                    false: addOpacity(theme.textColor, 0.2),
-                    true: addOpacity(theme.accentColor, 0.4),
-                  }}
-                  thumbColor={refreshCacheOnExecute ? theme.accentColor : theme.borderColor}
-                />
-              </ToggleRow>
-
               <StepperRow>
                 <ToggleLabel>
                   History window (days)
@@ -690,7 +665,7 @@ const Oracle: React.FC = () => {
                 </StepperControls>
               </StepperRow>
               <CardSubtle>
-                Execute runs: (1) optional cache refresh, then (2) scan history, then (3) build strategies.
+                Execute runs: (1) refresh cache, then (2) scan history, then (3) build strategies.
               </CardSubtle>
 
               <StepperRow>

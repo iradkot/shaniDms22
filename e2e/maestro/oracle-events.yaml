@@ -46,23 +46,7 @@ appId: com.shanidms22
       id: screen.oracle
     timeout: 30000
 
-# Keep this flow deterministic: disable network cache refresh.
-# Note: app state is cleared on launch, so this starts as ON by default.
-- scrollUntilVisible:
-    element:
-      id: oracle.header.refreshOnExecuteToggle
-    direction: UP
-    timeout: 8000
-    optional: true
-
-- scrollUntilVisible:
-    element:
-      id: oracle.header.refreshOnExecuteToggle
-    direction: DOWN
-    timeout: 15000
-
-- tapOn:
-    id: oracle.header.refreshOnExecuteToggle
+# Cache refresh is always enabled before Execute.
 
 # Recent events list should appear.
 - extendedWaitUntil:

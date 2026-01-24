@@ -134,8 +134,6 @@ export function useOracleInsights(params?: {
   slopePointCount?: number;
   /** History window (days) to keep in the local cache, used when running a sync. */
   cacheDays?: number;
-  /** When true, Execute will re-sync cache before analyzing. */
-  refreshCacheOnExecute?: boolean;
 }): {
   insights: OracleInsights | null;
   events: OracleInvestigateEvent[];
@@ -178,7 +176,7 @@ export function useOracleInsights(params?: {
   const cacheDays = typeof params?.cacheDays === 'number' && Number.isFinite(params.cacheDays)
     ? Math.max(1, Math.round(params.cacheDays))
     : 90;
-  const refreshCacheOnExecute = params?.refreshCacheOnExecute !== false;
+  const refreshCacheOnExecute = true;
 
   // Debounce the slope-point count. Users tend to tap +/- quickly; this avoids
   // repeated heavy recomputes while still updating the control immediately.
@@ -449,7 +447,7 @@ export function useOracleInsights(params?: {
     selectedEvent?.date,
   ]);
 
-  // Main execution pipeline: (optional) cache sync -> compute insights.
+  // Main execution pipeline: cache sync -> compute insights.
   useEffect(() => {
     const runId = runIdRef.current;
     const cfg = runConfigRef.current;
@@ -471,7 +469,7 @@ export function useOracleInsights(params?: {
         return;
       }
 
-      // 1) Optionally sync cache.
+      // 1) Sync cache.
       let nextHistory = historyRef.current;
       let nextTreatments = treatmentsRef.current;
       let nextDeviceStatus = deviceStatusRef.current;

@@ -134,7 +134,6 @@ export const E2E_TEST_IDS = {
     slopePlus: 'oracle.header.slope.plus',
     cacheDaysMinus: 'oracle.header.cacheDays.minus',
     cacheDaysPlus: 'oracle.header.cacheDays.plus',
-    refreshOnExecuteToggle: 'oracle.header.refreshOnExecuteToggle',
     historySyncHint: 'oracle.history.syncHint',
     statusBanner: 'oracle.status.banner',
     retryButton: 'oracle.retry.button',
