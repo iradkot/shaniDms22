@@ -22,7 +22,12 @@ import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {addOpacity} from 'app/style/styling.utils';
 
-import {AI_ANALYST_SYSTEM_PROMPT} from 'app/services/llm/systemPrompts';
+import {
+  AI_ANALYST_SYSTEM_PROMPT,
+  USER_BEHAVIOR_SYSTEM_PROMPT,
+  LOOP_SETTINGS_ADVISOR_SYSTEM_PROMPT,
+  LOOP_SETTINGS_TOOLS_DESCRIPTION,
+} from 'app/services/llm/systemPrompts';
 import {createLlmProvider} from 'app/services/llm/llmClient';
 import {LlmChatMessage} from 'app/services/llm/llmTypes';
 import {buildHypoDetectiveContext} from 'app/services/aiAnalyst/hypoDetectiveContextBuilder';
@@ -148,11 +153,14 @@ const SendButton = styled(Pressable)`
   background-color: ${({theme}: {theme: ThemeType}) => theme.accentColor};
 `;
 
-type MissionKey = 'hypoDetective';
+type MissionKey = 'hypoDetective' | 'userBehavior' | 'loopSettings';
+
+type AnalystMode = 'userBehavior' | 'loopSettings';
 
 type ScreenState =
   | {mode: 'locked'}
   | {mode: 'dashboard'}
+  | {mode: 'modeSelection'}
   | {mode: 'history'}
   | {mode: 'historyDetail'; id: string}
   | {mode: 'mission'; mission: MissionKey};
@@ -274,6 +282,7 @@ const AiAnalyst: React.FC = () => {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
+  const [analystMode, setAnalystMode] = useState<AnalystMode | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -447,6 +456,26 @@ const AiAnalyst: React.FC = () => {
     [],
   );
 
+  // Loop Settings Advisor uses extended tools for settings analysis
+  const loopSettingsToolSystemPrompt = useMemo(
+    () =>
+      `Tooling (REQUIRED for Loop Settings Advisor):\n` +
+      `You MUST use tools to gather data and verify your findings. Use at least 3 tool calls before making any recommendation.\n\n` +
+      LOOP_SETTINGS_TOOLS_DESCRIPTION +
+      `\nAdditional tools available:\n` +
+      `- getCgmData: {rangeDays: number (1-180), maxSamples?: number (50-2000)}\n` +
+      `- getTreatments: {rangeDays: number (1-180)}\n` +
+      `- getPumpProfile: {dateIso?: string}\n` +
+      `- getProfileChangeHistory: {rangeDays: number (7-180), maxEvents?: number (1-50)}\n` +
+      `- analyzeSettingsImpact: {changeDate: ISO string, windowDays: number (1-30)}\n\n` +
+      `How to call a tool:\n` +
+      `- Respond with ONLY a single-line JSON object: {"type":"tool_call","name":"getGlucosePatterns","args":{...}}\n` +
+      `- After you receive a message starting with "Tool result (NAME):", either call another tool or respond with {"type":"final","content":"..."}.\n` +
+      `- You may call up to 20 tools per conversation.\n` +
+      `- Content may include Markdown.\n`,
+    [],
+  );
+
   const openSettings = useCallback(() => {
     navigation.navigate(SCREEN_NAMES.SETTINGS_TAB_SCREEN);
   }, [navigation]);
@@ -581,6 +610,157 @@ const AiAnalyst: React.FC = () => {
     }
   }, [provider, glucoseSettings.severeHypo, aiSettings.openAiModel, toolSystemPrompt]);
 
+  // ==========================================================================
+  // USER BEHAVIOR MISSION
+  // ==========================================================================
+  const startUserBehavior = useCallback(async () => {
+    if (!provider) return;
+    setErrorText(null);
+    setIsBusy(true);
+    setProgressText('Starting User Behavior Analysis…');
+    setUiMessages([]);
+    setLlmMessages([]);
+    setInput('');
+    setAnalystMode('userBehavior');
+    const nextId = makeConversationId();
+    setConversationId(nextId);
+
+    try {
+      // Fetch recent CGM and treatment data for behavior analysis
+      setProgressText('Loading CGM data…');
+      const cgmResult = await runAiAnalystTool('getCgmSamples', {rangeDays: 14, maxSamples: 1000});
+      setProgressText('Loading treatments…');
+      const treatmentsResult = await runAiAnalystTool('getTreatments', {rangeDays: 14});
+      const insulinResult = await runAiAnalystTool('getInsulinSummary', {rangeDays: 14});
+
+      setProgressText('Asking AI Analyst…');
+
+      const disclosure = makeDisclosureText();
+      const userPrompt =
+        `Mission: User Behavior Improvements\n\n` +
+        `Help me identify ways I can improve my diabetes management through my own actions and habits. ` +
+        `Focus on user behaviors, NOT Loop settings changes.\n\n` +
+        `Disclosure: ${disclosure}\n\n` +
+        `Recent CGM Data (14 days):\n${JSON.stringify(cgmResult.ok ? cgmResult.result : 'Data unavailable')}\n\n` +
+        `Recent Treatments:\n${JSON.stringify(treatmentsResult.ok ? treatmentsResult.result : 'Data unavailable')}\n\n` +
+        `Insulin Summary:\n${JSON.stringify(insulinResult.ok ? insulinResult.result : 'Data unavailable')}`;
+
+      const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
+      setLlmMessages(baseLlmMessages);
+
+      const res = await provider.sendChat({
+        model: aiSettings.openAiModel,
+        messages: [
+          {role: 'system', content: USER_BEHAVIOR_SYSTEM_PROMPT},
+          ...baseLlmMessages,
+        ],
+        temperature: 0.4,
+        maxOutputTokens: 1200,
+      });
+
+      const finalText = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
+
+      const assistantMessage = {
+        role: 'assistant',
+        content: finalText,
+      } satisfies LlmChatMessage;
+      setUiMessages([assistantMessage]);
+      setLlmMessages([...baseLlmMessages, assistantMessage]);
+
+      await upsertAiAnalystConversationSnapshot({
+        id: nextId,
+        mission: 'userBehavior',
+        messages: [{role: 'assistant', content: assistantMessage.content}],
+      });
+
+      setState({mode: 'mission', mission: 'userBehavior'});
+      setProgressText('');
+
+      setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 50);
+    } catch (e: any) {
+      setErrorText(e?.message ? String(e.message) : 'Failed to run User Behavior Analysis');
+    } finally {
+      setIsBusy(false);
+      setProgressText('');
+    }
+  }, [provider, aiSettings.openAiModel]);
+
+  // ==========================================================================
+  // LOOP SETTINGS ADVISOR MISSION
+  // ==========================================================================
+  const startLoopSettingsAdvisor = useCallback(async () => {
+    if (!provider) return;
+    setErrorText(null);
+    setIsBusy(true);
+    setProgressText('Starting Loop Settings Advisor…');
+    setUiMessages([]);
+    setLlmMessages([]);
+    setInput('');
+    setAnalystMode('loopSettings');
+    const nextId = makeConversationId();
+    setConversationId(nextId);
+
+    try {
+      setProgressText('Loading profile data…');
+      const profileResult = await runAiAnalystTool('getPumpProfile', {});
+
+      setProgressText('Asking AI Analyst…');
+
+      const disclosure = makeDisclosureText();
+      // For loop settings advisor, we start with a clarification prompt
+      // The LLM will ask questions first before using tools
+      const userPrompt =
+        `Mission: Loop Settings Advisor\n\n` +
+        `I'd like help optimizing my Loop settings. Please help me identify any changes that might improve my glucose control.\n\n` +
+        `Disclosure: ${disclosure}\n\n` +
+        `Current Pump Profile:\n${JSON.stringify(profileResult.ok ? profileResult.result : 'Profile unavailable')}\n\n` +
+        `IMPORTANT: Before analyzing my data, please ask me 3-5 clarifying questions about:\n` +
+        `1. What specific issues I'm experiencing (highs, lows, variability)\n` +
+        `2. When these issues occur (time of day, after meals, overnight)\n` +
+        `3. Any recent lifestyle or health changes\n` +
+        `4. My comfort level with settings changes\n\n` +
+        `Once I answer your questions, you can use the available tools to analyze my data.`;
+
+      const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
+      setLlmMessages(baseLlmMessages);
+
+      const res = await provider.sendChat({
+        model: aiSettings.openAiModel,
+        messages: [
+          {role: 'system', content: LOOP_SETTINGS_ADVISOR_SYSTEM_PROMPT + '\n' + loopSettingsToolSystemPrompt},
+          ...baseLlmMessages,
+        ],
+        temperature: 0.3,
+        maxOutputTokens: 800,
+      });
+
+      const finalText = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
+
+      const assistantMessage = {
+        role: 'assistant',
+        content: finalText,
+      } satisfies LlmChatMessage;
+      setUiMessages([assistantMessage]);
+      setLlmMessages([...baseLlmMessages, assistantMessage]);
+
+      await upsertAiAnalystConversationSnapshot({
+        id: nextId,
+        mission: 'loopSettings',
+        messages: [{role: 'assistant', content: assistantMessage.content}],
+      });
+
+      setState({mode: 'mission', mission: 'loopSettings'});
+      setProgressText('');
+
+      setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 50);
+    } catch (e: any) {
+      setErrorText(e?.message ? String(e.message) : 'Failed to run Loop Settings Advisor');
+    } finally {
+      setIsBusy(false);
+      setProgressText('');
+    }
+  }, [provider, aiSettings.openAiModel, loopSettingsToolSystemPrompt]);
+
   const sendFollowUp = useCallback(async () => {
     if (!provider) return;
     const trimmed = input.trim();
@@ -631,19 +811,30 @@ const AiAnalyst: React.FC = () => {
         setLlmMessages(workingLlmMessages);
       }
 
-      const MAX_TOOL_CALLS = 4;
+      // For loop settings advisor, allow more tool calls
+      const MAX_TOOL_CALLS = analystMode === 'loopSettings' ? 20 : 4;
       let toolCalls = 0;
       let finalText: string | null = null;
+
+      // Select the appropriate system prompt based on analyst mode
+      let systemPrompt: string;
+      if (analystMode === 'loopSettings') {
+        systemPrompt = LOOP_SETTINGS_ADVISOR_SYSTEM_PROMPT + '\n' + loopSettingsToolSystemPrompt;
+      } else if (analystMode === 'userBehavior') {
+        systemPrompt = USER_BEHAVIOR_SYSTEM_PROMPT;
+      } else {
+        systemPrompt = AI_ANALYST_SYSTEM_PROMPT + '\n' + toolSystemPrompt;
+      }
 
       while (finalText == null) {
         const res = await provider.sendChat({
           model: aiSettings.openAiModel,
           messages: [
-            {role: 'system', content: AI_ANALYST_SYSTEM_PROMPT + '\n' + toolSystemPrompt},
+            {role: 'system', content: systemPrompt},
             ...workingLlmMessages,
           ],
           temperature: 0.2,
-          maxOutputTokens: 800,
+          maxOutputTokens: analystMode === 'loopSettings' ? 1200 : 800,
         });
 
         const raw = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
@@ -694,7 +885,7 @@ const AiAnalyst: React.FC = () => {
       setIsBusy(false);
       setProgressText('');
     }
-  }, [provider, input, llmMessages, aiSettings.openAiModel, toolSystemPrompt]);
+  }, [provider, input, llmMessages, aiSettings.openAiModel, toolSystemPrompt, loopSettingsToolSystemPrompt, analystMode, glucoseSettings.hyper, glucoseSettings.hypo, persistHistorySnapshot]);
 
   const renderLocked = () => (
     <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
@@ -762,6 +953,42 @@ const AiAnalyst: React.FC = () => {
             <View style={{flex: 1}}>
               <CardTitle>Hypo Detective</CardTitle>
               <CardSubtitle>Why do I keep going low?</CardSubtitle>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
+          </CardRow>
+
+          <View style={{height: theme.spacing.md}} />
+
+          <CardRow
+            onPress={() => startUserBehavior()}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityLabel="User Behavior Tips"
+          >
+            <CardIcon>
+              <MaterialIcons name="lightbulb-outline" size={22} color={theme.accentColor} />
+            </CardIcon>
+            <View style={{flex: 1}}>
+              <CardTitle>User Behavior Tips</CardTitle>
+              <CardSubtitle>Improve my daily habits</CardSubtitle>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
+          </CardRow>
+
+          <View style={{height: theme.spacing.md}} />
+
+          <CardRow
+            onPress={() => startLoopSettingsAdvisor()}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityLabel="Loop Settings Advisor"
+          >
+            <CardIcon>
+              <MaterialIcons name="tune" size={22} color={theme.accentColor} />
+            </CardIcon>
+            <View style={{flex: 1}}>
+              <CardTitle>Loop Settings Advisor</CardTitle>
+              <CardSubtitle>Optimize CR, ISF, basal rates</CardSubtitle>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
           </CardRow>

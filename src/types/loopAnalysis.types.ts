@@ -363,3 +363,129 @@ export interface GhostChartProps {
   /** Height of the chart in pixels. */
   height?: number;
 }
+
+// =============================================================================
+// AI ANALYST MODE TYPES
+// =============================================================================
+
+/**
+ * The two analysis modes available in AI Analyst.
+ */
+export type AnalystMode = 'behavior' | 'settings';
+
+/**
+ * Time of day segments for analysis.
+ */
+export type TimeOfDaySegment = 'all' | 'overnight' | 'morning' | 'afternoon' | 'evening';
+
+/**
+ * Meal type for meal response analysis.
+ */
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'all';
+
+/**
+ * Glucose focus area for pattern analysis.
+ */
+export type GlucoseFocusArea = 'all' | 'overnight' | 'post-meal' | 'fasting';
+
+/**
+ * Settings change type filter.
+ */
+export type SettingsChangeTypeFilter = 'all' | 'carb_ratio' | 'isf' | 'targets' | 'basal' | 'dia';
+
+/**
+ * Parameters for glucose pattern analysis.
+ */
+export interface GlucosePatternParams {
+  daysBack: number;
+  focusTime: GlucoseFocusArea;
+}
+
+/**
+ * Parameters for time in range analysis with time of day filtering.
+ */
+export interface TimeInRangeParams {
+  startDate: string;
+  endDate: string;
+  timeOfDay?: TimeOfDaySegment;
+}
+
+/**
+ * Parameters for comparing two time periods.
+ */
+export interface ComparePeriodParams {
+  period1Start: string;
+  period1End: string;
+  period2Start: string;
+  period2End: string;
+}
+
+/**
+ * Parameters for meal response analysis.
+ */
+export interface MealResponseParams {
+  daysBack: number;
+  mealType: MealType;
+}
+
+/**
+ * Glucose pattern identified in data.
+ */
+export interface GlucosePattern {
+  /** Type of pattern */
+  type: 'recurring_high' | 'recurring_low' | 'high_variability' | 'consistent';
+  /** Time of day when pattern occurs */
+  timeOfDay: TimeOfDaySegment;
+  /** Description of the pattern */
+  description: string;
+  /** Frequency (e.g., "4 of 7 days") */
+  frequency: string;
+  /** Average glucose during pattern */
+  averageBg: number;
+  /** Severity: low, medium, high */
+  severity: 'low' | 'medium' | 'high';
+}
+
+/**
+ * Meal response analysis result.
+ */
+export interface MealResponseAnalysis {
+  mealType: MealType;
+  /** Average pre-meal glucose */
+  preMealAvg: number;
+  /** Average peak glucose after meal */
+  peakAvg: number;
+  /** Average time to peak (minutes) */
+  timeToPeak: number;
+  /** Average glucose at 2 hours post-meal */
+  twoHourAvg: number;
+  /** Number of meals analyzed */
+  mealCount: number;
+  /** Time in range during 3-hour post-meal window */
+  postMealTir: number;
+}
+
+/**
+ * Settings recommendation from AI analysis.
+ */
+export interface SettingsRecommendation {
+  /** Which setting to change */
+  settingType: 'carb_ratio' | 'isf' | 'basal' | 'target_low' | 'target_high' | 'dia';
+  /** Current value (formatted string like "1:10" for CR) */
+  currentValue: string;
+  /** Suggested new value */
+  suggestedValue: string;
+  /** Time slot if applicable (e.g., "12am-6am") */
+  timeSlot?: string;
+  /** Confidence level of recommendation */
+  confidence: 'low' | 'medium' | 'high';
+  /** Evidence supporting the recommendation */
+  evidence: string[];
+  /** Reasoning for the change */
+  reasoning: string;
+  /** Potential risks/cautions */
+  caution: string;
+  /** Expected outcome */
+  expectedOutcome: string;
+}
+
