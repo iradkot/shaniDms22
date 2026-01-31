@@ -117,6 +117,8 @@ function extractHyperEvents(params: {
 }
 
 export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Promise<ToolResult> {
+  console.log(`[AiAnalystTool] Calling tool: ${name}`, args);
+  const startTime = Date.now();
   try {
     switch (name) {
       case 'getCgmData':
@@ -922,9 +924,12 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
       }
 
       default:
+        console.warn(`[AiAnalystTool] Unknown tool requested: ${name}`);
         return {ok: false, error: `Unknown tool: ${name}`};
     }
   } catch (e: any) {
+    const duration = Date.now() - startTime;
+    console.error(`[AiAnalystTool] Tool ${name} FAILED after ${duration}ms:`, e?.message || e);
     return {ok: false, error: e?.message ? String(e.message) : 'Tool failed'};
   }
 }

@@ -703,23 +703,21 @@ const AiAnalyst: React.FC = () => {
     try {
       setProgressText('Loading profile data…');
       const profileResult = await runAiAnalystTool('getPumpProfile', {});
+      console.log('[LoopSettingsAdvisor] Profile loaded:', profileResult.ok ? 'success' : 'failed');
 
       setProgressText('Asking AI Analyst…');
 
       const disclosure = makeDisclosureText();
-      // For loop settings advisor, we start with a clarification prompt
-      // The LLM will ask questions first before using tools
+      // For loop settings advisor, we start with a simple greeting
+      // The LLM will ask ONE question first, then follow-up after user responds
       const userPrompt =
         `Mission: Loop Settings Advisor\n\n` +
-        `I'd like help optimizing my Loop settings. Please help me identify any changes that might improve my glucose control.\n\n` +
+        `I'd like help optimizing my Loop settings.\n\n` +
         `Disclosure: ${disclosure}\n\n` +
-        `Current Pump Profile:\n${JSON.stringify(profileResult.ok ? profileResult.result : 'Profile unavailable')}\n\n` +
-        `IMPORTANT: Before analyzing my data, please ask me 3-5 clarifying questions about:\n` +
-        `1. What specific issues I'm experiencing (highs, lows, variability)\n` +
-        `2. When these issues occur (time of day, after meals, overnight)\n` +
-        `3. Any recent lifestyle or health changes\n` +
-        `4. My comfort level with settings changes\n\n` +
-        `Once I answer your questions, you can use the available tools to analyze my data.`;
+        `Current Pump Profile (for your reference, don't mention specifics yet):\n${JSON.stringify(profileResult.ok ? profileResult.result : 'Profile unavailable')}\n\n` +
+        `IMPORTANT: Start with a simple, friendly greeting and ask ONE open-ended question like "What's been bothering you lately?" or "What would you like to improve?"\n` +
+        `DO NOT overwhelm with multiple questions in the first message.\n` +
+        `After I respond, you can ask 2-3 focused follow-up questions, then use tools to analyze.`;
 
       const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
       setLlmMessages(baseLlmMessages);
@@ -842,9 +840,11 @@ const AiAnalyst: React.FC = () => {
 
         if (env?.type === 'tool_call' && toolCalls < MAX_TOOL_CALLS) {
           toolCalls += 1;
+          console.log(`[AiAnalyst] Tool call #${toolCalls}: ${env.name}`, env.args);
           setProgressText(`Running ${env.name}…`);
 
           const toolResult = await runAiAnalystTool(env.name, env.args);
+          console.log(`[AiAnalyst] Tool ${env.name} result:`, toolResult.ok ? 'SUCCESS' : `FAILED: ${toolResult.error}`);
 
           workingLlmMessages = [
             ...workingLlmMessages,
@@ -859,6 +859,7 @@ const AiAnalyst: React.FC = () => {
         }
 
         if (env?.type === 'tool_call' && toolCalls >= MAX_TOOL_CALLS) {
+          console.warn(`[AiAnalyst] Tool call limit reached (${MAX_TOOL_CALLS})`);
           finalText =
             'I tried to fetch additional data, but hit the tool-call limit. Please try again (or ask for a smaller time range).';
         } else {
