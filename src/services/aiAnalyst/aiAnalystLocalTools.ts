@@ -35,12 +35,38 @@ export type AiAnalystToolName =
   | 'getPumpProfile'
   | 'getProfileChangeHistory'
   | 'analyzeSettingsImpact'
-  // Loop Settings Advisor tools
+  // Loop Settings Advisor tools (camelCase)
   | 'getGlucosePatterns'
   | 'analyzeTimeInRange'
   | 'comparePeriods'
   | 'getInsulinDeliveryStats'
-  | 'analyzeMealResponses';
+  | 'analyzeMealResponses'
+  // Snake_case aliases (LLM often uses these)
+  | 'get_glucose_patterns'
+  | 'analyze_time_in_range'
+  | 'compare_periods'
+  | 'get_insulin_delivery_stats'
+  | 'analyze_meal_responses'
+  | 'get_settings_change_history'
+  | 'get_profile_change_history';
+
+// Normalize tool names: convert snake_case to camelCase
+function normalizeToolName(name: string): string {
+  const snakeToCamelMap: Record<string, string> = {
+    'get_glucose_patterns': 'getGlucosePatterns',
+    'analyze_time_in_range': 'analyzeTimeInRange',
+    'compare_periods': 'comparePeriods',
+    'get_insulin_delivery_stats': 'getInsulinDeliveryStats',
+    'analyze_meal_responses': 'analyzeMealResponses',
+    'get_settings_change_history': 'getProfileChangeHistory',
+    'get_profile_change_history': 'getProfileChangeHistory',
+    'get_cgm_samples': 'getCgmSamples',
+    'get_cgm_data': 'getCgmData',
+    'get_treatments': 'getTreatments',
+    'get_pump_profile': 'getPumpProfile',
+  };
+  return snakeToCamelMap[name] || name;
+}
 
 function clampInt(v: unknown, min: number, max: number, fallback: number) {
   const n = typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : fallback;
@@ -117,10 +143,12 @@ function extractHyperEvents(params: {
 }
 
 export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Promise<ToolResult> {
-  console.log(`[AiAnalystTool] Calling tool: ${name}`, args);
+  // Normalize tool name (convert snake_case to camelCase)
+  const normalizedName = normalizeToolName(name) as AiAnalystToolName;
+  console.log(`[AiAnalystTool] Calling tool: ${name}${name !== normalizedName ? ` (normalized to ${normalizedName})` : ''}`, args);
   const startTime = Date.now();
   try {
-    switch (name) {
+    switch (normalizedName) {
       case 'getCgmData':
       case 'getCgmSamples': {
         const rangeDays = clampInt(args?.rangeDays, 1, 180, 14);
