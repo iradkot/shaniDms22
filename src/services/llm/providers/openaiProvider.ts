@@ -159,6 +159,7 @@ export class OpenAIProvider implements LlmProvider {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
         },
+        signal: (req as any).abortSignal,
         body: JSON.stringify(payload),
       });
 

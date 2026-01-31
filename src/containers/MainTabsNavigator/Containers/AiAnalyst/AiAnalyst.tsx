@@ -336,6 +336,38 @@ const AiAnalyst: React.FC = () => {
   const [progressText, setProgressText] = useState<string>('');
   const [errorText, setErrorText] = useState<string | null>(null);
 
+  // Cancellation: allow users to stop a long-running analysis.
+  // We abort in-flight LLM fetches where possible, and ignore in-flight tool results.
+  const runSeqRef = useRef(0);
+  const abortRef = useRef<any>(null);
+
+  const beginRun = useCallback((label: string) => {
+    runSeqRef.current += 1;
+    const runId = runSeqRef.current;
+
+    // Abort any previous LLM request.
+    try {
+      abortRef.current?.abort?.();
+    } catch {}
+    abortRef.current = typeof AbortController !== 'undefined' ? new AbortController() : null;
+
+    setProgressText(label);
+    return {runId, signal: abortRef.current?.signal};
+  }, []);
+
+  const cancelActiveRun = useCallback(() => {
+    runSeqRef.current += 1;
+    try {
+      abortRef.current?.abort?.();
+    } catch {}
+    abortRef.current = null;
+
+    setIsBusy(false);
+    setErrorText(null);
+    setProgressText('Stopped');
+    setTimeout(() => setProgressText(''), 1200);
+  }, []);
+
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
@@ -614,7 +646,7 @@ const AiAnalyst: React.FC = () => {
     if (!provider) return;
     setErrorText(null);
     setIsBusy(true);
-    setProgressText('Starting…');
+    const {runId, signal} = beginRun('Starting…');
     setUiMessages([]);
     setLlmMessages([]);
     setSessionDataUsed([]);
@@ -629,6 +661,8 @@ const AiAnalyst: React.FC = () => {
         maxEvents: 12,
         onProgress: s => setProgressText(s),
       });
+
+      if (runSeqRef.current !== runId) return;
 
       setProgressText('Asking AI Analyst…');
 
@@ -658,7 +692,10 @@ const AiAnalyst: React.FC = () => {
           ],
           temperature: temp,
           maxOutputTokens: 800,
+          abortSignal: signal,
         });
+
+        if (runSeqRef.current !== runId) return;
 
         const raw = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
         const env = tryParseToolEnvelope(raw);
@@ -668,6 +705,7 @@ const AiAnalyst: React.FC = () => {
           setProgressText(`Running ${env.name}…`);
 
           const toolResult = await runAiAnalystTool(env.name, env.args);
+          if (runSeqRef.current !== runId) return;
           workingLlmMessages = [
             ...workingLlmMessages,
             {role: 'assistant', content: raw},
@@ -710,10 +748,14 @@ const AiAnalyst: React.FC = () => {
 
       setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 50);
     } catch (e: any) {
-      setErrorText(e?.message ? String(e.message) : 'Failed to run Hypo Detective');
+      if (runSeqRef.current !== runId) return;
+      const msg = e?.name === 'AbortError' ? 'Stopped' : e?.message ? String(e.message) : 'Failed to run Hypo Detective';
+      if (msg !== 'Stopped') setErrorText(msg);
     } finally {
-      setIsBusy(false);
-      setProgressText('');
+      if (runSeqRef.current === runId) {
+        setIsBusy(false);
+        setProgressText('');
+      }
     }
   }, [provider, glucoseSettings.severeHypo, aiSettings.openAiModel, toolSystemPrompt]);
 
@@ -724,7 +766,7 @@ const AiAnalyst: React.FC = () => {
     if (!provider) return;
     setErrorText(null);
     setIsBusy(true);
-    setProgressText('Starting User Behavior Analysis…');
+    const {runId, signal} = beginRun('Starting User Behavior Analysis…');
     setUiMessages([]);
     setLlmMessages([]);
     setSessionDataUsed([]);
@@ -738,11 +780,14 @@ const AiAnalyst: React.FC = () => {
       setProgressText('Loading CGM data…');
       const cgmResult = await runAiAnalystTool('getCgmSamples', {rangeDays: 14, maxSamples: 1000});
       recordDataUsed('getCgmSamples', cgmResult);
+      if (runSeqRef.current !== runId) return;
       setProgressText('Loading treatments…');
       const treatmentsResult = await runAiAnalystTool('getTreatments', {rangeDays: 14});
       recordDataUsed('getTreatments', treatmentsResult);
+      if (runSeqRef.current !== runId) return;
       const insulinResult = await runAiAnalystTool('getInsulinSummary', {rangeDays: 14});
       recordDataUsed('getInsulinSummary', insulinResult);
+      if (runSeqRef.current !== runId) return;
 
       setProgressText('Asking AI Analyst…');
 
@@ -767,7 +812,10 @@ const AiAnalyst: React.FC = () => {
         ],
         temperature: aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.4,
         maxOutputTokens: 1200,
+        abortSignal: signal,
       });
+
+      if (runSeqRef.current !== runId) return;
 
       const finalText = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
 
@@ -789,10 +837,14 @@ const AiAnalyst: React.FC = () => {
 
       setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 50);
     } catch (e: any) {
-      setErrorText(e?.message ? String(e.message) : 'Failed to run User Behavior Analysis');
+      if (runSeqRef.current !== runId) return;
+      const msg = e?.name === 'AbortError' ? 'Stopped' : e?.message ? String(e.message) : 'Failed to run User Behavior Analysis';
+      if (msg !== 'Stopped') setErrorText(msg);
     } finally {
-      setIsBusy(false);
-      setProgressText('');
+      if (runSeqRef.current === runId) {
+        setIsBusy(false);
+        setProgressText('');
+      }
     }
   }, [provider, aiSettings.openAiModel, recordDataUsed]);
 
@@ -803,7 +855,7 @@ const AiAnalyst: React.FC = () => {
     if (!provider) return;
     setErrorText(null);
     setIsBusy(true);
-    setProgressText('Starting Loop Settings Advisor…');
+    const {runId, signal} = beginRun('Starting Loop Settings Advisor…');
     setUiMessages([]);
     setLlmMessages([]);
     setSessionDataUsed([]);
@@ -817,9 +869,11 @@ const AiAnalyst: React.FC = () => {
       const profileResult = await runAiAnalystTool('getPumpProfile', {});
       recordDataUsed('getPumpProfile', profileResult);
       console.log('[LoopSettingsAdvisor] Profile loaded:', profileResult.ok ? 'success' : 'failed');
+      if (runSeqRef.current !== runId) return;
 
       const currentSettingsResult = await runAiAnalystTool('getCurrentProfileSettings', {});
       recordDataUsed('getCurrentProfileSettings', currentSettingsResult);
+      if (runSeqRef.current !== runId) return;
 
       setProgressText('Asking AI Analyst…');
 
@@ -863,7 +917,10 @@ const AiAnalyst: React.FC = () => {
         ],
         temperature: aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.3,
         maxOutputTokens: 800,
+        abortSignal: signal,
       });
+
+      if (runSeqRef.current !== runId) return;
 
       const finalText = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
 
@@ -885,10 +942,14 @@ const AiAnalyst: React.FC = () => {
 
       setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 50);
     } catch (e: any) {
-      setErrorText(e?.message ? String(e.message) : 'Failed to run Loop Settings Advisor');
+      if (runSeqRef.current !== runId) return;
+      const msg = e?.name === 'AbortError' ? 'Stopped' : e?.message ? String(e.message) : 'Failed to run Loop Settings Advisor';
+      if (msg !== 'Stopped') setErrorText(msg);
     } finally {
-      setIsBusy(false);
-      setProgressText('');
+      if (runSeqRef.current === runId) {
+        setIsBusy(false);
+        setProgressText('');
+      }
     }
   }, [provider, aiSettings.openAiModel, loopSettingsToolSystemPrompt, recordDataUsed, glucoseSettings.severeHypo, glucoseSettings.hypo, glucoseSettings.hyper, glucoseSettings.severeHyper, glucoseSettings.nightStartHour, glucoseSettings.nightEndHour]);
 
@@ -899,6 +960,7 @@ const AiAnalyst: React.FC = () => {
 
     setErrorText(null);
     setIsBusy(true);
+    const {runId, signal} = beginRun('Thinking…');
 
     // Always show the user's message immediately.
     const userUiMessage = {role: 'user', content: trimmed} satisfies LlmChatMessage;
@@ -938,6 +1000,8 @@ const AiAnalyst: React.FC = () => {
           TOOL_TIMEOUT_MS,
           'getGlycemicEvents',
         );
+
+        if (runSeqRef.current !== runId) return;
 
         recordDataUsed('getGlycemicEvents', toolResult);
 
@@ -985,10 +1049,13 @@ const AiAnalyst: React.FC = () => {
             messages: [{role: 'system', content: systemPrompt}, ...workingLlmMessages],
             temperature: temp,
             maxOutputTokens: analystMode === 'loopSettings' ? 1200 : 800,
+            abortSignal: signal,
           }),
           LLM_TIMEOUT_MS,
           'LLM response',
         );
+
+        if (runSeqRef.current !== runId) return;
 
         const raw = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
         const env = tryParseToolEnvelope(raw);
@@ -1003,6 +1070,7 @@ const AiAnalyst: React.FC = () => {
             TOOL_TIMEOUT_MS,
             `Tool ${env.name}`,
           );
+          if (runSeqRef.current !== runId) return;
           recordDataUsed(env.name, toolResult);
           console.log(`[AiAnalyst] Tool ${env.name} result:`, toolResult.ok ? 'SUCCESS' : `FAILED: ${toolResult.error}`);
 
@@ -1049,10 +1117,13 @@ const AiAnalyst: React.FC = () => {
                 ],
                 temperature: aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.2,
                 maxOutputTokens: 1200,
+                abortSignal: signal,
               }),
               LLM_TIMEOUT_MS,
               'LLM rewrite',
             );
+
+            if (runSeqRef.current !== runId) return;
 
             const rewriteRaw = rewriteRes.content?.trim?.() ? rewriteRes.content.trim() : String(rewriteRes.content ?? '');
             const rewriteEnv = tryParseToolEnvelope(rewriteRaw);
@@ -1082,12 +1153,16 @@ const AiAnalyst: React.FC = () => {
       });
       setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 50);
     } catch (e: any) {
-      setErrorText(e?.message ? String(e.message) : 'Failed to send message');
+      if (runSeqRef.current !== runId) return;
+      const msg = e?.name === 'AbortError' ? 'Stopped' : e?.message ? String(e.message) : 'Failed to send message';
+      if (msg !== 'Stopped') setErrorText(msg);
     } finally {
-      setIsBusy(false);
-      setProgressText('');
+      if (runSeqRef.current === runId) {
+        setIsBusy(false);
+        setProgressText('');
+      }
     }
-  }, [provider, input, llmMessages, aiSettings.openAiModel, toolSystemPrompt, loopSettingsToolSystemPrompt, analystMode, glucoseSettings.hyper, glucoseSettings.hypo, glucoseSettings.severeHypo, glucoseSettings.severeHyper, glucoseSettings.nightStartHour, glucoseSettings.nightEndHour, persistHistorySnapshot, recordDataUsed]);
+  }, [provider, input, llmMessages, aiSettings.openAiModel, toolSystemPrompt, loopSettingsToolSystemPrompt, analystMode, glucoseSettings.hyper, glucoseSettings.hypo, glucoseSettings.severeHypo, glucoseSettings.severeHyper, glucoseSettings.nightStartHour, glucoseSettings.nightEndHour, persistHistorySnapshot, recordDataUsed, beginRun]);
 
   const renderLocked = () => (
     <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
@@ -1416,6 +1491,14 @@ const AiAnalyst: React.FC = () => {
               <Text style={{marginLeft: 10, color: addOpacity(theme.textColor, 0.75)}}>
                 {progressText ? progressText : 'Thinking…'}
               </Text>
+              <Pressable
+                onPress={cancelActiveRun}
+                accessibilityRole="button"
+                accessibilityLabel="Stop"
+                style={{marginLeft: 'auto', marginRight: 12, paddingVertical: 6, paddingHorizontal: 10}}
+              >
+                <Text style={{color: theme.belowRangeColor}}>Stop</Text>
+              </Pressable>
             </View>
           ) : null}
 
