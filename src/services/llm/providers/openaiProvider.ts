@@ -99,50 +99,201 @@ export class OpenAIProvider implements LlmProvider {
       };
     }
 
-    const payload = {
-      model: req.model,
-      messages: req.messages,
-      temperature: typeof req.temperature === 'number' ? req.temperature : 0.3,
-      // Keep this optional: some OpenAI models accept `max_completion_tokens`, others accept `max_tokens`.
-      ...(typeof req.maxOutputTokens === 'number'
-        ? {max_tokens: Math.max(1, Math.round(req.maxOutputTokens))}
-        : null),
+    const normalizedMaxOutputTokens =
+      typeof req.maxOutputTokens === 'number'
+        ? Math.max(1, Math.round(req.maxOutputTokens))
+        : null;
+
+    const normalizedTemperature =
+      typeof req.temperature === 'number' ? req.temperature : 0.3;
+
+    type TokenParamName = 'max_tokens' | 'max_completion_tokens';
+
+    type PostOptions = {
+      tokenParamName: TokenParamName | null;
+      includeTemperature: boolean;
     };
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(payload),
-    });
+    const buildPayload = (options: PostOptions) => {
+      const payload: any = {
+        model: req.model,
+        messages: req.messages,
+      };
 
-    const rawText = await res.text();
-    let rawJson: any;
-    try {
-      rawJson = rawText ? JSON.parse(rawText) : null;
-    } catch {
-      rawJson = null;
-    }
+      // Some OpenAI-compatible backends/models reject `temperature` entirely.
+      if (options.includeTemperature) {
+        payload.temperature = normalizedTemperature;
+      }
 
-    if (!res.ok) {
+      // Some OpenAI-compatible backends accept `max_completion_tokens` instead of `max_tokens`.
+      if (normalizedMaxOutputTokens != null && options.tokenParamName) {
+        payload[options.tokenParamName] = normalizedMaxOutputTokens;
+      }
+
+      return payload;
+    };
+
+    const extractUnsupportedParam = (msg: string): 'max_tokens' | 'max_completion_tokens' | 'temperature' | null => {
+      if (!/unsupported parameter/i.test(msg)) return null;
+
+      // Prefer the explicit "Unsupported parameter: 'X'" name when present.
+      const m = msg.match(/unsupported\s+parameter\s*:\s*['"]([^'"]+)['"]/i);
+      const explicit = (m?.[1] ?? '').trim();
+      if (explicit === 'max_tokens' || explicit === 'max_completion_tokens' || explicit === 'temperature') {
+        return explicit;
+      }
+
+      // Fallback: infer based on mention.
+      if (/max_completion_tokens/i.test(msg)) return 'max_completion_tokens';
+      if (/max_tokens/i.test(msg)) return 'max_tokens';
+      if (/temperature/i.test(msg)) return 'temperature';
+      return null;
+    };
+
+    const postOnce = async (options: PostOptions) => {
+      const payload = buildPayload(options);
+
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const rawText = await res.text();
+      let rawJson: any;
+      try {
+        rawJson = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        rawJson = null;
+      }
+
       const msg =
         rawJson?.error?.message ||
         rawJson?.message ||
         `OpenAI request failed (${res.status})`;
-      throw new Error(msg);
+
+      if (!res.ok) {
+        const err = new Error(msg) as Error & {raw?: any; status?: number};
+        err.raw = rawJson;
+        err.status = res.status;
+        throw err;
+      }
+
+      const message0 = rawJson?.choices?.[0]?.message;
+
+      const coerceContentToString = (value: any): string => {
+        if (typeof value === 'string') return value;
+        if (Array.isArray(value)) {
+          // Some OpenAI-compatible backends return a Responses-style content array.
+          // Try to join text parts, ignoring non-text parts.
+          const textParts = value
+            .map((part: any) => {
+              if (typeof part === 'string') return part;
+              if (typeof part?.text === 'string') return part.text;
+              if (typeof part?.content === 'string') return part.content;
+              return '';
+            })
+            .filter(Boolean);
+          return textParts.join('');
+        }
+        return '';
+      };
+
+      let content =
+        coerceContentToString(message0?.content) ||
+        coerceContentToString(rawJson?.choices?.[0]?.text) ||
+        '';
+
+      // If the backend returns tool calls but no content, convert to our local
+      // tool-envelope protocol so the rest of the app can execute tools.
+      if ((!content || !content.trim()) && Array.isArray(message0?.tool_calls) && message0.tool_calls.length > 0) {
+        const firstCall = message0.tool_calls[0];
+        const fnName = firstCall?.function?.name;
+        const fnArgsRaw = firstCall?.function?.arguments;
+        let fnArgs: any = fnArgsRaw;
+        if (typeof fnArgsRaw === 'string') {
+          try {
+            fnArgs = fnArgsRaw ? JSON.parse(fnArgsRaw) : {};
+          } catch {
+            fnArgs = fnArgsRaw;
+          }
+        }
+
+        if (typeof fnName === 'string' && fnName.trim()) {
+          content = JSON.stringify({type: 'tool_call', tool_name: fnName.trim(), args: fnArgs});
+        }
+      }
+
+      if (typeof content !== 'string' || !content.trim()) {
+        const err = new Error('Empty response from OpenAI') as Error & {raw?: any; isEmptyResponse?: boolean};
+        err.raw = rawJson;
+        err.isEmptyResponse = true;
+        throw err;
+      }
+
+      return {content, rawJson};
+    };
+
+    const postWithSingleRetryOnEmpty = async (options: PostOptions) => {
+      try {
+        return await postOnce(options);
+      } catch (e: any) {
+        const isEmpty =
+          e?.isEmptyResponse === true ||
+          (typeof e?.message === 'string' && /empty response from openai/i.test(e.message));
+        if (!isEmpty) throw e;
+        return await postOnce(options);
+      }
+    };
+
+    const candidates: PostOptions[] = [];
+    const tokenCandidates: Array<TokenParamName | null> =
+      normalizedMaxOutputTokens == null
+        ? [null]
+        : ['max_tokens', 'max_completion_tokens'];
+
+    for (const tokenParamName of tokenCandidates) {
+      candidates.push({tokenParamName, includeTemperature: true});
+    }
+    for (const tokenParamName of tokenCandidates) {
+      candidates.push({tokenParamName, includeTemperature: false});
     }
 
-    const content =
-      rawJson?.choices?.[0]?.message?.content ??
-      rawJson?.choices?.[0]?.text ??
-      '';
+    let banned: Set<'max_tokens' | 'max_completion_tokens' | 'temperature'> = new Set();
+    let lastErr: any = null;
 
-    if (typeof content !== 'string' || !content.trim()) {
-      throw new Error('Empty response from OpenAI');
+    for (const options of candidates) {
+      if (options.includeTemperature && banned.has('temperature')) continue;
+      if (options.tokenParamName && banned.has(options.tokenParamName)) continue;
+
+      try {
+        const {content, rawJson} = await postWithSingleRetryOnEmpty(options);
+        return {content, raw: rawJson};
+      } catch (e: any) {
+        lastErr = e;
+        const msg = typeof e?.message === 'string' ? e.message : '';
+        const unsupportedParam = extractUnsupportedParam(msg);
+
+        // Only auto-retry for known unsupported-parameter cases; otherwise surface the error.
+        if (!unsupportedParam) throw e;
+
+        // Only retry if we actually sent the offending parameter.
+        const sentUnsupportedParam =
+          (unsupportedParam === 'temperature' && options.includeTemperature) ||
+          (unsupportedParam !== 'temperature' && options.tokenParamName === unsupportedParam);
+
+        if (!sentUnsupportedParam) {
+          throw e;
+        }
+
+        banned.add(unsupportedParam);
+        continue;
+      }
     }
 
-    return {content, raw: rawJson};
+    throw lastErr ?? new Error('OpenAI request failed');
   }
 }

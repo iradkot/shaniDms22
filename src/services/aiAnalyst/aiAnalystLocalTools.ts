@@ -20,8 +20,14 @@ import {
   fetchProfileChangeHistory,
   findNearestProfileChange,
 } from 'app/services/loopAnalysis/profileHistoryService';
+import {detectSettingsChanges} from 'app/services/loopAnalysis/settingsChangeDetection';
 import {analyzeSettingsImpact} from 'app/services/loopAnalysis/impactAnalysisService';
 import {generateImpactSummary} from 'app/services/loopAnalysis/impactAnalysis.utils';
+import {calculatePeriodStats} from 'app/services/loopAnalysis/impactAnalysis.utils';
+import {TimeValueEntry} from 'app/types/insulin.types';
+import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
+import {DEFAULT_NIGHT_WINDOW} from 'app/constants/GLUCOSE_WINDOWS';
+import type {TirThresholds} from 'app/types/loopAnalysis.types';
 
 type ToolResult = {ok: true; result: any} | {ok: false; error: string};
 
@@ -41,6 +47,11 @@ export type AiAnalystToolName =
   | 'comparePeriods'
   | 'getInsulinDeliveryStats'
   | 'analyzeMealResponses'
+  // New helper tools for better recommendations + export
+  | 'getSettingsChangeHistory'
+  | 'getCurrentProfileSettings'
+  | 'getGlucoseStats'
+  | 'getMonthlyGlucoseSummary'
   // Snake_case aliases (LLM often uses these)
   | 'get_glucose_patterns'
   | 'analyze_time_in_range'
@@ -48,7 +59,10 @@ export type AiAnalystToolName =
   | 'get_insulin_delivery_stats'
   | 'analyze_meal_responses'
   | 'get_settings_change_history'
-  | 'get_profile_change_history';
+  | 'get_profile_change_history'
+  | 'get_current_profile_settings'
+  | 'get_glucose_stats'
+  | 'get_monthly_glucose_summary';
 
 // Normalize tool names: convert snake_case to camelCase
 function normalizeToolName(name: string): string {
@@ -58,14 +72,125 @@ function normalizeToolName(name: string): string {
     'compare_periods': 'comparePeriods',
     'get_insulin_delivery_stats': 'getInsulinDeliveryStats',
     'analyze_meal_responses': 'analyzeMealResponses',
-    'get_settings_change_history': 'getProfileChangeHistory',
+    'get_settings_change_history': 'getSettingsChangeHistory',
     'get_profile_change_history': 'getProfileChangeHistory',
+    'get_current_profile_settings': 'getCurrentProfileSettings',
+    'get_glucose_stats': 'getGlucoseStats',
+    'get_monthly_glucose_summary': 'getMonthlyGlucoseSummary',
     'get_cgm_samples': 'getCgmSamples',
     'get_cgm_data': 'getCgmData',
     'get_treatments': 'getTreatments',
     'get_pump_profile': 'getPumpProfile',
   };
   return snakeToCamelMap[name] || name;
+}
+
+function timeStrToMinutes(timeStr: string): number | null {
+  if (typeof timeStr !== 'string') return null;
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(timeStr.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(min)) return null;
+  return h * 60 + min;
+}
+
+function valueAtMinutes(schedule: TimeValueEntry[] | undefined, minutes: number): number | null {
+  const entries = Array.isArray(schedule) ? schedule : [];
+  const parsed = entries
+    .map(e => ({m: timeStrToMinutes(String((e as any)?.time)), v: (e as any)?.value}))
+    .filter(x => typeof x.m === 'number' && typeof x.v === 'number') as Array<{m: number; v: number}>;
+
+  if (parsed.length === 0) return null;
+  const sorted = parsed.sort((a, b) => a.m - b.m);
+
+  // Find the last entry whose time <= minutes; if none, wrap to last entry.
+  let current = sorted[sorted.length - 1];
+  for (const e of sorted) {
+    if (e.m <= minutes) current = e;
+    else break;
+  }
+  return current?.v ?? null;
+}
+
+function filterBgByTimeOfDay(samples: BgSample[], timeOfDay: string): BgSample[] {
+  const segment = ['all', 'overnight', 'morning', 'afternoon', 'evening'].includes(timeOfDay)
+    ? timeOfDay
+    : 'all';
+  if (segment === 'all') return samples;
+
+  const nightStartHour = Math.max(0, Math.min(23, Math.trunc(DEFAULT_NIGHT_WINDOW.startHour ?? 0)));
+  const nightEndHour = Math.max(0, Math.min(23, Math.trunc(DEFAULT_NIGHT_WINDOW.endHour ?? 6)));
+  const inOvernight = (hour: number) => {
+    if (nightStartHour === nightEndHour) return true;
+    if (nightStartHour < nightEndHour) return hour >= nightStartHour && hour < nightEndHour;
+    // Wraps midnight
+    return hour >= nightStartHour || hour < nightEndHour;
+  };
+
+  return (samples ?? []).filter(s => {
+    const hour = new Date(s.date).getHours();
+    switch (segment) {
+      case 'overnight':
+        return inOvernight(hour);
+      case 'morning':
+        return hour >= 6 && hour < 12;
+      case 'afternoon':
+        return hour >= 12 && hour < 18;
+      case 'evening':
+        return hour >= 18 && hour < 24;
+      default:
+        return true;
+    }
+  });
+}
+
+function getTimeOfDayDefinition(timeOfDay: string) {
+  const segment = ['all', 'overnight', 'morning', 'afternoon', 'evening'].includes(timeOfDay)
+    ? timeOfDay
+    : 'all';
+
+  if (segment !== 'overnight') {
+    return {
+      segment,
+      note:
+        segment === 'all'
+          ? 'all times'
+          : segment === 'morning'
+            ? 'morning: 06:00–12:00 local'
+            : segment === 'afternoon'
+              ? 'afternoon: 12:00–18:00 local'
+              : 'evening: 18:00–24:00 local',
+    };
+  }
+
+  const startHour = Math.max(0, Math.min(23, Math.trunc(DEFAULT_NIGHT_WINDOW.startHour ?? 0)));
+  const endHour = Math.max(0, Math.min(23, Math.trunc(DEFAULT_NIGHT_WINDOW.endHour ?? 6)));
+  const wrapsMidnight = startHour > endHour;
+
+  const pad = (h: number) => String(h).padStart(2, '0');
+  const note = `overnight: ${pad(startHour)}:00–${pad(endHour)}:00 local${wrapsMidnight ? ' (wraps midnight)' : ''}`;
+  return {segment, startHour, endHour, wrapsMidnight, note};
+}
+
+function getTirThresholdsFromGlucoseSettings(): TirThresholds {
+  const severeHypo = Number(cgmRange?.[CGM_STATUS_CODES.EXTREME_LOW]);
+  const hypo = Number(cgmRange?.TARGET?.min);
+  const hyper = Number(cgmRange?.[CGM_STATUS_CODES.VERY_HIGH]);
+  const severeHyper = Number(cgmRange?.[CGM_STATUS_CODES.EXTREME_HIGH]);
+
+  const fallback = {veryLowMax: 54, targetMin: 70, targetMax: 180, highMax: 250};
+  if (![severeHypo, hypo, hyper, severeHyper].every(n => Number.isFinite(n))) return fallback;
+
+  // Keep basic ordering; if invalid, fall back.
+  if (!(severeHypo < hypo && hypo < hyper && hyper < severeHyper)) return fallback;
+
+  return {
+    veryLowMax: severeHypo,
+    targetMin: hypo,
+    targetMax: hyper,
+    highMax: severeHyper,
+  };
 }
 
 function clampInt(v: unknown, min: number, max: number, fallback: number) {
@@ -158,7 +283,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const endMs = Date.now();
         const startMs = endMs - rangeDays * 24 * 60 * 60 * 1000;
 
-        const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs));
+        const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs), {throwOnError: true});
         const enriched = includeDeviceStatus
           ? await enrichBgSamplesWithDeviceStatusForRange({startMs, endMs, bgSamples: bg})
           : bg;
@@ -262,7 +387,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const endMs = Date.now();
         const startMs = endMs - rangeDays * 24 * 60 * 60 * 1000;
 
-        const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs));
+        const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs), {throwOnError: true});
 
         if (kind === 'hypo') {
           const events = extractHypoEvents({bgData: bg, lowThreshold: thresholdMgdl})
@@ -335,6 +460,220 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               timezone: first?.timezone ?? null,
               units: first?.units ?? null,
             },
+          },
+        };
+      }
+
+      // =======================================================================
+      // LOOP SETTINGS ADVISOR SUPPORT TOOLS (better current values + trends)
+      // =======================================================================
+
+      case 'getSettingsChangeHistory': {
+        const daysBack = clampInt(args?.daysBack, 1, 180, 90);
+        const changeType = typeof args?.changeType === 'string' ? args.changeType : 'all';
+
+        const endMs = Date.now();
+        const startMs = endMs - daysBack * 24 * 60 * 60 * 1000;
+
+        // Pull a reasonable number of the latest changes and then filter by time.
+        const rawEvents = await detectSettingsChanges({minEvents: 120, sourceFilter: 'all'});
+        const inWindow = rawEvents.filter(e => typeof e.timestamp === 'number' && e.timestamp >= startMs && e.timestamp <= endMs);
+
+        const matchesType = (e: any) => {
+          if (changeType === 'all') return true;
+          const types = Array.isArray(e?.changeTypes) ? e.changeTypes : [];
+          switch (changeType) {
+            case 'carb_ratio':
+              return types.includes('carb_ratio');
+            case 'isf':
+              return types.includes('isf');
+            case 'dia':
+              return types.includes('dia');
+            case 'basal':
+              return types.includes('basal');
+            case 'targets':
+              return types.includes('target_low') || types.includes('target_high');
+            default:
+              return true;
+          }
+        };
+
+        const filtered = inWindow.filter(matchesType);
+
+        return {
+          ok: true,
+          result: {
+            range: {startMs, endMs, daysBack},
+            changeType,
+            count: filtered.length,
+            events: filtered.map(e => ({
+              id: e.id,
+              date: new Date(e.timestamp).toISOString(),
+              profileName: e.profileName ?? null,
+              enteredBy: e.enteredBy ?? null,
+              source: e.source ?? null,
+              changeTypes: e.changeTypes ?? [],
+              summary: e.summary,
+              changes: (e.changes ?? []).map((c: any) => ({
+                type: c.type,
+                label: c.label,
+                timeSlot: c.timeSlot,
+                oldValue: c.oldValue,
+                newValue: c.newValue,
+                unit: c.unit,
+              })),
+            })),
+          },
+        };
+      }
+
+      case 'getCurrentProfileSettings': {
+        const dateIso = typeof args?.dateIso === 'string' ? args.dateIso : new Date().toISOString();
+        const profileData = await getUserProfileFromNightscout(dateIso);
+        const first = Array.isArray(profileData) ? profileData?.[0] : (profileData as any)?.[0];
+
+        const defaultProfileName = first?.defaultProfile ?? null;
+        const store = first?.store ?? null;
+        const profile = defaultProfileName && store ? store[defaultProfileName] : null;
+
+        const targetLow = profile?.target_low as TimeValueEntry[] | undefined;
+        const targetHigh = profile?.target_high as TimeValueEntry[] | undefined;
+        const isf = profile?.sens as TimeValueEntry[] | undefined;
+        const carbRatio = profile?.carbratio as TimeValueEntry[] | undefined;
+        const diaHours = typeof profile?.dia === 'number' ? profile.dia : null;
+
+        const snapshotTimes = [
+          {label: '22:00', minutes: 22 * 60},
+          {label: '00:00', minutes: 0},
+          {label: '03:00', minutes: 3 * 60},
+          {label: '06:00', minutes: 6 * 60},
+          {label: '12:00', minutes: 12 * 60},
+          {label: '18:00', minutes: 18 * 60},
+        ];
+
+        const snapshotByTime = snapshotTimes.map(t => ({
+          label: t.label,
+          targetLow: valueAtMinutes(targetLow, t.minutes),
+          targetHigh: valueAtMinutes(targetHigh, t.minutes),
+          isf: valueAtMinutes(isf, t.minutes),
+          carbRatio: valueAtMinutes(carbRatio, t.minutes),
+        }));
+
+        return {
+          ok: true,
+          result: {
+            dateIso,
+            units: first?.units ?? null,
+            timezone: profile?.timezone ?? first?.timezone ?? null,
+            defaultProfile: defaultProfileName,
+            diaHours,
+            schedules: {
+              targetLow: Array.isArray(targetLow) ? targetLow : [],
+              targetHigh: Array.isArray(targetHigh) ? targetHigh : [],
+              isf: Array.isArray(isf) ? isf : [],
+              carbRatio: Array.isArray(carbRatio) ? carbRatio : [],
+            },
+            snapshotByTime,
+          },
+        };
+      }
+
+      case 'getGlucoseStats': {
+        const startDateStr = args?.startDate;
+        const endDateStr = args?.endDate;
+        const timeOfDay = typeof args?.timeOfDay === 'string' ? args.timeOfDay : 'all';
+
+        if (!startDateStr || !endDateStr) {
+          return {ok: false, error: 'startDate and endDate are required (ISO date strings)'};
+        }
+
+        const startMs = Date.parse(startDateStr);
+        const endMs = Date.parse(endDateStr);
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+          return {ok: false, error: 'Invalid date format. Use ISO date strings.'};
+        }
+
+        const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs), {throwOnError: true});
+        const filtered = filterBgByTimeOfDay(bg, timeOfDay);
+        const tirThresholds = getTirThresholdsFromGlucoseSettings();
+        const stats = calculatePeriodStats(filtered, startMs, endMs, tirThresholds);
+        const timeOfDayDefinition = getTimeOfDayDefinition(timeOfDay);
+
+        return {
+          ok: true,
+          result: {
+            period: {
+              start: new Date(startMs).toISOString(),
+              end: new Date(endMs).toISOString(),
+              days: Math.max(1, Math.round((endMs - startMs) / (24 * 60 * 60 * 1000))),
+            },
+            timeOfDay: ['all', 'overnight', 'morning', 'afternoon', 'evening'].includes(timeOfDay) ? timeOfDay : 'all',
+            timeOfDayDefinition,
+            sampleCount: stats.sampleCount,
+            tirThresholdsUsed: tirThresholds,
+            stats: {
+              avgBg: stats.averageBg,
+              cv: stats.cv,
+              stdDev: stats.stdDev,
+              gmi: stats.gmi,
+            },
+            tir: {
+              veryLowPercent: Math.round(stats.timeInRange.veryLow * 10) / 10,
+              lowPercent: Math.round(stats.timeInRange.low * 10) / 10,
+              inRangePercent: Math.round(stats.timeInRange.target * 10) / 10,
+              highPercent: Math.round(stats.timeInRange.high * 10) / 10,
+              veryHighPercent: Math.round(stats.timeInRange.veryHigh * 10) / 10,
+            },
+            events: {
+              hypoEventCount: stats.hypoEventCount,
+              hyperEventCount: stats.hyperEventCount,
+            },
+          },
+        };
+      }
+
+      case 'getMonthlyGlucoseSummary': {
+        const monthsBack = clampInt(args?.monthsBack, 1, 24, 12);
+        const timeOfDay = typeof args?.timeOfDay === 'string' ? args.timeOfDay : 'all';
+        const tirThresholds = getTirThresholdsFromGlucoseSettings();
+        const timeOfDayDefinition = getTimeOfDayDefinition(timeOfDay);
+
+        const now = new Date();
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0); // start of next month
+        const start = new Date(end.getFullYear(), end.getMonth() - monthsBack, 1, 0, 0, 0, 0);
+
+        const months: Array<any> = [];
+        for (let i = 0; i < monthsBack; i++) {
+          const mStart = new Date(end.getFullYear(), end.getMonth() - monthsBack + i, 1, 0, 0, 0, 0);
+          const mEnd = new Date(end.getFullYear(), end.getMonth() - monthsBack + i + 1, 1, 0, 0, 0, 0);
+          const mStartMs = mStart.getTime();
+          const mEndMs = mEnd.getTime();
+          // Fetch month-by-month to avoid truncation when requesting large multi-month ranges.
+          const inMonth = await fetchBgDataForDateRangeUncached(new Date(mStartMs), new Date(mEndMs), {throwOnError: true});
+          const filtered = filterBgByTimeOfDay(inMonth, timeOfDay);
+          const stats = calculatePeriodStats(filtered, mStartMs, mEndMs, tirThresholds);
+
+          months.push({
+            month: `${mStart.getFullYear()}-${String(mStart.getMonth() + 1).padStart(2, '0')}`,
+            period: {start: mStart.toISOString(), end: mEnd.toISOString()},
+            sampleCount: stats.sampleCount,
+            avgBg: stats.averageBg,
+            cv: stats.cv,
+            tirPercent: Math.round(stats.timeInRange.target * 10) / 10,
+            hypoEventCount: stats.hypoEventCount,
+            hyperEventCount: stats.hyperEventCount,
+          });
+        }
+
+        return {
+          ok: true,
+          result: {
+            monthsBack,
+            timeOfDay: ['all', 'overnight', 'morning', 'afternoon', 'evening'].includes(timeOfDay) ? timeOfDay : 'all',
+            timeOfDayDefinition,
+            tirThresholdsUsed: tirThresholds,
+            range: {start: start.toISOString(), end: end.toISOString()},
+            months,
           },
         };
       }
@@ -488,8 +827,16 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const endMs = Date.now();
         const startMs = endMs - daysBack * 24 * 60 * 60 * 1000;
 
-        const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs));
+        const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs), {throwOnError: true});
         const treatments = await fetchTreatmentsForDateRangeUncached(new Date(startMs), new Date(endMs));
+
+        const nightStartHour = Math.max(0, Math.min(23, Math.trunc(DEFAULT_NIGHT_WINDOW.startHour ?? 0)));
+        const nightEndHour = Math.max(0, Math.min(23, Math.trunc(DEFAULT_NIGHT_WINDOW.endHour ?? 6)));
+        const inOvernight = (hour: number) => {
+          if (nightStartHour === nightEndHour) return true;
+          if (nightStartHour < nightEndHour) return hour >= nightStartHour && hour < nightEndHour;
+          return hour >= nightStartHour || hour < nightEndHour;
+        };
 
         // Filter by time of day if specified
         const filterByTime = (samples: BgSample[]) => {
@@ -497,7 +844,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           return samples.filter(s => {
             const hour = new Date(s.date).getHours();
             switch (focusTime) {
-              case 'overnight': return hour >= 0 && hour < 6;
+              case 'overnight': return inOvernight(hour);
               case 'fasting': return hour >= 6 && hour < 9;
               case 'post-meal': return (hour >= 7 && hour <= 9) || (hour >= 12 && hour <= 14) || (hour >= 18 && hour <= 20);
               default: return true;
@@ -542,15 +889,17 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           count: stats.count,
         })).sort((a, b) => a.hour - b.hour);
 
+        const tirThresholds = getTirThresholdsFromGlucoseSettings();
+
         // Identify problem hours (high or low averages)
         const problemHours = hourlyAverages.filter(h =>
-          h.avgBg < 70 || h.avgBg > 180
+          h.avgBg < tirThresholds.targetMin || h.avgBg > tirThresholds.targetMax
         );
 
         // Count hypos and hypers
-        const hypoCount = values.filter(v => v < 70).length;
-        const hyperCount = values.filter(v => v > 180).length;
-        const inRangeCount = values.filter(v => v >= 70 && v <= 180).length;
+        const hypoCount = values.filter(v => v < tirThresholds.targetMin).length;
+        const hyperCount = values.filter(v => v > tirThresholds.targetMax).length;
+        const inRangeCount = values.filter(v => v >= tirThresholds.targetMin && v <= tirThresholds.targetMax).length;
 
         return {
           ok: true,
@@ -558,6 +907,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
             range: {startMs, endMs, daysBack},
             focusTime,
             sampleCount: values.length,
+            tirThresholdsUsed: tirThresholds,
             stats: {
               avgBg: Math.round(avg),
               sdBg: Math.round(sd),
@@ -599,24 +949,8 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           return {ok: false, error: 'Invalid date format. Use ISO date strings.'};
         }
 
-        const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs));
-
-        // Filter by time of day
-        const filterByTimeOfDay = (samples: BgSample[]) => {
-          if (timeOfDay === 'all') return samples;
-          return samples.filter(s => {
-            const hour = new Date(s.date).getHours();
-            switch (timeOfDay) {
-              case 'overnight': return hour >= 0 && hour < 6;
-              case 'morning': return hour >= 6 && hour < 12;
-              case 'afternoon': return hour >= 12 && hour < 18;
-              case 'evening': return hour >= 18 && hour < 24;
-              default: return true;
-            }
-          });
-        };
-
-        const filtered = filterByTimeOfDay(bg);
+        const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs), {throwOnError: true});
+        const filtered = filterBgByTimeOfDay(bg, timeOfDay);
         const values = filtered.map(s => s.sgv).filter((v): v is number => typeof v === 'number');
 
         if (values.length < 10) {
@@ -626,20 +960,10 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           };
         }
 
-        // Calculate TIR metrics
-        const veryLow = values.filter(v => v < 54).length;
-        const low = values.filter(v => v >= 54 && v < 70).length;
-        const inRange = values.filter(v => v >= 70 && v <= 180).length;
-        const high = values.filter(v => v > 180 && v <= 250).length;
-        const veryHigh = values.filter(v => v > 250).length;
-        const total = values.length;
-
-        const avg = values.reduce((a, b) => a + b, 0) / values.length;
-        const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
-        const sd = Math.sqrt(variance);
-
-        // GMI calculation
-        const gmi = 3.31 + (0.02392 * avg);
+        const tirThresholds = getTirThresholdsFromGlucoseSettings();
+        const stats = calculatePeriodStats(filtered, startMs, endMs, tirThresholds);
+        const total = stats.sampleCount;
+        const timeOfDayDefinition = getTimeOfDayDefinition(timeOfDay);
 
         return {
           ok: true,
@@ -650,19 +974,21 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               days: Math.round((endMs - startMs) / (24 * 60 * 60 * 1000)),
             },
             timeOfDay,
+            timeOfDayDefinition,
             readingCount: total,
+            tirThresholdsUsed: tirThresholds,
             tir: {
-              veryLowPercent: Math.round((veryLow / total) * 1000) / 10,
-              lowPercent: Math.round((low / total) * 1000) / 10,
-              inRangePercent: Math.round((inRange / total) * 1000) / 10,
-              highPercent: Math.round((high / total) * 1000) / 10,
-              veryHighPercent: Math.round((veryHigh / total) * 1000) / 10,
+              veryLowPercent: Math.round(stats.timeInRange.veryLow * 10) / 10,
+              lowPercent: Math.round(stats.timeInRange.low * 10) / 10,
+              inRangePercent: Math.round(stats.timeInRange.target * 10) / 10,
+              highPercent: Math.round(stats.timeInRange.high * 10) / 10,
+              veryHighPercent: Math.round(stats.timeInRange.veryHigh * 10) / 10,
             },
             stats: {
-              avgBg: Math.round(avg),
-              sdBg: Math.round(sd),
-              cv: Math.round((sd / avg) * 1000) / 10,
-              gmi: Math.round(gmi * 10) / 10,
+              avgBg: stats.averageBg,
+              sdBg: stats.stdDev,
+              cv: stats.cv,
+              gmi: stats.gmi,
             },
           },
         };
@@ -680,34 +1006,32 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         }
 
         const [bg1, bg2] = await Promise.all([
-          fetchBgDataForDateRangeUncached(new Date(p1Start), new Date(p1End)),
-          fetchBgDataForDateRangeUncached(new Date(p2Start), new Date(p2End)),
+          fetchBgDataForDateRangeUncached(new Date(p1Start), new Date(p1End), {throwOnError: true}),
+          fetchBgDataForDateRangeUncached(new Date(p2Start), new Date(p2End), {throwOnError: true}),
         ]);
 
-        const calcStats = (bg: BgSample[]) => {
-          const values = bg.map(s => s.sgv).filter((v): v is number => typeof v === 'number');
-          if (values.length < 10) return null;
+        const tirThresholds = getTirThresholdsFromGlucoseSettings();
+        const calcStats = (bg: BgSample[], startMs: number, endMs: number) => {
+          const stats = calculatePeriodStats(bg, startMs, endMs, tirThresholds);
+          if ((stats.sampleCount ?? 0) < 10) return null;
+          if (stats.averageBg == null || stats.stdDev == null || stats.cv == null) return null;
 
-          const avg = values.reduce((a, b) => a + b, 0) / values.length;
-          const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
-          const sd = Math.sqrt(variance);
-          const inRange = values.filter(v => v >= 70 && v <= 180).length;
-          const hypos = values.filter(v => v < 70).length;
-          const hypers = values.filter(v => v > 180).length;
+          const hypoPct = stats.timeInRange.veryLow + stats.timeInRange.low;
+          const hyperPct = stats.timeInRange.high + stats.timeInRange.veryHigh;
 
           return {
-            count: values.length,
-            avgBg: Math.round(avg),
-            sdBg: Math.round(sd),
-            cv: Math.round((sd / avg) * 1000) / 10,
-            tirPercent: Math.round((inRange / values.length) * 1000) / 10,
-            hypoPercent: Math.round((hypos / values.length) * 1000) / 10,
-            hyperPercent: Math.round((hypers / values.length) * 1000) / 10,
+            count: stats.sampleCount,
+            avgBg: stats.averageBg,
+            sdBg: stats.stdDev,
+            cv: stats.cv,
+            tirPercent: Math.round(stats.timeInRange.target * 10) / 10,
+            hypoPercent: Math.round(hypoPct * 10) / 10,
+            hyperPercent: Math.round(hyperPct * 10) / 10,
           };
         };
 
-        const stats1 = calcStats(bg1);
-        const stats2 = calcStats(bg2);
+        const stats1 = calcStats(bg1, p1Start, p1End);
+        const stats2 = calcStats(bg2, p2Start, p2End);
 
         if (!stats1 || !stats2) {
           return {ok: false, error: 'Insufficient data in one or both periods.'};
@@ -728,6 +1052,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               days: Math.round((p2End - p2Start) / (24 * 60 * 60 * 1000)),
               ...stats2,
             },
+            tirThresholdsUsed: tirThresholds,
             delta: {
               avgBgDelta: stats2.avgBg - stats1.avgBg,
               tirDelta: stats2.tirPercent - stats1.tirPercent,
@@ -834,7 +1159,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const startMs = endMs - daysBack * 24 * 60 * 60 * 1000;
 
         const [bg, treatments] = await Promise.all([
-          fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs)),
+          fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs), {throwOnError: true}),
           fetchTreatmentsForDateRangeUncached(new Date(startMs), new Date(endMs)),
         ]);
 

@@ -1,11 +1,13 @@
 import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
+  Share,
   Text,
   TextInput,
   View,
@@ -32,6 +34,12 @@ import {createLlmProvider} from 'app/services/llm/llmClient';
 import {LlmChatMessage} from 'app/services/llm/llmTypes';
 import {buildHypoDetectiveContext} from 'app/services/aiAnalyst/hypoDetectiveContextBuilder';
 import {AiAnalystToolName, runAiAnalystTool} from 'app/services/aiAnalyst/aiAnalystLocalTools';
+import {
+  AiAnalystDataUsedItem,
+  buildAiAnalystExportJson,
+  buildAiAnalystExportMarkdown,
+  buildAiAnalystExportPayload,
+} from 'app/services/aiAnalyst/aiAnalystExport';
 import {
   clearAiAnalystHistory,
   deleteAiAnalystConversation,
@@ -193,6 +201,22 @@ function tryParseToolEnvelope(text: string): ToolEnvelope | null {
     if (obj?.type === 'final' && typeof obj?.content === 'string') {
       return {type: 'final', content: obj.content};
     }
+
+    // Back-compat: some models emit the tool name directly in `type`.
+    // Example: {"type":"analyze_time_in_range","args":{...}}
+    if (
+      typeof obj?.type === 'string' &&
+      obj.type !== 'tool_call' &&
+      obj.type !== 'final' &&
+      obj?.args !== undefined
+    ) {
+      return {type: 'tool_call', name: obj.type, args: obj.args};
+    }
+
+    // Back-compat: some models omit `type` and only provide {"name":"tool","args":{...}}.
+    if (typeof obj?.name === 'string' && obj?.args !== undefined) {
+      return {type: 'tool_call', name: obj.name, args: obj.args};
+    }
     return null;
   } catch {
     return null;
@@ -249,6 +273,20 @@ function wantsCountWithDates(text: string): boolean {
   return t.includes('how many') || t.includes('count') || t.includes('כמה') || t.includes('מתי') || t.includes('dates') || t.includes('תאריכים');
 }
 
+function looksLikeBasalRecommendation(text: string): boolean {
+  return /\b(basal|basal rate|scheduled basal|u\/hr)\b/i.test(text ?? '');
+}
+
+function looksLikePlaceholderValues(text: string): boolean {
+  return /\[(x|y|your current|adjust to|suggested value|current value)[^\]]*\]/i.test(text ?? '');
+}
+
+function getMissionTitle(mission: string | undefined): string {
+  if (mission === 'loopSettings') return 'Loop Settings Advisor';
+  if (mission === 'userBehavior') return 'User Behavior Tips';
+  return 'Hypo Detective';
+}
+
 const AiAnalyst: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation<any>();
@@ -274,6 +312,7 @@ const AiAnalyst: React.FC = () => {
 
   const [uiMessages, setUiMessages] = useState<LlmChatMessage[]>([]);
   const [llmMessages, setLlmMessages] = useState<LlmChatMessage[]>([]);
+  const [sessionDataUsed, setSessionDataUsed] = useState<AiAnalystDataUsedItem[]>([]);
   const [input, setInput] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [progressText, setProgressText] = useState<string>('');
@@ -466,6 +505,10 @@ const AiAnalyst: React.FC = () => {
       `- getCgmData: {rangeDays: number (1-180), maxSamples?: number (50-2000)}\n` +
       `- getTreatments: {rangeDays: number (1-180)}\n` +
       `- getPumpProfile: {dateIso?: string}\n` +
+      `- getCurrentProfileSettings: {dateIso?: string}\n` +
+      `- getGlucoseStats: {startDate: ISO date string, endDate: ISO date string, timeOfDay?: "all"|"overnight"|"morning"|"afternoon"|"evening"}\n` +
+      `- getMonthlyGlucoseSummary: {monthsBack: number (1-24), timeOfDay?: "all"|"overnight"|"morning"|"afternoon"|"evening"}\n` +
+      `- getSettingsChangeHistory: {daysBack: number (1-180), changeType?: "all"|"carb_ratio"|"isf"|"targets"|"basal"|"dia"}\n` +
       `- getProfileChangeHistory: {rangeDays: number (7-180), maxEvents?: number (1-50)}\n` +
       `- analyzeSettingsImpact: {changeDate: ISO string, windowDays: number (1-30)}\n\n` +
       `How to call a tool:\n` +
@@ -505,6 +548,50 @@ const AiAnalyst: React.FC = () => {
     [conversationId, state],
   );
 
+  const recordDataUsed = useCallback((name: string, toolResult: any) => {
+    if (!toolResult || toolResult.ok !== true) return;
+    setSessionDataUsed(prev => [
+      ...prev,
+      {
+        name,
+        atIso: new Date().toISOString(),
+        result: toolResult.result,
+      },
+    ]);
+  }, []);
+
+  const exportSession = useCallback(async () => {
+    const mission = state.mode === 'mission' ? state.mission : null;
+    const payload = buildAiAnalystExportPayload({
+      conversationId,
+      mission,
+      messages: uiMessages,
+      dataUsed: sessionDataUsed,
+    });
+
+    Alert.alert(
+      'Export',
+      'Share a summary of this discussion (and the diabetes data used).',
+      [
+        {
+          text: 'Share Summary',
+          onPress: async () => {
+            const md = buildAiAnalystExportMarkdown(payload);
+            await Share.share({title: 'AI Analyst Summary', message: md});
+          },
+        },
+        {
+          text: 'Share Data (JSON)',
+          onPress: async () => {
+            const json = buildAiAnalystExportJson(payload);
+            await Share.share({title: 'AI Analyst Export (JSON)', message: json});
+          },
+        },
+        {text: 'Cancel', style: 'cancel'},
+      ],
+    );
+  }, [conversationId, sessionDataUsed, state, uiMessages]);
+
   const startHypoDetective = useCallback(async () => {
     if (!provider) return;
     setErrorText(null);
@@ -512,6 +599,7 @@ const AiAnalyst: React.FC = () => {
     setProgressText('Starting…');
     setUiMessages([]);
     setLlmMessages([]);
+    setSessionDataUsed([]);
     setInput('');
     const nextId = makeConversationId();
     setConversationId(nextId);
@@ -543,13 +631,14 @@ const AiAnalyst: React.FC = () => {
       let workingLlmMessages: LlmChatMessage[] = [...baseLlmMessages];
 
       while (finalText == null) {
+        const temp = aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.2;
         const res = await provider.sendChat({
           model: aiSettings.openAiModel,
           messages: [
             {role: 'system', content: AI_ANALYST_SYSTEM_PROMPT + '\n' + toolSystemPrompt},
             ...workingLlmMessages,
           ],
-          temperature: 0.2,
+          temperature: temp,
           maxOutputTokens: 800,
         });
 
@@ -620,6 +709,7 @@ const AiAnalyst: React.FC = () => {
     setProgressText('Starting User Behavior Analysis…');
     setUiMessages([]);
     setLlmMessages([]);
+    setSessionDataUsed([]);
     setInput('');
     setAnalystMode('userBehavior');
     const nextId = makeConversationId();
@@ -629,9 +719,12 @@ const AiAnalyst: React.FC = () => {
       // Fetch recent CGM and treatment data for behavior analysis
       setProgressText('Loading CGM data…');
       const cgmResult = await runAiAnalystTool('getCgmSamples', {rangeDays: 14, maxSamples: 1000});
+      recordDataUsed('getCgmSamples', cgmResult);
       setProgressText('Loading treatments…');
       const treatmentsResult = await runAiAnalystTool('getTreatments', {rangeDays: 14});
+      recordDataUsed('getTreatments', treatmentsResult);
       const insulinResult = await runAiAnalystTool('getInsulinSummary', {rangeDays: 14});
+      recordDataUsed('getInsulinSummary', insulinResult);
 
       setProgressText('Asking AI Analyst…');
 
@@ -654,7 +747,7 @@ const AiAnalyst: React.FC = () => {
           {role: 'system', content: USER_BEHAVIOR_SYSTEM_PROMPT},
           ...baseLlmMessages,
         ],
-        temperature: 0.4,
+        temperature: aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.4,
         maxOutputTokens: 1200,
       });
 
@@ -683,7 +776,7 @@ const AiAnalyst: React.FC = () => {
       setIsBusy(false);
       setProgressText('');
     }
-  }, [provider, aiSettings.openAiModel]);
+  }, [provider, aiSettings.openAiModel, recordDataUsed]);
 
   // ==========================================================================
   // LOOP SETTINGS ADVISOR MISSION
@@ -695,6 +788,7 @@ const AiAnalyst: React.FC = () => {
     setProgressText('Starting Loop Settings Advisor…');
     setUiMessages([]);
     setLlmMessages([]);
+    setSessionDataUsed([]);
     setInput('');
     setAnalystMode('loopSettings');
     const nextId = makeConversationId();
@@ -703,7 +797,11 @@ const AiAnalyst: React.FC = () => {
     try {
       setProgressText('Loading profile data…');
       const profileResult = await runAiAnalystTool('getPumpProfile', {});
+      recordDataUsed('getPumpProfile', profileResult);
       console.log('[LoopSettingsAdvisor] Profile loaded:', profileResult.ok ? 'success' : 'failed');
+
+      const currentSettingsResult = await runAiAnalystTool('getCurrentProfileSettings', {});
+      recordDataUsed('getCurrentProfileSettings', currentSettingsResult);
 
       setProgressText('Asking AI Analyst…');
 
@@ -715,6 +813,9 @@ const AiAnalyst: React.FC = () => {
         `I'd like help optimizing my Loop settings.\n\n` +
         `Disclosure: ${disclosure}\n\n` +
         `Current Pump Profile (for your reference, don't mention specifics yet):\n${JSON.stringify(profileResult.ok ? profileResult.result : 'Profile unavailable')}\n\n` +
+        `Current Profile Settings (USE THESE to fill Current Value fields later):\n${JSON.stringify(
+          currentSettingsResult.ok ? currentSettingsResult.result : 'Settings unavailable'
+        )}\n\n` +
         `IMPORTANT: Start with a simple, friendly greeting and ask ONE open-ended question like "What's been bothering you lately?" or "What would you like to improve?"\n` +
         `DO NOT overwhelm with multiple questions in the first message.\n` +
         `After I respond, you can ask 2-3 focused follow-up questions, then use tools to analyze.`;
@@ -725,10 +826,24 @@ const AiAnalyst: React.FC = () => {
       const res = await provider.sendChat({
         model: aiSettings.openAiModel,
         messages: [
-          {role: 'system', content: LOOP_SETTINGS_ADVISOR_SYSTEM_PROMPT + '\n' + loopSettingsToolSystemPrompt},
+          {
+            role: 'system',
+            content:
+              LOOP_SETTINGS_ADVISOR_SYSTEM_PROMPT +
+              '\n' +
+              loopSettingsToolSystemPrompt +
+              `\n\n## User glucose thresholds + night window (from app settings)\n` +
+              `- Severe low (<=): ${glucoseSettings.severeHypo} mg/dL\n` +
+              `- Low (<): ${glucoseSettings.hypo} mg/dL\n` +
+              `- High (>): ${glucoseSettings.hyper} mg/dL\n` +
+              `- Severe high (>=): ${glucoseSettings.severeHyper} mg/dL\n` +
+              `- Overnight window (local): ${String(glucoseSettings.nightStartHour).padStart(2, '0')}:00–${String(glucoseSettings.nightEndHour).padStart(2, '0')}:00` +
+              (glucoseSettings.nightStartHour > glucoseSettings.nightEndHour ? ' (wraps midnight)' : '') +
+              `\n`,
+          },
           ...baseLlmMessages,
         ],
-        temperature: 0.3,
+        temperature: aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.3,
         maxOutputTokens: 800,
       });
 
@@ -757,7 +872,7 @@ const AiAnalyst: React.FC = () => {
       setIsBusy(false);
       setProgressText('');
     }
-  }, [provider, aiSettings.openAiModel, loopSettingsToolSystemPrompt]);
+  }, [provider, aiSettings.openAiModel, loopSettingsToolSystemPrompt, recordDataUsed, glucoseSettings.severeHypo, glucoseSettings.hypo, glucoseSettings.hyper, glucoseSettings.severeHyper, glucoseSettings.nightStartHour, glucoseSettings.nightEndHour]);
 
   const sendFollowUp = useCallback(async () => {
     if (!provider) return;
@@ -799,6 +914,8 @@ const AiAnalyst: React.FC = () => {
           maxEvents: wantsDates ? 120 : 60,
         });
 
+        recordDataUsed('getGlycemicEvents', toolResult);
+
         workingLlmMessages = [
           ...workingLlmMessages,
           {
@@ -817,7 +934,18 @@ const AiAnalyst: React.FC = () => {
       // Select the appropriate system prompt based on analyst mode
       let systemPrompt: string;
       if (analystMode === 'loopSettings') {
-        systemPrompt = LOOP_SETTINGS_ADVISOR_SYSTEM_PROMPT + '\n' + loopSettingsToolSystemPrompt;
+        systemPrompt =
+          LOOP_SETTINGS_ADVISOR_SYSTEM_PROMPT +
+          '\n' +
+          loopSettingsToolSystemPrompt +
+          `\n\n## User glucose thresholds + night window (from app settings)\n` +
+          `- Severe low (<=): ${glucoseSettings.severeHypo} mg/dL\n` +
+          `- Low (<): ${glucoseSettings.hypo} mg/dL\n` +
+          `- High (>): ${glucoseSettings.hyper} mg/dL\n` +
+          `- Severe high (>=): ${glucoseSettings.severeHyper} mg/dL\n` +
+          `- Overnight window (local): ${String(glucoseSettings.nightStartHour).padStart(2, '0')}:00–${String(glucoseSettings.nightEndHour).padStart(2, '0')}:00` +
+          (glucoseSettings.nightStartHour > glucoseSettings.nightEndHour ? ' (wraps midnight)' : '') +
+          `\n`;
       } else if (analystMode === 'userBehavior') {
         systemPrompt = USER_BEHAVIOR_SYSTEM_PROMPT;
       } else {
@@ -825,13 +953,14 @@ const AiAnalyst: React.FC = () => {
       }
 
       while (finalText == null) {
+        const temp = aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.2;
         const res = await provider.sendChat({
           model: aiSettings.openAiModel,
           messages: [
             {role: 'system', content: systemPrompt},
             ...workingLlmMessages,
           ],
-          temperature: 0.2,
+          temperature: temp,
           maxOutputTokens: analystMode === 'loopSettings' ? 1200 : 800,
         });
 
@@ -844,6 +973,7 @@ const AiAnalyst: React.FC = () => {
           setProgressText(`Running ${env.name}…`);
 
           const toolResult = await runAiAnalystTool(env.name, env.args);
+          recordDataUsed(env.name, toolResult);
           console.log(`[AiAnalyst] Tool ${env.name} result:`, toolResult.ok ? 'SUCCESS' : `FAILED: ${toolResult.error}`);
 
           workingLlmMessages = [
@@ -865,13 +995,47 @@ const AiAnalyst: React.FC = () => {
         } else {
           finalText = env?.type === 'final' ? env.content : raw;
         }
+
+        if (analystMode === 'loopSettings' && finalText) {
+          const needsRewrite = looksLikeBasalRecommendation(finalText) || looksLikePlaceholderValues(finalText);
+          if (needsRewrite) {
+            console.warn('[LoopSettingsAdvisor] Rewriting response to enforce: no basal + no placeholders + include trend.');
+            const rewriteRes = await provider.sendChat({
+              model: aiSettings.openAiModel,
+              messages: [
+                {role: 'system', content: systemPrompt},
+                ...workingLlmMessages,
+                {
+                  role: 'user',
+                  content:
+                    `Rewrite your last answer with these constraints:\n` +
+                    `1) Do NOT recommend basal schedule changes.\n` +
+                    `2) Do NOT use placeholders like [X]/[Y]/[Your current...]. Use actual current values (call tools if needed).\n` +
+                    `3) Include at least one numeric trend comparison (TIR, avg BG, CV) relevant to the user's issue.\n\n` +
+                    `Return ONLY {"type":"final","content":"..."}.\n\n` +
+                    `Your last answer:\n${finalText}`,
+                },
+              ],
+              temperature: aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.2,
+              maxOutputTokens: 1200,
+            });
+
+            const rewriteRaw = rewriteRes.content?.trim?.() ? rewriteRes.content.trim() : String(rewriteRes.content ?? '');
+            const rewriteEnv = tryParseToolEnvelope(rewriteRaw);
+            finalText = rewriteEnv?.type === 'final' ? rewriteEnv.content : rewriteRaw;
+          }
+        }
         workingLlmMessages = [...workingLlmMessages, {role: 'assistant', content: finalText.trim()}];
         setLlmMessages(workingLlmMessages);
       }
 
+      let finalOut = (finalText ?? '').trim();
+      // Guardrail: avoid dead-end filler like "one moment" when nothing is happening.
+      finalOut = finalOut.replace(/\s*(?:one moment(?: please)?\.?|one moment please\.?|hang on\.?|hold on\.?|just a moment\.?)+\s*$/i, '').trim();
+
       const assistantUiMessage = {
         role: 'assistant',
-        content: (finalText ?? '').trim(),
+        content: finalOut,
       } satisfies LlmChatMessage;
 
       setUiMessages(prev => {
@@ -886,7 +1050,7 @@ const AiAnalyst: React.FC = () => {
       setIsBusy(false);
       setProgressText('');
     }
-  }, [provider, input, llmMessages, aiSettings.openAiModel, toolSystemPrompt, loopSettingsToolSystemPrompt, analystMode, glucoseSettings.hyper, glucoseSettings.hypo, persistHistorySnapshot]);
+  }, [provider, input, llmMessages, aiSettings.openAiModel, toolSystemPrompt, loopSettingsToolSystemPrompt, analystMode, glucoseSettings.hyper, glucoseSettings.hypo, glucoseSettings.severeHypo, glucoseSettings.severeHyper, glucoseSettings.nightStartHour, glucoseSettings.nightEndHour, persistHistorySnapshot, recordDataUsed]);
 
   const renderLocked = () => (
     <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
@@ -989,7 +1153,7 @@ const AiAnalyst: React.FC = () => {
             </CardIcon>
             <View style={{flex: 1}}>
               <CardTitle>Loop Settings Advisor</CardTitle>
-              <CardSubtitle>Optimize CR, ISF, basal rates</CardSubtitle>
+              <CardSubtitle>Optimize targets, CR, ISF, DIA</CardSubtitle>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
           </CardRow>
@@ -1160,9 +1324,29 @@ const AiAnalyst: React.FC = () => {
             <Text style={{marginLeft: 6, color: addOpacity(theme.textColor, 0.8)}}>Back</Text>
           </Pressable>
 
-          <View style={{marginTop: theme.spacing.sm}}>
-          <Title>Hypo Detective</Title>
-          <Subtle>{makeDisclosureText()}</Subtle>
+          <View
+            style={{
+              marginTop: theme.spacing.sm,
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <View>
+              <Title>{getMissionTitle(state.mode === 'mission' ? state.mission : undefined)}</Title>
+              <Subtle>{makeDisclosureText()}</Subtle>
+            </View>
+
+            <Pressable
+              onPress={exportSession}
+              accessibilityRole="button"
+              accessibilityLabel="Export discussion"
+              hitSlop={10}
+              style={{flexDirection: 'row', alignItems: 'center'}}
+            >
+              <MaterialIcons name="download" size={18} color={addOpacity(theme.textColor, 0.8)} />
+              <Text style={{marginLeft: 6, color: addOpacity(theme.textColor, 0.8)}}>Export</Text>
+            </Pressable>
           </View>
         </View>
 

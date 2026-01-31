@@ -92,7 +92,7 @@ export const fetchBgDataForDateRange = async (
 export const fetchBgDataForDateRangeUncached = async (
   startDate: Date,
   endDate: Date,
-  options?: {count?: number},
+  options?: {count?: number; throwOnError?: boolean},
 ): Promise<BgSample[]> => {
   const startIso = startDate.toISOString();
   const endIso = endDate.toISOString();
@@ -108,6 +108,9 @@ export const fetchBgDataForDateRangeUncached = async (
     return bgData.sort(bgSortFunction(false));
   } catch (error: any) {
     console.warn('fetchBgDataForDateRangeUncached: Failed to fetch BG data', error);
+    if (options?.throwOnError) {
+      throw error;
+    }
     return [];
   }
 };
@@ -249,8 +252,22 @@ export const fetchDeviceStatusForDateRange = async (
 
     try {
       await AsyncStorage.setItem(cacheKey, JSON.stringify(status));
-    } catch (e) {
+    } catch (e: any) {
       console.warn('fetchDeviceStatusForDateRange: Failed caching device status', e);
+      const errMsg = e?.message || String(e ?? '');
+      if (errMsg.includes('SQLITE_FULL') || errMsg.includes('database or disk is full')) {
+        // Attempt to purge old device status cache keys to free space.
+        try {
+          const allKeys = await AsyncStorage.getAllKeys();
+          const deviceKeys = allKeys.filter(key => key.startsWith('deviceStatus-'));
+          if (deviceKeys.length) {
+            await AsyncStorage.multiRemove(deviceKeys);
+            console.info('fetchDeviceStatusForDateRange: Cleared old deviceStatus cache entries');
+          }
+        } catch (purgeErr) {
+          console.error('fetchDeviceStatusForDateRange: Failed to purge old cache', purgeErr);
+        }
+      }
     }
 
     return status;
