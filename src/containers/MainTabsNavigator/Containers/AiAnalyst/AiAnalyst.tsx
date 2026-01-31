@@ -287,6 +287,24 @@ function getMissionTitle(mission: string | undefined): string {
   return 'Hypo Detective';
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: any;
+  const timeout = new Promise<T>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+  });
+
+  return (Promise.race([promise, timeout]) as Promise<T>).then(
+    v => {
+      if (timer) clearTimeout(timer);
+      return v;
+    },
+    e => {
+      if (timer) clearTimeout(timer);
+      throw e;
+    },
+  );
+}
+
 const AiAnalyst: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation<any>();
@@ -896,6 +914,9 @@ const AiAnalyst: React.FC = () => {
     setInput('');
 
     try {
+      const TOOL_TIMEOUT_MS = 60_000;
+      const LLM_TIMEOUT_MS = 60_000;
+
       // Lightweight client-side router for count/range questions.
       // This prevents the model from choosing an irrelevant tool (e.g. hypo tool for hyper question).
       const rangeDays = parseRangeDaysFromText(trimmed);
@@ -907,12 +928,16 @@ const AiAnalyst: React.FC = () => {
         const kind = isHyper ? 'hyper' : 'hypo';
         const thresholdMgdl = isHyper ? glucoseSettings.hyper : glucoseSettings.hypo;
         setProgressText(`Running getGlycemicEvents…`);
-        const toolResult = await runAiAnalystTool('getGlycemicEvents', {
-          kind,
-          rangeDays,
-          thresholdMgdl,
-          maxEvents: wantsDates ? 120 : 60,
-        });
+        const toolResult = await withTimeout(
+          runAiAnalystTool('getGlycemicEvents', {
+            kind,
+            rangeDays,
+            thresholdMgdl,
+            maxEvents: wantsDates ? 120 : 60,
+          }),
+          TOOL_TIMEOUT_MS,
+          'getGlycemicEvents',
+        );
 
         recordDataUsed('getGlycemicEvents', toolResult);
 
@@ -954,15 +979,16 @@ const AiAnalyst: React.FC = () => {
 
       while (finalText == null) {
         const temp = aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.2;
-        const res = await provider.sendChat({
-          model: aiSettings.openAiModel,
-          messages: [
-            {role: 'system', content: systemPrompt},
-            ...workingLlmMessages,
-          ],
-          temperature: temp,
-          maxOutputTokens: analystMode === 'loopSettings' ? 1200 : 800,
-        });
+        const res = await withTimeout(
+          provider.sendChat({
+            model: aiSettings.openAiModel,
+            messages: [{role: 'system', content: systemPrompt}, ...workingLlmMessages],
+            temperature: temp,
+            maxOutputTokens: analystMode === 'loopSettings' ? 1200 : 800,
+          }),
+          LLM_TIMEOUT_MS,
+          'LLM response',
+        );
 
         const raw = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
         const env = tryParseToolEnvelope(raw);
@@ -972,7 +998,11 @@ const AiAnalyst: React.FC = () => {
           console.log(`[AiAnalyst] Tool call #${toolCalls}: ${env.name}`, env.args);
           setProgressText(`Running ${env.name}…`);
 
-          const toolResult = await runAiAnalystTool(env.name, env.args);
+          const toolResult = await withTimeout(
+            runAiAnalystTool(env.name, env.args),
+            TOOL_TIMEOUT_MS,
+            `Tool ${env.name}`,
+          );
           recordDataUsed(env.name, toolResult);
           console.log(`[AiAnalyst] Tool ${env.name} result:`, toolResult.ok ? 'SUCCESS' : `FAILED: ${toolResult.error}`);
 
@@ -1000,25 +1030,29 @@ const AiAnalyst: React.FC = () => {
           const needsRewrite = looksLikeBasalRecommendation(finalText) || looksLikePlaceholderValues(finalText);
           if (needsRewrite) {
             console.warn('[LoopSettingsAdvisor] Rewriting response to enforce: no basal + no placeholders + include trend.');
-            const rewriteRes = await provider.sendChat({
-              model: aiSettings.openAiModel,
-              messages: [
-                {role: 'system', content: systemPrompt},
-                ...workingLlmMessages,
-                {
-                  role: 'user',
-                  content:
-                    `Rewrite your last answer with these constraints:\n` +
-                    `1) Do NOT recommend basal schedule changes.\n` +
-                    `2) Do NOT use placeholders like [X]/[Y]/[Your current...]. Use actual current values (call tools if needed).\n` +
-                    `3) Include at least one numeric trend comparison (TIR, avg BG, CV) relevant to the user's issue.\n\n` +
-                    `Return ONLY {"type":"final","content":"..."}.\n\n` +
-                    `Your last answer:\n${finalText}`,
-                },
-              ],
-              temperature: aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.2,
-              maxOutputTokens: 1200,
-            });
+            const rewriteRes = await withTimeout(
+              provider.sendChat({
+                model: aiSettings.openAiModel,
+                messages: [
+                  {role: 'system', content: systemPrompt},
+                  ...workingLlmMessages,
+                  {
+                    role: 'user',
+                    content:
+                      `Rewrite your last answer with these constraints:\n` +
+                      `1) Do NOT recommend basal schedule changes.\n` +
+                      `2) Do NOT use placeholders like [X]/[Y]/[Your current...]. Use actual current values (call tools if needed).\n` +
+                      `3) Include at least one numeric trend comparison (TIR, avg BG, CV) relevant to the user's issue.\n\n` +
+                      `Return ONLY {"type":"final","content":"..."}.\n\n` +
+                      `Your last answer:\n${finalText}`,
+                  },
+                ],
+                temperature: aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.2,
+                maxOutputTokens: 1200,
+              }),
+              LLM_TIMEOUT_MS,
+              'LLM rewrite',
+            );
 
             const rewriteRaw = rewriteRes.content?.trim?.() ? rewriteRes.content.trim() : String(rewriteRes.content ?? '');
             const rewriteEnv = tryParseToolEnvelope(rewriteRaw);
@@ -1400,7 +1434,7 @@ const AiAnalyst: React.FC = () => {
             onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 50)}
             placeholder="Ask a follow-up…"
             placeholderTextColor={addOpacity(theme.textColor, 0.5)}
-            editable={!isBusy}
+            editable
           />
           <SendButton
             testID={E2E_TEST_IDS.aiAnalyst.sendButton}
