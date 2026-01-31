@@ -281,6 +281,22 @@ function looksLikePlaceholderValues(text: string): boolean {
   return /\[(x|y|your current|adjust to|suggested value|current value)[^\]]*\]/i.test(text ?? '');
 }
 
+function looksTruncatedAssistantMessage(text: string): boolean {
+  const t = (text ?? '').trim();
+  if (t.length < 40) return false;
+
+  // If it ends with obvious continuation markers, it's likely incomplete.
+  if (/(\.{3}|…)$/.test(t)) return true;
+
+  // If it ends mid-phrase without punctuation, it's suspicious.
+  // Allow common terminal punctuation and closing quotes/brackets.
+  if (/[.!?\n]$/.test(t)) return false;
+  if (/[)\]"']$/.test(t)) return false;
+
+  // Ends with alphanumeric but no punctuation.
+  return /[A-Za-z0-9]$/.test(t);
+}
+
 function getMissionTitle(mission: string | undefined): string {
   if (mission === 'loopSettings') return 'Loop Settings Advisor';
   if (mission === 'userBehavior') return 'User Behavior Tips';
@@ -1130,6 +1146,44 @@ const AiAnalyst: React.FC = () => {
             finalText = rewriteEnv?.type === 'final' ? rewriteEnv.content : rewriteRaw;
           }
         }
+
+        // If the model returns a cut-off answer (common with transient gateway issues),
+        // ask it to finish once before we show it to the user.
+        if (analystMode === 'loopSettings' && finalText && looksTruncatedAssistantMessage(finalText)) {
+          console.warn('[LoopSettingsAdvisor] Detected truncated response; requesting continuation');
+          setProgressText('Finishing response…');
+
+          const continueRes = await withTimeout(
+            provider.sendChat({
+              model: aiSettings.openAiModel,
+              messages: [
+                {role: 'system', content: systemPrompt},
+                ...workingLlmMessages,
+                {
+                  role: 'user',
+                  content:
+                    `Your last answer appears cut off. Finish it completely.\n` +
+                    `Return ONLY {"type":"final","content":"..."}.\n\n` +
+                    `Cut-off answer:\n${finalText}`,
+                },
+              ],
+              temperature: aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.2,
+              maxOutputTokens: 1200,
+              abortSignal: signal,
+            }),
+            60_000,
+            'LLM continuation',
+          );
+
+          if (runSeqRef.current !== runId) return;
+          const continueRaw = continueRes.content?.trim?.() ? continueRes.content.trim() : String(continueRes.content ?? '');
+          const continueEnv = tryParseToolEnvelope(continueRaw);
+          const completed = continueEnv?.type === 'final' ? continueEnv.content : continueRaw;
+          if (completed && completed.trim()) {
+            finalText = completed;
+          }
+        }
+
         workingLlmMessages = [...workingLlmMessages, {role: 'assistant', content: finalText.trim()}];
         setLlmMessages(workingLlmMessages);
       }
