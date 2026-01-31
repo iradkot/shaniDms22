@@ -1,6 +1,7 @@
 import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -162,9 +163,22 @@ type ToolEnvelope =
 
 function tryParseToolEnvelope(text: string): ToolEnvelope | null {
   const trimmed = (text ?? '').trim();
-  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
+  if (!trimmed) return null;
+
+  // Accept fenced JSON blocks.
+  const unfenced = trimmed
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  // Best effort: extract a single top-level JSON object.
+  const firstBrace = unfenced.indexOf('{');
+  const lastBrace = unfenced.lastIndexOf('}');
+  if (firstBrace < 0 || lastBrace < 0 || lastBrace <= firstBrace) return null;
+  const candidate = unfenced.slice(firstBrace, lastBrace + 1).trim();
+  if (!candidate.startsWith('{') || !candidate.endsWith('}')) return null;
   try {
-    const obj = JSON.parse(trimmed);
+    const obj = JSON.parse(candidate);
     if (obj?.type === 'tool_call' && typeof obj?.name === 'string') {
       return {type: 'tool_call', name: obj.name, args: obj.args};
     }
@@ -494,19 +508,59 @@ const AiAnalyst: React.FC = () => {
       const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
       setLlmMessages(baseLlmMessages);
 
-      const res = await provider.sendChat({
-        model: aiSettings.openAiModel,
-        messages: [
-          {role: 'system', content: AI_ANALYST_SYSTEM_PROMPT + '\n' + toolSystemPrompt},
-          {role: 'user', content: userPrompt},
-        ],
-        temperature: 0.2,
-        maxOutputTokens: 800,
-      });
+      const MAX_TOOL_CALLS = 4;
+      let toolCalls = 0;
+      let finalText: string | null = null;
+      let workingLlmMessages: LlmChatMessage[] = [...baseLlmMessages];
 
-      const assistantMessage = {role: 'assistant', content: res.content.trim()} satisfies LlmChatMessage;
+      while (finalText == null) {
+        const res = await provider.sendChat({
+          model: aiSettings.openAiModel,
+          messages: [
+            {role: 'system', content: AI_ANALYST_SYSTEM_PROMPT + '\n' + toolSystemPrompt},
+            ...workingLlmMessages,
+          ],
+          temperature: 0.2,
+          maxOutputTokens: 800,
+        });
+
+        const raw = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
+        const env = tryParseToolEnvelope(raw);
+
+        if (env?.type === 'tool_call' && toolCalls < MAX_TOOL_CALLS) {
+          toolCalls += 1;
+          setProgressText(`Running ${env.name}…`);
+
+          const toolResult = await runAiAnalystTool(env.name, env.args);
+          workingLlmMessages = [
+            ...workingLlmMessages,
+            {role: 'assistant', content: raw},
+            {
+              role: 'user',
+              content: `Tool result (${env.name}):\n${JSON.stringify(toolResult)}`,
+            },
+          ];
+          setLlmMessages(workingLlmMessages);
+          continue;
+        }
+
+        if (env?.type === 'tool_call' && toolCalls >= MAX_TOOL_CALLS) {
+          finalText =
+            'I tried to fetch additional data, but hit the tool-call limit. Please try again (or ask for a smaller time range).';
+        } else {
+          finalText = env?.type === 'final' ? env.content : raw;
+        }
+
+        workingLlmMessages = [...workingLlmMessages, {role: 'assistant', content: finalText.trim()}];
+        setLlmMessages(workingLlmMessages);
+      }
+
+      const assistantMessage = {
+        role: 'assistant',
+        content: (finalText ?? '').trim(),
+      } satisfies LlmChatMessage;
       setUiMessages([assistantMessage]);
-      setLlmMessages([...baseLlmMessages, assistantMessage]);
+      setLlmMessages([...workingLlmMessages]);
 
       // Snapshot text-only UI messages (no JSON/tool payloads).
       await upsertAiAnalystConversationSnapshot({
@@ -577,7 +631,7 @@ const AiAnalyst: React.FC = () => {
         setLlmMessages(workingLlmMessages);
       }
 
-      const MAX_TOOL_CALLS = 2;
+      const MAX_TOOL_CALLS = 4;
       let toolCalls = 0;
       let finalText: string | null = null;
 
@@ -613,7 +667,12 @@ const AiAnalyst: React.FC = () => {
           continue;
         }
 
-        finalText = env?.type === 'final' ? env.content : raw;
+        if (env?.type === 'tool_call' && toolCalls >= MAX_TOOL_CALLS) {
+          finalText =
+            'I tried to fetch additional data, but hit the tool-call limit. Please try again (or ask for a smaller time range).';
+        } else {
+          finalText = env?.type === 'final' ? env.content : raw;
+        }
         workingLlmMessages = [...workingLlmMessages, {role: 'assistant', content: finalText.trim()}];
         setLlmMessages(workingLlmMessages);
       }
@@ -806,7 +865,17 @@ const AiAnalyst: React.FC = () => {
         <ScrollView style={{flex: 1}} contentContainerStyle={{paddingBottom: theme.spacing.xl * 2}}>
           {messages.map((m, idx) => (
             <MessageBubble key={String(idx)} role={m.role === 'user' ? 'user' : 'assistant'}>
-              <MessageText selectable>{m.content}</MessageText>
+              {m.role === 'assistant' ? (
+                <Markdown
+                  markdownit={markdownItInstance}
+                  rules={selectableMarkdownRules}
+                  style={markdownStyle}
+                >
+                  {m.content}
+                </Markdown>
+              ) : (
+                <MessageText selectable>{m.content}</MessageText>
+              )}
             </MessageBubble>
           ))}
         </ScrollView>
@@ -846,8 +915,27 @@ const AiAnalyst: React.FC = () => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
+          <Pressable
+            testID={E2E_TEST_IDS.aiAnalyst.backButton}
+            onPress={() => {
+              Keyboard.dismiss();
+              setUiMessages([]);
+              setLlmMessages([]);
+              setState({mode: 'dashboard'});
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Back to AI Analyst"
+            hitSlop={10}
+            style={{alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center'}}
+          >
+            <MaterialIcons name="arrow-back" size={18} color={addOpacity(theme.textColor, 0.8)} />
+            <Text style={{marginLeft: 6, color: addOpacity(theme.textColor, 0.8)}}>Back</Text>
+          </Pressable>
+
+          <View style={{marginTop: theme.spacing.sm}}>
           <Title>Hypo Detective</Title>
           <Subtle>{makeDisclosureText()}</Subtle>
+          </View>
         </View>
 
         <ScrollView
@@ -913,6 +1001,7 @@ const AiAnalyst: React.FC = () => {
         <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md}}>
           <Pressable
             onPress={() => {
+              Keyboard.dismiss();
               setUiMessages([]);
               setLlmMessages([]);
               setState({mode: 'dashboard'});

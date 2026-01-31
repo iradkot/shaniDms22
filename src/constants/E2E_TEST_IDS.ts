@@ -63,6 +63,7 @@ export const E2E_TEST_IDS = {
     missionHypoDetective: 'aiAnalyst.mission.hypoDetective',
     chatInput: 'aiAnalyst.chat.input',
     sendButton: 'aiAnalyst.chat.send',
+    backButton: 'aiAnalyst.back',
   },
 
   notifications: {
