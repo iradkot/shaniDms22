@@ -15,6 +15,7 @@ import SportTracker from './Containers/SportTracker/SportTracker';
 import Trends from 'app/containers/MainTabsNavigator/Containers/Trends';
 import Oracle from 'app/containers/MainTabsNavigator/Containers/Oracle';
 import AiAnalyst from 'app/containers/MainTabsNavigator/Containers/AiAnalyst';
+import LoopTuner from 'app/containers/MainTabsNavigator/Containers/LoopTuner';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import SettingsNavigator from 'app/containers/MainTabsNavigator/Containers/Settings/SettingsNavigator';
 import {useTabsSettings} from 'app/contexts/TabsSettingsContext';
@@ -104,6 +105,19 @@ const MainTabsNavigator: React.FC = () => {
             ),
             tabBarLabel: 'AI Analyst',
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.aiAnalyst),
+          }}
+        />
+
+        <Tab.Screen
+          name={SCREEN_NAMES.LOOP_TUNER_TAB_SCREEN}
+          component={LoopTuner}
+          options={{
+            ...(settings.showLoopTuner ? {} : hiddenTabOptions),
+            tabBarIcon: ({color, size}: {color: string; size: number}) => (
+              <MaterialIcons name="tune" color={color} size={size} />
+            ),
+            tabBarLabel: 'Loop Tuner',
+            tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.loopTuner),
           }}
         />
 

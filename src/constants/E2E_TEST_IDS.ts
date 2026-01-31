@@ -20,6 +20,7 @@ export const E2E_TEST_IDS = {
     food: 'tab.food',
     sport: 'tab.sport',
     notifications: 'tab.notifications',
+    loopTuner: 'tab.loopTuner',
   },
 
   screens: {
@@ -31,6 +32,7 @@ export const E2E_TEST_IDS = {
     food: 'screen.food',
     sport: 'screen.sport',
     notifications: 'screen.notifications',
+    loopTuner: 'screen.loopTuner',
 
     sportAdd: 'screen.sport.add',
     notificationsAdd: 'screen.notifications.add',
@@ -41,6 +43,7 @@ export const E2E_TEST_IDS = {
     toggleSportTab: 'settings.toggle.sportTab',
     toggleNotificationsTab: 'settings.toggle.notificationsTab',
     toggleAiAnalystTab: 'settings.toggle.aiAnalystTab',
+    toggleLoopTunerTab: 'settings.toggle.loopTunerTab',
 
     aiApiKeyInput: 'settings.input.ai.apiKey',
     aiEnabledToggle: 'settings.toggle.ai.enabled',
@@ -187,6 +190,19 @@ export const E2E_TEST_IDS = {
 
   hypoInvestigation: {
     screen: 'screen.hypoInvestigation',
+  },
+
+  /**
+   * Loop Settings Impact Analysis (LoopTuner) selectors.
+   */
+  loopTuner: {
+    container: 'loopTuner.container',
+    profileCard: 'loopTuner.profileCard',
+    impactSummary: 'loopTuner.impactSummary',
+    ghostChart: 'loopTuner.ghostChart',
+    windowPills: 'loopTuner.windowPills',
+    metricRow: 'loopTuner.metricRow',
+    backButton: 'loopTuner.backButton',
   },
 } as const;
 

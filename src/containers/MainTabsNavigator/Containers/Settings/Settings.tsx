@@ -422,6 +422,22 @@ const Settings: React.FC = () => {
                 onValueChange={v => setSetting('showAiAnalyst', v)}
               />
             </View>
+
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons
+                  name="tune"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
+              </View>
+              <Text style={labelStyle}>Loop Tuner</Text>
+              <Switch
+                testID={E2E_TEST_IDS.settings.toggleLoopTunerTab}
+                value={settings.showLoopTuner}
+                onValueChange={v => setSetting('showLoopTuner', v)}
+              />
+            </View>
           </>
         )}
       </View>

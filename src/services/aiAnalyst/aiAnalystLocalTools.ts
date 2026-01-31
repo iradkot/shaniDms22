@@ -15,6 +15,14 @@ import {BgSample} from 'app/types/day_bgs.types';
 
 import {buildHypoDetectiveContext} from './hypoDetectiveContextBuilder';
 
+// Loop Analysis imports
+import {
+  fetchProfileChangeHistory,
+  findNearestProfileChange,
+} from 'app/services/loopAnalysis/profileHistoryService';
+import {analyzeSettingsImpact} from 'app/services/loopAnalysis/impactAnalysisService';
+import {generateImpactSummary} from 'app/services/loopAnalysis/impactAnalysis.utils';
+
 type ToolResult = {ok: true; result: any} | {ok: false; error: string};
 
 export type AiAnalystToolName =
@@ -24,7 +32,9 @@ export type AiAnalystToolName =
   | 'getInsulinSummary'
   | 'getHypoDetectiveContext'
   | 'getGlycemicEvents'
-  | 'getPumpProfile';
+  | 'getPumpProfile'
+  | 'getProfileChangeHistory'
+  | 'analyzeSettingsImpact';
 
 function clampInt(v: unknown, min: number, max: number, fallback: number) {
   const n = typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : fallback;
@@ -289,6 +299,142 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               timezone: first?.timezone ?? null,
               units: first?.units ?? null,
             },
+          },
+        };
+      }
+
+      // =======================================================================
+      // LOOP SETTINGS IMPACT ANALYSIS TOOLS
+      // =======================================================================
+
+      case 'getProfileChangeHistory': {
+        const rangeDays = clampInt(args?.rangeDays, 7, 180, 90);
+        const maxEvents = clampInt(args?.maxEvents, 1, 50, 20);
+        const excludeTemporary = Boolean(args?.excludeTemporary);
+
+        const endMs = Date.now();
+        const startMs = endMs - rangeDays * 24 * 60 * 60 * 1000;
+
+        const events = await fetchProfileChangeHistory({
+          startMs,
+          endMs,
+          limit: maxEvents,
+          excludeTemporary,
+        });
+
+        return {
+          ok: true,
+          result: {
+            range: {startMs, endMs, rangeDays},
+            count: events.length,
+            events: events.map(e => ({
+              id: e.id,
+              date: new Date(e.timestamp).toISOString(),
+              source: e.source,
+              profileName: e.profileName ?? null,
+              summary: e.summary,
+              isTemporary: (e.durationMinutes ?? 0) > 0,
+            })),
+          },
+        };
+      }
+
+      case 'analyzeSettingsImpact': {
+        const changeDate = args?.changeDate;
+        const windowDays = clampInt(args?.windowDays, 1, 30, 7);
+
+        if (!changeDate) {
+          return {ok: false, error: 'changeDate is required (ISO date string)'};
+        }
+
+        const targetTimestamp = Date.parse(changeDate);
+        if (!Number.isFinite(targetTimestamp)) {
+          return {ok: false, error: 'Invalid changeDate format. Use ISO date string.'};
+        }
+
+        // Find the nearest profile change event
+        const changeEvent = await findNearestProfileChange(targetTimestamp, 24 * 60 * 60 * 1000);
+
+        if (!changeEvent) {
+          return {
+            ok: false,
+            error: `No profile change found within 24 hours of ${changeDate}. ` +
+              `Use getProfileChangeHistory to see available changes.`,
+          };
+        }
+
+        // Check if post-change period has enough data
+        const now = Date.now();
+        const postEndMs = changeEvent.timestamp + windowDays * 24 * 60 * 60 * 1000;
+        const availablePostMs = Math.max(0, now - changeEvent.timestamp);
+        const postCoverage = availablePostMs / (windowDays * 24 * 60 * 60 * 1000);
+
+        if (postCoverage < 0.3) {
+          return {
+            ok: false,
+            error: `Only ${Math.round(postCoverage * 100)}% of the post-change period is available. ` +
+              `Try a shorter windowDays or wait longer for more data.`,
+          };
+        }
+
+        // Run the analysis
+        const result = await analyzeSettingsImpact({
+          changeEvent,
+          windowDays,
+        });
+
+        // Generate natural language summary
+        const summary = generateImpactSummary(
+          result.deltas,
+          result.preChange,
+          result.postChange,
+          result.windowDays
+        );
+
+        // Return LLM-friendly output
+        return {
+          ok: true,
+          result: {
+            changeDate: new Date(result.changeEvent.timestamp).toISOString(),
+            profileName: result.changeEvent.profileName ?? null,
+            source: result.changeEvent.source,
+            windowDays: result.windowDays,
+
+            preChange: {
+              avgBg: result.preChange.averageBg,
+              tirPercent: Math.round(result.preChange.timeInRange.target * 10) / 10,
+              hypoCount: result.preChange.hypoEventCount,
+              hyperCount: result.preChange.hyperEventCount,
+              cv: result.preChange.cv,
+              gmi: result.preChange.gmi,
+            },
+
+            postChange: {
+              avgBg: result.postChange.averageBg,
+              tirPercent: Math.round(result.postChange.timeInRange.target * 10) / 10,
+              hypoCount: result.postChange.hypoEventCount,
+              hyperCount: result.postChange.hyperEventCount,
+              cv: result.postChange.cv,
+              gmi: result.postChange.gmi,
+            },
+
+            deltas: {
+              tirDelta: result.deltas.tirDelta,
+              avgBgDelta: result.deltas.avgBgDelta,
+              hypoCountDelta: result.deltas.hypoCountDelta,
+              hyperCountDelta: result.deltas.hyperCountDelta,
+              isSignificant: result.deltas.isSignificant,
+              overallTrend: result.deltas.overallTrend,
+            },
+
+            dataQuality: {
+              hasEnoughData: result.dataQuality.hasEnoughData,
+              preCoverage: Math.round(result.dataQuality.prePeriodCoverage * 100),
+              postCoverage: Math.round(result.dataQuality.postPeriodCoverage * 100),
+              warnings: result.dataQuality.warnings,
+            },
+
+            summary,
           },
         };
       }

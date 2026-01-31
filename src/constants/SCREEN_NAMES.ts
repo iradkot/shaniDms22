@@ -27,5 +27,8 @@ export const FULL_SCREEN_VIEW_SCREEN: string = 'FullScreenViewScreen';
 // Trends deep dives
 export const HYPO_INVESTIGATION_SCREEN: string = 'HypoInvestigationScreen';
 
+// Loop Settings Impact Analysis
+export const LOOP_TUNER_TAB_SCREEN: string = 'LoopTunerTabScreen';
+
 // Nightscout setup (required before fetching data)
 export const NIGHTSCOUT_SETUP_SCREEN: string = 'NightscoutSetupScreen';
