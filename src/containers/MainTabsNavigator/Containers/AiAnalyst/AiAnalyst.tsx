@@ -1032,6 +1032,9 @@ const AiAnalyst: React.FC = () => {
       let finalOut = (finalText ?? '').trim();
       // Guardrail: avoid dead-end filler like "one moment" when nothing is happening.
       finalOut = finalOut.replace(/\s*(?:one moment(?: please)?\.?|one moment please\.?|hang on\.?|hold on\.?|just a moment\.?)+\s*$/i, '').trim();
+      if (!finalOut) {
+        finalOut = "If you'd like me to proceed, reply 'continue' and I'll run the next step.";
+      }
 
       const assistantUiMessage = {
         role: 'assistant',
