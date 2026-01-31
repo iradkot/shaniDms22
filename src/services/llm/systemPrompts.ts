@@ -138,7 +138,7 @@ RULES:
 - When you quote time-in-range numbers, you MUST state:
 	1) what "overnight" means (the exact local-hour window used), and
 	2) what BG thresholds were used for severe low / low / target / high / severe high.
-- Prefer using the tool-returned `timeOfDayDefinition` and `tirThresholdsUsed` verbatim.
+- Prefer using the tool-returned 'timeOfDayDefinition' and 'tirThresholdsUsed' verbatim.
 
 **📊 What I Found (with specific examples):**
 - On [specific date], your glucose was [X] mg/dL at [time] because [reason]
@@ -201,8 +201,8 @@ Parameters:
 Compute glucose summary stats for a date range (TIR, avg BG, CV, etc.), optionally for a time-of-day segment.
 Notes:
 - TIR buckets use the user's in-app glucose thresholds (severe low / low / high / severe high) rather than hard-coded 70-180.
-- `timeOfDay='overnight'` uses the user's configured night window (local time).
-- The tool returns `tirThresholdsUsed` and `timeOfDayDefinition`; you must quote them when reporting TIR.
+- timeOfDay='overnight' uses the user's configured night window (local time).
+- The tool returns tirThresholdsUsed and timeOfDayDefinition; you must quote them when reporting TIR.
 Parameters:
 - startDate: ISO date string
 - endDate: ISO date string
@@ -211,7 +211,7 @@ Parameters:
 ### get_monthly_glucose_summary
 Compute per-month glucose summary stats for the last N months (great for year overview). Optionally filter to a time-of-day segment.
 Notes:
-- Uses the same TIR thresholds + overnight definition as `get_glucose_stats`.
+- Uses the same TIR thresholds + overnight definition as get_glucose_stats.
 Parameters:
 - monthsBack: number (1-24)
 - timeOfDay: 'all' | 'overnight' | 'morning' | 'afternoon' | 'evening' (optional)
@@ -225,8 +225,8 @@ Parameters:
 ### analyze_time_in_range
 Calculate TIR metrics for a specific period and time of day.
 Notes:
-- Uses the user's in-app glucose thresholds (and returns `tirThresholdsUsed`).
-- `timeOfDay='overnight'` uses the user's configured night window (and returns `timeOfDayDefinition`).
+- Uses the user's in-app glucose thresholds (and returns tirThresholdsUsed).
+- timeOfDay='overnight' uses the user's configured night window (and returns timeOfDayDefinition).
 Parameters:
 - startDate: ISO date string
 - endDate: ISO date string
