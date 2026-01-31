@@ -1154,8 +1154,40 @@ const AiAnalyst: React.FC = () => {
       setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 50);
     } catch (e: any) {
       if (runSeqRef.current !== runId) return;
-      const msg = e?.name === 'AbortError' ? 'Stopped' : e?.message ? String(e.message) : 'Failed to send message';
-      if (msg !== 'Stopped') setErrorText(msg);
+      const rawMsg = e?.message ? String(e.message) : 'Failed to send message';
+      const msg = e?.name === 'AbortError' ? 'Stopped' : rawMsg;
+
+      if (msg !== 'Stopped') {
+        const isEmpty = /empty response from openai/i.test(msg);
+        setErrorText(
+          isEmpty
+            ? 'OpenAI returned an empty response (often transient). Tap Send to retry.'
+            : msg,
+        );
+
+        // Roll back the last user message so retry doesn't duplicate.
+        setUiMessages(prev => {
+          if (!prev.length) return prev;
+          const last = prev[prev.length - 1];
+          if (last?.role === 'user' && last?.content === trimmed) {
+            const next = prev.slice(0, -1);
+            void persistHistorySnapshot(next);
+            return next;
+          }
+          return prev;
+        });
+        setLlmMessages(prev => {
+          if (!prev.length) return prev;
+          const last = prev[prev.length - 1];
+          if (last?.role === 'user' && last?.content === trimmed) {
+            return prev.slice(0, -1);
+          }
+          return prev;
+        });
+
+        // Restore text so the user can quickly retry.
+        setInput(trimmed);
+      }
     } finally {
       if (runSeqRef.current === runId) {
         setIsBusy(false);

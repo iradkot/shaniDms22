@@ -239,15 +239,33 @@ export class OpenAIProvider implements LlmProvider {
     };
 
     const postWithSingleRetryOnEmpty = async (options: PostOptions) => {
-      try {
-        return await postOnce(options);
-      } catch (e: any) {
-        const isEmpty =
-          e?.isEmptyResponse === true ||
-          (typeof e?.message === 'string' && /empty response from openai/i.test(e.message));
-        if (!isEmpty) throw e;
-        return await postOnce(options);
+      const delaysMs = [0, 250, 500];
+      let last: any = null;
+      for (let attempt = 0; attempt < delaysMs.length; attempt += 1) {
+        if (delaysMs[attempt] > 0) {
+          await new Promise(resolve => setTimeout(resolve, delaysMs[attempt]));
+        }
+        try {
+          return await postOnce(options);
+        } catch (e: any) {
+          last = e;
+          const isEmpty =
+            e?.isEmptyResponse === true ||
+            (typeof e?.message === 'string' && /empty response from openai/i.test(e.message));
+          if (!isEmpty) throw e;
+
+          // Helpful diagnostics when a backend returns ok=true but no message content.
+          try {
+            // Avoid logging full PHI-heavy payloads; log only response shape.
+            const choicesLen = Array.isArray(e?.raw?.choices) ? e.raw.choices.length : null;
+            const hasMessage = !!e?.raw?.choices?.[0]?.message;
+            const hasToolCalls = Array.isArray(e?.raw?.choices?.[0]?.message?.tool_calls);
+            console.warn('[OpenAIProvider] Empty response retry', {attempt: attempt + 1, choicesLen, hasMessage, hasToolCalls});
+          } catch {}
+          continue;
+        }
       }
+      throw last;
     };
 
     const candidates: PostOptions[] = [];
