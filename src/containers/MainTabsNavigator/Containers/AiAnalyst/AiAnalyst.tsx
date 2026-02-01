@@ -281,22 +281,6 @@ function looksLikePlaceholderValues(text: string): boolean {
   return /\[(x|y|your current|adjust to|suggested value|current value)[^\]]*\]/i.test(text ?? '');
 }
 
-function looksTruncatedAssistantMessage(text: string): boolean {
-  const t = (text ?? '').trim();
-  if (t.length < 40) return false;
-
-  // If it ends with obvious continuation markers, it's likely incomplete.
-  if (/(\.{3}|…)$/.test(t)) return true;
-
-  // If it ends mid-phrase without punctuation, it's suspicious.
-  // Allow common terminal punctuation and closing quotes/brackets.
-  if (/[.!?\n]$/.test(t)) return false;
-  if (/[)\]"']$/.test(t)) return false;
-
-  // Ends with alphanumeric but no punctuation.
-  return /[A-Za-z0-9]$/.test(t);
-}
-
 function getMissionTitle(mission: string | undefined): string {
   if (mission === 'loopSettings') return 'Loop Settings Advisor';
   if (mission === 'userBehavior') return 'User Behavior Tips';
@@ -565,7 +549,15 @@ const AiAnalyst: React.FC = () => {
   const loopSettingsToolSystemPrompt = useMemo(
     () =>
       `Tooling (REQUIRED for Loop Settings Advisor):\n` +
-      `You MUST use tools to gather data and verify your findings. Use at least 3 tool calls before making any recommendation.\n\n` +
+      `You MUST use tools to gather data and verify your findings. Use at least 3 tool calls before making any recommendation.\n` +
+      `CRITICAL: Do NOT ask the user whether they changed settings (ISF/CR/targets/basal/DIA). Verify with tools (especially getSettingsChangeHistory / getProfileChangeHistory).\n` +
+      `Ask the user only for context that tools cannot provide (sleep/dinner/exercise/alcohol/illness).\n` +
+      `To reduce truncation, keep each assistant message short (aim <150 words). Prefer bullets over long paragraphs.\n\n` +
+      `Suggested early tool sequence for overnight issues:\n` +
+      `1) getSettingsChangeHistory(daysBack=60, changeType="all")\n` +
+      `2) analyzeTimeInRange(timeOfDay="overnight") or getGlucoseStats(timeOfDay="overnight")\n` +
+      `3) getGlucosePatterns(daysBack=30, focusTime="overnight")\n` +
+      `4) comparePeriods (if the user says it used to be better)\n\n` +
       LOOP_SETTINGS_TOOLS_DESCRIPTION +
       `\nAdditional tools available:\n` +
       `- getCgmData: {rangeDays: number (1-180), maxSamples?: number (50-2000)}\n` +
@@ -577,6 +569,7 @@ const AiAnalyst: React.FC = () => {
       `- getSettingsChangeHistory: {daysBack: number (1-180), changeType?: "all"|"carb_ratio"|"isf"|"targets"|"basal"|"dia"}\n` +
       `- getProfileChangeHistory: {rangeDays: number (7-180), maxEvents?: number (1-50)}\n` +
       `- analyzeSettingsImpact: {changeDate: ISO string, windowDays: number (1-30)}\n\n` +
+      `Naming note: snake_case aliases like get_settings_change_history are accepted, but prefer the camelCase names listed here when possible.\n\n` +
       `How to call a tool:\n` +
       `- Respond with ONLY a single-line JSON object: {"type":"tool_call","name":"getGlucosePatterns","args":{...}}\n` +
       `- After you receive a message starting with "Tool result (NAME):", either call another tool or respond with {"type":"final","content":"..."}.\n` +
@@ -906,7 +899,8 @@ const AiAnalyst: React.FC = () => {
         )}\n\n` +
         `IMPORTANT: Start with a simple, friendly greeting and ask ONE open-ended question like "What's been bothering you lately?" or "What would you like to improve?"\n` +
         `DO NOT overwhelm with multiple questions in the first message.\n` +
-        `After I respond, you can ask 2-3 focused follow-up questions, then use tools to analyze.`;
+        `After I respond, you can ask 2-3 focused follow-up questions, then use tools to analyze.\n` +
+        `Do NOT ask me whether I changed settings; you can verify that yourself via getSettingsChangeHistory/getProfileChangeHistory.`;
 
       const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
       setLlmMessages(baseLlmMessages);
@@ -1144,43 +1138,6 @@ const AiAnalyst: React.FC = () => {
             const rewriteRaw = rewriteRes.content?.trim?.() ? rewriteRes.content.trim() : String(rewriteRes.content ?? '');
             const rewriteEnv = tryParseToolEnvelope(rewriteRaw);
             finalText = rewriteEnv?.type === 'final' ? rewriteEnv.content : rewriteRaw;
-          }
-        }
-
-        // If the model returns a cut-off answer (common with transient gateway issues),
-        // ask it to finish once before we show it to the user.
-        if (analystMode === 'loopSettings' && finalText && looksTruncatedAssistantMessage(finalText)) {
-          console.warn('[LoopSettingsAdvisor] Detected truncated response; requesting continuation');
-          setProgressText('Finishing response…');
-
-          const continueRes = await withTimeout(
-            provider.sendChat({
-              model: aiSettings.openAiModel,
-              messages: [
-                {role: 'system', content: systemPrompt},
-                ...workingLlmMessages,
-                {
-                  role: 'user',
-                  content:
-                    `Your last answer appears cut off. Finish it completely.\n` +
-                    `Return ONLY {"type":"final","content":"..."}.\n\n` +
-                    `Cut-off answer:\n${finalText}`,
-                },
-              ],
-              temperature: aiSettings.openAiModel.trim().startsWith('o') ? undefined : 0.2,
-              maxOutputTokens: 1200,
-              abortSignal: signal,
-            }),
-            60_000,
-            'LLM continuation',
-          );
-
-          if (runSeqRef.current !== runId) return;
-          const continueRaw = continueRes.content?.trim?.() ? continueRes.content.trim() : String(continueRes.content ?? '');
-          const continueEnv = tryParseToolEnvelope(continueRaw);
-          const completed = continueEnv?.type === 'final' ? continueEnv.content : continueRaw;
-          if (completed && completed.trim()) {
-            finalText = completed;
           }
         }
 

@@ -88,10 +88,14 @@ Provide data-driven Loop settings recommendations by analyzing historical data w
 
 ### Key Principles
 
-1. **Verification First** - LLM must ask clarifying questions before analysis
+1. **Tool-First Verification** - Verify setting changes via tools; don't ask the user to remember
 2. **Tool-Based Analysis** - Minimum 3 tool calls, up to 20, to verify findings
 3. **Specific Recommendations** - Concrete setting changes with reasoning
 4. **Safety-Conscious** - Conservative suggestions, recommend gradual changes
+
+#### Important behavioral rule
+- Do NOT ask the user whether they changed settings (ISF/CR/targets/basal/DIA). Use `get_settings_change_history` (and related tools) to verify.
+- Ask the user only for context tools cannot provide (sleep/dinner/exercise/illness).
 
 ### Available Tools
 

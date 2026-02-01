@@ -186,16 +186,29 @@ export const LOOP_SETTINGS_TOOLS_DESCRIPTION = `
 
 You have access to these tools to analyze the user's data:
 
+## Tool-first policy (important)
+- Do NOT ask the user to confirm whether they changed settings. You can and should verify this with get_settings_change_history.
+- Only ask the user for information that is NOT available via tools (e.g., bedtime, dinner timing, exercise, sleep disturbances).
+- When you mention a change (or lack of change), cite the tool and the date.
+- Keep outputs concise to avoid truncation: prefer short bullets; avoid long prose.
+
 ### get_settings_change_history
 Get history of user settings changes (CR, ISF, targets, basal, DIA).
 Parameters:
 - daysBack: number (1-90) - How many days to look back
 - changeType: 'all' | 'carb_ratio' | 'isf' | 'targets' | 'basal' | 'dia' - Filter by type
 
+When to use:
+- Any time you suspect a recent change in ISF/CR/targets/basal/DIA.
+- Before asking questions like "did you change X?".
+
 ### get_current_profile_settings
 Get current Loop profile settings (targets, ISF, CR, DIA) for the default profile, including an easy-to-read snapshot for common times (e.g., 22:00, 00:00, 03:00, 06:00).
 Parameters:
 - dateIso: ISO date string (optional) - fetch the profile active at/near a date
+
+When to use:
+- Before referencing "your current ISF/CR/targets" in recommendations.
 
 ### get_glucose_stats
 Compute glucose summary stats for a date range (TIR, avg BG, CV, etc.), optionally for a time-of-day segment.
@@ -239,6 +252,9 @@ Parameters:
 - period1End: ISO date
 - period2Start: ISO date
 - period2End: ISO date
+
+When to use:
+- When the user says "it used to be better" or you want to quantify a "before vs after".
 
 ### get_insulin_delivery_stats
 Get insulin delivery statistics (basal vs bolus, total daily).

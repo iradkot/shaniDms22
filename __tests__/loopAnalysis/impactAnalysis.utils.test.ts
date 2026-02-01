@@ -282,7 +282,11 @@ describe('computeHourlyAggregates', () => {
     }
 
     const result = computeHourlyAggregates(samples);
-    const hour0 = result[baseDate.getUTCHours()];
+    // Timezone-agnostic: find the bucket that contains our 10 samples.
+    const hour0 = result.find(h => h.count === 10);
+
+    expect(hour0).toBeDefined();
+    if (!hour0) return;
 
     expect(hour0.count).toBe(10);
     expect(hour0.median).toBeCloseTo(145, 0);
@@ -407,7 +411,8 @@ describe('assessDataQuality', () => {
     ];
     // Need more samples to reach coverage threshold
     for (let i = 0; i < 2000; i++) {
-      preSamples.push({date: 2000 + i * 300000, sgv: 100} as BgSample);
+      // Keep these samples clustered (do NOT bridge the multi-hour gaps above).
+      preSamples.push({date: 2000 + i * 1000, sgv: 100} as BgSample);
     }
 
     const quality = assessDataQuality(preSamples, preSamples, 7);
