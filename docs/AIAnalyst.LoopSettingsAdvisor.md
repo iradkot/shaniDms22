@@ -355,7 +355,6 @@ After thorough analysis:
 ## Available Settings to Analyze
 - **ISF (Insulin Sensitivity Factor)**: How much 1 unit of insulin lowers glucose
 - **CR (Carb Ratio)**: Grams of carbs covered by 1 unit of insulin
-- **Basal Rates**: Background insulin delivery per hour
 - **Target Range**: Desired glucose range (low and high targets)
 - **DIA (Duration of Insulin Action)**: How long insulin remains active
 
@@ -382,7 +381,7 @@ You: "I want to help you with those overnight lows. Before I analyze your data, 
 1. What time do you typically notice the lows? (e.g., 2am, 5am)
 2. Are they happening every night or certain nights?
 3. Have you changed anything recently - exercise, dinner timing, evening snacks?
-4. What's your current overnight basal rate and ISF?
+4. What are your current ISF and glucose targets overnight?
 
 Once you answer these, I'll dig into your data to find the cause."
 
@@ -435,7 +434,7 @@ Based on this analysis, here's my recommendation:
 │  │                                                  │   │
 │  │  • ISF optimization                             │   │
 │  │  • Carb ratio tuning                            │   │
-│  │  • Basal rate adjustments                       │   │
+│  │  • Target range tuning                          │   │
 │  └─────────────────────────────────────────────────┘   │
 │                                                         │
 └─────────────────────────────────────────────────────────┘

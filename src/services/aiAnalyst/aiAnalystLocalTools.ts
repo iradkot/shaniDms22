@@ -981,7 +981,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
             period: {
               start: new Date(startMs).toISOString(),
               end: new Date(endMs).toISOString(),
-              days: Math.round((endMs - startMs) / (24 * 60 * 60 * 1000)),
+              days: Math.max(1, Math.round((endMs - startMs) / (24 * 60 * 60 * 1000))),
             },
             timeOfDay,
             timeOfDayDefinition,
@@ -1013,6 +1013,10 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         if (!Number.isFinite(p1Start) || !Number.isFinite(p1End) ||
             !Number.isFinite(p2Start) || !Number.isFinite(p2End)) {
           return {ok: false, error: 'All four dates are required (ISO date strings)'};
+        }
+
+        if (p1End <= p1Start || p2End <= p2Start) {
+          return {ok: false, error: 'Each period must have end > start.'};
         }
 
         const [bg1, bg2] = await Promise.all([
@@ -1053,13 +1057,13 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
             period1: {
               start: new Date(p1Start).toISOString(),
               end: new Date(p1End).toISOString(),
-              days: Math.round((p1End - p1Start) / (24 * 60 * 60 * 1000)),
+              days: Math.max(1, Math.round((p1End - p1Start) / (24 * 60 * 60 * 1000))),
               ...stats1,
             },
             period2: {
               start: new Date(p2Start).toISOString(),
               end: new Date(p2End).toISOString(),
-              days: Math.round((p2End - p2Start) / (24 * 60 * 60 * 1000)),
+              days: Math.max(1, Math.round((p2End - p2Start) / (24 * 60 * 60 * 1000))),
               ...stats2,
             },
             tirThresholdsUsed: tirThresholds,
