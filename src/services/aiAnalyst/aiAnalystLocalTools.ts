@@ -1100,6 +1100,10 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           return {ok: false, error: 'Invalid date format. Use ISO date strings.'};
         }
 
+        if (endMs <= startMs) {
+          return {ok: false, error: 'endDate must be after startDate.'};
+        }
+
         const treatments = await fetchTreatmentsForDateRangeUncached(new Date(startMs), new Date(endMs));
         const insulinEntries = mapNightscoutTreatmentsToInsulinDataEntries(treatments);
 
