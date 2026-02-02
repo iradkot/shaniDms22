@@ -580,7 +580,7 @@ export class OpenAIProvider implements LlmProvider {
         }
 
         if (typeof fnName === 'string' && fnName.trim()) {
-          content = JSON.stringify({type: 'tool_call', tool_name: fnName.trim(), args: fnArgs});
+          content = JSON.stringify({type: 'tool_call', name: fnName.trim(), args: fnArgs});
         }
       }
 

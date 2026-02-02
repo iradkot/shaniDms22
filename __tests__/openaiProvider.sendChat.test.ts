@@ -441,7 +441,7 @@ describe('OpenAIProvider.sendChat', () => {
 
     const parsed = JSON.parse(res.content);
     expect(parsed.type).toBe('tool_call');
-    expect(parsed.tool_name).toBe('getGlucoseStats');
+    expect(parsed.name).toBe('getGlucoseStats');
     expect(parsed.args).toEqual({days: 7});
   });
 

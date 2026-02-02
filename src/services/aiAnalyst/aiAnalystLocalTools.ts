@@ -643,26 +643,37 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const start = new Date(end.getFullYear(), end.getMonth() - monthsBack, 1, 0, 0, 0, 0);
 
         const months: Array<any> = [];
-        for (let i = 0; i < monthsBack; i++) {
+        const monthPeriods = Array.from({length: monthsBack}, (_, i) => {
           const mStart = new Date(end.getFullYear(), end.getMonth() - monthsBack + i, 1, 0, 0, 0, 0);
           const mEnd = new Date(end.getFullYear(), end.getMonth() - monthsBack + i + 1, 1, 0, 0, 0, 0);
-          const mStartMs = mStart.getTime();
-          const mEndMs = mEnd.getTime();
-          // Fetch month-by-month to avoid truncation when requesting large multi-month ranges.
-          const inMonth = await fetchBgDataForDateRangeUncached(new Date(mStartMs), new Date(mEndMs), {throwOnError: true});
-          const filtered = filterBgByTimeOfDay(inMonth, timeOfDay);
-          const stats = calculatePeriodStats(filtered, mStartMs, mEndMs, tirThresholds);
+          return {mStart, mEnd};
+        });
 
-          months.push({
-            month: `${mStart.getFullYear()}-${String(mStart.getMonth() + 1).padStart(2, '0')}`,
-            period: {start: mStart.toISOString(), end: mEnd.toISOString()},
-            sampleCount: stats.sampleCount,
-            avgBg: stats.averageBg,
-            cv: stats.cv,
-            tirPercent: Math.round(stats.timeInRange.target * 10) / 10,
-            hypoEventCount: stats.hypoEventCount,
-            hyperEventCount: stats.hyperEventCount,
-          });
+        // Fetch month-by-month ranges (to avoid truncation), but do a few in parallel to reduce total runtime.
+        const CONCURRENCY = 4;
+        for (let i = 0; i < monthPeriods.length; i += CONCURRENCY) {
+          const chunk = monthPeriods.slice(i, i + CONCURRENCY);
+          const chunkResults = await Promise.all(
+            chunk.map(async ({mStart, mEnd}) => {
+              const mStartMs = mStart.getTime();
+              const mEndMs = mEnd.getTime();
+              const inMonth = await fetchBgDataForDateRangeUncached(new Date(mStartMs), new Date(mEndMs), {throwOnError: true});
+              const filtered = filterBgByTimeOfDay(inMonth, timeOfDay);
+              const stats = calculatePeriodStats(filtered, mStartMs, mEndMs, tirThresholds);
+
+              return {
+                month: `${mStart.getFullYear()}-${String(mStart.getMonth() + 1).padStart(2, '0')}`,
+                period: {start: mStart.toISOString(), end: mEnd.toISOString()},
+                sampleCount: stats.sampleCount,
+                avgBg: stats.averageBg,
+                cv: stats.cv,
+                tirPercent: Math.round(stats.timeInRange.target * 10) / 10,
+                hypoEventCount: stats.hypoEventCount,
+                hyperEventCount: stats.hyperEventCount,
+              };
+            }),
+          );
+          months.push(...chunkResults);
         }
 
         return {
@@ -828,7 +839,6 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const startMs = endMs - daysBack * 24 * 60 * 60 * 1000;
 
         const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs), {throwOnError: true});
-        const treatments = await fetchTreatmentsForDateRangeUncached(new Date(startMs), new Date(endMs));
 
         const nightStartHour = Math.max(0, Math.min(23, Math.trunc(DEFAULT_NIGHT_WINDOW.startHour ?? 0)));
         const nightEndHour = Math.max(0, Math.min(23, Math.trunc(DEFAULT_NIGHT_WINDOW.endHour ?? 6)));
@@ -1164,6 +1174,9 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         ]);
 
         const carbItems = mapNightscoutTreatmentsToCarbFoodItems(treatments);
+        const tirThresholds = getTirThresholdsFromGlucoseSettings();
+        const targetMax = tirThresholds.targetMax;
+        const peakProblemThreshold = Math.min(tirThresholds.highMax, targetMax + 20);
 
         // Classify meals by time of day
         const classifyMeal = (timestamp: number): string => {
@@ -1234,15 +1247,16 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           ? withRise.reduce((sum, m) => sum + (m.rise ?? 0), 0) / withRise.length
           : null;
 
-        const avgPeak = mealResponses.filter(m => m.peakBg !== null).length > 0
-          ? mealResponses.reduce((sum, m) => sum + (m.peakBg ?? 0), 0) / mealResponses.filter(m => m.peakBg !== null).length
+        const withPeak = mealResponses.filter((m): m is typeof m & {peakBg: number} => m.peakBg !== null);
+        const avgPeak = withPeak.length > 0
+          ? withPeak.reduce((sum, m) => sum + m.peakBg, 0) / withPeak.length
           : null;
 
         const avgCarbs = mealResponses.reduce((sum, m) => sum + (m.carbs ?? 0), 0) / mealResponses.length;
 
         // Identify problem meals
         const problematicMeals = mealResponses.filter(m =>
-          (m.rise && m.rise > 80) || (m.peakBg && m.peakBg > 200)
+          (m.rise && m.rise > 80) || (m.peakBg && m.peakBg > peakProblemThreshold)
         );
 
         return {
@@ -1265,11 +1279,11 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               bgAtMeal: m.bgAtMeal,
               peakBg: m.peakBg,
               riseMgdl: m.rise,
-              returnedToRange: m.bg3hr !== null && m.bg3hr <= 180,
+              returnedToRange: m.bg3hr !== null && m.bg3hr <= targetMax,
             })),
             summary: {
               mealsWithHighSpike: mealResponses.filter(m => m.rise && m.rise > 80).length,
-              mealsWithGoodControl: mealResponses.filter(m => m.peakBg && m.peakBg <= 180).length,
+              mealsWithGoodControl: mealResponses.filter(m => m.peakBg && m.peakBg <= targetMax).length,
               avgTimeToReturn: null, // Could be calculated with more complex logic
             },
           },

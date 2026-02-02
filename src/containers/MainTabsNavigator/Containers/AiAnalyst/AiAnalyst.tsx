@@ -198,6 +198,10 @@ function tryParseToolEnvelope(text: string): ToolEnvelope | null {
     if (obj?.type === 'tool_call' && typeof obj?.name === 'string') {
       return {type: 'tool_call', name: obj.name, args: obj.args};
     }
+    // Back-compat: some older code emitted `tool_name` instead of `name`.
+    if (obj?.type === 'tool_call' && typeof obj?.tool_name === 'string') {
+      return {type: 'tool_call', name: obj.tool_name, args: obj.args};
+    }
     if (obj?.type === 'final' && typeof obj?.content === 'string') {
       return {type: 'final', content: obj.content};
     }
@@ -660,6 +664,7 @@ const AiAnalyst: React.FC = () => {
     setLlmMessages([]);
     setSessionDataUsed([]);
     setInput('');
+    setAnalystMode(null);
     const nextId = makeConversationId();
     setConversationId(nextId);
 

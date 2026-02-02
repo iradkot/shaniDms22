@@ -21,8 +21,8 @@ The AI Analyst will be enhanced with two distinct analysis modes, each with spec
 │  │                     │     │                             │    │
 │  │  • Injection tips   │     │  • ISF analysis             │    │
 │  │  • Timing guidance  │     │  • CR recommendations       │    │
-│  │  • Carb counting    │     │  • Basal rate tuning        │    │
-│  │  • Exercise advice  │     │  • Target range advice      │    │
+│  │  • Carb counting    │     │  • Target range advice      │    │
+│  │  • Exercise advice  │     │  • DIA guidance             │    │
 │  └─────────────────────┘     └─────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -92,6 +92,9 @@ Provide data-driven Loop settings recommendations by analyzing historical data w
 2. **Tool-Based Analysis** - Minimum 3 tool calls, up to 20, to verify findings
 3. **Specific Recommendations** - Concrete setting changes with reasoning
 4. **Safety-Conscious** - Conservative suggestions, recommend gradual changes
+
+#### Out of scope
+- Do NOT recommend basal schedule changes in Loop Settings Advisor mode.
 
 #### Important behavioral rule
 - Do NOT ask the user whether they changed settings (ISF/CR/targets/basal/DIA). Use `get_settings_change_history` (and related tools) to verify.
@@ -222,8 +225,8 @@ Please answer these questions:
 5. **Any specific settings you're concerned about?**
    - Carb Ratio (CR)
    - Insulin Sensitivity Factor (ISF)
-   - Basal rates
    - Target glucose range
+   - Duration of Insulin Action (DIA)
    - Not sure / analyze everything
 `;
 ```
