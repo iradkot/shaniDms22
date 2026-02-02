@@ -10,6 +10,8 @@ export type LlmChatRequest = {
   messages: LlmChatMessage[];
   temperature?: number;
   maxOutputTokens?: number;
+  // Optional cancellation signal. Typed as unknown/any for RN TS compatibility.
+  abortSignal?: any;
 };
 
 export type LlmChatResponse = {
