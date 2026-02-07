@@ -132,7 +132,7 @@ export async function buildHypoDetectiveContext(params: {
   const events = extractHypoEvents({bgData: enrichedBg, lowThreshold});
 
   const severe = events
-    .filter(e => typeof e?.nadirSgv === 'number' && e.nadirSgv < lowThreshold)
+    .filter(e => typeof e?.nadirSgv === 'number' && e.nadirSgv <= lowThreshold)
     .slice(0, maxEvents);
 
   onProgress?.('Fetching treatments…');

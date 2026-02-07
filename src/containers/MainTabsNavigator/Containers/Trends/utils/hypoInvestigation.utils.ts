@@ -105,7 +105,7 @@ export function extractHypoEvents(params: {
     const ts = s?.date;
     if (typeof v !== 'number' || !Number.isFinite(v) || typeof ts !== 'number') continue;
 
-    const isHypo = v < lowThreshold;
+    const isHypo = v <= lowThreshold;
     const gap = lastTs === null ? 0 : ts - lastTs;
     const gapBreaks = lastTs !== null && gap > HYPO_EVENT_MAX_GAP_MS;
 

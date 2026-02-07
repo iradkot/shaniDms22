@@ -366,7 +366,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
 
       case 'getHypoDetectiveContext': {
         const rangeDays = clampInt(args?.rangeDays, 1, 180, 60);
-        const lowThresholdMgdl = clampInt(args?.lowThresholdMgdl, 40, 120, 54);
+        const lowThresholdMgdl = clampInt(args?.lowThresholdMgdl, 40, 120, 55);
         const maxEvents = clampInt(args?.maxEvents, 1, 30, 12);
 
         const {contextJson, debug} = await buildHypoDetectiveContext({
@@ -390,7 +390,8 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs), {throwOnError: true});
 
         if (kind === 'hypo') {
-          const events = extractHypoEvents({bgData: bg, lowThreshold: thresholdMgdl})
+          const allEvents = extractHypoEvents({bgData: bg, lowThreshold: thresholdMgdl});
+          const events = allEvents
             .slice(0, maxEvents)
             .map(e => ({
               startMs: e.startMs,
@@ -407,17 +408,20 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               kind,
               range: {startMs, endMs, rangeDays},
               thresholdMgdl,
-              count: events.length,
+              totalCount: allEvents.length,
+              returnedCount: events.length,
+              truncated: allEvents.length > maxEvents,
               events,
             },
           };
         }
 
-        const events = extractHyperEvents({
+        const allHyperEvents = extractHyperEvents({
           bgData: bg,
           highThreshold: thresholdMgdl,
           maxGapMinutes: args?.maxGapMinutes,
-        })
+        });
+        const events = allHyperEvents
           .slice(0, maxEvents)
           .map(e => ({
             startMs: e.startMs,
@@ -433,7 +437,9 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
             kind,
             range: {startMs, endMs, rangeDays},
             thresholdMgdl,
-            count: events.length,
+            totalCount: allHyperEvents.length,
+            returnedCount: events.length,
+            truncated: allHyperEvents.length > maxEvents,
             events,
           },
         };
@@ -540,6 +546,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const targetHigh = profile?.target_high as TimeValueEntry[] | undefined;
         const isf = profile?.sens as TimeValueEntry[] | undefined;
         const carbRatio = profile?.carbratio as TimeValueEntry[] | undefined;
+        const basal = profile?.basal as TimeValueEntry[] | undefined;
         const diaHours = typeof profile?.dia === 'number' ? profile.dia : null;
 
         const snapshotTimes = [
@@ -557,6 +564,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           targetHigh: valueAtMinutes(targetHigh, t.minutes),
           isf: valueAtMinutes(isf, t.minutes),
           carbRatio: valueAtMinutes(carbRatio, t.minutes),
+          basal: valueAtMinutes(basal, t.minutes),
         }));
 
         return {
@@ -572,6 +580,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               targetHigh: Array.isArray(targetHigh) ? targetHigh : [],
               isf: Array.isArray(isf) ? isf : [],
               carbRatio: Array.isArray(carbRatio) ? carbRatio : [],
+              basal: Array.isArray(basal) ? basal : [],
             },
             snapshotByTime,
           },
