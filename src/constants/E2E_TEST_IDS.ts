@@ -44,6 +44,7 @@ export const E2E_TEST_IDS = {
     toggleNotificationsTab: 'settings.toggle.notificationsTab',
     toggleAiAnalystTab: 'settings.toggle.aiAnalystTab',
     toggleLoopTunerTab: 'settings.toggle.loopTunerTab',
+    toggleOracleTab: 'settings.toggle.oracleTab',
 
     aiApiKeyInput: 'settings.input.ai.apiKey',
     aiEnabledToggle: 'settings.toggle.ai.enabled',

@@ -362,6 +362,22 @@ const Settings: React.FC = () => {
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
                 <MaterialIcons
+                  name="insights"
+                  size={theme.typography.size.xl}
+                  color={theme.textColor}
+                />
+              </View>
+              <Text style={labelStyle}>Oracle</Text>
+              <Switch
+                testID={E2E_TEST_IDS.settings.toggleOracleTab}
+                value={settings.showOracle}
+                onValueChange={v => setSetting('showOracle', v)}
+              />
+            </View>
+
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons
                   name="fastfood"
                   size={theme.typography.size.xl}
                   color={theme.textColor}

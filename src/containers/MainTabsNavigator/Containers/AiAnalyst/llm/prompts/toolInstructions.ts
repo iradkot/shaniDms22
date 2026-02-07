@@ -22,7 +22,8 @@ export const DEFAULT_TOOL_SYSTEM_PROMPT =
   `- getPumpProfile: {dateIso?: string}  → returns ONLY the basal schedule. For ISF/CR/targets/DIA use getCurrentProfileSettings.\n` +
   `- getCurrentProfileSettings: {dateIso?: string}  → returns ISF, CR, targets, DIA, and basal schedules with snapshots at key times.\n` +
   `- getHypoDetectiveContext: {rangeDays: number (1-180), lowThresholdMgdl?: number (default 55), maxEvents?: number}\n` +
-  `- getGlycemicEvents: {kind: "hypo"|"hyper", rangeDays: number (1-180), thresholdMgdl: number, maxEvents?: number}  → Note: totalCount in the response indicates the real total; events may be truncated.\n\n` +
+  `- getGlycemicEvents: {kind: "hypo"|"hyper", rangeDays: number (1-180), thresholdMgdl: number, maxEvents?: number}  → Note: totalCount in the response indicates the real total; events may be truncated.\n` +
+  `- getMealAbsorptionData: {daysBack: number (1-90), mealType?: "all"|"breakfast"|"lunch"|"dinner"|"snack"}  → Returns per-meal carb absorption: carbsEntered vs carbsAbsorbed, estimation accuracy (over/under/accurate), TIR score, and aggregated summary.\n\n` +
   `Tool choice guidance:\n` +
   `- If the user asks about hypers/highs, do NOT call getHypoDetectiveContext. Use getGlycemicEvents(kind="hyper") or getCgmData.\n` +
   `- If the user asks about hypos/lows, use getGlycemicEvents(kind="hypo") or getHypoDetectiveContext.\n` +

@@ -167,7 +167,7 @@ export const colors = {
     800: '#fbc02d',
     900: '#f9a825',
     get main() {
-      return this[600];
+      return this[900];
     },
   },
   darkYellow: {

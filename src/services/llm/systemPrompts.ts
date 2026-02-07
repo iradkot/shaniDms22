@@ -274,6 +274,20 @@ Parameters:
 - daysBack: number (7-30)
 - mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'all'
 
+### get_meal_absorption_data
+Get per-meal carb absorption data: how many carbs the user entered vs how many were actually absorbed (from loop COB tracking). Helps understand if the user tends to over- or under-estimate carbs.
+Parameters:
+- daysBack: number (1-90) - How many days to look back (default 14)
+- mealType: 'all' | 'breakfast' | 'lunch' | 'dinner' | 'snack' - Filter by meal type
+
+Returns per meal: carbsEnteredG, carbsAbsorbedG, absorptionPct, estimationAccuracy ('accurate' / 'over-estimated' / 'under-estimated'), tirScore.
+Also returns a summary with totals, averages, and an estimation breakdown (how often the user over-estimates, under-estimates, or is accurate).
+
+When to use:
+- When the user asks about carb absorption or how well they estimate carbs.
+- When investigating post-meal glucose spikes — absorption data helps explain if the carb estimate was wrong.
+- When the user asks "am I entering too many / too few carbs?"
+
 Use these tools to gather evidence before making recommendations. Always use at least 3 tools.
 `;
 

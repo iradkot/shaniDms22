@@ -199,6 +199,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
           onTouchStart={handleTouchStartWithTooltip}
           onTouchMove={handleTouchMoveWithTooltip}
           onTouchEnd={handleTouchEndWithTooltip}
+          onTouchCancel={handleTouchEndWithTooltip}
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}>

@@ -1,9 +1,14 @@
 import {
   fetchBgDataForDateRangeUncached,
   fetchTreatmentsForDateRangeUncached,
+  fetchDeviceStatusForDateRangeUncached,
   getUserProfileFromNightscout,
 } from 'app/api/apiRequests';
 import {enrichBgSamplesWithDeviceStatusForRange} from 'app/utils/stackedChartsData.utils';
+import {mergeDeviceStatusIntoBgSamples} from 'app/utils/mergeDeviceStatusIntoBgSamples.utils';
+import {
+  calculateTimeInRangePercentages,
+} from 'app/utils/glucose/timeInRange';
 import {
   extractBasalProfileFromNightscoutProfileData,
   mapNightscoutTreatmentsToCarbFoodItems,
@@ -52,6 +57,9 @@ export type AiAnalystToolName =
   | 'getCurrentProfileSettings'
   | 'getGlucoseStats'
   | 'getMonthlyGlucoseSummary'
+  // Food & absorption tools
+  | 'getMealAbsorptionData'
+  | 'get_meal_absorption_data'
   // Snake_case aliases (LLM often uses these)
   | 'get_glucose_patterns'
   | 'analyze_time_in_range'
@@ -77,6 +85,7 @@ function normalizeToolName(name: string): string {
     'get_current_profile_settings': 'getCurrentProfileSettings',
     'get_glucose_stats': 'getGlucoseStats',
     'get_monthly_glucose_summary': 'getMonthlyGlucoseSummary',
+    'get_meal_absorption_data': 'getMealAbsorptionData',
     'get_cgm_samples': 'getCgmSamples',
     'get_cgm_data': 'getCgmData',
     'get_treatments': 'getTreatments',
@@ -1295,6 +1304,146 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               mealsWithGoodControl: mealResponses.filter(m => m.peakBg && m.peakBg <= targetMax).length,
               avgTimeToReturn: null, // Could be calculated with more complex logic
             },
+          },
+        };
+      }
+
+      case 'getMealAbsorptionData': {
+        const daysBack = clampInt(args?.daysBack, 1, 90, 14);
+        const mealType = ['breakfast', 'lunch', 'dinner', 'snack', 'all'].includes(args?.mealType)
+          ? args.mealType
+          : 'all';
+
+        const endMs = Date.now();
+        const startMs = endMs - daysBack * 24 * 60 * 60 * 1000;
+        const startDate = new Date(startMs);
+        const endDate = new Date(endMs);
+
+        const [treatments, bgData, deviceStatus] = await Promise.all([
+          fetchTreatmentsForDateRangeUncached(startDate, endDate),
+          fetchBgDataForDateRangeUncached(startDate, endDate, {throwOnError: true}),
+          fetchDeviceStatusForDateRangeUncached(startDate, endDate),
+        ]);
+
+        const carbItems = mapNightscoutTreatmentsToCarbFoodItems(treatments);
+        const enrichedBg = mergeDeviceStatusIntoBgSamples({bgSamples: bgData, deviceStatus});
+
+        const TIR_WINDOW = 3 * 60 * 60 * 1000;
+        const MIN_BG = 6;
+        const tirThresholds = getTirThresholdsFromGlucoseSettings();
+
+        const classifyMeal = (timestamp: number): string => {
+          const hour = new Date(timestamp).getHours();
+          if (hour >= 5 && hour < 11) return 'breakfast';
+          if (hour >= 11 && hour < 15) return 'lunch';
+          if (hour >= 15 && hour < 21) return 'dinner';
+          return 'snack';
+        };
+
+        const findCobAtTime = (targetTs: number, tolerance: number = 30 * 60 * 1000): number | null => {
+          let best: any = null;
+          let bestDist = Infinity;
+          for (const s of enrichedBg) {
+            if ((s as any).cob == null) continue;
+            const dist = Math.abs(s.date - targetTs);
+            if (dist < bestDist && dist <= tolerance) {
+              best = s;
+              bestDist = dist;
+            }
+          }
+          return best ? (best as any).cob : null;
+        };
+
+        const filteredCarbs = mealType === 'all'
+          ? carbItems
+          : carbItems.filter(c => classifyMeal(c.timestamp) === mealType);
+
+        if (filteredCarbs.length < 1) {
+          return {ok: false, error: `No ${mealType} meals found in the last ${daysBack} days.`};
+        }
+
+        const mealResults = filteredCarbs
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .map(ct => {
+            const windowEnd = ct.timestamp + TIR_WINDOW;
+            const windowSamples = enrichedBg.filter(s => s.date >= ct.timestamp && s.date <= windowEnd);
+
+            // TIR score
+            let tirScore: number | null = null;
+            if (windowSamples.length >= MIN_BG) {
+              const {percentages, validCount} = calculateTimeInRangePercentages(windowSamples, tirThresholds);
+              if (validCount) tirScore = Math.round(percentages.target);
+            }
+
+            // Absorption
+            const cobRemaining = findCobAtTime(ct.timestamp + TIR_WINDOW);
+            const absorbed = cobRemaining != null
+              ? Math.max(0, ct.carbs - Math.min(cobRemaining, ct.carbs))
+              : null;
+            const absorptionPct = absorbed != null && ct.carbs > 0
+              ? Math.round((absorbed / ct.carbs) * 100)
+              : null;
+
+            // Estimation accuracy
+            let estimationAccuracy: string | null = null;
+            if (absorbed != null && ct.carbs > 0) {
+              const ratio = absorbed / ct.carbs;
+              if (ratio > 1.1) estimationAccuracy = 'under-estimated';
+              else if (ratio >= 0.9) estimationAccuracy = 'accurate';
+              else estimationAccuracy = 'over-estimated';
+            }
+
+            return {
+              date: new Date(ct.timestamp).toISOString(),
+              mealType: classifyMeal(ct.timestamp),
+              carbsEnteredG: ct.carbs,
+              carbsAbsorbedG: absorbed != null ? Math.round(absorbed) : null,
+              cobRemainingG: cobRemaining != null ? Math.round(cobRemaining) : null,
+              absorptionPct,
+              estimationAccuracy,
+              tirScore,
+            };
+          });
+
+        // Aggregate stats
+        const withAbsorption = mealResults.filter(m => m.carbsAbsorbedG != null);
+        const totalEntered = mealResults.reduce((s, m) => s + m.carbsEnteredG, 0);
+        const totalAbsorbed = withAbsorption.reduce((s, m) => s + (m.carbsAbsorbedG ?? 0), 0);
+        const avgAbsorptionPct = withAbsorption.length
+          ? Math.round(withAbsorption.reduce((s, m) => s + (m.absorptionPct ?? 0), 0) / withAbsorption.length)
+          : null;
+
+        const overEstimated = withAbsorption.filter(m => m.estimationAccuracy === 'over-estimated').length;
+        const underEstimated = withAbsorption.filter(m => m.estimationAccuracy === 'under-estimated').length;
+        const accurate = withAbsorption.filter(m => m.estimationAccuracy === 'accurate').length;
+
+        const mealsWithScore = mealResults.filter(m => m.tirScore != null);
+        const avgTirScore = mealsWithScore.length
+          ? Math.round(mealsWithScore.reduce((s, m) => s + (m.tirScore ?? 0), 0) / mealsWithScore.length)
+          : null;
+
+        return {
+          ok: true,
+          result: {
+            range: {startMs, endMs, daysBack},
+            mealType,
+            mealCount: mealResults.length,
+            mealsWithAbsorptionData: withAbsorption.length,
+            summary: {
+              totalCarbsEnteredG: totalEntered,
+              totalCarbsAbsorbedG: totalAbsorbed,
+              avgAbsorptionPct,
+              avgTirScore,
+              estimationBreakdown: {
+                accurate,
+                overEstimated,
+                underEstimated,
+                accuratePct: withAbsorption.length ? Math.round((accurate / withAbsorption.length) * 100) : null,
+                overEstimatedPct: withAbsorption.length ? Math.round((overEstimated / withAbsorption.length) * 100) : null,
+                underEstimatedPct: withAbsorption.length ? Math.round((underEstimated / withAbsorption.length) * 100) : null,
+              },
+            },
+            meals: mealResults.slice(0, 30),
           },
         };
       }

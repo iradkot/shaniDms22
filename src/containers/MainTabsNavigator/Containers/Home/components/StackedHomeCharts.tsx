@@ -79,11 +79,13 @@ export type StackedHomeChartsProps = {
   /**
    * Controls where the unified tooltip is positioned.
    *
-   * - `above` (default): renders above the CGM chart.
+   * - `above` (default): renders above the CGM chart (absolute, overflows upward).
    * - `inside`: renders inside the CGM chart area (useful for fullscreen screens that
    *   clip overflow).
+   * - `top`: renders above the chart in **normal document flow** (no absolute positioning,
+   *   takes up layout space — ideal for inline expanded cards like the FoodTracker).
    */
-  tooltipPlacement?: 'above' | 'inside';
+  tooltipPlacement?: 'above' | 'inside' | 'top';
 
   /**
    * Controls horizontal alignment when `tooltipPlacement="inside"`.
@@ -126,6 +128,26 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   const theme = useTheme() as ThemeType;
 
   const [chartsTooltip, setChartsTooltip] = useState<CGMGraphExternalTooltipPayload | null>(null);
+
+  // Auto-hide tooltip after 4 s of no updates (safety net for stuck touch events).
+  const tooltipTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearTooltipTimer = React.useCallback(() => {
+    if (tooltipTimerRef.current) {
+      clearTimeout(tooltipTimerRef.current);
+      tooltipTimerRef.current = null;
+    }
+  }, []);
+  const handleTooltipChange = React.useCallback(
+    (payload: CGMGraphExternalTooltipPayload | null) => {
+      clearTooltipTimer();
+      setChartsTooltip(payload);
+      if (payload != null) {
+        tooltipTimerRef.current = setTimeout(() => setChartsTooltip(null), 4000);
+      }
+    },
+    [clearTooltipTimer],
+  );
+  React.useEffect(() => clearTooltipTimer, [clearTooltipTimer]);
 
   const stackedChartsMargin = useMemo<ChartMargin>(
     () =>
@@ -179,10 +201,35 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
   return (
     <View testID={testID}>
+      {/* 'top' placement: tooltip in normal flow ABOVE the chart stack */}
+      {tooltipPlacement === 'top' && shouldShowTooltip ? (
+        <TooltipDock
+          testID={tooltipDockTestID}
+          style={{justifyContent: resolvedTooltipAlign === 'right' ? 'flex-end' : 'flex-start'}}
+        >
+          <HomeChartsTooltip
+                anchorTimeMs={cgmAnchorTimeMs}
+                bgSample={tooltipBgSample}
+                activeInsulinU={activeInsulinU}
+                activeInsulinBolusU={activeInsulinBolusU}
+                activeInsulinBasalU={activeInsulinBasalU}
+                cobG={cobG}
+                basalRateUhr={basalRateUhr}
+                bolusSummary={bolusSummary}
+                carbsSummary={carbsSummary}
+                bolusEvents={tooltipBolusEvents}
+                carbEvents={tooltipCarbEvents}
+                fullWidth={tooltipFullWidth}
+                maxWidthPx={tooltipMaxWidthPx}
+              />
+            </TooltipDock>
+        ) : null}
+
       <ChartStack>
-        {shouldShowTooltip ? (
+        {/* 'above' / 'inside' placement: absolute overlay inside ChartStack */}
+        {tooltipPlacement !== 'top' && shouldShowTooltip ? (
           <ChartTooltipOverlay
-            $placement={tooltipPlacement}
+            $placement={tooltipPlacement === 'inside' ? 'inside' : 'above'}
             pointerEvents="none"
             testID={tooltipOverlayTestID}
           >
@@ -234,7 +281,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
           testID={testID}
           showFullScreenButton={false}
           tooltipMode="external"
-          onTooltipChange={setChartsTooltip}
+          onTooltipChange={handleTooltipChange}
           cursorTimeMs={cursorTimeMs}
         />
       </ChartStack>

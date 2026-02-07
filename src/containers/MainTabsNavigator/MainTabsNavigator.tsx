@@ -87,6 +87,7 @@ const MainTabsNavigator: React.FC = () => {
           name={SCREEN_NAMES.ORACLE_TAB_SCREEN}
           component={Oracle}
           options={{
+            ...(settings.showOracle ? {} : hiddenTabOptions),
             tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="insights" color={color} size={size} />
             ),

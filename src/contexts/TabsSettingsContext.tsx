@@ -7,6 +7,7 @@ export type TabsSettings = {
   showNotifications: boolean;
   showAiAnalyst: boolean;
   showLoopTuner: boolean;
+  showOracle: boolean;
 };
 
 type TabsSettingsContextValue = {
@@ -24,6 +25,7 @@ const DEFAULT_SETTINGS: TabsSettings = {
   showNotifications: false,
   showAiAnalyst: true,
   showLoopTuner: true,
+  showOracle: true,
 };
 
 const TabsSettingsContext = createContext<TabsSettingsContextValue>({
