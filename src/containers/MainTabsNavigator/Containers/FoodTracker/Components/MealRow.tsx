@@ -1,4 +1,5 @@
 import React from 'react';
+import {View} from 'react-native';
 import {format} from 'date-fns';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -14,11 +15,14 @@ import {
   CellTextMuted,
 } from 'app/containers/MainTabsNavigator/Containers/FoodTracker/styles';
 import {ThemeType} from 'app/types/theme';
+import TagChip from 'app/components/MealTagging/TagChip';
 
 interface MealRowProps {
   meal: MealEntry;
   isExpanded: boolean;
   onPress: () => void;
+  /** Called when the user taps the tag button. */
+  onTagPress?: (meal: MealEntry) => void;
 }
 
 /** Color the score: green ≥70%, yellow 50-69%, red <50%. */
@@ -45,7 +49,7 @@ function absGramsColor(
   return theme.aboveRangeColor;                      // over-estimated
 }
 
-const MealRow: React.FC<MealRowProps> = ({meal, isExpanded, onPress}) => {
+const MealRow: React.FC<MealRowProps> = ({meal, isExpanded, onPress, onTagPress}) => {
   const theme = useTheme() as ThemeType;
   const icon = MEAL_SLOT_ICON[meal.mealSlot];
 
@@ -53,6 +57,7 @@ const MealRow: React.FC<MealRowProps> = ({meal, isExpanded, onPress}) => {
   const dateLabel = format(new Date(meal.timestamp), 'dd/MM');
 
   return (
+    <>
     <RowContainer
       onPress={onPress}
       activeOpacity={0.7}
@@ -118,7 +123,31 @@ const MealRow: React.FC<MealRowProps> = ({meal, isExpanded, onPress}) => {
           <CellTextMuted>—</CellTextMuted>
         )}
       </RowCell>
+
+      {/* Tag button */}
+      <RowCell flex={0.4} style={{justifyContent: 'center'}}>
+        {onTagPress ? (
+          <MaterialCommunityIcons
+            name={meal.tags.length > 0 ? 'tag' : 'tag-plus-outline'}
+            size={18}
+            color={meal.tags.length > 0 ? theme.accentColor : theme.borderColor}
+            onPress={() => onTagPress(meal)}
+          />
+        ) : null}
+      </RowCell>
     </RowContainer>
+
+    {/* Tag chips below the row */}
+    {meal.tags.length > 0 ? (
+      <View style={{flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingBottom: 6, paddingTop: 2}}>
+        {meal.tags.map(tag => (
+          <View key={tag} style={{marginRight: 4, marginBottom: 4}}>
+            <TagChip tag={tag} compact />
+          </View>
+        ))}
+      </View>
+    ) : null}
+    </>
   );
 };
 

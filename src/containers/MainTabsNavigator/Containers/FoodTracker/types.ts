@@ -32,6 +32,8 @@ export interface MealEntry {
   bolusInsulinU: number | null;
   /** Time-of-day label derived from timestamp. */
   mealSlot: MealSlot;
+  /** User-applied tags (e.g. ["pizza", "family dinner"]). */
+  tags: string[];
 }
 
 /** Chart-ready data scoped to a 5-hour window around a meal. */

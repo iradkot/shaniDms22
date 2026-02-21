@@ -1,14 +1,17 @@
-import React, {useMemo, useState} from 'react';
+import React, {useCallback, useMemo, useRef, useState} from 'react';
 
-import {Pressable, View} from 'react-native';
+import {type GestureResponderEvent, Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import styled, {useTheme} from 'styled-components/native';
+import * as d3 from 'd3';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import type {CGMGraphExternalTooltipPayload} from 'app/components/charts/CgmGraph/CgmGraph';
 import BasalMiniGraph from 'app/components/charts/BasalMiniGraph/BasalMiniGraph';
 import ActiveInsulinMiniGraph from 'app/components/charts/ActiveInsulinMiniGraph/ActiveInsulinMiniGraph';
+import CobMiniGraph from 'app/components/charts/CobMiniGraph/CobMiniGraph';
+import MixedMiniChart from 'app/components/charts/MixedMiniChart/MixedMiniChart';
 import HomeChartsTooltip from 'app/containers/MainTabsNavigator/Containers/Home/components/HomeChartsTooltip';
 import {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 import {useStackedChartsTooltipModel} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useStackedChartsTooltipModel';
@@ -21,6 +24,24 @@ import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+
+/** Tooltip state exposed to parent when `tooltipPlacement="none"`. */
+export type StackedChartsTooltipModel = {
+  visible: boolean;
+  anchorTimeMs: number;
+  bgSample: BgSample | null;
+  activeInsulinU: number | null;
+  activeInsulinBolusU: number | null;
+  activeInsulinBasalU: number | null;
+  cobG: number | null;
+  basalRateUhr: number | null;
+  bolusSummary: {count: number; totalU: number};
+  carbsSummary: {count: number; totalG: number};
+  bolusEvents: any[];
+  carbEvents: any[];
+  fullWidth: boolean;
+  maxWidthPx?: number;
+};
 
 export type StackedHomeChartsProps = {
   bgSamples: BgSample[];
@@ -84,8 +105,10 @@ export type StackedHomeChartsProps = {
    *   clip overflow).
    * - `top`: renders above the chart in **normal document flow** (no absolute positioning,
    *   takes up layout space — ideal for inline expanded cards like the FoodTracker).
+   * - `none`: suppresses tooltip rendering inside this component. Use `onTooltipModelChange`
+   *   to render the tooltip externally (e.g., as a Home-level overlay).
    */
-  tooltipPlacement?: 'above' | 'inside' | 'top';
+  tooltipPlacement?: 'above' | 'inside' | 'top' | 'none';
 
   /**
    * Controls horizontal alignment when `tooltipPlacement="inside"`.
@@ -102,6 +125,20 @@ export type StackedHomeChartsProps = {
    * Useful in fullscreen landscape to avoid covering charts.
    */
   tooltipMaxWidthPx?: number;
+
+  /**
+   * Controls how mini charts are displayed.
+   *
+   * - `separate` (default): Three distinct mini charts stacked vertically.
+   * - `mixed`: Single overlaid area chart combining basal, IOB, and COB.
+   */
+  chartMode?: 'separate' | 'mixed';
+
+  /**
+   * Called whenever the tooltip model changes.
+   * Use with `tooltipPlacement="none"` to render the tooltip externally.
+   */
+  onTooltipModelChange?: (model: StackedChartsTooltipModel) => void;
 };
 
 const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
@@ -123,6 +160,8 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     tooltipAlign = 'left',
     tooltipFullWidth = true,
     tooltipMaxWidthPx,
+    chartMode = 'separate',
+    onTooltipModelChange,
   } = props;
 
   const theme = useTheme() as ThemeType;
@@ -199,10 +238,94 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   const tooltipOverlayTestID = testID ? `${testID}.tooltipOverlay` : undefined;
   const tooltipDockTestID = testID ? `${testID}.tooltipDock` : undefined;
 
+  // ── Emit tooltip model to parent when placement is 'none' ─────────
+  const prevModelRef = useRef<string>('');
+  React.useEffect(() => {
+    if (!onTooltipModelChange) return;
+    const model: StackedChartsTooltipModel = {
+      visible: shouldShowTooltip,
+      anchorTimeMs: cgmAnchorTimeMs,
+      bgSample: tooltipBgSample,
+      activeInsulinU,
+      activeInsulinBolusU,
+      activeInsulinBasalU,
+      cobG,
+      basalRateUhr,
+      bolusSummary,
+      carbsSummary,
+      bolusEvents: tooltipBolusEvents,
+      carbEvents: tooltipCarbEvents,
+      fullWidth: tooltipFullWidth,
+      maxWidthPx: tooltipMaxWidthPx,
+    };
+    // Shallow key check to avoid excessive re-renders
+    const key = `${model.visible}-${model.anchorTimeMs}`;
+    if (key !== prevModelRef.current) {
+      prevModelRef.current = key;
+      onTooltipModelChange(model);
+    }
+  }, [
+    onTooltipModelChange, shouldShowTooltip, cgmAnchorTimeMs,
+    tooltipBgSample, activeInsulinU, activeInsulinBolusU,
+    activeInsulinBasalU, cobG, basalRateUhr,
+    bolusSummary, carbsSummary, tooltipBolusEvents, tooltipCarbEvents,
+    tooltipFullWidth, tooltipMaxWidthPx,
+  ]);
+
+  // Whether to render the tooltip inside this component
+  const renderTooltipInternally = tooltipPlacement !== 'none';
+
+  // ── Touch forwarding for mini charts ───────────────────────────────
+  // Mini charts don't have their own touch handlers, so we wrap them in a
+  // View that translates touch x → time and forwards to the tooltip system.
+
+  const miniChartXScale = useMemo(() => {
+    const resolvedDomain = xDomain ?? (() => {
+      const extent = d3.extent(bgSamples, s => new Date(s.date));
+      if (extent[0] && extent[1]) return extent as [Date, Date];
+      const now = new Date();
+      return [now, now] as [Date, Date];
+    })();
+    const plotWidth = Math.max(1, width - stackedChartsMargin.left - stackedChartsMargin.right);
+    return d3.scaleTime().domain(resolvedDomain).range([0, plotWidth]);
+  }, [bgSamples, stackedChartsMargin.left, stackedChartsMargin.right, width, xDomain]);
+
+  const miniTouchToTime = useCallback(
+    (evt: GestureResponderEvent): number | null => {
+      const rawX = evt.nativeEvent.locationX;
+      if (typeof rawX !== 'number' || !Number.isFinite(rawX)) return null;
+      const plotWidth = Math.max(1, width - stackedChartsMargin.left - stackedChartsMargin.right);
+      const localX = Math.max(0, Math.min(rawX - stackedChartsMargin.left, plotWidth));
+      const t = miniChartXScale.invert(localX).getTime();
+      return Number.isFinite(t) ? t : null;
+    },
+    [miniChartXScale, stackedChartsMargin.left, stackedChartsMargin.right, width],
+  );
+
+  const handleMiniTouchStart = useCallback(
+    (evt: GestureResponderEvent) => {
+      const timeMs = miniTouchToTime(evt);
+      if (timeMs != null) handleTooltipChange({touchTimeMs: timeMs, anchorTimeMs: timeMs});
+    },
+    [miniTouchToTime, handleTooltipChange],
+  );
+
+  const handleMiniTouchMove = useCallback(
+    (evt: GestureResponderEvent) => {
+      const timeMs = miniTouchToTime(evt);
+      if (timeMs != null) handleTooltipChange({touchTimeMs: timeMs, anchorTimeMs: timeMs});
+    },
+    [miniTouchToTime, handleTooltipChange],
+  );
+
+  const handleMiniTouchEnd = useCallback(() => {
+    handleTooltipChange(null);
+  }, [handleTooltipChange]);
+
   return (
     <View testID={testID}>
       {/* 'top' placement: tooltip in normal flow ABOVE the chart stack */}
-      {tooltipPlacement === 'top' && shouldShowTooltip ? (
+      {renderTooltipInternally && tooltipPlacement === 'top' && shouldShowTooltip ? (
         <TooltipDock
           testID={tooltipDockTestID}
           style={{justifyContent: resolvedTooltipAlign === 'right' ? 'flex-end' : 'flex-start'}}
@@ -227,7 +350,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
       <ChartStack>
         {/* 'above' / 'inside' placement: absolute overlay inside ChartStack */}
-        {tooltipPlacement !== 'top' && shouldShowTooltip ? (
+        {renderTooltipInternally && tooltipPlacement !== 'top' && shouldShowTooltip ? (
           <ChartTooltipOverlay
             $placement={tooltipPlacement === 'inside' ? 'inside' : 'above'}
             pointerEvents="none"
@@ -286,34 +409,77 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
         />
       </ChartStack>
 
-      <BasalMiniGraph
-        bgSamples={bgSamples}
-        insulinData={insulinData}
-        width={width}
-        height={miniChartHeight}
-        xDomain={xDomain}
-        margin={{
-          top: 8,
-          right: stackedChartsMargin.right,
-          bottom: 12,
-          left: stackedChartsMargin.left,
-        }}
-        cursorTimeMs={cursorTimeMs}
-      />
+      {/* Mini charts area — wrapped in a touch-responsive View */}
+      <View
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderGrant={handleMiniTouchStart}
+        onResponderMove={handleMiniTouchMove}
+        onResponderRelease={handleMiniTouchEnd}
+        onResponderTerminate={handleMiniTouchEnd}
+      >
+        {chartMode === 'mixed' ? (
+          <MixedMiniChart
+            bgSamples={bgSamples}
+            insulinData={insulinData}
+            width={width}
+            height={miniChartHeight * 2.5}
+            xDomain={xDomain}
+            margin={{
+              top: 16,
+              right: stackedChartsMargin.right,
+              bottom: 16,
+              left: stackedChartsMargin.left,
+            }}
+            cursorTimeMs={cursorTimeMs}
+          />
+        ) : (
+          <>
+            <BasalMiniGraph
+              bgSamples={bgSamples}
+              insulinData={insulinData}
+              width={width}
+              height={miniChartHeight}
+              xDomain={xDomain}
+              margin={{
+                top: 8,
+                right: stackedChartsMargin.right,
+                bottom: 12,
+                left: stackedChartsMargin.left,
+              }}
+              cursorTimeMs={cursorTimeMs}
+            />
 
-      <ActiveInsulinMiniGraph
-        bgSamples={bgSamples}
-        width={width}
-        height={miniChartHeight}
-        xDomain={xDomain}
-        margin={{
-          top: 18,
-          right: stackedChartsMargin.right,
-          bottom: 12,
-          left: stackedChartsMargin.left,
-        }}
-        cursorTimeMs={cursorTimeMs}
-      />
+            <ActiveInsulinMiniGraph
+              bgSamples={bgSamples}
+              width={width}
+              height={miniChartHeight}
+              xDomain={xDomain}
+              margin={{
+                top: 18,
+                right: stackedChartsMargin.right,
+                bottom: 12,
+                left: stackedChartsMargin.left,
+              }}
+              cursorTimeMs={cursorTimeMs}
+            />
+
+            <CobMiniGraph
+              bgSamples={bgSamples}
+              width={width}
+              height={miniChartHeight}
+              xDomain={xDomain}
+              margin={{
+                top: 18,
+                right: stackedChartsMargin.right,
+                bottom: 12,
+                left: stackedChartsMargin.left,
+              }}
+              cursorTimeMs={cursorTimeMs}
+            />
+          </>
+        )}
+      </View>
     </View>
   );
 };

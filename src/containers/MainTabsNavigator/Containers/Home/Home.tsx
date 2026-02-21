@@ -1,19 +1,17 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import {RefreshControl, ScrollView, View} from 'react-native';
 
-import styled from 'styled-components/native';
-import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
+import styled, {useTheme} from 'styled-components/native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
-import StatsRow, {
-  type BgStatsKey,
-  type BgStatsNavigatePayload,
-} from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
+import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
+import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import {ThemeType} from 'app/types/theme';
 import {useNavigation} from '@react-navigation/native';
 import {useBgData} from 'app/hooks/useBgData';
 import {useFoodItems} from 'app/hooks/useFoodItems';
 import {bgSortFunction} from 'app/utils/bg.utils';
-import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
 import {useInsulinData} from 'app/hooks/useInsulinData';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {isE2E} from 'app/utils/e2e';
@@ -21,32 +19,70 @@ import {makeE2EBgSamplesForDate} from 'app/utils/e2eFixtures';
 import {getLoadReferences} from 'app/utils/loadBars.utils';
 import {buildFullScreenStackedChartsParams} from 'app/utils/stackedChartsData.utils';
 import {pushFullScreenStackedCharts} from 'app/utils/fullscreenNavigation.utils';
+import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
+import {addOpacity} from 'app/style/styling.utils';
 
 import HomeHeaderSection from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeHeaderSection';
-import HomeSectionSwitcher from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeSectionSwitcher';
-import HomeChartSection from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeChartSection';
+import CompactDayChart from 'app/containers/MainTabsNavigator/Containers/Home/sections/CompactDayChart';
+import PreMealCard from 'app/containers/MainTabsNavigator/Containers/Home/components/PreMealCard';
+import MealTimeline from 'app/containers/MainTabsNavigator/Containers/Home/components/MealTimeline';
+import HomeChartsTooltip from 'app/containers/MainTabsNavigator/Containers/Home/components/HomeChartsTooltip';
+import type {StackedChartsTooltipModel} from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
 import {useHomeChartViewport} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useHomeChartViewport';
-import {
-  HOME_SECTION_KEYS,
-  type HomeSection,
-} from 'app/containers/MainTabsNavigator/Containers/Home/homeSections';
+import {useMealSegments} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useMealSegments';
+import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useMealSegments';
+import {useMealTags} from 'app/hooks/useMealTags';
+import TagMealSheet from 'app/components/MealTagging/TagMealSheet';
+import {format} from 'date-fns';
 
 const HomeContainer = styled.View`
   flex: 1;
   background-color: ${(props: {theme: ThemeType}) => props.theme.backgroundColor};
 `;
 
+const TooltipOverlay = styled.View<{theme: ThemeType}>`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 999;
+  elevation: 30;
+  padding-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
+  padding-top: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
+`;
+
+const StatsToggleRow = styled.Pressable<{theme: ThemeType}>`
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  padding-vertical: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+  margin-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+  border-radius: ${(p: {theme: ThemeType}) => p.theme.borderRadius + 2}px;
+  border-width: 1px;
+  border-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.12)};
+  background-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.white, 0.9)};
+`;
+
+const StatsToggleText = styled.Text<{theme: ThemeType}>`
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs}px;
+  font-weight: 700;
+  color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.6)};
+  margin-left: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+`;
+
 // create dummy home component with typescript
 const Home: React.FC = () => {
   const navigation = useNavigation();
-  const [selectedSection, setSelectedSection] = useState<HomeSection | null>(null);
+  const theme = useTheme() as ThemeType;
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
+  const [showDetailedStats, setShowDetailedStats] = useState(false);
+  const [tooltipModel, setTooltipModel] = useState<StackedChartsTooltipModel | null>(null);
 
-  const [activeBgStatsKey, setActiveBgStatsKey] = useState<BgStatsKey | null>(null);
-  const [bgStatsFocusToken, setBgStatsFocusToken] = useState<number>(0);
-  const [bgStatsFocusTargetDateMs, setBgStatsFocusTargetDateMs] =
-    useState<number | null>(null);
-  const [bgStatsHighlightDateMs, setBgStatsHighlightDateMs] = useState<number[]>([]);
+  const handleTooltipModelChange = useCallback((model: StackedChartsTooltipModel) => {
+    setTooltipModel(model.visible ? model : null);
+  }, []);
+
   const isShowingToday = useMemo(() => {
     const today = new Date();
     return (
@@ -75,11 +111,6 @@ const Home: React.FC = () => {
     isLoading: insulinIsLoading,
     getUpdatedInsulinData,
   } = useInsulinData(debouncedCurrentDate);
-
-  const startOfDay = new Date(debouncedCurrentDate);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(debouncedCurrentDate);
-  endOfDay.setHours(23, 59, 59, 999);
 
   useEffect(() => {
     setDebouncedCurrentDate(currentDate);
@@ -174,11 +205,6 @@ const Home: React.FC = () => {
 
   const {
     chartXDomain,
-    isZoomed,
-    canPanLeft,
-    canPanRight,
-    handleToggleZoom,
-    handlePan,
   } = useHomeChartViewport({
     extentMs: chartDataExtentMs,
     anchorMs: headerLatestBgSample?.date ?? latestBgSample?.date,
@@ -219,108 +245,227 @@ const Home: React.FC = () => {
     navigation,
   ]);
 
-  const handleToggleSection = useCallback((section: HomeSection) => {
-    setSelectedSection(prev => (prev === section ? null : section));
-  }, []);
-
-  const handleNavigateToBgSample = useCallback((payload: BgStatsNavigatePayload) => {
-    const token = Date.now();
-    setBgStatsFocusToken(token);
-    setBgStatsFocusTargetDateMs(payload.targetDateMs);
-    setBgStatsHighlightDateMs(payload.highlightDateMs);
-    setActiveBgStatsKey(payload.key);
-  }, []);
-
-  useEffect(() => {
-    if (!bgStatsFocusToken) return;
-    const timeoutId = setTimeout(() => {
-      setActiveBgStatsKey(null);
-    }, 1400);
-    return () => clearTimeout(timeoutId);
-  }, [bgStatsFocusToken]);
-
-  const homeSectionNodes = useMemo(() => {
-    const nodes: Record<HomeSection, React.ReactNode> = {
-      bgStats: (
-        <StatsRow
-          bgData={bgData}
-          activeKey={activeBgStatsKey}
-          onNavigateToSample={handleNavigateToBgSample}
-        />
-      ),
-      insulinStats: (
-        <InsulinStatsRow
-          insulinData={insulinData}
-          basalProfileData={basalProfileData}
-          startDate={startOfDay}
-          endDate={endOfDay}
-        />
-      ),
-      chart: null,
-    };
-
-    return nodes;
-  }, [
-    activeBgStatsKey,
-    basalProfileData,
-    bgData,
-    endOfDay,
-    handleNavigateToBgSample,
+  // ── Meal segments (auto-detected from carb/bolus events) ──────────────
+  const mealSegments = useMealSegments({
+    bgData: listBgData,
     insulinData,
-    startOfDay,
-  ]);
+    carbTreatments,
+    foodItems: foodItems ?? [],
+  });
+
+  // ── Meal tags ─────────────────────────────────────────────────────────
+  const allMealIds = useMemo(
+    () => mealSegments.reduce<string[]>((acc, s) => {
+      const ids = s.mealIds.length > 0 ? s.mealIds : [s.id];
+      return acc.concat(ids);
+    }, []),
+    [mealSegments],
+  );
+  const {tagMap, suggestions, tagMeal} = useMealTags(allMealIds);
+
+  // Merge async tags into segments
+  const taggedSegments = useMemo(() => {
+    return mealSegments.map(s => {
+      const ids = s.mealIds.length > 0 ? s.mealIds : [s.id];
+      const localTags = ids.reduce<string[]>((acc, id) => acc.concat(tagMap[id] ?? []), []);
+      const merged = [...new Set([...s.tags, ...localTags])];
+      return merged.length !== s.tags.length ? {...s, tags: merged} : s;
+    });
+  }, [mealSegments, tagMap]);
+
+  // Tag sheet state
+  const [tagSheetSegment, setTagSheetSegment] = useState<MealSegment | null>(null);
+
+  const handleMealTagPress = useCallback((segment: MealSegment) => {
+    setTagSheetSegment(segment);
+  }, []);
+
+  const handleTagSave = useCallback(
+    async (tags: string[]) => {
+      if (tagSheetSegment) {
+        // Use mealIds if available, otherwise fall back to the segment id
+        const ids = tagSheetSegment.mealIds.length > 0
+          ? tagSheetSegment.mealIds
+          : [tagSheetSegment.id];
+        for (const id of ids) {
+          await tagMeal(id, tags);
+        }
+      }
+      setTagSheetSegment(null);
+    },
+    [tagSheetSegment, tagMeal],
+  );
+
+  const handleTagSheetClose = useCallback(() => {
+    setTagSheetSegment(null);
+  }, []);
+
+  const tagSheetCurrentTags = useMemo(() => {
+    if (!tagSheetSegment) return [];
+    const ids = tagSheetSegment.mealIds.length > 0
+      ? tagSheetSegment.mealIds
+      : [tagSheetSegment.id];
+    const localTags = ids.reduce<string[]>((acc, id) => acc.concat(tagMap[id] ?? []), []);
+    return [...new Set([...tagSheetSegment.tags, ...localTags])];
+  }, [tagSheetSegment, tagMap]);
+
+  const tagSheetLabel = useMemo(() => {
+    if (!tagSheetSegment) return '';
+    return `${tagSheetSegment.label} · ${format(new Date(tagSheetSegment.startMs), 'HH:mm')}`;
+  }, [tagSheetSegment]);
+
+  const lastMealSegment = useMemo(() => {
+    return taggedSegments.length ? taggedSegments[taggedSegments.length - 1] : null;
+  }, [taggedSegments]);
+
+  const handleRefreshAll = useCallback(() => {
+    getUpdatedBgData();
+    getUpdatedInsulinData();
+  }, [getUpdatedBgData, getUpdatedInsulinData]);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handlePullToRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await Promise.all([getUpdatedBgData(), getUpdatedInsulinData()]);
+    setIsRefreshing(false);
+  }, [getUpdatedBgData, getUpdatedInsulinData]);
+
+  // ── Live BG snapshot for PreMealCard (polls Nightscout every 60s) ─────
+  const {snapshot: liveSnapshot} = useLatestNightscoutSnapshot({
+    pollingEnabled: isShowingToday,
+  });
+
+  const liveBgSample = useMemo(() => {
+    if (liveSnapshot?.enrichedBg) return liveSnapshot.enrichedBg;
+    return headerLatestBgSample ?? undefined;
+  }, [liveSnapshot, headerLatestBgSample]);
+
+  // ── InsulinStatsRow needs startOfDay / endOfDay ───────────────────────
+  const startOfDay = useMemo(() => {
+    const d = new Date(debouncedCurrentDate);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, [debouncedCurrentDate]);
+
+  const endOfDay = useMemo(() => {
+    const d = new Date(debouncedCurrentDate);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }, [debouncedCurrentDate]);
 
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
-      <HomeHeaderSection
-        bgData={bgData}
-        isShowingToday={isShowingToday}
-        headerLatestBgSample={headerLatestBgSample ?? undefined}
-        headerLatestPrevBgSample={headerLatestPrevBgSample ?? undefined}
-        latestBgSample={latestBgSample ?? undefined}
-        latestPrevBgSample={latestPrevBgSample ?? undefined}
-        listBgData={listBgData}
-        maxIobReference={maxIobReference}
-        maxCobReference={maxCobReference}
-        onRefreshBgData={getUpdatedBgData}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handlePullToRefresh}
+          />
+        }>
+        {/* 1. Hero: Live BG header + Time-in-Range bar */}
+        <HomeHeaderSection
+          bgData={bgData}
+          isShowingToday={isShowingToday}
+          headerLatestBgSample={headerLatestBgSample ?? undefined}
+          headerLatestPrevBgSample={headerLatestPrevBgSample ?? undefined}
+          latestBgSample={latestBgSample ?? undefined}
+          latestPrevBgSample={latestPrevBgSample ?? undefined}
+          listBgData={listBgData}
+          maxIobReference={maxIobReference}
+          maxCobReference={maxCobReference}
+          onRefreshBgData={getUpdatedBgData}
+        />
+
+        {/* 2. Collapsible detailed stats (BG + Insulin) — at top for quick access */}
+        <StatsToggleRow
+          accessibilityRole="button"
+          onPress={() => setShowDetailedStats(prev => !prev)}>
+          <Icon
+            name={showDetailedStats ? 'chevron-up' : 'chart-bar'}
+            size={16}
+            color={addOpacity('#000000', 0.5)}
+          />
+          <StatsToggleText>
+            {showDetailedStats ? 'Hide Detailed Stats' : 'BG Stats & Insulin Details'}
+          </StatsToggleText>
+        </StatsToggleRow>
+
+        {showDetailedStats ? (
+          <>
+            <StatsRow bgData={bgData} />
+            <InsulinStatsRow
+              insulinData={insulinData}
+              basalProfileData={basalProfileData}
+              startDate={startOfDay}
+              endDate={endOfDay}
+            />
+          </>
+        ) : null}
+
+        {/* 3. Compact day chart (always visible, with basal + insulin mini charts) */}
+        <CompactDayChart
+          bgSamples={memoizedBgSamples}
+          foodItems={chartFoodItems}
+          insulinData={insulinData}
+          basalProfileData={basalProfileData}
+          xDomain={fullXDomain}
+          fallbackAnchorTimeMs={headerLatestBgSample?.date ?? latestBgSample?.date}
+          onPressFullScreen={handleOpenStackedChartsFullScreen}
+          onTooltipModelChange={handleTooltipModelChange}
+          testID={E2E_TEST_IDS.charts.cgmGraph}
+        />
+
+        {/* 4. Pre-meal decision card (today only, uses live polling BG) */}
+        {isShowingToday ? (
+          <PreMealCard
+            latestBgSample={liveBgSample}
+            insulinData={insulinData}
+            lastMealSegment={lastMealSegment}
+          />
+        ) : null}
+
+        {/* 5. Meal-segmented timeline */}
+        <MealTimeline
+          meals={taggedSegments}
+          isLoading={isLoading || insulinIsLoading}
+          isToday={isShowingToday}
+          onTagPress={handleMealTagPress}
+        />
+      </ScrollView>
+
+      {/* Chart tooltip overlay — renders at the top of the screen, over header/TIR */}
+      {tooltipModel ? (
+        <TooltipOverlay pointerEvents="none">
+          <HomeChartsTooltip
+            anchorTimeMs={tooltipModel.anchorTimeMs}
+            bgSample={tooltipModel.bgSample}
+            activeInsulinU={tooltipModel.activeInsulinU}
+            activeInsulinBolusU={tooltipModel.activeInsulinBolusU}
+            activeInsulinBasalU={tooltipModel.activeInsulinBasalU}
+            cobG={tooltipModel.cobG}
+            basalRateUhr={tooltipModel.basalRateUhr}
+            bolusSummary={tooltipModel.bolusSummary}
+            carbsSummary={tooltipModel.carbsSummary}
+            bolusEvents={tooltipModel.bolusEvents}
+            carbEvents={tooltipModel.carbEvents}
+            fullWidth={tooltipModel.fullWidth}
+            maxWidthPx={tooltipModel.maxWidthPx}
+          />
+        </TooltipOverlay>
+      ) : null}
+
+      {/* Tag meal sheet */}
+      <TagMealSheet
+        visible={tagSheetSegment != null}
+        mealLabel={tagSheetLabel}
+        currentTags={tagSheetCurrentTags}
+        suggestions={suggestions}
+        onSave={handleTagSave}
+        onClose={handleTagSheetClose}
       />
 
-      <HomeSectionSwitcher
-        selectedSection={selectedSection}
-        onToggle={handleToggleSection}
-      />
-
-      {selectedSection && selectedSection !== HOME_SECTION_KEYS.chart
-        ? homeSectionNodes[selectedSection]
-        : null}
-
-      <HomeChartSection
-        visible={selectedSection === HOME_SECTION_KEYS.chart}
-        isZoomed={isZoomed}
-        canPanLeft={canPanLeft}
-        canPanRight={canPanRight}
-        onPan={handlePan}
-        onToggleZoom={handleToggleZoom}
-        bgSamples={memoizedBgSamples}
-        foodItems={chartFoodItems}
-        insulinData={insulinData}
-        basalProfileData={basalProfileData}
-        xDomain={chartXDomain ?? fullXDomain}
-        fallbackAnchorTimeMs={headerLatestBgSample?.date ?? latestBgSample?.date}
-        onPressFullScreen={handleOpenStackedChartsFullScreen}
-        testID={E2E_TEST_IDS.charts.cgmGraph}
-      />
-
-      <CgmRows
-        onPullToRefreshRefresh={getUpdatedBgData}
-        isLoading={isLoading}
-        bgData={listBgData}
-        isToday={isShowingToday}
-        focusTargetDateMs={bgStatsFocusTargetDateMs}
-        focusHighlightDateMs={bgStatsHighlightDateMs}
-        focusToken={bgStatsFocusToken}
-      />
-
+      {/* Date navigator (pinned to bottom, outside scroll) */}
       <DateNavigatorRow
         isLoading={isLoading || currentDate !== debouncedCurrentDate}
         date={currentDate}

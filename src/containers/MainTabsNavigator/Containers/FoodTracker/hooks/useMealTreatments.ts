@@ -18,6 +18,11 @@ import {
   TimeInRangeThresholds,
   TimeInRangePercentages,
 } from 'app/utils/glucose/timeInRange';
+import {
+  sumBolusNearMeal,
+  computeAbsorption,
+  ABSORPTION_WINDOW_MS,
+} from 'app/utils/mealAbsorption.utils';
 
 import {BgSample} from 'app/types/day_bgs.types';
 import {FoodItemDTO} from 'app/types/food.types';
@@ -31,7 +36,7 @@ import {
 // ── constants ────────────────────────────────────────────
 
 /** Post-meal TIR scoring window: 0 → 3 hours after meal. */
-const TIR_WINDOW_MS = 3 * 60 * 60 * 1000;
+const TIR_WINDOW_MS = ABSORPTION_WINDOW_MS;
 
 /** Minimum BG readings needed in the window to compute a meaningful score. */
 const MIN_BG_READINGS = 6; // ~30 min of 5-min CGM
@@ -47,9 +52,6 @@ const DEFAULT_THRESHOLDS: TimeInRangeThresholds = {
 /** Window half-widths for the per-meal chart view. */
 const CHART_PRE_MS = 30 * 60 * 1000; // 30 min before
 const CHART_POST_MS = 4 * 60 * 60 * 1000; // 4 hrs after
-
-/** Tolerance for associating a bolus with a meal. */
-const BOLUS_WINDOW_MS = 15 * 60 * 1000; // ±15 min
 
 // ── helpers ──────────────────────────────────────────────
 
@@ -85,53 +87,6 @@ function computePostMealTir(
     score: Math.round(percentages.target),
     breakdown: percentages,
   };
-}
-
-/**
- * Find the COB value from the BG sample closest to `targetTs` (within tolerance).
- * BG samples are enriched with `.cob` from device-status by `mergeDeviceStatusIntoBgSamples`.
- */
-function findCobAtTime(
-  bgSamples: BgSample[],
-  targetTs: number,
-  toleranceMs: number = 30 * 60 * 1000,
-): number | null {
-  let best: BgSample | null = null;
-  let bestDist = Infinity;
-
-  for (const s of bgSamples) {
-    if ((s as any).cob == null) continue;
-    const dist = Math.abs(s.date - targetTs);
-    if (dist < bestDist && dist <= toleranceMs) {
-      best = s;
-      bestDist = dist;
-    }
-  }
-
-  return best ? (best as any).cob : null;
-}
-
-/**
- * Sum all bolus insulin entries within ±BOLUS_WINDOW_MS of the meal timestamp.
- * Returns null if no boluses found.
- */
-function sumBolusNearMeal(
-  insulinEntries: InsulinDataEntry[],
-  mealTs: number,
-): number | null {
-  let total = 0;
-  let found = false;
-
-  for (const entry of insulinEntries) {
-    if (entry.type !== 'bolus' || !entry.amount) continue;
-    const ts = entry.timestamp ? Date.parse(entry.timestamp) : 0;
-    if (Math.abs(ts - mealTs) <= BOLUS_WINDOW_MS) {
-      total += entry.amount;
-      found = true;
-    }
-  }
-
-  return found ? Math.round(total * 100) / 100 : null;
 }
 
 // ── hook ─────────────────────────────────────────────────
@@ -205,19 +160,8 @@ export function useMealTreatments(
         const tir = computePostMealTir(bgSamples, ct.timestamp);
         const hour = new Date(ct.timestamp).getHours();
 
-        // Absorption: COB remaining at end of the 3-hr window
-        const cobRemaining = findCobAtTime(
-          bgSamples,
-          ct.timestamp + TIR_WINDOW_MS,
-        );
-        const absorbed =
-          cobRemaining != null
-            ? Math.max(0, ct.carbs - Math.min(cobRemaining, ct.carbs))
-            : null;
-        const absorptionPct =
-          absorbed != null && ct.carbs > 0
-            ? Math.round((absorbed / ct.carbs) * 100)
-            : null;
+        // Absorption: uses shared utility (carbsEntered − COB at T+3h)
+        const absorption = computeAbsorption(ct.carbs, bgSamples, ct.timestamp);
 
         // Bolus insulin near this meal
         const bolusInsulinU = sumBolusNearMeal(insulinData, ct.timestamp);
@@ -228,11 +172,12 @@ export function useMealTreatments(
           timestamp: ct.timestamp,
           score: tir?.score ?? null,
           postMealTir: tir?.breakdown ?? null,
-          cobRemaining: cobRemaining != null ? Math.round(cobRemaining) : null,
-          absorbed: absorbed != null ? Math.round(absorbed) : null,
-          absorptionPct,
+          cobRemaining: absorption.cobRemaining,
+          absorbed: absorption.absorbed,
+          absorptionPct: absorption.absorptionPct,
           bolusInsulinU,
           mealSlot: classifyMealSlot(hour),
+          tags: ct.tags ?? [],
         } satisfies MealEntry;
       });
   }, [carbTreatments, bgSamples, insulinData]);

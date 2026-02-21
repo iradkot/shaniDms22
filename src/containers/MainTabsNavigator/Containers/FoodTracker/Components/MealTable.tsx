@@ -36,6 +36,7 @@ const COLUMNS: ColumnConfig[] = [
   {label: 'Time', field: 'timestamp', flex: 1.1},
   {label: 'Carbs', field: 'carbsEntered', flex: 1.4},
   {label: 'Score', field: 'score', flex: 0.8},
+  {label: '', field: null, flex: 0.4}, // tag
 ];
 
 // ── helpers ──────────────────────────────────────────
@@ -75,12 +76,15 @@ interface MealTableProps {
   meals: MealEntry[];
   carbFilter: CarbRangeFilter;
   getChartDataForMeal: (meal: MealEntry) => MealChartData;
+  /** Called when the user taps the tag button on a meal row. */
+  onTagPress?: (meal: MealEntry) => void;
 }
 
 const MealTable: React.FC<MealTableProps> = ({
   meals,
   carbFilter,
   getChartDataForMeal,
+  onTagPress,
 }) => {
   const theme = useTheme() as ThemeType;
   const [sortField, setSortField] = useState<SortField>('timestamp');
@@ -131,6 +135,7 @@ const MealTable: React.FC<MealTableProps> = ({
             meal={item}
             isExpanded={isExpanded}
             onPress={() => handleRowPress(item)}
+            onTagPress={onTagPress}
           />
           {isExpanded && expandedChart && (
             <MealChartExpander chartData={expandedChart} meal={item} />

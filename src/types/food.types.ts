@@ -12,6 +12,8 @@ export interface FoodItemDTO {
   notes: string;
   score: number;
   timestamp: number; // timestamp in milliseconds
+  /** User-applied meal tags (e.g. ["pizza"]). Optional — absent for legacy items. */
+  tags?: string[];
 }
 
 export interface FormattedFoodItemDTO

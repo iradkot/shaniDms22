@@ -1,5 +1,6 @@
 import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {FoodItemDTO} from 'app/types/food.types';
+import {parseTagsFromNotes} from 'app/services/mealTagService';
 
 export function mapNightscoutTreatmentsToInsulinDataEntries(
   treatments: any[] | null | undefined,
@@ -54,14 +55,16 @@ export function mapNightscoutTreatmentsToCarbFoodItems(
       if (!Number.isFinite(ts)) return null;
 
       const id = typeof t?._id === 'string' ? t._id : `carbs-${ts}-${carbs}`;
+      const rawNotes = typeof t?.notes === 'string' ? t.notes : '';
       return {
         id,
         carbs,
         name: 'Carbs',
         image: '',
-        notes: '',
+        notes: rawNotes,
         score: 0,
         timestamp: ts,
+        tags: parseTagsFromNotes(rawNotes),
       } satisfies FoodItemDTO;
     })
     .filter(Boolean) as FoodItemDTO[];
