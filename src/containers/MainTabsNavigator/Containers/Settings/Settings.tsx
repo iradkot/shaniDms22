@@ -15,6 +15,7 @@ import {useTabsSettings} from 'app/contexts/TabsSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {useNightscoutConfig} from 'app/contexts/NightscoutConfigContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
+import {useProactiveCareSettings} from 'app/contexts/ProactiveCareSettingsContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import ADIcon from 'react-native-vector-icons/AntDesign';
 import {useNavigation} from '@react-navigation/native';
@@ -32,12 +33,18 @@ const Settings: React.FC = () => {
     useGlucoseSettings();
   const {profiles, activeProfile, setActiveProfileId, deleteProfile} = useNightscoutConfig();
   const {settings: aiSettings, setSetting: setAiSetting, isLoaded: aiLoaded} = useAiSettings();
+  const {
+    settings: proactiveSettings,
+    setSetting: setProactiveSetting,
+    isLoaded: proactiveLoaded,
+  } = useProactiveCareSettings();
 
   const [showDisplayedTabs, setShowDisplayedTabs] = useState(true);
   const [showNightscout, setShowNightscout] = useState(false);
   const [showRanges, setShowRanges] = useState(false);
   const [showNightWindow, setShowNightWindow] = useState(false);
   const [showAi, setShowAi] = useState(false);
+  const [showProactiveCare, setShowProactiveCare] = useState(false);
   const [uiLoaded, setUiLoaded] = useState(false);
 
   const [aiApiKeyText, setAiApiKeyText] = useState('');
@@ -57,6 +64,7 @@ const Settings: React.FC = () => {
   const [severeHyperText, setSevereHyperText] = useState('');
   const [nightStartText, setNightStartText] = useState('');
   const [nightEndText, setNightEndText] = useState('');
+  const [preferredFastCarbText, setPreferredFastCarbText] = useState('');
   const [rangeError, setRangeError] = useState<string | null>(null);
 
   const openAiModelOptions = useMemo(
@@ -105,6 +113,11 @@ const Settings: React.FC = () => {
   }, [aiLoaded, aiSettings.apiKey, aiSettings.openAiModel, openAiModelOptions]);
 
   useEffect(() => {
+    if (!proactiveLoaded) return;
+    setPreferredFastCarbText(proactiveSettings.preferredFastCarb || '');
+  }, [proactiveLoaded, proactiveSettings.preferredFastCarb]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const loadUi = async () => {
@@ -123,6 +136,7 @@ const Settings: React.FC = () => {
           showRanges: boolean;
           showNightWindow: boolean;
           showAi: boolean;
+          showProactiveCare: boolean;
         }>;
 
         if (typeof parsed.showDisplayedTabs === 'boolean') {
@@ -139,6 +153,9 @@ const Settings: React.FC = () => {
         }
         if (typeof parsed.showAi === 'boolean') {
           setShowAi(parsed.showAi);
+        }
+        if (typeof parsed.showProactiveCare === 'boolean') {
+          setShowProactiveCare(parsed.showProactiveCare);
         }
       } catch (e) {
         // Best-effort: keep defaults.
@@ -165,11 +182,12 @@ const Settings: React.FC = () => {
         showRanges,
         showNightWindow,
         showAi,
+        showProactiveCare,
       }),
     ).catch(() => {
       // Best-effort persistence.
     });
-  }, [uiLoaded, showDisplayedTabs, showNightscout, showRanges, showNightWindow, showAi]);
+  }, [uiLoaded, showDisplayedTabs, showNightscout, showRanges, showNightWindow, showAi, showProactiveCare]);
 
   const inputStyle = {
     borderWidth: 1,
@@ -649,6 +667,66 @@ const Settings: React.FC = () => {
                 />
               </View>
             )}
+          </>
+        )}
+      </View>
+
+      <View>
+        <SectionHeader
+          title="Proactive Care (MVP)"
+          expanded={showProactiveCare}
+          onToggle={() => setShowProactiveCare(v => !v)}
+        />
+
+        {showProactiveCare && (
+          <>
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="notifications-active" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>Enable hypo-now alerts</Text>
+              <Switch
+                value={proactiveSettings.hypoNowEnabled}
+                onValueChange={v => setProactiveSetting('hypoNowEnabled', v)}
+              />
+            </View>
+
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="translate" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>Hebrew notifications</Text>
+              <Switch
+                value={proactiveSettings.language === 'he'}
+                onValueChange={v => setProactiveSetting('language', v ? 'he' : 'en')}
+              />
+            </View>
+
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="local-drink" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>Preferred fast carb</Text>
+              <TextInput
+                value={preferredFastCarbText}
+                onChangeText={setPreferredFastCarbText}
+                onBlur={() => setProactiveSetting('preferredFastCarb', preferredFastCarbText.trim() || 'מיץ')}
+                placeholder="למשל: מיץ תפוזים קטן"
+                placeholderTextColor={theme.textColor}
+                style={{...inputStyle, minWidth: 160, textAlign: 'left'}}
+              />
+            </View>
+
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="no-meals" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>Prefer juice/glucose over chocolate</Text>
+              <Switch
+                value={proactiveSettings.avoidChocolateForImmediateHypo}
+                onValueChange={v => setProactiveSetting('avoidChocolateForImmediateHypo', v)}
+              />
+            </View>
           </>
         )}
       </View>

@@ -65,6 +65,10 @@ import {NightscoutConfigProvider} from 'app/contexts/NightscoutConfigContext';
 import NightscoutSetupScreen from 'app/containers/NightscoutSetupScreen';
 import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {AiSettingsProvider} from 'app/contexts/AiSettingsContext';
+import {
+  ProactiveCareSettingsProvider,
+  useProactiveCareSettings,
+} from 'app/contexts/ProactiveCareSettingsContext';
 
 // Suppress deprecation warnings from Firebase React Native v21 with Hermes
 LogBox.ignoreLogs([
@@ -167,14 +171,15 @@ const App: () => React.ReactElement = () => {
   const [notifVisible, setNotifVisible] = React.useState(false);
   const [notifTitle, setNotifTitle] = React.useState<string | undefined>();
   const [notifBody, setNotifBody] = React.useState<string | undefined>();
+  const {settings: proactiveSettings} = useProactiveCareSettings();
 
   useHypoNowMvp({
-    enabled: !isE2E,
+    enabled: !isE2E && proactiveSettings.hypoNowEnabled,
     profile: {
-      language: 'he',
-      preferredFastCarb: 'מיץ תפוזים קטן',
+      language: proactiveSettings.language,
+      preferredFastCarb: proactiveSettings.preferredFastCarb,
       treatmentHints: {
-        avoidChocolateForImmediateHypo: true,
+        avoidChocolateForImmediateHypo: proactiveSettings.avoidChocolateForImmediateHypo,
       },
     },
   });
@@ -229,6 +234,7 @@ const App: () => React.ReactElement = () => {
                         <TabsSettingsProvider>
                           <GlucoseSettingsProvider>
                             <AiSettingsProvider>
+                              <ProactiveCareSettingsProvider>
                             <NavigationContainer ref={rootNavigationRef}>
                               <Stack.Navigator screenOptions={{headerShown: false}}>
                                 <Stack.Screen name="initScreen" component={AppInitScreen} />
@@ -293,6 +299,7 @@ const App: () => React.ReactElement = () => {
                               />
                               </Stack.Navigator>
                             </NavigationContainer>
+                              </ProactiveCareSettingsProvider>
                             </AiSettingsProvider>
                           </GlucoseSettingsProvider>
                         </TabsSettingsProvider>
