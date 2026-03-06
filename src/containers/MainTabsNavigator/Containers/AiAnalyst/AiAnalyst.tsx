@@ -115,6 +115,7 @@ const AiAnalyst: React.FC = () => {
   // ── Dashboard (default) ───────────────────────────────────────────────
   return (
     <DashboardScreen
+      onStartOpenChat={engine.startOpenChat}
       onStartHypoDetective={engine.startHypoDetective}
       onStartUserBehavior={engine.startUserBehavior}
       onStartLoopSettings={engine.startLoopSettingsAdvisor}

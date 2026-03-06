@@ -7,7 +7,7 @@ import {LlmChatMessage} from 'app/services/llm/llmTypes';
 // Domain types
 // ---------------------------------------------------------------------------
 
-export type MissionKey = 'hypoDetective' | 'userBehavior' | 'loopSettings';
+export type MissionKey = 'openChat' | 'hypoDetective' | 'userBehavior' | 'loopSettings';
 
 export type AnalystMode = 'userBehavior' | 'loopSettings';
 
@@ -67,6 +67,7 @@ export interface AiAnalystEngine {
   openHistory: () => Promise<void>;
   clearHistory: () => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
+  startOpenChat: () => Promise<void>;
   startHypoDetective: () => Promise<void>;
   startUserBehavior: () => Promise<void>;
   startLoopSettingsAdvisor: () => Promise<void>;

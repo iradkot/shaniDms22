@@ -165,7 +165,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
             value={input}
             onChangeText={setInput}
             onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), SCROLL_DELAY_MS)}
-            placeholder="Ask a follow-up…"
+            placeholder="Ask anything…"
             placeholderTextColor={addOpacity(theme.textColor, 0.5)}
             editable
           />

@@ -46,6 +46,7 @@ import {
   SCROLL_DELAY_MS,
   MAX_EVENTS_WITH_DATES,
   MAX_EVENTS_DEFAULT,
+  MAX_CONTEXT_MESSAGES,
   EMPTY_RESPONSE_FALLBACK,
   makeConversationId,
   temperatureForModel,
@@ -268,6 +269,82 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   // ====================================================================
   // Mission starters
   // ====================================================================
+
+  const startOpenChat = useCallback(async () => {
+    if (!provider) return;
+    const {runId, signal, conversationId: nextId} = initMission('Preparing context…', null);
+
+    try {
+      const [cgmResult, insulinResult, profileResult] = await Promise.all([
+        runAiAnalystTool('getCgmSamples', {rangeDays: 14, maxSamples: 400}),
+        runAiAnalystTool('getInsulinSummary', {rangeDays: 14}),
+        runAiAnalystTool('getCurrentProfileSettings', {}),
+      ]);
+
+      recordDataUsed('getCgmSamples', cgmResult);
+      recordDataUsed('getInsulinSummary', insulinResult);
+      recordDataUsed('getCurrentProfileSettings', profileResult);
+      if (runSeqRef.current !== runId) return;
+
+      setProgressText('Starting chat…');
+
+      const userPrompt =
+        `Mission: Open Chat\n\n` +
+        `Start with a short, friendly greeting and one concise question asking what the user wants to focus on now.\n` +
+        `You can answer broad and random diabetes questions, but ground recommendations in available data.\n\n` +
+        `Disclosure: ${DISCLOSURE_TEXT}\n\n` +
+        `Recent CGM snapshot (14d):\n${JSON.stringify(cgmResult.ok ? cgmResult.result : 'Data unavailable')}\n\n` +
+        `Recent insulin summary (14d):\n${JSON.stringify(insulinResult.ok ? insulinResult.result : 'Data unavailable')}\n\n` +
+        `Current profile settings:\n${JSON.stringify(profileResult.ok ? profileResult.result : 'Data unavailable')}`;
+
+      const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
+      setLlmMessages(baseLlmMessages);
+
+      const {finalText, llmMessages: updatedMessages} = await runLlmToolLoop({
+        provider,
+        model: aiSettings.openAiModel,
+        systemPrompt: buildSystemPrompt(null, glucoseSettings),
+        initialMessages: baseLlmMessages,
+        maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
+        maxOutputTokens: maxOutputTokensForModel(aiSettings.openAiModel, DEFAULT_MAX_OUTPUT_TOKENS),
+        temperature: temperatureForModel(aiSettings.openAiModel, DEFAULT_TEMPERATURE),
+        abortSignal: signal,
+        callbacks: {
+          onToolStart: name => setProgressText(`Running ${name}…`),
+          onToolResult: recordDataUsed,
+          isCancelled: () => runSeqRef.current !== runId,
+        },
+      });
+      if (runSeqRef.current !== runId) return;
+
+      const assistantMessage: LlmChatMessage = {role: 'assistant', content: finalText.trim()};
+      setUiMessages([assistantMessage]);
+      setLlmMessages(updatedMessages);
+
+      await upsertAiAnalystConversationSnapshot({
+        id: nextId,
+        mission: 'openChat',
+        messages: [{role: 'assistant', content: assistantMessage.content}],
+      });
+
+      setState({mode: 'mission', mission: 'openChat'});
+      setProgressText('');
+      scrollToEnd();
+    } catch (e: any) {
+      handleMissionError(e, runId, 'Failed to start Open Chat');
+    } finally {
+      finaliseMission(runId);
+    }
+  }, [
+    provider,
+    aiSettings.openAiModel,
+    glucoseSettings,
+    initMission,
+    recordDataUsed,
+    handleMissionError,
+    finaliseMission,
+    scrollToEnd,
+  ]);
 
   const startHypoDetective = useCallback(async () => {
     if (!provider) return;
@@ -503,6 +580,26 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     [glucoseSettings.hyper, glucoseSettings.hypo],
   );
 
+  /** Keep only recent context to reduce latency/cost while preserving tool results. */
+  const buildContextWindow = useCallback((messages: LlmChatMessage[]): LlmChatMessage[] => {
+    if (!Array.isArray(messages) || messages.length <= MAX_CONTEXT_MESSAGES) return messages;
+
+    const recent = messages.slice(-MAX_CONTEXT_MESSAGES);
+    const hasToolResultsInRecent = recent.some(
+      m => m.role === 'user' && typeof m.content === 'string' && m.content.startsWith('Tool result ('),
+    );
+
+    if (hasToolResultsInRecent) return recent;
+
+    const latestToolResult = [...messages]
+      .reverse()
+      .find(
+        m => m.role === 'user' && typeof m.content === 'string' && m.content.startsWith('Tool result ('),
+      );
+
+    return latestToolResult ? [latestToolResult, ...recent] : recent;
+  }, []);
+
   /** Follow-up error handler (rolls back user message for retry). */
   const handleFollowUpError = useCallback(
     (error: any, originalText: string, _runId: number) => {
@@ -571,11 +668,13 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       );
       const systemPrompt = buildSystemPrompt(analystMode, glucoseSettings);
 
+      const contextWindowMessages = buildContextWindow(workingLlmMessages);
+
       const {finalText, llmMessages: updatedMessages} = await runLlmToolLoop({
         provider,
         model: aiSettings.openAiModel,
         systemPrompt,
-        initialMessages: workingLlmMessages,
+        initialMessages: contextWindowMessages,
         maxToolCalls,
         maxOutputTokens,
         temperature: temperatureForModel(aiSettings.openAiModel, DEFAULT_TEMPERATURE),
@@ -612,6 +711,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     provider, input, llmMessages, aiSettings.openAiModel, analystMode,
     glucoseSettings, persistHistorySnapshot, recordDataUsed, beginRun,
     finaliseMission, scrollToEnd, maybePreFetchGlycemicEvents, handleFollowUpError,
+    buildContextWindow,
   ]);
 
   // ====================================================================
@@ -690,6 +790,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     openHistory,
     clearHistory: clearAllHistory,
     deleteConversation,
+    startOpenChat,
     startHypoDetective,
     startUserBehavior,
     startLoopSettingsAdvisor,

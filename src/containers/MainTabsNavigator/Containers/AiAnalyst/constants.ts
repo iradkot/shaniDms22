@@ -70,6 +70,9 @@ export const MAX_EVENTS_WITH_DATES = 120;
 /** Max glycemic events for regular follow-up. */
 export const MAX_EVENTS_DEFAULT = 60;
 
+/** Max number of recent conversation messages to send per follow-up LLM turn. */
+export const MAX_CONTEXT_MESSAGES = 14;
+
 // ---------------------------------------------------------------------------
 // Guardrail: filler suffix pattern
 // ---------------------------------------------------------------------------
@@ -91,6 +94,7 @@ export const TOOL_LIMIT_MESSAGE =
 // ---------------------------------------------------------------------------
 
 const MISSION_TITLES: Record<string, string> = {
+  openChat: 'Open Chat',
   loopSettings: 'Loop Settings Advisor',
   userBehavior: 'User Behavior Tips',
   hypoDetective: 'Hypo Detective',
