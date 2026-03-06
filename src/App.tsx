@@ -38,9 +38,14 @@ import EditNotificationScreen from 'app/containers/forms/EditNotificationScreen/
 import { getApp } from '@react-native-firebase/app';
 import { getMessaging } from '@react-native-firebase/messaging';
 import messaging from '@react-native-firebase/messaging';
-import notifee from '@notifee/react-native';
+import notifee, {EventType} from '@notifee/react-native';
 import { registerDeviceToken, unregisterDeviceToken, syncTokenIfNeeded } from 'app/services/rebaseService';
 import NotificationModal from 'app/components/NotificationModal';
+import {useHypoNowMvp} from 'app/hooks/useHypoNowMvp';
+import {
+  navigateToHypoInvestigation,
+  rootNavigationRef,
+} from 'app/navigation/rootNavigation';
 import {ThemeProvider} from 'styled-components';
 import styled from 'styled-components/native';
 import {theme} from 'app/style/theme';
@@ -91,6 +96,23 @@ const AppContainer = styled.View<AppContainerProps>`
   flex: 1;
   background-color: ${(props: AppContainerProps) => props.theme.backgroundColor};
 `;
+
+function parseMs(value: unknown): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function handleNotificationNavigation(initialNotification: {notification?: {data?: Record<string, string>}} | null) {
+  const data = initialNotification?.notification?.data;
+  if (!data || data.route !== HYPO_INVESTIGATION_SCREEN) return;
+
+  navigateToHypoInvestigation({
+    startMs: parseMs(data.startMs),
+    endMs: parseMs(data.endMs),
+    lowThreshold: parseMs(data.lowThreshold),
+  });
+}
 
 const App: () => React.ReactElement = () => {
   console.log('App.tsx: Entering App component');
@@ -145,6 +167,38 @@ const App: () => React.ReactElement = () => {
   const [notifVisible, setNotifVisible] = React.useState(false);
   const [notifTitle, setNotifTitle] = React.useState<string | undefined>();
   const [notifBody, setNotifBody] = React.useState<string | undefined>();
+
+  useHypoNowMvp({
+    enabled: !isE2E,
+    profile: {
+      language: 'he',
+      preferredFastCarb: 'מיץ תפוזים קטן',
+      treatmentHints: {
+        avoidChocolateForImmediateHypo: true,
+      },
+    },
+  });
+
+  React.useEffect(() => {
+    if (isE2E) return;
+
+    const unsubscribeForeground = notifee.onForegroundEvent(({type, detail}: {type: number; detail: any}) => {
+      if (type !== EventType.PRESS) return;
+      handleNotificationNavigation({notification: detail.notification});
+    });
+
+    notifee
+      .getInitialNotification()
+      .then((initialNotification: any) => {
+        handleNotificationNavigation(initialNotification);
+      })
+      .catch((err: unknown) => {
+        console.warn('App: failed to read initial notifee notification', err);
+      });
+
+    return unsubscribeForeground;
+  }, []);
+
   // if user is not logged in, show login screen else show home screen
   // Subscribe to foreground messages
   React.useEffect(() => {
@@ -175,7 +229,7 @@ const App: () => React.ReactElement = () => {
                         <TabsSettingsProvider>
                           <GlucoseSettingsProvider>
                             <AiSettingsProvider>
-                            <NavigationContainer>
+                            <NavigationContainer ref={rootNavigationRef}>
                               <Stack.Navigator screenOptions={{headerShown: false}}>
                                 <Stack.Screen name="initScreen" component={AppInitScreen} />
                                 <Stack.Screen name={LOGIN_SCREEN} component={Login} />
@@ -232,8 +286,6 @@ const App: () => React.ReactElement = () => {
                                 options={{
                                   headerShown: true,
                                   headerTitle: 'Hypo investigation',
-                                  headerTopInsetEnabled: false,
-                                  headerStyle: {height: 48},
                                   headerTitleStyle: {fontSize: 16, fontWeight: '700'},
                                 }}
                                 name={HYPO_INVESTIGATION_SCREEN}
