@@ -22,28 +22,9 @@ const DEFAULTS = {
 const CHANNEL_ID = 'hypo-alerts';
 const PRESS_ACTION_ID = 'open_hypo_investigation';
 
-export type HypoNowPersonalizationProfile = {
-  /**
-   * Preferred quick carb suggestion (e.g. "מיץ ענבים קטן").
-   * TODO: persist from user settings / history.
-   */
-  preferredFastCarb?: string;
-  /**
-   * Preferred language for copy. POC currently supports he/en copy templates.
-   */
-  language?: 'he' | 'en';
-  /**
-   * Future-facing: treatment-plan guardrails from clinician configuration.
-   */
-  treatmentHints?: {
-    avoidChocolateForImmediateHypo?: boolean;
-  };
-};
-
 export type HypoNowEvaluationInput = {
   latestBgSample: BgSample | null | undefined;
   nowMs?: number;
-  profile?: HypoNowPersonalizationProfile;
 };
 
 export type HypoNowEvaluationResult = {
@@ -76,25 +57,10 @@ function getSampleGlucose(sample: BgSample): number | null {
   return typeof sgv === 'number' && Number.isFinite(sgv) ? sgv : null;
 }
 
-function buildHypoNowCopy(profile?: HypoNowPersonalizationProfile): {title: string; body: string} {
-  const language = profile?.language ?? 'he';
-  const preferredFastCarb = profile?.preferredFastCarb ?? 'מיץ';
-  const avoidChocolate = profile?.treatmentHints?.avoidChocolateForImmediateHypo ?? true;
-
-  if (language === 'en') {
-    return {
-      title: 'Possible hypo now',
-      body: avoidChocolate
-        ? `Your glucose appears low now. Take a fast carb (for example: ${preferredFastCarb}). Prefer juice/glucose tabs over chocolate.`
-        : `Your glucose appears low now. Take a fast carb (for example: ${preferredFastCarb}).`,
-    };
-  }
-
+function buildHypoNowCopy(): {title: string; body: string} {
   return {
-    title: 'נראה שאתה בהיפו עכשיו',
-    body: avoidChocolate
-      ? `מומלץ לקחת פחמימה מהירה (למשל ${preferredFastCarb}). עדיף מיץ/גלוקוז ולא שוקולד לטיפול מיידי.`
-      : `מומלץ לקחת פחמימה מהירה (למשל ${preferredFastCarb}).`,
+    title: 'Possible hypo now',
+    body: 'Your glucose appears low now. Please take a fast-acting carb and re-check in 15 minutes.',
   };
 }
 
@@ -108,10 +74,8 @@ async function ensureNotificationChannel(): Promise<string> {
 
 async function scheduleFollowUpNotification(params: {
   baseTimestampMs: number;
-  profile?: HypoNowPersonalizationProfile;
 }) {
-  const {baseTimestampMs, profile} = params;
-  const language = profile?.language ?? 'he';
+  const {baseTimestampMs} = params;
 
   const trigger = {
     type: TriggerType.TIMESTAMP,
@@ -119,11 +83,8 @@ async function scheduleFollowUpNotification(params: {
     alarmManager: true,
   } as const;
 
-  const title = language === 'en' ? 'Quick follow-up' : 'בדיקת המשך';
-  const body =
-    language === 'en'
-      ? '15 minutes passed. Can you re-check glucose and update me?'
-      : 'עברו 15 דקות. רוצה לבדוק שוב את הסוכר ולעדכן?';
+  const title = 'Quick follow-up';
+  const body = '15 minutes passed. Can you re-check glucose and update me?';
 
   await notifee.createTriggerNotification(
     {
@@ -196,7 +157,7 @@ export async function evaluateHypoNowAndNotify(input: HypoNowEvaluationInput): P
 
   await ensureNotificationChannel();
 
-  const copy = buildHypoNowCopy(input.profile);
+  const copy = buildHypoNowCopy();
   const endMs = nowMs;
   const startMs = nowMs - DEFAULTS.analysisWindowMs;
 
@@ -222,7 +183,6 @@ export async function evaluateHypoNowAndNotify(input: HypoNowEvaluationInput): P
 
   await scheduleFollowUpNotification({
     baseTimestampMs: nowMs,
-    profile: input.profile,
   });
 
   await Promise.all([

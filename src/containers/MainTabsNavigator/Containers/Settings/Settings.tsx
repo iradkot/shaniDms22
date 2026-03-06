@@ -33,11 +33,7 @@ const Settings: React.FC = () => {
     useGlucoseSettings();
   const {profiles, activeProfile, setActiveProfileId, deleteProfile} = useNightscoutConfig();
   const {settings: aiSettings, setSetting: setAiSetting, isLoaded: aiLoaded} = useAiSettings();
-  const {
-    settings: proactiveSettings,
-    setSetting: setProactiveSetting,
-    isLoaded: proactiveLoaded,
-  } = useProactiveCareSettings();
+  const {settings: proactiveSettings, setSetting: setProactiveSetting} = useProactiveCareSettings();
 
   const [showDisplayedTabs, setShowDisplayedTabs] = useState(true);
   const [showNightscout, setShowNightscout] = useState(false);
@@ -64,7 +60,6 @@ const Settings: React.FC = () => {
   const [severeHyperText, setSevereHyperText] = useState('');
   const [nightStartText, setNightStartText] = useState('');
   const [nightEndText, setNightEndText] = useState('');
-  const [preferredFastCarbText, setPreferredFastCarbText] = useState('');
   const [rangeError, setRangeError] = useState<string | null>(null);
 
   const openAiModelOptions = useMemo(
@@ -112,10 +107,6 @@ const Settings: React.FC = () => {
     setAiModelText('gpt-4o-mini');
   }, [aiLoaded, aiSettings.apiKey, aiSettings.openAiModel, openAiModelOptions]);
 
-  useEffect(() => {
-    if (!proactiveLoaded) return;
-    setPreferredFastCarbText(proactiveSettings.preferredFastCarb || '');
-  }, [proactiveLoaded, proactiveSettings.preferredFastCarb]);
 
   useEffect(() => {
     let isMounted = true;
@@ -670,10 +661,9 @@ const Settings: React.FC = () => {
           </>
         )}
       </View>
-
       <View>
         <SectionHeader
-          title="Proactive Care (MVP)"
+          title="Proactive Care"
           expanded={showProactiveCare}
           onToggle={() => setShowProactiveCare(v => !v)}
         />
@@ -682,50 +672,35 @@ const Settings: React.FC = () => {
           <>
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
+                <MaterialIcons name="auto-awesome" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>Enable proactive care</Text>
+              <Switch
+                value={proactiveSettings.enabled}
+                onValueChange={v => setProactiveSetting('enabled', v)}
+              />
+            </View>
+
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
                 <MaterialIcons name="notifications-active" size={theme.typography.size.xl} color={theme.textColor} />
               </View>
-              <Text style={labelStyle}>Enable hypo-now alerts</Text>
+              <Text style={labelStyle}>Hypo now event</Text>
               <Switch
-                value={proactiveSettings.hypoNowEnabled}
-                onValueChange={v => setProactiveSetting('hypoNowEnabled', v)}
+                value={proactiveSettings.events.hypoNow}
+                onValueChange={v =>
+                  setProactiveSetting('events', {
+                    ...proactiveSettings.events,
+                    hypoNow: v,
+                  })
+                }
               />
             </View>
 
-            <View style={rowStyle}>
-              <View style={iconContainerStyle}>
-                <MaterialIcons name="translate" size={theme.typography.size.xl} color={theme.textColor} />
-              </View>
-              <Text style={labelStyle}>Hebrew notifications</Text>
-              <Switch
-                value={proactiveSettings.language === 'he'}
-                onValueChange={v => setProactiveSetting('language', v ? 'he' : 'en')}
-              />
-            </View>
-
-            <View style={rowStyle}>
-              <View style={iconContainerStyle}>
-                <MaterialIcons name="local-drink" size={theme.typography.size.xl} color={theme.textColor} />
-              </View>
-              <Text style={labelStyle}>Preferred fast carb</Text>
-              <TextInput
-                value={preferredFastCarbText}
-                onChangeText={setPreferredFastCarbText}
-                onBlur={() => setProactiveSetting('preferredFastCarb', preferredFastCarbText.trim() || 'מיץ')}
-                placeholder="למשל: מיץ תפוזים קטן"
-                placeholderTextColor={theme.textColor}
-                style={{...inputStyle, minWidth: 160, textAlign: 'left'}}
-              />
-            </View>
-
-            <View style={rowStyle}>
-              <View style={iconContainerStyle}>
-                <MaterialIcons name="no-meals" size={theme.typography.size.xl} color={theme.textColor} />
-              </View>
-              <Text style={labelStyle}>Prefer juice/glucose over chocolate</Text>
-              <Switch
-                value={proactiveSettings.avoidChocolateForImmediateHypo}
-                onValueChange={v => setProactiveSetting('avoidChocolateForImmediateHypo', v)}
-              />
+            <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm}}>
+              <Text style={{color: theme.textColor, opacity: 0.75, fontSize: theme.typography.size.sm}}>
+                Coming soon: hypo risk prediction and additional proactive events.
+              </Text>
             </View>
           </>
         )}
@@ -911,4 +886,5 @@ const Settings: React.FC = () => {
 };
 
 export default Settings;
+
 

@@ -1,10 +1,7 @@
 import {useEffect, useMemo, useRef} from 'react';
 
 import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
-import {
-  evaluateHypoNowAndNotify,
-  HypoNowPersonalizationProfile,
-} from 'app/services/proactiveCare/hypoNowMvp';
+import {evaluateHypoNowAndNotify} from 'app/services/proactiveCare/hypoNowMvp';
 
 /**
  * POC hook: monitor latest CGM snapshot and trigger a single hypo-now proactive flow.
@@ -18,10 +15,8 @@ import {
  */
 export function useHypoNowMvp(params?: {
   enabled?: boolean;
-  profile?: HypoNowPersonalizationProfile;
 }) {
   const enabled = params?.enabled ?? true;
-  const profile = params?.profile;
 
   const {snapshot} = useLatestNightscoutSnapshot({
     pollingEnabled: enabled,
@@ -45,9 +40,8 @@ export function useHypoNowMvp(params?: {
 
     evaluateHypoNowAndNotify({
       latestBgSample: latestBg,
-      profile,
     }).catch(err => {
       console.warn('useHypoNowMvp: failed to evaluate hypo_now flow', err);
     });
-  }, [enabled, latestBg, profile]);
+  }, [enabled, latestBg]);
 }

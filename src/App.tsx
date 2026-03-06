@@ -174,14 +174,7 @@ const App: () => React.ReactElement = () => {
   const {settings: proactiveSettings} = useProactiveCareSettings();
 
   useHypoNowMvp({
-    enabled: !isE2E && proactiveSettings.hypoNowEnabled,
-    profile: {
-      language: proactiveSettings.language,
-      preferredFastCarb: proactiveSettings.preferredFastCarb,
-      treatmentHints: {
-        avoidChocolateForImmediateHypo: proactiveSettings.avoidChocolateForImmediateHypo,
-      },
-    },
+    enabled: !isE2E && proactiveSettings.enabled && proactiveSettings.events.hypoNow,
   });
 
   React.useEffect(() => {

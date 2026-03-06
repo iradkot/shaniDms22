@@ -2,10 +2,12 @@ import React, {createContext, useCallback, useContext, useEffect, useMemo, useSt
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type ProactiveCareSettings = {
-  hypoNowEnabled: boolean;
-  language: 'he' | 'en';
-  preferredFastCarb: string;
-  avoidChocolateForImmediateHypo: boolean;
+  enabled: boolean;
+  events: {
+    hypoNow: boolean;
+    hypoRiskSoon: boolean;
+    postHypoFollowUp: boolean;
+  };
 };
 
 type ProactiveCareSettingsContextValue = {
@@ -21,10 +23,12 @@ type ProactiveCareSettingsContextValue = {
 const STORAGE_KEY = 'proactive.care.settings.v1';
 
 const DEFAULT_SETTINGS: ProactiveCareSettings = {
-  hypoNowEnabled: true,
-  language: 'he',
-  preferredFastCarb: 'מיץ תפוזים קטן',
-  avoidChocolateForImmediateHypo: true,
+  enabled: true,
+  events: {
+    hypoNow: true,
+    hypoRiskSoon: false,
+    postHypoFollowUp: true,
+  },
 };
 
 const ProactiveCareSettingsContext = createContext<ProactiveCareSettingsContextValue>({
@@ -53,8 +57,28 @@ export const ProactiveCareSettingsProvider = ({children}: {children: React.React
           return;
         }
 
-        const parsed = JSON.parse(stored) as Partial<ProactiveCareSettings>;
-        setSettings(prev => ({...prev, ...parsed}));
+        const parsed = JSON.parse(stored) as any;
+
+        const migrated: Partial<ProactiveCareSettings> = {
+          ...parsed,
+        };
+
+        if (typeof parsed?.hypoNowEnabled === 'boolean') {
+          migrated.enabled = parsed.hypoNowEnabled;
+          migrated.events = {
+            ...DEFAULT_SETTINGS.events,
+            hypoNow: parsed.hypoNowEnabled,
+          };
+        }
+
+        setSettings(prev => ({
+          ...prev,
+          ...migrated,
+          events: {
+            ...prev.events,
+            ...(migrated.events ?? {}),
+          },
+        }));
       } finally {
         if (isMounted) setIsLoaded(true);
       }
