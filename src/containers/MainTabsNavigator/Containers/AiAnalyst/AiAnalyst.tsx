@@ -12,6 +12,7 @@ import DashboardScreen from './screens/DashboardScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import HistoryDetailScreen from './screens/HistoryDetailScreen';
 import MissionChatScreen from './screens/MissionChatScreen';
+import EvidenceScreen from './screens/EvidenceScreen';
 import {Container, Header, Title, Subtle, Card, Button, ButtonText} from './styled';
 
 // ---------------------------------------------------------------------------
@@ -91,6 +92,16 @@ const AiAnalyst: React.FC = () => {
     );
   }
 
+  // ── Evidence page ─────────────────────────────────────────────────────
+  if (engine.state.mode === 'evidence') {
+    return (
+      <EvidenceScreen
+        request={engine.state.request}
+        onBack={engine.backToMissionFromEvidence}
+      />
+    );
+  }
+
   // ── Active mission (chat) ─────────────────────────────────────────────
   if (engine.state.mode === 'mission') {
     return (
@@ -106,6 +117,7 @@ const AiAnalyst: React.FC = () => {
         onCancel={engine.cancelActiveRun}
         onBack={engine.goBackToDashboard}
         onExport={engine.exportSession}
+        onOpenEvidence={engine.openEvidence}
         scrollRef={engine.scrollRef}
         markdown={engine.markdown}
       />

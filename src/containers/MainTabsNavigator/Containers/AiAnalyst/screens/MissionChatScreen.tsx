@@ -17,7 +17,8 @@ import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {addOpacity} from 'app/style/styling.utils';
 import {LlmChatMessage} from 'app/services/llm/llmTypes';
 
-import {MissionKey, MarkdownConfig} from '../types';
+import {EvidenceRequest, MissionKey, MarkdownConfig} from '../types';
+import {extractEvidenceLinks, stripEvidenceTags} from '../helpers/evidenceLinks';
 import {DISCLOSURE_TEXT, SCROLL_DELAY_MS, getMissionTitle} from '../constants';
 import {
   Container,
@@ -46,6 +47,7 @@ export interface MissionChatScreenProps {
   onCancel: () => void;
   onBack: () => void;
   onExport: () => void;
+  onOpenEvidence: (request: EvidenceRequest) => void;
   scrollRef: RefObject<ScrollView | null>;
   markdown: MarkdownConfig;
 }
@@ -66,6 +68,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
   onCancel,
   onBack,
   onExport,
+  onOpenEvidence,
   scrollRef,
   markdown,
 }) => {
@@ -122,17 +125,46 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         >
-          {uiMessages.map((m, idx) => (
-            <MessageBubble key={String(idx)} role={m.role === 'user' ? 'user' : 'assistant'}>
-              {m.role === 'assistant' ? (
-                <Markdown markdownit={markdown.instance} rules={markdown.rules} style={markdown.style}>
-                  {m.content}
-                </Markdown>
-              ) : (
-                <MessageText selectable>{m.content}</MessageText>
-              )}
-            </MessageBubble>
-          ))}
+          {uiMessages.map((m, idx) => {
+            const evidenceLinks = m.role === 'assistant' ? extractEvidenceLinks(m.content) : [];
+            const visibleText = m.role === 'assistant' ? stripEvidenceTags(m.content) : m.content;
+
+            return (
+              <MessageBubble key={String(idx)} role={m.role === 'user' ? 'user' : 'assistant'}>
+                {m.role === 'assistant' ? (
+                  <Markdown markdownit={markdown.instance} rules={markdown.rules} style={markdown.style}>
+                    {visibleText}
+                  </Markdown>
+                ) : (
+                  <MessageText selectable>{visibleText}</MessageText>
+                )}
+
+                {evidenceLinks.length > 0 ? (
+                  <View style={{marginTop: theme.spacing.sm, gap: theme.spacing.xs}}>
+                    {evidenceLinks.map((link, linkIdx) => (
+                      <Pressable
+                        key={`${link.request.kind}-${link.request.rangeDays}-${linkIdx}`}
+                        onPress={() => onOpenEvidence(link.request)}
+                        style={{
+                          borderWidth: 1,
+                          borderColor: addOpacity(theme.accentColor, 0.45),
+                          borderRadius: 10,
+                          paddingVertical: 8,
+                          paddingHorizontal: 10,
+                          alignSelf: 'flex-start',
+                          backgroundColor: addOpacity(theme.accentColor, 0.12),
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={link.label}
+                      >
+                        <Text style={{color: theme.textColor, fontWeight: '600'}}>{link.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+              </MessageBubble>
+            );
+          })}
 
           {isBusy ? (
             <View style={{marginTop: 6, marginLeft: 12, flexDirection: 'row', alignItems: 'center'}}>

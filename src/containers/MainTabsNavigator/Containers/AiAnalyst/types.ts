@@ -11,13 +11,21 @@ export type MissionKey = 'openChat' | 'hypoDetective' | 'userBehavior' | 'loopSe
 
 export type AnalystMode = 'userBehavior' | 'loopSettings';
 
+export type EvidenceKind = 'agp' | 'tir';
+
+export interface EvidenceRequest {
+  kind: EvidenceKind;
+  rangeDays: number;
+}
+
 export type ScreenState =
   | {mode: 'locked'}
   | {mode: 'dashboard'}
   | {mode: 'modeSelection'}
   | {mode: 'history'}
   | {mode: 'historyDetail'; id: string}
-  | {mode: 'mission'; mission: MissionKey};
+  | {mode: 'mission'; mission: MissionKey}
+  | {mode: 'evidence'; mission: MissionKey; request: EvidenceRequest};
 
 export type ToolEnvelope =
   | {type: 'tool_call'; name: AiAnalystToolName; args?: any}
@@ -72,6 +80,8 @@ export interface AiAnalystEngine {
   startUserBehavior: () => Promise<void>;
   startLoopSettingsAdvisor: () => Promise<void>;
   sendFollowUp: () => Promise<void>;
+  openEvidence: (request: EvidenceRequest) => void;
+  backToMissionFromEvidence: () => void;
   cancelActiveRun: () => void;
   goBackToDashboard: () => void;
   exportSession: () => Promise<void>;
