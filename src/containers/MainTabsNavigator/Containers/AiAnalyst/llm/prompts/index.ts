@@ -29,6 +29,7 @@ const EVIDENCE_LINK_INSTRUCTION =
   '- When user asks to see Time in Range, append exactly: [[evidence:tir:<days>]] (example [[evidence:tir:7]]).\n' +
   '- When recommendation is meal/carbs/CR-related, append [[evidence:meal:<days>]] (example [[evidence:meal:7]]).\n' +
   '- If you provide a recommendation and mention supporting data, append at least one matching evidence tag.\n' +
+  '- For meal/CR recommendations, cite 2-3 concrete meal dates from data before the recommendation.\n' +
   '- Keep the tag on a separate line near the end of your reply.';
 
 // ---------------------------------------------------------------------------

@@ -1436,6 +1436,29 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           ? Math.round(mealsWithScore.reduce((s, m) => s + (m.tirScore ?? 0), 0) / mealsWithScore.length)
           : null;
 
+        const topProblemMeals = [...mealResults]
+          .sort((a, b) => {
+            const aRisk = (a.riseMgdl ?? 0) + Math.max(0, 80 - (a.tirScore ?? 80));
+            const bRisk = (b.riseMgdl ?? 0) + Math.max(0, 80 - (b.tirScore ?? 80));
+            return bRisk - aRisk;
+          })
+          .slice(0, 3)
+          .map(m => ({
+            date: m.date,
+            mealType: m.mealType,
+            carbsEnteredG: m.carbsEnteredG,
+            bgAtMeal: m.bgAtMeal,
+            peakBg: m.peakBg,
+            riseMgdl: m.riseMgdl,
+            tirScore: m.tirScore,
+            likelyDriver:
+              (m.riseMgdl ?? 0) > 80
+                ? 'possible carb-ratio or pre-bolus timing mismatch'
+                : (m.tirScore ?? 100) < 60
+                  ? 'prolonged post-meal out-of-range pattern'
+                  : 'moderate post-meal variability',
+          }));
+
         return {
           ok: true,
           result: {
@@ -1458,6 +1481,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
                 overEstimatedPct: withAbsorption.length ? Math.round((overEstimated / withAbsorption.length) * 100) : null,
                 underEstimatedPct: withAbsorption.length ? Math.round((underEstimated / withAbsorption.length) * 100) : null,
               },
+              topProblemMeals,
             },
             meals: mealResults.slice(0, 30),
           },

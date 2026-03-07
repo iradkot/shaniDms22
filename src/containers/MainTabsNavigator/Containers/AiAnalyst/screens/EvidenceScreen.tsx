@@ -116,6 +116,32 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
         ) : request.kind === 'meal' ? (
           <View style={{gap: theme.spacing.md}}>
             <Text style={{fontWeight: '700', color: theme.textColor}}>
+              Top 3 meals driving the recommendation
+            </Text>
+            {(mealEvidence?.summary?.topProblemMeals ?? []).slice(0, 3).map((meal: any, idx: number) => (
+              <View
+                key={`top-${meal?.date || idx}`}
+                style={{
+                  borderWidth: 1,
+                  borderColor: addOpacity('#c62828', 0.5),
+                  borderRadius: 12,
+                  padding: 10,
+                  backgroundColor: addOpacity('#c62828', 0.08),
+                }}
+              >
+                <Text style={{fontWeight: '700', color: theme.textColor}}>
+                  {new Date(meal?.date || Date.now()).toLocaleString()} • {meal?.mealType || 'meal'}
+                </Text>
+                <Text style={{color: addOpacity(theme.textColor, 0.78), marginTop: 4}}>
+                  BG at meal: {meal?.bgAtMeal ?? '-'} | Peak: {meal?.peakBg ?? '-'} | Rise: {meal?.riseMgdl ?? '-'} mg/dL
+                </Text>
+                <Text style={{color: addOpacity(theme.textColor, 0.78), marginTop: 4}}>
+                  Why this matters: {meal?.likelyDriver || 'post-meal variability'}
+                </Text>
+              </View>
+            ))}
+
+            <Text style={{fontWeight: '700', color: theme.textColor, marginTop: 4}}>
               Recent meal responses
             </Text>
             {(mealEvidence?.meals ?? []).slice(0, 8).map((meal: any, idx: number) => {
