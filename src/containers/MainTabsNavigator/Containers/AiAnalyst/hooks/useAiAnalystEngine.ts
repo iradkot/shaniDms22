@@ -619,29 +619,50 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
   const maybeInjectEvidenceTag = useCallback((userText: string, assistantText: string): string => {
     const lower = String(userText || '').toLowerCase();
+    const assistantLower = String(assistantText || '').toLowerCase();
     const alreadyHasTag = /\[\[\s*evidence\s*:/i.test(assistantText);
 
     const rangeDays = parseRangeDaysFromText(lower) ?? 14;
 
-    const asksAgp = /\bagp\b/.test(lower) || (lower.includes('ambulatory') && lower.includes('profile'));
+    const asksAgp =
+      /\bagp\b/.test(lower) ||
+      (lower.includes('ambulatory') && lower.includes('profile')) ||
+      lower.includes('אייג׳יפי');
     const asksTir =
       lower.includes('time in range') ||
       lower.includes('tir') ||
-      (lower.includes('in range') && lower.includes('time'));
+      (lower.includes('in range') && lower.includes('time')) ||
+      lower.includes('בטווח') ||
+      lower.includes('זמן בטווח');
     const asksMealEvidence =
       lower.includes('meal') ||
       lower.includes('carb') ||
       lower.includes('ratio') ||
       lower.includes('post meal') ||
-      lower.includes('after meal');
+      lower.includes('after meal') ||
+      lower.includes('ארוחה') ||
+      lower.includes('פחמ') ||
+      lower.includes('בולוס') ||
+      lower.includes('היפו');
+
+    const assistantMentionsMealLogic =
+      assistantLower.includes('bolus') ||
+      assistantLower.includes('temp basal') ||
+      assistantLower.includes('stack') ||
+      assistantLower.includes('carb') ||
+      assistantLower.includes('ארוחה') ||
+      assistantLower.includes('בולוס') ||
+      assistantLower.includes('היפו');
 
     if (!alreadyHasTag) {
       if (asksAgp) return `${assistantText}\n\n[[evidence:agp:${rangeDays}]]`;
       if (asksTir) return `${assistantText}\n\n[[evidence:tir:${rangeDays}]]`;
-      if (asksMealEvidence) return `${assistantText}\n\n[[evidence:meal:${Math.min(rangeDays, 14)}]]`;
+      if (asksMealEvidence || assistantMentionsMealLogic) {
+        return `${assistantText}\n\n[[evidence:meal:${Math.min(rangeDays, 14)}]]\n[[evidence:agp:14]]`;
+      }
 
       const asksEvidenceForRecommendation =
-        (lower.includes('recommend') || lower.includes('advice')) &&
+        (lower.includes('recommend') || lower.includes('advice') || lower.includes('הוכח') || lower.includes('הוכחות')) &&
         (lower.includes('evidence') || lower.includes('prove') || lower.includes('proof') || lower.includes('show'));
 
       if (asksEvidenceForRecommendation) {
