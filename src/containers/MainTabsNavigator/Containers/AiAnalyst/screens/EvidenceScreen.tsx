@@ -118,31 +118,63 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
             <Text style={{fontWeight: '700', color: theme.textColor}}>
               Recent meal responses
             </Text>
-            {(mealEvidence?.meals ?? []).slice(0, 8).map((meal: any, idx: number) => (
-              <View
-                key={`${meal?.date || idx}`}
-                style={{
-                  borderWidth: 1,
-                  borderColor: addOpacity(theme.borderColor, 0.8),
-                  borderRadius: 12,
-                  padding: 10,
-                  backgroundColor: theme.white,
-                }}
-              >
-                <Text style={{fontWeight: '700', color: theme.textColor}}>
-                  {meal?.mealType || 'meal'} • {meal?.carbsEnteredG ?? '-'}g carbs
-                </Text>
-                <Text style={{color: addOpacity(theme.textColor, 0.75), marginTop: 4}}>
-                  BG at meal: {meal?.bgAtMeal ?? '-'} mg/dL | Peak: {meal?.peakBg ?? '-'} mg/dL | Rise: {meal?.riseMgdl ?? '-'} mg/dL
-                </Text>
-                <Text style={{color: addOpacity(theme.textColor, 0.75), marginTop: 2}}>
-                  3h in-range score: {meal?.tirScore ?? '-'}%
-                </Text>
-              </View>
-            ))}
+            {(mealEvidence?.meals ?? []).slice(0, 8).map((meal: any, idx: number) => {
+              const rise = typeof meal?.riseMgdl === 'number' ? meal.riseMgdl : null;
+              const tirScore = typeof meal?.tirScore === 'number' ? meal.tirScore : null;
+
+              const status: 'good' | 'watch' | 'risk' =
+                rise != null && rise <= 45 && (tirScore == null || tirScore >= 75)
+                  ? 'good'
+                  : rise != null && rise <= 80 && (tirScore == null || tirScore >= 60)
+                    ? 'watch'
+                    : 'risk';
+
+              const statusColor =
+                status === 'good' ? '#2e7d32' : status === 'watch' ? '#f9a825' : '#c62828';
+              const statusLabel = status === 'good' ? 'Looks stable' : status === 'watch' ? 'Can improve' : 'Needs attention';
+
+              const improvementHint =
+                status === 'good'
+                  ? 'Keep this pattern.'
+                  : rise != null && rise > 80
+                    ? 'Likely carb-ratio or pre-bolus timing issue. Consider a cautious CR/timing adjustment.'
+                    : 'Review meal timing and carb entry accuracy for this meal.';
+
+              return (
+                <View
+                  key={`${meal?.date || idx}`}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: addOpacity(statusColor, 0.55),
+                    borderRadius: 12,
+                    padding: 10,
+                    backgroundColor: addOpacity(statusColor, 0.08),
+                  }}
+                >
+                  <Text style={{fontWeight: '700', color: theme.textColor}}>
+                    {meal?.mealType || 'meal'} • {meal?.carbsEnteredG ?? '-'}g carbs
+                  </Text>
+                  <Text style={{color: statusColor, marginTop: 4, fontWeight: '700'}}>{statusLabel}</Text>
+                  <Text style={{color: addOpacity(theme.textColor, 0.78), marginTop: 4}}>
+                    BG at meal: {meal?.bgAtMeal ?? '-'} mg/dL | Peak: {meal?.peakBg ?? '-'} mg/dL | Rise: {meal?.riseMgdl ?? '-'} mg/dL
+                  </Text>
+                  <Text style={{color: addOpacity(theme.textColor, 0.78), marginTop: 2}}>
+                    3h in-range score: {meal?.tirScore ?? '-'}%
+                  </Text>
+                  <Text style={{color: addOpacity(theme.textColor, 0.78), marginTop: 6}}>
+                    What to improve: {improvementHint}
+                  </Text>
+                </View>
+              );
+            })}
             <Text style={{color: addOpacity(theme.textColor, 0.72)}}>
               Meals analyzed: {mealEvidence?.mealCount ?? 0}
             </Text>
+            {mealEvidence?.summary?.evidenceFallback === 'bg_response_only' ? (
+              <Text style={{color: addOpacity(theme.textColor, 0.72)}}>
+                Note: Absorption (COB) data was partial, so this view is based on glucose meal-response evidence.
+              </Text>
+            ) : null}
           </View>
         ) : (
           <View style={{gap: theme.spacing.md}}>

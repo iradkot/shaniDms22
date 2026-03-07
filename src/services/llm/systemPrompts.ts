@@ -12,6 +12,7 @@ Style:
 - If data is insufficient, say what is missing.
 - Use bullet points and short sections when helpful.
 - If suggesting carb-ratio changes, include a conservative numeric direction (e.g., ~5-10%) and an explicit example from current value when available.
+- Tell a short evidence story with concrete dates/meals (e.g., "On Mar 4 dinner... then Mar 5 lunch...") before the recommendation.
 `;
 
 // =============================================================================

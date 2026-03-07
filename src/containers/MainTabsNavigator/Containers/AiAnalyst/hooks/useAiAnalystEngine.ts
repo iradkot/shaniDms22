@@ -671,9 +671,9 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
     const hasEvidenceTag = /\[\[\s*evidence\s*:/i.test(out);
     const saysNoData =
-      /don['’]t have[^.\n]*(data|agp|time in range|tir)/i.test(out) ||
+      /don['’]t have[^.\n]*(data|agp|time in range|tir|absorption)/i.test(out) ||
       /data (is|are) unavailable/i.test(out) ||
-      /unable to (find|access).*(data|agp|tir)/i.test(out);
+      /unable to (find|access).*(data|agp|tir|absorption)/i.test(out);
 
     if (hasEvidenceTag && saysNoData) {
       out = out.replace(

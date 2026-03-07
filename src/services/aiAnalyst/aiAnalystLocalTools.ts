@@ -1368,6 +1368,17 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
             const windowEnd = ct.timestamp + TIR_WINDOW;
             const windowSamples = enrichedBg.filter(s => s.date >= ct.timestamp && s.date <= windowEnd);
 
+            const findNearestBg = (targetTs: number, windowMs: number = 15 * 60 * 1000): number | null => {
+              const nearby = enrichedBg
+                .filter(s => Math.abs(s.date - targetTs) <= windowMs)
+                .sort((a, b) => Math.abs(a.date - targetTs) - Math.abs(b.date - targetTs));
+              return nearby[0]?.sgv ?? null;
+            };
+
+            const bgAtMeal = findNearestBg(ct.timestamp);
+            const peakBg = windowSamples.length ? Math.max(...windowSamples.map(s => s.sgv)) : null;
+            const riseMgdl = bgAtMeal != null && peakBg != null ? Math.round(peakBg - bgAtMeal) : null;
+
             // TIR score
             let tirScore: number | null = null;
             if (windowSamples.length >= MIN_BG) {
@@ -1397,6 +1408,9 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               date: new Date(ct.timestamp).toISOString(),
               mealType: classifyMeal(ct.timestamp),
               carbsEnteredG: ct.carbs,
+              bgAtMeal,
+              peakBg,
+              riseMgdl,
               carbsAbsorbedG: absorbed != null ? Math.round(absorbed) : null,
               cobRemainingG: cobRemaining != null ? Math.round(cobRemaining) : null,
               absorptionPct,
@@ -1434,6 +1448,8 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               totalCarbsAbsorbedG: totalAbsorbed,
               avgAbsorptionPct,
               avgTirScore,
+              absorptionCoveragePct: Math.round((withAbsorption.length / Math.max(1, mealResults.length)) * 100),
+              evidenceFallback: withAbsorption.length === 0 ? 'bg_response_only' : null,
               estimationBreakdown: {
                 accurate,
                 overEstimated,
