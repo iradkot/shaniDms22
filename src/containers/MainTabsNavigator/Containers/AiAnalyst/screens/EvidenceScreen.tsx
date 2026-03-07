@@ -25,6 +25,7 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [bgData, setBgData] = useState<BgSample[]>([]);
   const [mealEvidence, setMealEvidence] = useState<any | null>(null);
+  const [focusDateIso, setFocusDateIso] = useState<string | null>(request.focusDateIso ?? null);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -36,6 +37,10 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
       sub.remove();
     };
   }, [onBack]);
+
+  useEffect(() => {
+    setFocusDateIso(request.focusDateIso ?? null);
+  }, [request.focusDateIso]);
 
   useEffect(() => {
     let mounted = true;
@@ -83,6 +88,20 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
     return `Time in Range for last ${request.rangeDays} days`;
   }, [request.kind, request.rangeDays]);
 
+  const normalizedFocusDate = useMemo(() => {
+    if (!focusDateIso) return null;
+    const d = new Date(focusDateIso);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+  }, [focusDateIso]);
+
+  const isFocusedMeal = (mealDate: string | undefined) => {
+    if (!normalizedFocusDate || !mealDate) return false;
+    const d = new Date(mealDate);
+    if (Number.isNaN(d.getTime())) return false;
+    return d.toISOString().slice(0, 10) === normalizedFocusDate;
+  };
+
   return (
     <Container>
       <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
@@ -100,6 +119,11 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
         <View style={{marginTop: theme.spacing.sm}}>
           <Title>Evidence</Title>
           <Subtle>{subtitle}</Subtle>
+          {normalizedFocusDate ? (
+            <Text style={{marginTop: 6, color: addOpacity(theme.accentColor, 0.9), fontWeight: '700'}}>
+              Focused date: {normalizedFocusDate}
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -147,6 +171,7 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
             {(mealEvidence?.meals ?? []).slice(0, 8).map((meal: any, idx: number) => {
               const rise = typeof meal?.riseMgdl === 'number' ? meal.riseMgdl : null;
               const tirScore = typeof meal?.tirScore === 'number' ? meal.tirScore : null;
+              const focused = isFocusedMeal(meal?.date);
 
               const status: 'good' | 'watch' | 'risk' =
                 rise != null && rise <= 45 && (tirScore == null || tirScore >= 75)
@@ -170,17 +195,22 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
                 <View
                   key={`${meal?.date || idx}`}
                   style={{
-                    borderWidth: 1,
-                    borderColor: addOpacity(statusColor, 0.55),
+                    borderWidth: focused ? 2 : 1,
+                    borderColor: focused ? theme.accentColor : addOpacity(statusColor, 0.55),
                     borderRadius: 12,
                     padding: 10,
-                    backgroundColor: addOpacity(statusColor, 0.08),
+                    backgroundColor: focused ? addOpacity(theme.accentColor, 0.12) : addOpacity(statusColor, 0.08),
                   }}
                 >
                   <Text style={{fontWeight: '700', color: theme.textColor}}>
                     {meal?.mealType || 'meal'} • {meal?.carbsEnteredG ?? '-'}g carbs
                   </Text>
-                  <Text style={{color: statusColor, marginTop: 4, fontWeight: '700'}}>{statusLabel}</Text>
+                  <Text style={{color: addOpacity(theme.textColor, 0.72), marginTop: 2}}>
+                    {meal?.date ? new Date(meal.date).toLocaleString() : '-'}
+                  </Text>
+                  <Text style={{color: statusColor, marginTop: 4, fontWeight: '700'}}>
+                    {statusLabel}{focused ? ' • Focused' : ''}
+                  </Text>
                   <Text style={{color: addOpacity(theme.textColor, 0.78), marginTop: 4}}>
                     BG at meal: {meal?.bgAtMeal ?? '-'} mg/dL | Peak: {meal?.peakBg ?? '-'} mg/dL | Rise: {meal?.riseMgdl ?? '-'} mg/dL
                   </Text>

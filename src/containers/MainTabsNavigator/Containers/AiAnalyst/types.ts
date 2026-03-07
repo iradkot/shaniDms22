@@ -16,6 +16,7 @@ export type EvidenceKind = 'agp' | 'tir' | 'meal';
 export interface EvidenceRequest {
   kind: EvidenceKind;
   rangeDays: number;
+  focusDateIso?: string;
 }
 
 export type ScreenState =

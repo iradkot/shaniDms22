@@ -1,6 +1,6 @@
 import {EvidenceRequest} from '../types';
 
-const EVIDENCE_TAG_RE = /\[\[\s*evidence\s*:\s*(agp|tir|meal)\s*:\s*(\d{1,3})\s*\]\]/gi;
+const EVIDENCE_TAG_RE = /\[\[\s*evidence\s*:\s*(agp|tir|meal)\s*:\s*(\d{1,3})(?:\s*:\s*([^\]\s]+))?\s*\]\]/gi;
 
 export interface EvidenceLink {
   request: EvidenceRequest;
@@ -19,19 +19,21 @@ export function extractEvidenceLinks(text: string): EvidenceLink[] {
   while ((match = EVIDENCE_TAG_RE.exec(text)) !== null) {
     const kind = (match[1] || '').toLowerCase() as 'agp' | 'tir' | 'meal';
     const rangeDays = Math.max(1, Math.min(90, Number(match[2] || 14)));
-    const key = `${kind}:${rangeDays}`;
+    const focusDateIso = typeof match[3] === 'string' && match[3].trim() ? match[3].trim() : undefined;
+    const key = `${kind}:${rangeDays}:${focusDateIso ?? ''}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
-    const label =
+    const baseLabel =
       kind === 'agp'
         ? `Open AGP (${rangeDays}d)`
         : kind === 'tir'
           ? `Open Time in Range (${rangeDays}d)`
           : `Open Meal Response (${rangeDays}d)`;
+    const label = focusDateIso ? `${baseLabel} • focus` : baseLabel;
 
     out.push({
-      request: {kind, rangeDays},
+      request: {kind, rangeDays, focusDateIso},
       label,
     });
   }
