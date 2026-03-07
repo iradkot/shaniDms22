@@ -9,6 +9,7 @@ import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {BgSample} from 'app/types/day_bgs.types';
 import AGPSummary from 'app/components/charts/AGPGraph/components/AGPSummary';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
+import {runAiAnalystTool} from 'app/services/aiAnalyst/aiAnalystLocalTools';
 
 import {EvidenceRequest} from '../types';
 import {Container, Title, Subtle} from '../styled';
@@ -23,6 +24,7 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
   const [isLoading, setIsLoading] = useState(true);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [bgData, setBgData] = useState<BgSample[]>([]);
+  const [mealEvidence, setMealEvidence] = useState<any | null>(null);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -42,11 +44,25 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
       setIsLoading(true);
       setErrorText(null);
       try {
-        const end = new Date();
-        const start = new Date(end.getTime() - request.rangeDays * 24 * 60 * 60 * 1000);
-        const rows = await fetchBgDataForDateRangeUncached(start, end, {throwOnError: true});
-        if (!mounted) return;
-        setBgData(rows ?? []);
+        if (request.kind === 'meal') {
+          const mealRes = await runAiAnalystTool('getMealAbsorptionData', {
+            daysBack: request.rangeDays,
+            mealType: 'all',
+          });
+          if (!mounted) return;
+          if (!mealRes.ok) {
+            throw new Error(mealRes.error || 'Failed to load meal evidence');
+          }
+          setMealEvidence(mealRes.result);
+          setBgData([]);
+        } else {
+          const end = new Date();
+          const start = new Date(end.getTime() - request.rangeDays * 24 * 60 * 60 * 1000);
+          const rows = await fetchBgDataForDateRangeUncached(start, end, {throwOnError: true});
+          if (!mounted) return;
+          setBgData(rows ?? []);
+          setMealEvidence(null);
+        }
       } catch (e: any) {
         if (!mounted) return;
         setErrorText(e?.message ? String(e.message) : 'Failed to load evidence data');
@@ -63,6 +79,7 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
 
   const subtitle = useMemo(() => {
     if (request.kind === 'agp') return `AGP for last ${request.rangeDays} days`;
+    if (request.kind === 'meal') return `Meal response for last ${request.rangeDays} days`;
     return `Time in Range for last ${request.rangeDays} days`;
   }, [request.kind, request.rangeDays]);
 
@@ -96,6 +113,37 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
           <Text style={{color: theme.belowRangeColor}}>{errorText}</Text>
         ) : request.kind === 'agp' ? (
           <AGPSummary bgData={bgData} showFullScreenButton={false} />
+        ) : request.kind === 'meal' ? (
+          <View style={{gap: theme.spacing.md}}>
+            <Text style={{fontWeight: '700', color: theme.textColor}}>
+              Recent meal responses
+            </Text>
+            {(mealEvidence?.meals ?? []).slice(0, 8).map((meal: any, idx: number) => (
+              <View
+                key={`${meal?.date || idx}`}
+                style={{
+                  borderWidth: 1,
+                  borderColor: addOpacity(theme.borderColor, 0.8),
+                  borderRadius: 12,
+                  padding: 10,
+                  backgroundColor: theme.white,
+                }}
+              >
+                <Text style={{fontWeight: '700', color: theme.textColor}}>
+                  {meal?.mealType || 'meal'} • {meal?.carbsEnteredG ?? '-'}g carbs
+                </Text>
+                <Text style={{color: addOpacity(theme.textColor, 0.75), marginTop: 4}}>
+                  BG at meal: {meal?.bgAtMeal ?? '-'} mg/dL | Peak: {meal?.peakBg ?? '-'} mg/dL | Rise: {meal?.riseMgdl ?? '-'} mg/dL
+                </Text>
+                <Text style={{color: addOpacity(theme.textColor, 0.75), marginTop: 2}}>
+                  3h in-range score: {meal?.tirScore ?? '-'}%
+                </Text>
+              </View>
+            ))}
+            <Text style={{color: addOpacity(theme.textColor, 0.72)}}>
+              Meals analyzed: {mealEvidence?.mealCount ?? 0}
+            </Text>
+          </View>
         ) : (
           <View style={{gap: theme.spacing.md}}>
             <TimeInRangeRow bgData={bgData} />

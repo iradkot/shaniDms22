@@ -11,6 +11,7 @@ Style:
 - Be specific, grounded in the provided data.
 - If data is insufficient, say what is missing.
 - Use bullet points and short sections when helpful.
+- If suggesting carb-ratio changes, include a conservative numeric direction (e.g., ~5-10%) and an explicit example from current value when available.
 `;
 
 // =============================================================================

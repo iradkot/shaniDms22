@@ -628,17 +628,24 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       lower.includes('time in range') ||
       lower.includes('tir') ||
       (lower.includes('in range') && lower.includes('time'));
+    const asksMealEvidence =
+      lower.includes('meal') ||
+      lower.includes('carb') ||
+      lower.includes('ratio') ||
+      lower.includes('post meal') ||
+      lower.includes('after meal');
 
     if (!alreadyHasTag) {
       if (asksAgp) return `${assistantText}\n\n[[evidence:agp:${rangeDays}]]`;
       if (asksTir) return `${assistantText}\n\n[[evidence:tir:${rangeDays}]]`;
+      if (asksMealEvidence) return `${assistantText}\n\n[[evidence:meal:${Math.min(rangeDays, 14)}]]`;
 
       const asksEvidenceForRecommendation =
         (lower.includes('recommend') || lower.includes('advice')) &&
         (lower.includes('evidence') || lower.includes('prove') || lower.includes('proof') || lower.includes('show'));
 
       if (asksEvidenceForRecommendation) {
-        return `${assistantText}\n\n[[evidence:agp:14]]\n[[evidence:tir:7]]`;
+        return `${assistantText}\n\n[[evidence:meal:7]]\n[[evidence:agp:14]]`;
       }
     }
 
@@ -649,6 +656,13 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     if (!text) return text;
 
     let out = text;
+
+    const mentionsCarbRatio = /carb ratio|carbohydrate ratio|cr\b/i.test(out);
+    const hasPercent = /\b\d{1,2}\s*%/.test(out);
+    const hasRatioExample = /\b\d+\s*:\s*\d+(\.\d+)?\b/.test(out);
+    if (mentionsCarbRatio && !hasPercent && !hasRatioExample) {
+      out += '\n\nPractical starting point: consider a conservative carb-ratio adjustment of about 5-10%, then monitor meal responses for 3-7 days.';
+    }
 
     out = out.replace(
       /\b(discuss|review|check)\b[^.\n]*(clinician|doctor|care team|healthcare provider)[^.\n]*\.?/gi,
