@@ -26,7 +26,7 @@ import {
   upsertAiAnalystConversationSnapshot,
 } from 'app/services/aiAnalyst/aiAnalystHistory';
 
-import {ScreenState, AnalystMode, AiAnalystEngine} from '../types';
+import {ScreenState, AnalystMode, AiAnalystEngine, EvidenceRequest, MissionKey} from '../types';
 import {
   DISCLOSURE_TEXT,
   HYPO_DETECTIVE_RANGE_DAYS,
@@ -46,6 +46,7 @@ import {
   SCROLL_DELAY_MS,
   MAX_EVENTS_WITH_DATES,
   MAX_EVENTS_DEFAULT,
+  MAX_CONTEXT_MESSAGES,
   EMPTY_RESPONSE_FALLBACK,
   makeConversationId,
   temperatureForModel,
@@ -128,6 +129,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [analystMode, setAnalystMode] = useState<AnalystMode | null>(null);
+  const activeMissionRef = useRef<MissionKey>('openChat');
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -269,6 +271,86 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   // Mission starters
   // ====================================================================
 
+  const startOpenChat = useCallback(async () => {
+    if (!provider) return;
+    const {runId, signal, conversationId: nextId} = initMission('Preparing context…', null);
+
+    try {
+      const [cgmResult, insulinResult, profileResult] = await Promise.all([
+        runAiAnalystTool('getCgmSamples', {rangeDays: 14, maxSamples: 400}),
+        runAiAnalystTool('getInsulinSummary', {rangeDays: 14}),
+        runAiAnalystTool('getCurrentProfileSettings', {}),
+      ]);
+
+      recordDataUsed('getCgmSamples', cgmResult);
+      recordDataUsed('getInsulinSummary', insulinResult);
+      recordDataUsed('getCurrentProfileSettings', profileResult);
+      if (runSeqRef.current !== runId) return;
+
+      setProgressText('Starting chat…');
+
+      const userPrompt =
+        `Mission: Open Chat\n\n` +
+        `Start with a short, friendly greeting and one concise question asking what the user wants to focus on now.\n` +
+        `You can answer broad and random diabetes questions, but ground recommendations in available data.\n\n` +
+        `Disclosure: ${DISCLOSURE_TEXT}\n\n` +
+        `Recent CGM snapshot (14d):\n${JSON.stringify(cgmResult.ok ? cgmResult.result : 'Data unavailable')}\n\n` +
+        `Recent insulin summary (14d):\n${JSON.stringify(insulinResult.ok ? insulinResult.result : 'Data unavailable')}\n\n` +
+        `Current profile settings:\n${JSON.stringify(profileResult.ok ? profileResult.result : 'Data unavailable')}`;
+
+      const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
+      setLlmMessages(baseLlmMessages);
+
+      const {finalText, llmMessages: updatedMessages} = await runLlmToolLoop({
+        provider,
+        model: aiSettings.openAiModel,
+        systemPrompt: buildSystemPrompt(null, glucoseSettings),
+        initialMessages: baseLlmMessages,
+        maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
+        maxOutputTokens: maxOutputTokensForModel(aiSettings.openAiModel, DEFAULT_MAX_OUTPUT_TOKENS),
+        temperature: temperatureForModel(aiSettings.openAiModel, DEFAULT_TEMPERATURE),
+        abortSignal: signal,
+        callbacks: {
+          onToolStart: name => setProgressText(`Running ${name}…`),
+          onToolResult: recordDataUsed,
+          isCancelled: () => runSeqRef.current !== runId,
+        },
+      });
+      if (runSeqRef.current !== runId) return;
+
+      const assistantMessage: LlmChatMessage = {
+        role: 'assistant',
+        content: sanitizeAssistantToneAndAvailability(finalText.trim()),
+      };
+      setUiMessages([assistantMessage]);
+      setLlmMessages(updatedMessages);
+
+      await upsertAiAnalystConversationSnapshot({
+        id: nextId,
+        mission: 'openChat',
+        messages: [{role: 'assistant', content: assistantMessage.content}],
+      });
+
+      activeMissionRef.current = 'openChat';
+      setState({mode: 'mission', mission: 'openChat'});
+      setProgressText('');
+      scrollToEnd();
+    } catch (e: any) {
+      handleMissionError(e, runId, 'Failed to start Open Chat');
+    } finally {
+      finaliseMission(runId);
+    }
+  }, [
+    provider,
+    aiSettings.openAiModel,
+    glucoseSettings,
+    initMission,
+    recordDataUsed,
+    handleMissionError,
+    finaliseMission,
+    scrollToEnd,
+  ]);
+
   const startHypoDetective = useCallback(async () => {
     if (!provider) return;
     const {runId, signal, conversationId: nextId} = initMission('Starting…', null);
@@ -309,7 +391,10 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       });
       if (runSeqRef.current !== runId) return;
 
-      const assistantMessage: LlmChatMessage = {role: 'assistant', content: finalText.trim()};
+      const assistantMessage: LlmChatMessage = {
+        role: 'assistant',
+        content: sanitizeAssistantToneAndAvailability(finalText.trim()),
+      };
       setUiMessages([assistantMessage]);
       setLlmMessages(updatedMessages);
 
@@ -319,6 +404,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         messages: [{role: 'assistant', content: assistantMessage.content}],
       });
 
+      activeMissionRef.current = 'hypoDetective';
       setState({mode: 'mission', mission: 'hypoDetective'});
       setProgressText('');
       scrollToEnd();
@@ -377,7 +463,10 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       if (runSeqRef.current !== runId) return;
 
       const finalText = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
-      const assistantMessage: LlmChatMessage = {role: 'assistant', content: finalText};
+      const assistantMessage: LlmChatMessage = {
+        role: 'assistant',
+        content: sanitizeAssistantToneAndAvailability(finalText),
+      };
       setUiMessages([assistantMessage]);
       setLlmMessages([...baseLlmMessages, assistantMessage]);
 
@@ -387,6 +476,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         messages: [{role: 'assistant', content: assistantMessage.content}],
       });
 
+      activeMissionRef.current = 'userBehavior';
       setState({mode: 'mission', mission: 'userBehavior'});
       setProgressText('');
       scrollToEnd();
@@ -442,7 +532,10 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       if (runSeqRef.current !== runId) return;
 
       const finalText = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
-      const assistantMessage: LlmChatMessage = {role: 'assistant', content: finalText};
+      const assistantMessage: LlmChatMessage = {
+        role: 'assistant',
+        content: sanitizeAssistantToneAndAvailability(finalText),
+      };
       setUiMessages([assistantMessage]);
       setLlmMessages([...baseLlmMessages, assistantMessage]);
 
@@ -452,6 +545,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         messages: [{role: 'assistant', content: assistantMessage.content}],
       });
 
+      activeMissionRef.current = 'loopSettings';
       setState({mode: 'mission', mission: 'loopSettings'});
       setProgressText('');
       scrollToEnd();
@@ -502,6 +596,81 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     },
     [glucoseSettings.hyper, glucoseSettings.hypo],
   );
+
+  /** Keep only recent context to reduce latency/cost while preserving tool results. */
+  const buildContextWindow = useCallback((messages: LlmChatMessage[]): LlmChatMessage[] => {
+    if (!Array.isArray(messages) || messages.length <= MAX_CONTEXT_MESSAGES) return messages;
+
+    const recent = messages.slice(-MAX_CONTEXT_MESSAGES);
+    const hasToolResultsInRecent = recent.some(
+      m => m.role === 'user' && typeof m.content === 'string' && m.content.startsWith('Tool result ('),
+    );
+
+    if (hasToolResultsInRecent) return recent;
+
+    const latestToolResult = [...messages]
+      .reverse()
+      .find(
+        m => m.role === 'user' && typeof m.content === 'string' && m.content.startsWith('Tool result ('),
+      );
+
+    return latestToolResult ? [latestToolResult, ...recent] : recent;
+  }, []);
+
+  const maybeInjectEvidenceTag = useCallback((userText: string, assistantText: string): string => {
+    const lower = String(userText || '').toLowerCase();
+    const alreadyHasTag = /\[\[\s*evidence\s*:/i.test(assistantText);
+
+    const rangeDays = parseRangeDaysFromText(lower) ?? 14;
+
+    const asksAgp = /\bagp\b/.test(lower) || (lower.includes('ambulatory') && lower.includes('profile'));
+    const asksTir =
+      lower.includes('time in range') ||
+      lower.includes('tir') ||
+      (lower.includes('in range') && lower.includes('time'));
+
+    if (!alreadyHasTag) {
+      if (asksAgp) return `${assistantText}\n\n[[evidence:agp:${rangeDays}]]`;
+      if (asksTir) return `${assistantText}\n\n[[evidence:tir:${rangeDays}]]`;
+
+      const asksEvidenceForRecommendation =
+        (lower.includes('recommend') || lower.includes('advice')) &&
+        (lower.includes('evidence') || lower.includes('prove') || lower.includes('proof') || lower.includes('show'));
+
+      if (asksEvidenceForRecommendation) {
+        return `${assistantText}\n\n[[evidence:agp:14]]\n[[evidence:tir:7]]`;
+      }
+    }
+
+    return assistantText;
+  }, []);
+
+  const sanitizeAssistantToneAndAvailability = useCallback((text: string): string => {
+    if (!text) return text;
+
+    let out = text;
+
+    out = out.replace(
+      /\b(discuss|review|check)\b[^.\n]*(clinician|doctor|care team|healthcare provider)[^.\n]*\.?/gi,
+      'review this in-app and adjust your self-management plan based on the data shown.',
+    );
+
+    const hasEvidenceTag = /\[\[\s*evidence\s*:/i.test(out);
+    const saysNoData =
+      /don['’]t have[^.\n]*(data|agp|time in range|tir)/i.test(out) ||
+      /data (is|are) unavailable/i.test(out) ||
+      /unable to (find|access).*(data|agp|tir)/i.test(out);
+
+    if (hasEvidenceTag && saysNoData) {
+      out = out.replace(
+        /(i currently don['’]t have[^.\n]*\.?|you may want to check[^.\n]*\.?|data (is|are) unavailable[^.\n]*\.?)/gi,
+        '',
+      );
+      out = `I pulled your data and prepared the requested view.\n\n${out}`.replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    return out;
+  }, []);
 
   /** Follow-up error handler (rolls back user message for retry). */
   const handleFollowUpError = useCallback(
@@ -571,11 +740,13 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       );
       const systemPrompt = buildSystemPrompt(analystMode, glucoseSettings);
 
+      const contextWindowMessages = buildContextWindow(workingLlmMessages);
+
       const {finalText, llmMessages: updatedMessages} = await runLlmToolLoop({
         provider,
         model: aiSettings.openAiModel,
         systemPrompt,
-        initialMessages: workingLlmMessages,
+        initialMessages: contextWindowMessages,
         maxToolCalls,
         maxOutputTokens,
         temperature: temperatureForModel(aiSettings.openAiModel, DEFAULT_TEMPERATURE),
@@ -594,6 +765,8 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
       let finalOut = stripFillerSuffix(finalText);
       if (!finalOut) finalOut = EMPTY_RESPONSE_FALLBACK;
+      finalOut = maybeInjectEvidenceTag(trimmed, finalOut);
+      finalOut = sanitizeAssistantToneAndAvailability(finalOut);
 
       const assistantUiMessage: LlmChatMessage = {role: 'assistant', content: finalOut};
       setUiMessages(prev => {
@@ -612,6 +785,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     provider, input, llmMessages, aiSettings.openAiModel, analystMode,
     glucoseSettings, persistHistorySnapshot, recordDataUsed, beginRun,
     finaliseMission, scrollToEnd, maybePreFetchGlycemicEvents, handleFollowUpError,
+    buildContextWindow, maybeInjectEvidenceTag,
   ]);
 
   // ====================================================================
@@ -646,6 +820,18 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     },
     [refreshHistory],
   );
+
+  // ====================================================================
+  // Evidence navigation
+  // ====================================================================
+
+  const openEvidence = useCallback((request: EvidenceRequest) => {
+    setState({mode: 'evidence', mission: activeMissionRef.current, request});
+  }, []);
+
+  const backToMissionFromEvidence = useCallback(() => {
+    setState({mode: 'mission', mission: activeMissionRef.current});
+  }, []);
 
   // ====================================================================
   // Dashboard reset
@@ -690,12 +876,19 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     openHistory,
     clearHistory: clearAllHistory,
     deleteConversation,
+    startOpenChat,
     startHypoDetective,
     startUserBehavior,
     startLoopSettingsAdvisor,
     sendFollowUp,
+    openEvidence,
+    backToMissionFromEvidence,
     cancelActiveRun,
     goBackToDashboard,
     exportSession,
   };
 }
+
+
+
+

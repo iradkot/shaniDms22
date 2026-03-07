@@ -517,6 +517,9 @@ export class OpenAIProvider implements LlmProvider {
         const err = new Error(msg) as Error & {raw?: any; status?: number};
         err.raw = rawJson;
         err.status = res.status;
+        (err as any).isServerError = typeof res.status === 'number' && res.status >= 500;
+        (err as any).isRateLimited = res.status === 429;
+        (err as any).isTimeout = res.status === 408;
         throw err;
       }
 
@@ -602,8 +605,9 @@ export class OpenAIProvider implements LlmProvider {
             e?.isEmptyResponse === true ||
             (typeof e?.message === 'string' && /empty response from openai/i.test(e.message));
           const isIncomplete = e?.isIncompleteResponse === true;
+          const isTransientHttp = e?.isServerError === true || e?.isRateLimited === true || e?.isTimeout === true;
           return {
-            retryable: isEmpty || isIncomplete,
+            retryable: isEmpty || isIncomplete || isTransientHttp,
             kind: isEmpty ? 'empty' : isIncomplete ? 'incomplete' : 'other',
           };
         },

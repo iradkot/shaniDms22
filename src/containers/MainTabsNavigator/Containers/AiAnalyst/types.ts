@@ -7,9 +7,16 @@ import {LlmChatMessage} from 'app/services/llm/llmTypes';
 // Domain types
 // ---------------------------------------------------------------------------
 
-export type MissionKey = 'hypoDetective' | 'userBehavior' | 'loopSettings';
+export type MissionKey = 'openChat' | 'hypoDetective' | 'userBehavior' | 'loopSettings';
 
 export type AnalystMode = 'userBehavior' | 'loopSettings';
+
+export type EvidenceKind = 'agp' | 'tir';
+
+export interface EvidenceRequest {
+  kind: EvidenceKind;
+  rangeDays: number;
+}
 
 export type ScreenState =
   | {mode: 'locked'}
@@ -17,7 +24,8 @@ export type ScreenState =
   | {mode: 'modeSelection'}
   | {mode: 'history'}
   | {mode: 'historyDetail'; id: string}
-  | {mode: 'mission'; mission: MissionKey};
+  | {mode: 'mission'; mission: MissionKey}
+  | {mode: 'evidence'; mission: MissionKey; request: EvidenceRequest};
 
 export type ToolEnvelope =
   | {type: 'tool_call'; name: AiAnalystToolName; args?: any}
@@ -67,10 +75,13 @@ export interface AiAnalystEngine {
   openHistory: () => Promise<void>;
   clearHistory: () => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
+  startOpenChat: () => Promise<void>;
   startHypoDetective: () => Promise<void>;
   startUserBehavior: () => Promise<void>;
   startLoopSettingsAdvisor: () => Promise<void>;
   sendFollowUp: () => Promise<void>;
+  openEvidence: (request: EvidenceRequest) => void;
+  backToMissionFromEvidence: () => void;
   cancelActiveRun: () => void;
   goBackToDashboard: () => void;
   exportSession: () => Promise<void>;

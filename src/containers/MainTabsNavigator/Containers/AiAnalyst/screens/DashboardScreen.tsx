@@ -25,6 +25,7 @@ import {
 // ---------------------------------------------------------------------------
 
 export interface DashboardScreenProps {
+  onStartOpenChat: () => void;
   onStartHypoDetective: () => void;
   onStartUserBehavior: () => void;
   onStartLoopSettings: () => void;
@@ -39,6 +40,7 @@ export interface DashboardScreenProps {
 // ---------------------------------------------------------------------------
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({
+  onStartOpenChat,
   onStartHypoDetective,
   onStartUserBehavior,
   onStartLoopSettings,
@@ -70,6 +72,25 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <View style={{flex: 1}}>
               <CardTitle>Conversation history</CardTitle>
               <CardSubtitle>Saved text only (limited)</CardSubtitle>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
+          </CardRow>
+
+          <View style={{height: theme.spacing.md}} />
+
+          {/* Open chat */}
+          <CardRow
+            onPress={onStartOpenChat}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityLabel="Open Chat"
+          >
+            <CardIcon>
+              <MaterialIcons name="chat" size={22} color={theme.accentColor} />
+            </CardIcon>
+            <View style={{flex: 1}}>
+              <CardTitle>Open Chat</CardTitle>
+              <CardSubtitle>Ask anything about your diabetes data</CardSubtitle>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
           </CardRow>
