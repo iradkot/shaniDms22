@@ -19,11 +19,13 @@ type AiSettingsContextValue = {
 
 const STORAGE_KEY = 'ai.settings.v1';
 
+const LATEST_OPENAI_MODEL = 'gpt-5.4';
+
 const DEFAULT_SETTINGS: AiSettings = {
   enabled: true,
   provider: 'openai',
   apiKey: '',
-  openAiModel: 'gpt-4o-mini',
+  openAiModel: LATEST_OPENAI_MODEL,
 };
 
 const AiSettingsContext = createContext<AiSettingsContextValue>({
@@ -53,7 +55,11 @@ export const AiSettingsProvider = ({children}: {children: React.ReactNode}) => {
         }
 
         const parsed = JSON.parse(stored) as Partial<AiSettings>;
-        setSettings(prev => ({...prev, ...parsed}));
+        setSettings(prev => ({
+          ...prev,
+          ...parsed,
+          openAiModel: LATEST_OPENAI_MODEL,
+        }));
       } catch (e) {
         // Best-effort: keep defaults.
       } finally {
@@ -82,6 +88,7 @@ export const AiSettingsProvider = ({children}: {children: React.ReactNode}) => {
         const next = {
           ...prev,
           [key]: value,
+          openAiModel: key === 'openAiModel' ? LATEST_OPENAI_MODEL : prev.openAiModel,
         } as AiSettings;
         persist(next);
         return next;
