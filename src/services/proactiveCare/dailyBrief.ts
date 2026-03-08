@@ -114,6 +114,26 @@ async function computeYesterdayBrief(glucose: GlucoseSettings) {
   });
 }
 
+export async function sendDailyBriefNow(glucose: GlucoseSettings) {
+  await ensureChannel();
+  const brief = await computeYesterdayBrief(glucose);
+
+  await notifee.displayNotification({
+    id: `${NOTIFICATION_ID}-manual-${Date.now()}`,
+    title: brief.title,
+    body: brief.body,
+    android: {
+      channelId: CHANNEL_ID,
+      smallIcon: 'ic_launcher',
+      pressAction: {id: 'default'},
+    },
+    data: {
+      route: 'Home',
+      source: 'daily_brief_manual',
+    },
+  });
+}
+
 export async function syncDailyBriefNotifications(params: {
   config: DailyBriefConfig;
   glucose: GlucoseSettings;

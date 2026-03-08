@@ -21,6 +21,7 @@ import ADIcon from 'react-native-vector-icons/AntDesign';
 import {useNavigation} from '@react-navigation/native';
 import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {validateOpenAiApiKey} from 'app/services/llm/providers/openaiProvider';
+import {sendDailyBriefNow} from 'app/services/proactiveCare/dailyBrief';
 import {NightscoutSection} from './sections/NightscoutSection';
 import {iconContainerStyle, labelStyle, rowStyle, SectionHeader} from './settingsShared';
 
@@ -62,6 +63,7 @@ const Settings: React.FC = () => {
   const [nightEndText, setNightEndText] = useState('');
   const [dailyBriefHourText, setDailyBriefHourText] = useState('08');
   const [dailyBriefMinuteText, setDailyBriefMinuteText] = useState('00');
+  const [dailyBriefStatus, setDailyBriefStatus] = useState<string | null>(null);
   const [rangeError, setRangeError] = useState<string | null>(null);
 
   const openAiModelOptions = useMemo(
@@ -271,6 +273,16 @@ const Settings: React.FC = () => {
       hour,
       minute,
     });
+  };
+
+  const triggerDailyBriefNow = async () => {
+    try {
+      setDailyBriefStatus('Sending brief…');
+      await sendDailyBriefNow(glucoseSettings);
+      setDailyBriefStatus('Daily brief sent.');
+    } catch (e) {
+      setDailyBriefStatus('Failed to send daily brief now.');
+    }
   };
 
   const persistAiSettings = () => {
@@ -767,6 +779,28 @@ const Settings: React.FC = () => {
                   maxLength={2}
                 />
               </View>
+            </View>
+
+            <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm}}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={triggerDailyBriefNow}
+                style={({pressed}) => ({
+                  paddingVertical: theme.spacing.md,
+                  borderRadius: theme.borderRadius,
+                  borderWidth: 1,
+                  borderColor: theme.borderColor,
+                  backgroundColor: pressed ? theme.borderColor : theme.white,
+                  alignItems: 'center',
+                })}
+              >
+                <Text style={{color: theme.textColor, fontWeight: '600'}}>Send daily brief now</Text>
+              </Pressable>
+              {dailyBriefStatus ? (
+                <Text style={{color: theme.textColor, opacity: 0.8, fontSize: theme.typography.size.sm, paddingTop: theme.spacing.xs}}>
+                  {dailyBriefStatus}
+                </Text>
+              ) : null}
             </View>
 
             <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm}}>
