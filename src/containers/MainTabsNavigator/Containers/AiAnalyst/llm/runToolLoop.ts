@@ -50,6 +50,8 @@ export async function runLlmToolLoop(params: ToolLoopParams): Promise<ToolLoopRe
   let toolCalls = 0;
   let finalText: string | null = null;
   let structuredQuestion: ToolLoopResult['structuredQuestion'];
+  let didRetryAfterIncomplete = false;
+  let effectiveMaxOutputTokens = maxOutputTokens;
 
   // ── Main loop: send → parse → maybe execute tool → repeat ────────────
   while (finalText == null) {
@@ -57,7 +59,7 @@ export async function runLlmToolLoop(params: ToolLoopParams): Promise<ToolLoopRe
     try {
       raw = await sendLlmRequest(
         provider, model, systemPrompt, workingMessages,
-        temperature, maxOutputTokens, abortSignal,
+        temperature, effectiveMaxOutputTokens, abortSignal,
       );
     } catch (err: any) {
       // Graceful handling for truncated / incomplete responses.
@@ -66,9 +68,28 @@ export async function runLlmToolLoop(params: ToolLoopParams): Promise<ToolLoopRe
       // user-friendly message instead of the raw provider error.
       if (err?.isIncompleteResponse) {
         console.warn('[AiAnalyst] LLM response incomplete (likely max_output_tokens)');
+
+        if (!didRetryAfterIncomplete) {
+          didRetryAfterIncomplete = true;
+          effectiveMaxOutputTokens = Math.max(effectiveMaxOutputTokens, 2_000);
+
+          const compactHistory = workingMessages.slice(-6);
+          const latestUserMessage = [...workingMessages].reverse().find(m => m.role === 'user');
+          workingMessages = [
+            {
+              role: 'user',
+              content:
+                'Please answer concisely in 4-6 bullet points with concrete actions. ' +
+                'Do not repeat prior context unless necessary.',
+            },
+            ...(latestUserMessage ? [latestUserMessage] : compactHistory),
+          ];
+          continue;
+        }
+
         finalText =
-          'My response was cut short — the conversation context may be too large. ' +
-          'Try starting a new session or asking a simpler question.';
+          'I had trouble completing a full response in one pass. ' +
+          'I still have your data — please resend the last question and I will answer briefly.';
         workingMessages = [
           ...workingMessages,
           {role: 'assistant', content: finalText},

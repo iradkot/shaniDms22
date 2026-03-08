@@ -45,7 +45,7 @@ const Settings: React.FC = () => {
 
   const [aiApiKeyText, setAiApiKeyText] = useState('');
   const [aiModelText, setAiModelText] = useState('');
-  const [aiModelPreset, setAiModelPreset] = useState<string>('gpt-4o-mini');
+  const [aiModelPreset, setAiModelPreset] = useState<string>('gpt-5.4');
   const [aiKeyStatus, setAiKeyStatus] = useState<
     | {state: 'idle'}
     | {state: 'checking'}
@@ -64,6 +64,7 @@ const Settings: React.FC = () => {
 
   const openAiModelOptions = useMemo(
     () => [
+      {id: 'gpt-5.4', label: 'gpt-5.4 (latest default)'} as const,
       {id: 'gpt-4o-mini', label: 'gpt-4o-mini (fast + cheap)'} as const,
       {id: 'gpt-4o', label: 'gpt-4o (best general)'} as const,
       {id: 'gpt-4.1-mini', label: 'gpt-4.1-mini (strong + efficient)'} as const,
@@ -103,8 +104,8 @@ const Settings: React.FC = () => {
       return;
     }
 
-    setAiModelPreset('gpt-4o-mini');
-    setAiModelText('gpt-4o-mini');
+    setAiModelPreset('gpt-5.4');
+    setAiModelText('gpt-5.4');
   }, [aiLoaded, aiSettings.apiKey, aiSettings.openAiModel, openAiModelOptions]);
 
 
@@ -589,7 +590,7 @@ const Settings: React.FC = () => {
                 Model
               </Text>
               <Text style={{color: theme.textColor, opacity: 0.75, fontSize: theme.typography.size.sm, paddingTop: theme.spacing.xs}}>
-                Choose a preset or Custom.
+                App is currently pinned to latest model (gpt-5.4).
               </Text>
             </View>
 
@@ -652,7 +653,7 @@ const Settings: React.FC = () => {
                   onChangeText={setAiModelText}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  placeholder="gpt-4o-mini"
+                  placeholder="gpt-5.4"
                   placeholderTextColor={theme.textColor}
                   style={{...inputStyle, minWidth: 160, textAlign: 'left'}}
                 />

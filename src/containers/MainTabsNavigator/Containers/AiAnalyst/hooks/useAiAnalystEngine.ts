@@ -619,26 +619,54 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
   const maybeInjectEvidenceTag = useCallback((userText: string, assistantText: string): string => {
     const lower = String(userText || '').toLowerCase();
+    const assistantLower = String(assistantText || '').toLowerCase();
     const alreadyHasTag = /\[\[\s*evidence\s*:/i.test(assistantText);
 
     const rangeDays = parseRangeDaysFromText(lower) ?? 14;
 
-    const asksAgp = /\bagp\b/.test(lower) || (lower.includes('ambulatory') && lower.includes('profile'));
+    const asksAgp =
+      /\bagp\b/.test(lower) ||
+      (lower.includes('ambulatory') && lower.includes('profile')) ||
+      lower.includes('אייג׳יפי');
     const asksTir =
       lower.includes('time in range') ||
       lower.includes('tir') ||
-      (lower.includes('in range') && lower.includes('time'));
+      (lower.includes('in range') && lower.includes('time')) ||
+      lower.includes('בטווח') ||
+      lower.includes('זמן בטווח');
+    const asksMealEvidence =
+      lower.includes('meal') ||
+      lower.includes('carb') ||
+      lower.includes('ratio') ||
+      lower.includes('post meal') ||
+      lower.includes('after meal') ||
+      lower.includes('ארוחה') ||
+      lower.includes('פחמ') ||
+      lower.includes('בולוס') ||
+      lower.includes('היפו');
+
+    const assistantMentionsMealLogic =
+      assistantLower.includes('bolus') ||
+      assistantLower.includes('temp basal') ||
+      assistantLower.includes('stack') ||
+      assistantLower.includes('carb') ||
+      assistantLower.includes('ארוחה') ||
+      assistantLower.includes('בולוס') ||
+      assistantLower.includes('היפו');
 
     if (!alreadyHasTag) {
       if (asksAgp) return `${assistantText}\n\n[[evidence:agp:${rangeDays}]]`;
       if (asksTir) return `${assistantText}\n\n[[evidence:tir:${rangeDays}]]`;
+      if (asksMealEvidence || assistantMentionsMealLogic) {
+        return `${assistantText}\n\n[[evidence:meal:${Math.min(rangeDays, 14)}]]\n[[evidence:agp:14]]`;
+      }
 
       const asksEvidenceForRecommendation =
-        (lower.includes('recommend') || lower.includes('advice')) &&
+        (lower.includes('recommend') || lower.includes('advice') || lower.includes('הוכח') || lower.includes('הוכחות')) &&
         (lower.includes('evidence') || lower.includes('prove') || lower.includes('proof') || lower.includes('show'));
 
       if (asksEvidenceForRecommendation) {
-        return `${assistantText}\n\n[[evidence:agp:14]]\n[[evidence:tir:7]]`;
+        return `${assistantText}\n\n[[evidence:meal:7]]\n[[evidence:agp:14]]`;
       }
     }
 
@@ -650,6 +678,13 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
     let out = text;
 
+    const mentionsCarbRatio = /carb ratio|carbohydrate ratio|cr\b/i.test(out);
+    const hasPercent = /\b\d{1,2}\s*%/.test(out);
+    const hasRatioExample = /\b\d+\s*:\s*\d+(\.\d+)?\b/.test(out);
+    if (mentionsCarbRatio && !hasPercent && !hasRatioExample) {
+      out += '\n\nPractical starting point: consider a conservative carb-ratio adjustment of about 5-10%, then monitor meal responses for 3-7 days.';
+    }
+
     out = out.replace(
       /\b(discuss|review|check)\b[^.\n]*(clinician|doctor|care team|healthcare provider)[^.\n]*\.?/gi,
       'review this in-app and adjust your self-management plan based on the data shown.',
@@ -657,9 +692,9 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
     const hasEvidenceTag = /\[\[\s*evidence\s*:/i.test(out);
     const saysNoData =
-      /don['’]t have[^.\n]*(data|agp|time in range|tir)/i.test(out) ||
+      /don['’]t have[^.\n]*(data|agp|time in range|tir|absorption)/i.test(out) ||
       /data (is|are) unavailable/i.test(out) ||
-      /unable to (find|access).*(data|agp|tir)/i.test(out);
+      /unable to (find|access).*(data|agp|tir|absorption)/i.test(out);
 
     if (hasEvidenceTag && saysNoData) {
       out = out.replace(

@@ -15,7 +15,7 @@ export const DEFAULT_MAX_TOOL_CALLS = 4;
 export const LOOP_SETTINGS_MAX_TOOL_CALLS = 20;
 
 /** Default maxOutputTokens for standard missions. */
-export const DEFAULT_MAX_OUTPUT_TOKENS = 800;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 1_800;
 
 /** maxOutputTokens for User Behavior initial prompt. */
 export const USER_BEHAVIOR_MAX_OUTPUT_TOKENS = 1_200;

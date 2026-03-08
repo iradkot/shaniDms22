@@ -6,11 +6,13 @@ import {
   Pressable,
   ScrollView,
   Text,
+  ToastAndroid,
   View,
 } from 'react-native';
 import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Markdown from 'react-native-markdown-display';
+import Clipboard from '@react-native-clipboard/clipboard';
 
 import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
@@ -74,6 +76,13 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
 }) => {
   const theme = useTheme() as ThemeType;
 
+  const copyToClipboard = (text: string) => {
+    Clipboard.setString(text || '');
+    if (Platform.OS === 'android') {
+      ToastAndroid.show('Copied to clipboard', ToastAndroid.SHORT);
+    }
+  };
+
   return (
     <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
       <KeyboardAvoidingView style={{flex: 1}} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -132,9 +141,20 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
             return (
               <MessageBubble key={String(idx)} role={m.role === 'user' ? 'user' : 'assistant'}>
                 {m.role === 'assistant' ? (
-                  <Markdown markdownit={markdown.instance} rules={markdown.rules} style={markdown.style}>
-                    {visibleText}
-                  </Markdown>
+                  <>
+                    <Markdown markdownit={markdown.instance} rules={markdown.rules} style={markdown.style}>
+                      {visibleText}
+                    </Markdown>
+                    <Pressable
+                      onPress={() => copyToClipboard(visibleText)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Copy response"
+                      style={{alignSelf: 'flex-end', marginTop: 6, flexDirection: 'row', alignItems: 'center'}}
+                    >
+                      <MaterialIcons name="content-copy" size={14} color={addOpacity(theme.textColor, 0.7)} />
+                      <Text style={{marginLeft: 4, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>Copy</Text>
+                    </Pressable>
+                  </>
                 ) : (
                   <MessageText selectable>{visibleText}</MessageText>
                 )}

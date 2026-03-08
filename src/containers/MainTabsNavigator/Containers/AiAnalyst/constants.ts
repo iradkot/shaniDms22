@@ -41,7 +41,7 @@ export const LLM_TIMEOUT_MS = 60_000;
 export const STOPPED_LABEL_DURATION_MS = 1_200;
 
 /** Default maxOutputTokens for standard missions. */
-export const DEFAULT_MAX_OUTPUT_TOKENS = 800;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 1_800;
 
 /** maxOutputTokens for User Behavior initial prompt. */
 export const USER_BEHAVIOR_MAX_OUTPUT_TOKENS = 1_200;

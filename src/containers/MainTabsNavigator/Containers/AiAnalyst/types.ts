@@ -11,11 +11,12 @@ export type MissionKey = 'openChat' | 'hypoDetective' | 'userBehavior' | 'loopSe
 
 export type AnalystMode = 'userBehavior' | 'loopSettings';
 
-export type EvidenceKind = 'agp' | 'tir';
+export type EvidenceKind = 'agp' | 'tir' | 'meal';
 
 export interface EvidenceRequest {
   kind: EvidenceKind;
   rangeDays: number;
+  focusDateIso?: string;
 }
 
 export type ScreenState =
