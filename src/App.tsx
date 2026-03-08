@@ -32,7 +32,7 @@ import {
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 import {TabsSettingsProvider} from 'app/contexts/TabsSettingsContext';
-import {GlucoseSettingsProvider} from 'app/contexts/GlucoseSettingsContext';
+import {GlucoseSettingsProvider, useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import AddNotificationScreen from './containers/forms/AddNotificationScreen/AddNotificationScreen';
 import EditNotificationScreen from 'app/containers/forms/EditNotificationScreen/EditNotificationScreen';
 import { getApp } from '@react-native-firebase/app';
@@ -42,6 +42,7 @@ import notifee, {EventType} from '@notifee/react-native';
 import { registerDeviceToken, unregisterDeviceToken, syncTokenIfNeeded } from 'app/services/rebaseService';
 import NotificationModal from 'app/components/NotificationModal';
 import {useHypoNowMvp} from 'app/hooks/useHypoNowMvp';
+import {useDailyBriefNotifications} from 'app/hooks/useDailyBriefNotifications';
 import {
   navigateToHypoInvestigation,
   rootNavigationRef,
@@ -172,9 +173,16 @@ const App: () => React.ReactElement = () => {
   const [notifTitle, setNotifTitle] = React.useState<string | undefined>();
   const [notifBody, setNotifBody] = React.useState<string | undefined>();
   const {settings: proactiveSettings} = useProactiveCareSettings();
+  const {settings: glucoseSettings} = useGlucoseSettings();
 
   useHypoNowMvp({
     enabled: !isE2E && proactiveSettings.enabled && proactiveSettings.events.hypoNow,
+  });
+
+  useDailyBriefNotifications({
+    enabled: !isE2E && proactiveSettings.enabled,
+    config: proactiveSettings.dailyBrief,
+    glucose: glucoseSettings,
   });
 
   React.useEffect(() => {

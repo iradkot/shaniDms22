@@ -60,6 +60,8 @@ const Settings: React.FC = () => {
   const [severeHyperText, setSevereHyperText] = useState('');
   const [nightStartText, setNightStartText] = useState('');
   const [nightEndText, setNightEndText] = useState('');
+  const [dailyBriefHourText, setDailyBriefHourText] = useState('08');
+  const [dailyBriefMinuteText, setDailyBriefMinuteText] = useState('00');
   const [rangeError, setRangeError] = useState<string | null>(null);
 
   const openAiModelOptions = useMemo(
@@ -83,6 +85,11 @@ const Settings: React.FC = () => {
     setNightStartText(String(glucoseSettings.nightStartHour));
     setNightEndText(String(glucoseSettings.nightEndHour));
   }, [glucoseLoaded, glucoseSettings]);
+
+  useEffect(() => {
+    setDailyBriefHourText(String(proactiveSettings.dailyBrief.hour).padStart(2, '0'));
+    setDailyBriefMinuteText(String(proactiveSettings.dailyBrief.minute).padStart(2, '0'));
+  }, [proactiveSettings.dailyBrief.hour, proactiveSettings.dailyBrief.minute]);
 
   useEffect(() => {
     if (!aiLoaded) return;
@@ -242,6 +249,28 @@ const Settings: React.FC = () => {
     setRangeError(null);
     setGlucoseSetting('nightStartHour', start);
     setGlucoseSetting('nightEndHour', end);
+  };
+
+  const validateAndApplyDailyBriefTime = () => {
+    const hour = parseIntStrict(dailyBriefHourText);
+    const minute = parseIntStrict(dailyBriefMinuteText);
+
+    if (hour === null || minute === null) {
+      setRangeError('Please enter daily brief time as HH:MM.');
+      return;
+    }
+
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      setRangeError('Daily brief time must be valid (hour 0–23, minute 0–59).');
+      return;
+    }
+
+    setRangeError(null);
+    setProactiveSetting('dailyBrief', {
+      ...proactiveSettings.dailyBrief,
+      hour,
+      minute,
+    });
   };
 
   const persistAiSettings = () => {
@@ -698,9 +727,51 @@ const Settings: React.FC = () => {
               />
             </View>
 
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="wb-sunny" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>Morning daily brief</Text>
+              <Switch
+                value={proactiveSettings.dailyBrief.enabled}
+                onValueChange={v =>
+                  setProactiveSetting('dailyBrief', {
+                    ...proactiveSettings.dailyBrief,
+                    enabled: v,
+                  })
+                }
+              />
+            </View>
+
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="schedule" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>Brief time (HH:MM)</Text>
+              <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                <TextInput
+                  value={dailyBriefHourText}
+                  onChangeText={setDailyBriefHourText}
+                  onBlur={validateAndApplyDailyBriefTime}
+                  keyboardType="numeric"
+                  style={{...inputStyle, minWidth: 50}}
+                  maxLength={2}
+                />
+                <Text style={{marginHorizontal: 6, color: theme.textColor}}>:</Text>
+                <TextInput
+                  value={dailyBriefMinuteText}
+                  onChangeText={setDailyBriefMinuteText}
+                  onBlur={validateAndApplyDailyBriefTime}
+                  keyboardType="numeric"
+                  style={{...inputStyle, minWidth: 50}}
+                  maxLength={2}
+                />
+              </View>
+            </View>
+
             <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm}}>
               <Text style={{color: theme.textColor, opacity: 0.75, fontSize: theme.typography.size.sm}}>
-                Coming soon: hypo risk prediction and additional proactive events.
+                Brief includes: night status, yesterday summary, and one action for today.
               </Text>
             </View>
           </>
