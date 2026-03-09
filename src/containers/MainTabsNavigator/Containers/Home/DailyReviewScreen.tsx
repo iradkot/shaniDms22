@@ -5,7 +5,7 @@ import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useNavigation} from '@react-navigation/native';
 
-import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
+import {fetchBgDataForDateRangeUncached, fetchTreatmentsForDateRangeUncached, getUserProfileFromNightscout} from 'app/api/apiRequests';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {getLatestDailyBrief, regenerateDailyBrief} from 'app/services/proactiveCare/dailyBrief';
@@ -13,8 +13,8 @@ import {computeRank} from 'app/services/proactiveCare/streakRank';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {RANKS_INFO_SCREEN} from 'app/constants/SCREEN_NAMES';
-import {useInsulinData} from 'app/hooks/useInsulinData';
-import {computeInsulinStats} from './components/InsulinStatsRow/InsulinDataCalculations';
+import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsulin';
+import {extractBasalProfileFromNightscoutProfileData, mapNightscoutTreatmentsToInsulinDataEntries} from 'app/utils/nightscoutTreatments.utils';
 
 type Row = {sgv: number; dateString?: string};
 
@@ -56,12 +56,12 @@ const DailyReviewScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
-  const {insulinData, basalProfileData} = useInsulinData();
 
   const [loading, setLoading] = useState(true);
   const [refreshingAction, setRefreshingAction] = useState(false);
   const [yesterdayRows, setYesterdayRows] = useState<Row[]>([]);
   const [weekRows, setWeekRows] = useState<Row[]>([]);
+  const [insulin, setInsulin] = useState({yesterday: 0, prevDay: 0, avgDaily7: 0});
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
   const [whyLine, setWhyLine] = useState<string | null>(null);
   const [actionSource, setActionSource] = useState<'ai' | 'fallback'>('fallback');
@@ -72,15 +72,38 @@ const DailyReviewScreen: React.FC = () => {
   const prevDayStart = subDays(yStart, 1);
   const wStart = subDays(todayStart, 8);
 
+  const getInsulinTotalForRange = async (start: Date, end: Date): Promise<number> => {
+    try {
+      const [treatments, profileData] = await Promise.all([
+        fetchTreatmentsForDateRangeUncached(start, end),
+        getUserProfileFromNightscout(start.toISOString()),
+      ]);
+      const entries = mapNightscoutTreatmentsToInsulinDataEntries(treatments ?? []);
+      const basal = extractBasalProfileFromNightscoutProfileData(profileData);
+      const totals = calculateTotalInsulin(entries, basal, start, end);
+      return (totals.totalBasal || 0) + (totals.totalBolus || 0);
+    } catch {
+      return 0;
+    }
+  };
+
   const loadData = async () => {
-    const [y, w, latestBrief] = await Promise.all([
+    const [y, w, latestBrief, insulinYesterday, insulinPrevDay, insulinWeek] = await Promise.all([
       fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
       getLatestDailyBrief(),
+      getInsulinTotalForRange(yStart, todayStart),
+      getInsulinTotalForRange(prevDayStart, yStart),
+      getInsulinTotalForRange(wStart, yStart),
     ]);
 
     setYesterdayRows((y as any) ?? []);
     setWeekRows((w as any) ?? []);
+    setInsulin({
+      yesterday: insulinYesterday,
+      prevDay: insulinPrevDay,
+      avgDaily7: insulinWeek > 0 ? insulinWeek / 7 : 0,
+    });
 
     if (latestBrief?.body) {
       const lines = latestBrief.body.split('\n').map(s => s.trim()).filter(Boolean);
@@ -131,22 +154,7 @@ const DailyReviewScreen: React.FC = () => {
   const y = useMemo(() => metrics(yesterdayRows), [yesterdayRows]);
   const w = useMemo(() => metrics(weekRows), [weekRows]);
 
-  const insulin = useMemo(() => {
-    try {
-      const yInsulin = computeInsulinStats(insulinData, basalProfileData, yStart, todayStart).totalInsulin;
-      const prevInsulin = computeInsulinStats(insulinData, basalProfileData, prevDayStart, yStart).totalInsulin;
-      const weekInsulin = computeInsulinStats(insulinData, basalProfileData, wStart, yStart).totalInsulin;
-      return {
-        yesterday: yInsulin,
-        prevDay: prevInsulin,
-        avgDaily7: weekInsulin > 0 ? weekInsulin / 7 : 0,
-      };
-    } catch {
-      return {yesterday: 0, prevDay: 0, avgDaily7: 0};
-    }
-  }, [insulinData, basalProfileData]);
-
-  const tirDelta = y.tir - w.tir;
+    const tirDelta = y.tir - w.tir;
   const lowDelta = y.lows - w.lows;
   const severeLowDelta = y.severeLows - w.severeLows;
   const insulinDelta = insulin.yesterday - insulin.prevDay;
@@ -256,3 +264,4 @@ const DailyReviewScreen: React.FC = () => {
 };
 
 export default DailyReviewScreen;
+
