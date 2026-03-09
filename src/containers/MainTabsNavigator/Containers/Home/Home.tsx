@@ -37,6 +37,7 @@ import {format, subDays} from 'date-fns';
 import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {DAILY_REVIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
+import {computeInsulinStats} from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinDataCalculations';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -368,8 +369,11 @@ const Home: React.FC = () => {
 
   const [dailySummary, setDailySummary] = useState<{
     nightLine: string;
-    dayLine: string;
     actionLine: string;
+    tirText: string;
+    avgBgText: string;
+    insulinText: string;
+    trendText: string;
   } | null>(null);
 
   useEffect(() => {
@@ -394,6 +398,7 @@ const Home: React.FC = () => {
         const yTir = y.length ? Math.round((y.filter(r => r.sgv >= 70 && r.sgv <= 180).length / y.length) * 100) : 0;
         const wTir = w.length ? Math.round((w.filter(r => r.sgv >= 70 && r.sgv <= 180).length / w.length) * 100) : 0;
         const yLows = y.filter(r => r.sgv < 70).length;
+        const yAvgBg = y.length ? Math.round(y.reduce((s, r) => s + (r.sgv ?? 0), 0) / y.length) : 0;
 
         const nightRows = y.filter(r => {
           const dt = r?.dateString ? new Date(r.dateString) : null;
@@ -403,20 +408,33 @@ const Home: React.FC = () => {
         });
         const nightLows = nightRows.filter(r => r.sgv < 70).length;
 
+        const insulinYesterday = computeInsulinStats(insulinData, basalProfileData, yesterdayStart, todayStart).totalInsulin;
+        const insulinWeek = computeInsulinStats(insulinData, basalProfileData, prevWeekStart, yesterdayStart).totalInsulin;
+        const insulinAvgDaily = insulinWeek > 0 ? insulinWeek / 7 : 0;
+
         const nightLine = nightLows > 0 ? `🌙 Night: ${nightLows} lows` : '🌙 Night: stable';
-        const dayLine = `📊 Yesterday: TIR ${yTir}% (${yTir - wTir >= 0 ? '+' : ''}${yTir - wTir} vs 7d)`;
         const defaultActionLine = yLows > 0 ? '🎯 Today: avoid afternoon stacking' : '🎯 Today: keep same routine';
         const briefLines = (latestBrief?.body || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
         const actionLine = briefLines.find((l: string) => l.startsWith('🎯')) || briefLines[2] || defaultActionLine;
 
         if (!mounted) return;
-        setDailySummary({nightLine, dayLine, actionLine});
+        setDailySummary({
+          nightLine,
+          actionLine,
+          tirText: `TIR ${yTir}% (${yTir - wTir >= 0 ? '+' : ''}${yTir - wTir} vs 7d)`,
+          avgBgText: `Avg BG ${yAvgBg}`,
+          insulinText: `Insulin ${insulinYesterday.toFixed(1)}U (avg ${insulinAvgDaily.toFixed(1)}U/day)`,
+          trendText: yLows > 0 ? 'Focus: lower hypo risk today' : 'Trend: stable day, keep momentum',
+        });
       } catch {
         if (mounted) {
           setDailySummary({
             nightLine: '🌙 Night: no data',
-            dayLine: '📊 Yesterday: no data',
             actionLine: '🎯 Today: collect more data',
+            tirText: 'TIR --',
+            avgBgText: 'Avg BG --',
+            insulinText: 'Insulin --',
+            trendText: 'Collect more data for a stronger summary',
           });
         }
       }
@@ -454,10 +472,29 @@ const Home: React.FC = () => {
 
         {dailySummary ? (
           <DailySummaryCard onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
-            <Text style={{fontWeight: '700', color: theme.textColor, marginBottom: 6}}>Daily summary</Text>
-            <Text style={{color: theme.textColor}}>{dailySummary.nightLine}</Text>
-            <Text style={{color: theme.textColor}}>{dailySummary.dayLine}</Text>
-            <Text style={{color: theme.textColor}}>{dailySummary.actionLine}</Text>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+              <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>Daily summary</Text>
+              <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>Yesterday</Text>
+            </View>
+
+            <View style={{marginTop: 8, gap: 4}}>
+              <Text style={{color: theme.textColor}}>{dailySummary.nightLine}</Text>
+              <Text style={{color: addOpacity(theme.textColor, 0.86)}}>{dailySummary.actionLine}</Text>
+            </View>
+
+            <View style={{marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
+              <View style={{paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10, backgroundColor: addOpacity(theme.inRangeColor, 0.14)}}>
+                <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>{dailySummary.tirText}</Text>
+              </View>
+              <View style={{paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10, backgroundColor: addOpacity(theme.accentColor, 0.14)}}>
+                <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>{dailySummary.avgBgText}</Text>
+              </View>
+              <View style={{paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10, backgroundColor: addOpacity(theme.aboveRangeColor, 0.14)}}>
+                <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>{dailySummary.insulinText}</Text>
+              </View>
+            </View>
+
+            <Text style={{marginTop: 10, color: addOpacity(theme.textColor, 0.75)}}>{dailySummary.trendText}</Text>
             <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.65)}}>Tap for full daily review</Text>
           </DailySummaryCard>
         ) : null}
