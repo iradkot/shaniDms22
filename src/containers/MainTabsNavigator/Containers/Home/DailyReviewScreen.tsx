@@ -17,11 +17,11 @@ import {computeRank} from 'app/services/proactiveCare/streakRank';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {RANKS_INFO_SCREEN} from 'app/constants/SCREEN_NAMES';
-import {computeInsulinStats} from './components/InsulinStatsRow/InsulinDataCalculations';
 import {
   extractBasalProfileFromNightscoutProfileData,
   mapNightscoutTreatmentsToInsulinDataEntries,
 } from 'app/utils/nightscoutTreatments.utils';
+import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsulin';
 
 type Row = {sgv: number; dateString?: string};
 
@@ -81,30 +81,47 @@ const DailyReviewScreen: React.FC = () => {
   const prevDayStart = useMemo(() => subDays(yStart, 1), [yStart]);
   const wStart = useMemo(() => subDays(todayStart, 8), [todayStart]);
 
+  const getDayInsulinTotal = async (dayStart: Date): Promise<number> => {
+    const s = new Date(dayStart);
+    s.setHours(0, 0, 0, 0);
+    const e = new Date(dayStart);
+    e.setHours(23, 59, 59, 999);
+
+    const [treatments, profileData] = await Promise.all([
+      fetchTreatmentsForDateRangeUncached(s, e),
+      getUserProfileFromNightscout(s.toISOString()),
+    ]);
+
+    const entries = mapNightscoutTreatmentsToInsulinDataEntries(treatments ?? []);
+    const basal = extractBasalProfileFromNightscoutProfileData(profileData);
+    const totals = calculateTotalInsulin(entries, basal, s, e);
+    return (totals.totalBasal || 0) + (totals.totalBolus || 0);
+  };
+
   const loadData = async () => {
-    const [y, w, latestBrief, treatments, profileData] = await Promise.all([
+    const [y, w, latestBrief] = await Promise.all([
       fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
       getLatestDailyBrief(),
-      fetchTreatmentsForDateRangeUncached(wStart, todayStart),
-      getUserProfileFromNightscout(todayStart.toISOString()),
     ]);
 
     setYesterdayRows((y as any) ?? []);
     setWeekRows((w as any) ?? []);
 
     try {
-      const entries = mapNightscoutTreatmentsToInsulinDataEntries(treatments ?? []);
-      const basal = extractBasalProfileFromNightscoutProfileData(profileData);
+      const yesterdayTotal = await getDayInsulinTotal(yStart);
+      const prevDayTotal = await getDayInsulinTotal(prevDayStart);
 
-      const yIns = computeInsulinStats(entries, basal, yStart, todayStart).totalInsulin;
-      const prevIns = computeInsulinStats(entries, basal, prevDayStart, yStart).totalInsulin;
-      const weekIns = computeInsulinStats(entries, basal, wStart, yStart).totalInsulin;
+      let weekSum = 0;
+      for (let i = 1; i <= 7; i++) {
+        const day = subDays(todayStart, i);
+        weekSum += await getDayInsulinTotal(day);
+      }
 
       setInsulin({
-        yesterday: yIns,
-        prevDay: prevIns,
-        avgDaily7: weekIns > 0 ? weekIns / 7 : 0,
+        yesterday: yesterdayTotal,
+        prevDay: prevDayTotal,
+        avgDaily7: weekSum / 7,
       });
     } catch {
       setInsulin({yesterday: 0, prevDay: 0, avgDaily7: 0});
