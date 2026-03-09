@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {RefreshControl, ScrollView, View} from 'react-native';
+import {RefreshControl, ScrollView, View, Text} from 'react-native';
 
 import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -33,7 +33,9 @@ import {useMealSegments} from 'app/containers/MainTabsNavigator/Containers/Home/
 import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useMealSegments';
 import {useMealTags} from 'app/hooks/useMealTags';
 import TagMealSheet from 'app/components/MealTagging/TagMealSheet';
-import {format} from 'date-fns';
+import {format, subDays} from 'date-fns';
+import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
+import {DAILY_REVIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -69,6 +71,16 @@ const StatsToggleText = styled.Text<{theme: ThemeType}>`
   font-weight: 700;
   color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.6)};
   margin-left: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+`;
+
+const DailySummaryCard = styled.Pressable<{theme: ThemeType}>`
+  margin-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  padding: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  border-radius: ${(p: {theme: ThemeType}) => p.theme.borderRadius + 2}px;
+  background-color: ${(p: {theme: ThemeType}) => p.theme.white};
+  border-width: 1px;
+  border-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.12)};
 `;
 
 // create dummy home component with typescript
@@ -353,6 +365,65 @@ const Home: React.FC = () => {
     return d;
   }, [debouncedCurrentDate]);
 
+  const [dailySummary, setDailySummary] = useState<{
+    nightLine: string;
+    dayLine: string;
+    actionLine: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const run = async () => {
+      try {
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const yesterdayStart = subDays(todayStart, 1);
+        const prevWeekStart = subDays(yesterdayStart, 7);
+
+        const [yRows, wRows] = await Promise.all([
+          fetchBgDataForDateRangeUncached(yesterdayStart, todayStart, {throwOnError: false}),
+          fetchBgDataForDateRangeUncached(prevWeekStart, yesterdayStart, {throwOnError: false}),
+        ]);
+
+        const y = (yRows as any[]) ?? [];
+        const w = (wRows as any[]) ?? [];
+
+        const yTir = y.length ? Math.round((y.filter(r => r.sgv >= 70 && r.sgv <= 180).length / y.length) * 100) : 0;
+        const wTir = w.length ? Math.round((w.filter(r => r.sgv >= 70 && r.sgv <= 180).length / w.length) * 100) : 0;
+        const yLows = y.filter(r => r.sgv < 70).length;
+
+        const nightRows = y.filter(r => {
+          const dt = r?.dateString ? new Date(r.dateString) : null;
+          if (!dt || Number.isNaN(dt.getTime())) return false;
+          const h = dt.getHours();
+          return h >= 0 && h < 6;
+        });
+        const nightLows = nightRows.filter(r => r.sgv < 70).length;
+
+        const nightLine = nightLows > 0 ? `🌙 Night: ${nightLows} lows` : '🌙 Night: stable';
+        const dayLine = `📊 Yesterday: TIR ${yTir}% (${yTir - wTir >= 0 ? '+' : ''}${yTir - wTir} vs 7d)`;
+        const actionLine = yLows > 0 ? '🎯 Today: avoid afternoon stacking' : '🎯 Today: keep same routine';
+
+        if (!mounted) return;
+        setDailySummary({nightLine, dayLine, actionLine});
+      } catch {
+        if (mounted) {
+          setDailySummary({
+            nightLine: '🌙 Night: no data',
+            dayLine: '📊 Yesterday: no data',
+            actionLine: '🎯 Today: collect more data',
+          });
+        }
+      }
+    };
+
+    run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
       <ScrollView
@@ -376,6 +447,16 @@ const Home: React.FC = () => {
           maxCobReference={maxCobReference}
           onRefreshBgData={getUpdatedBgData}
         />
+
+        {dailySummary ? (
+          <DailySummaryCard onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
+            <Text style={{fontWeight: '700', color: theme.textColor, marginBottom: 6}}>Daily summary</Text>
+            <Text style={{color: theme.textColor}}>{dailySummary.nightLine}</Text>
+            <Text style={{color: theme.textColor}}>{dailySummary.dayLine}</Text>
+            <Text style={{color: theme.textColor}}>{dailySummary.actionLine}</Text>
+            <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.65)}}>Tap for full daily review</Text>
+          </DailySummaryCard>
+        ) : null}
 
         {/* 2. Collapsible detailed stats (BG + Insulin) — at top for quick access */}
         <StatsToggleRow

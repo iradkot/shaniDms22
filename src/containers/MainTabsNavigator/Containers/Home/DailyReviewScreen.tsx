@@ -1,0 +1,107 @@
+import React, {useEffect, useMemo, useState} from 'react';
+import {ActivityIndicator, ScrollView, Text, View} from 'react-native';
+import {subDays} from 'date-fns';
+import {useTheme} from 'styled-components/native';
+
+import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
+import {ThemeType} from 'app/types/theme';
+import {addOpacity} from 'app/style/styling.utils';
+
+type Row = {sgv: number; dateString?: string};
+
+function metrics(rows: Row[]) {
+  if (!rows.length) return {avg: 0, tir: 0, lows: 0, highs: 0};
+  const avg = Math.round(rows.reduce((s, r) => s + r.sgv, 0) / rows.length);
+  const lows = rows.filter(r => r.sgv < 70).length;
+  const highs = rows.filter(r => r.sgv > 180).length;
+  const tir = Math.round((rows.filter(r => r.sgv >= 70 && r.sgv <= 180).length / rows.length) * 100);
+  return {avg, tir, lows, highs};
+}
+
+const DailyReviewScreen: React.FC = () => {
+  const theme = useTheme() as ThemeType;
+  const [loading, setLoading] = useState(true);
+  const [yesterdayRows, setYesterdayRows] = useState<Row[]>([]);
+  const [weekRows, setWeekRows] = useState<Row[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        setLoading(true);
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const yStart = subDays(todayStart, 1);
+        const wStart = subDays(todayStart, 8);
+
+        const [y, w] = await Promise.all([
+          fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
+          fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
+        ]);
+
+        if (!mounted) return;
+        setYesterdayRows((y as any) ?? []);
+        setWeekRows((w as any) ?? []);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const y = useMemo(() => metrics(yesterdayRows), [yesterdayRows]);
+  const w = useMemo(() => metrics(weekRows), [weekRows]);
+
+  const tirDelta = y.tir - w.tir;
+  const lowDelta = y.lows - w.lows;
+
+  const streakText = y.lows === 0 ? 'Streak: 1 day without lows ✅' : 'Streak reset: lows detected';
+  const action = y.lows > 0 ? 'Action today: reduce stacking risk in afternoon' : 'Action today: keep current pattern';
+
+  if (loading) {
+    return (
+      <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 12}}>
+      <Text style={{fontSize: 24, fontWeight: '700', color: theme.textColor}}>Daily Review</Text>
+      <Text style={{color: addOpacity(theme.textColor, 0.7)}}>Yesterday vs last 7-day baseline</Text>
+
+      <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>Yesterday</Text>
+        <Text style={{color: theme.textColor}}>TIR: {y.tir}% | Avg: {y.avg} | Lows: {y.lows} | Highs: {y.highs}</Text>
+      </View>
+
+      <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>7-day baseline</Text>
+        <Text style={{color: theme.textColor}}>TIR: {w.tir}% | Avg: {w.avg} | Lows: {w.lows} | Highs: {w.highs}</Text>
+      </View>
+
+      <View style={{backgroundColor: addOpacity(tirDelta >= 0 ? '#2e7d32' : '#c62828', 0.1), borderRadius: 12, padding: 12}}>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>Comparison</Text>
+        <Text style={{color: theme.textColor}}>TIR delta: {tirDelta >= 0 ? '+' : ''}{tirDelta}%</Text>
+        <Text style={{color: theme.textColor}}>Low events delta: {lowDelta >= 0 ? '+' : ''}{lowDelta}</Text>
+      </View>
+
+      <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>Momentum</Text>
+        <Text style={{color: theme.textColor}}>{streakText}</Text>
+      </View>
+
+      <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>Today</Text>
+        <Text style={{color: theme.textColor}}>{action}</Text>
+      </View>
+    </ScrollView>
+  );
+};
+
+export default DailyReviewScreen;

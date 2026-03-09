@@ -128,7 +128,7 @@ export async function sendDailyBriefNow(glucose: GlucoseSettings) {
       pressAction: {id: 'default'},
     },
     data: {
-      route: 'Home',
+      route: 'DailyReviewScreen',
       source: 'daily_brief_manual',
     },
   });
@@ -167,7 +167,7 @@ export async function syncDailyBriefNotifications(params: {
         pressAction: {id: 'default'},
       },
       data: {
-        route: 'Home',
+        route: 'DailyReviewScreen',
         source: 'daily_brief',
       },
     });
@@ -188,7 +188,7 @@ export async function syncDailyBriefNotifications(params: {
         pressAction: {id: 'default'},
       },
       data: {
-        route: 'Home',
+        route: 'DailyReviewScreen',
         source: 'daily_brief',
       },
     },
@@ -200,3 +200,4 @@ export async function syncDailyBriefNotifications(params: {
     },
   );
 }
+
