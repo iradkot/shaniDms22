@@ -5,7 +5,11 @@ import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useNavigation} from '@react-navigation/native';
 
-import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
+import {
+  fetchBgDataForDateRangeUncached,
+  fetchTreatmentsForDateRangeUncached,
+  getUserProfileFromNightscout,
+} from 'app/api/apiRequests';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {getLatestDailyBrief, regenerateDailyBrief} from 'app/services/proactiveCare/dailyBrief';
@@ -13,8 +17,11 @@ import {computeRank} from 'app/services/proactiveCare/streakRank';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {RANKS_INFO_SCREEN} from 'app/constants/SCREEN_NAMES';
-import {useInsulinData} from 'app/hooks/useInsulinData';
 import {computeInsulinStats} from './components/InsulinStatsRow/InsulinDataCalculations';
+import {
+  extractBasalProfileFromNightscoutProfileData,
+  mapNightscoutTreatmentsToInsulinDataEntries,
+} from 'app/utils/nightscoutTreatments.utils';
 
 type Row = {sgv: number; dateString?: string};
 
@@ -56,31 +63,52 @@ const DailyReviewScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
-  const {insulinData, basalProfileData} = useInsulinData();
 
   const [loading, setLoading] = useState(true);
   const [refreshingAction, setRefreshingAction] = useState(false);
   const [yesterdayRows, setYesterdayRows] = useState<Row[]>([]);
   const [weekRows, setWeekRows] = useState<Row[]>([]);
+  const [insulin, setInsulin] = useState({yesterday: 0, prevDay: 0, avgDaily7: 0});
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
   const [whyLine, setWhyLine] = useState<string | null>(null);
   const [actionSource, setActionSource] = useState<'ai' | 'fallback'>('fallback');
 
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const yStart = subDays(todayStart, 1);
-  const prevDayStart = subDays(yStart, 1);
-  const wStart = subDays(todayStart, 8);
+  const todayStart = useMemo(() => {
+    const n = new Date();
+    return new Date(n.getFullYear(), n.getMonth(), n.getDate(), 0, 0, 0, 0);
+  }, []);
+  const yStart = useMemo(() => subDays(todayStart, 1), [todayStart]);
+  const prevDayStart = useMemo(() => subDays(yStart, 1), [yStart]);
+  const wStart = useMemo(() => subDays(todayStart, 8), [todayStart]);
 
   const loadData = async () => {
-    const [y, w, latestBrief] = await Promise.all([
+    const [y, w, latestBrief, treatments, profileData] = await Promise.all([
       fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
       getLatestDailyBrief(),
+      fetchTreatmentsForDateRangeUncached(wStart, todayStart),
+      getUserProfileFromNightscout(todayStart.toISOString()),
     ]);
 
     setYesterdayRows((y as any) ?? []);
     setWeekRows((w as any) ?? []);
+
+    try {
+      const entries = mapNightscoutTreatmentsToInsulinDataEntries(treatments ?? []);
+      const basal = extractBasalProfileFromNightscoutProfileData(profileData);
+
+      const yIns = computeInsulinStats(entries, basal, yStart, todayStart).totalInsulin;
+      const prevIns = computeInsulinStats(entries, basal, prevDayStart, yStart).totalInsulin;
+      const weekIns = computeInsulinStats(entries, basal, wStart, yStart).totalInsulin;
+
+      setInsulin({
+        yesterday: yIns,
+        prevDay: prevIns,
+        avgDaily7: weekIns > 0 ? weekIns / 7 : 0,
+      });
+    } catch {
+      setInsulin({yesterday: 0, prevDay: 0, avgDaily7: 0});
+    }
 
     if (latestBrief?.body) {
       const lines = latestBrief.body.split('\n').map(s => s.trim()).filter(Boolean);
@@ -104,7 +132,6 @@ const DailyReviewScreen: React.FC = () => {
       .finally(() => {
         if (mounted) setLoading(false);
       });
-
     return () => {
       mounted = false;
     };
@@ -131,27 +158,11 @@ const DailyReviewScreen: React.FC = () => {
   const y = useMemo(() => metrics(yesterdayRows), [yesterdayRows]);
   const w = useMemo(() => metrics(weekRows), [weekRows]);
 
-  const insulin = useMemo(() => {
-    try {
-      const yInsulin = computeInsulinStats(insulinData, basalProfileData, yStart, todayStart).totalInsulin;
-      const prevInsulin = computeInsulinStats(insulinData, basalProfileData, prevDayStart, yStart).totalInsulin;
-      const weekInsulin = computeInsulinStats(insulinData, basalProfileData, wStart, yStart).totalInsulin;
-      return {
-        yesterday: yInsulin,
-        prevDay: prevInsulin,
-        avgDaily7: weekInsulin > 0 ? weekInsulin / 7 : 0,
-      };
-    } catch {
-      return {yesterday: 0, prevDay: 0, avgDaily7: 0};
-    }
-  }, [insulinData, basalProfileData, yStart, todayStart, prevDayStart, wStart]);
-
   const tirDelta = y.tir - w.tir;
   const lowDelta = y.lows - w.lows;
   const severeLowDelta = y.severeLows - w.severeLows;
   const insulinDelta = insulin.yesterday - insulin.prevDay;
 
-  const streakText = y.lows === 0 ? '1 day without lows ✅' : 'Streak reset: lows detected';
   const heuristicAction = y.lows > 0 ? 'Action today: reduce stacking risk in afternoon' : 'Action today: keep current pattern';
   const action = llmActionLine || heuristicAction;
 
@@ -170,83 +181,59 @@ const DailyReviewScreen: React.FC = () => {
   }
 
   return (
-    <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 12}}>
+    <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 10}}>
       <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
         <Pressable onPress={() => navigation.goBack()}>
           <MaterialIcons name="arrow-back" size={22} color={theme.textColor} />
         </Pressable>
         <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor}}>Daily Review</Text>
       </View>
-      <Text style={{color: addOpacity(theme.textColor, 0.65)}}>Yesterday vs completed 7-day baseline</Text>
 
       <Pressable
         onPress={() => navigation.navigate(RANKS_INFO_SCREEN)}
         style={{...cardStyle(theme), backgroundColor: addOpacity(rv.color, 0.14), borderColor: addOpacity(rv.color, 0.6)}}
       >
-        <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-          <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>{rv.emoji} Ranked Streak</Text>
-          <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
-            <Text style={{fontWeight: '800', color: theme.textColor}}>{rank.tier}</Text>
-            <MaterialIcons name="chevron-right" size={18} color={addOpacity(theme.textColor, 0.6)} />
-          </View>
+        <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+          <Text style={{fontWeight: '800', color: theme.textColor}}>{rv.emoji} Ranked Streak</Text>
+          <Text style={{fontWeight: '800', color: theme.textColor}}>{rank.tier}</Text>
         </View>
-        <Text style={{color: theme.textColor, marginTop: 4}}>Score {rank.score}</Text>
         <View style={{height: 8, borderRadius: 10, backgroundColor: addOpacity(theme.textColor, 0.12), marginTop: 8}}>
           <View style={{height: 8, borderRadius: 10, width: `${Math.max(4, rank.progressToNextPct)}%`, backgroundColor: rv.color}} />
         </View>
         <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 6}}>
           {rank.nextTier ? `Progress to ${rank.nextTier}: ${rank.progressToNextPct}%` : 'Max tier reached'}
         </Text>
-        <Text style={{color: addOpacity(theme.textColor, 0.85), marginTop: 4}}>Goal: {rank.shortGoal}</Text>
       </Pressable>
 
-      <Pressable
-        onPress={handleRegenerate}
-        disabled={refreshingAction}
-        style={{...cardStyle(theme), alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8,
-          backgroundColor: refreshingAction ? addOpacity(theme.accentColor, 0.12) : theme.white,
-        }}
-      >
-        <MaterialIcons name="auto-fix-high" size={18} color={theme.textColor} />
-        <Text style={{color: theme.textColor, fontWeight: '700'}}>
-          {refreshingAction ? 'Regenerating…' : 'Regenerate review & recommendation'}
+      <Pressable onPress={handleRegenerate} disabled={refreshingAction} style={{...cardStyle(theme), alignItems: 'center'}}>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>
+          {refreshingAction ? 'Regenerating…' : 'Regenerate recommendation'}
         </Text>
       </Pressable>
 
       <View style={cardStyle(theme)}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>Yesterday</Text>
-        <Text style={{color: theme.textColor}}>TIR {y.tir}% • Avg {y.avg} • Hypo {y.lows} • Severe {y.severeLows} • Highs {y.highs}</Text>
-        <Text style={{color: addOpacity(theme.textColor, 0.78), marginTop: 4}}>
+        <Text style={{color: theme.textColor}}>TIR {y.tir}% • Avg {y.avg} • Hypo {y.lows} • Severe {y.severeLows}</Text>
+        <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 4}}>
           Insulin {insulin.yesterday.toFixed(1)}U ({insulinDelta >= 0 ? '+' : ''}{insulinDelta.toFixed(1)} vs day before)
         </Text>
       </View>
 
       <View style={cardStyle(theme)}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>7-day baseline</Text>
-        <Text style={{color: theme.textColor}}>TIR {w.tir}% • Avg {w.avg} • Hypo {w.lows} • Severe {w.severeLows} • Highs {w.highs}</Text>
-        <Text style={{color: addOpacity(theme.textColor, 0.78), marginTop: 4}}>
-          Avg insulin/day {insulin.avgDaily7.toFixed(1)}U (completed days only)
-        </Text>
+        <Text style={{color: theme.textColor}}>TIR {w.tir}% • Avg {w.avg} • Hypo {w.lows} • Severe {w.severeLows}</Text>
+        <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 4}}>Avg insulin/day {insulin.avgDaily7.toFixed(1)}U</Text>
       </View>
 
-      <View style={{...cardStyle(theme), backgroundColor: addOpacity(tirDelta >= 0 ? '#2e7d32' : '#c62828', 0.1)}}>
+      <View style={cardStyle(theme)}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>Comparison</Text>
-        <Text style={{color: theme.textColor}}>TIR delta: {tirDelta >= 0 ? '+' : ''}{tirDelta}%</Text>
-        <Text style={{color: theme.textColor}}>Hypo delta: {lowDelta >= 0 ? '+' : ''}{lowDelta}</Text>
-        <Text style={{color: theme.textColor}}>Severe hypo delta: {severeLowDelta >= 0 ? '+' : ''}{severeLowDelta}</Text>
+        <Text style={{color: theme.textColor}}>TIR {tirDelta >= 0 ? '+' : ''}{tirDelta}% • Hypo {lowDelta >= 0 ? '+' : ''}{lowDelta} • Severe {severeLowDelta >= 0 ? '+' : ''}{severeLowDelta}</Text>
       </View>
 
       <View style={cardStyle(theme)}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>Momentum</Text>
-        <Text style={{color: theme.textColor}}>{streakText}</Text>
-      </View>
-
-      <View style={cardStyle(theme)}>
-        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+        <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
           <Text style={{fontWeight: '700', color: theme.textColor}}>Today</Text>
-          <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>
-            {actionSource === 'ai' ? 'AI recommendation' : 'Rule-based fallback'}
-          </Text>
+          <Text style={{color: addOpacity(theme.textColor, 0.6), fontSize: 12}}>{actionSource === 'ai' ? 'AI' : 'Fallback'}</Text>
         </View>
         <Text style={{color: theme.textColor, marginTop: 4}}>{action}</Text>
         {whyLine ? <Text style={{color: addOpacity(theme.textColor, 0.72), marginTop: 6}}>{whyLine}</Text> : null}
@@ -256,4 +243,3 @@ const DailyReviewScreen: React.FC = () => {
 };
 
 export default DailyReviewScreen;
-
