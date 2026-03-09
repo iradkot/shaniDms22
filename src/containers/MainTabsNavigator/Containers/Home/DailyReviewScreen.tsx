@@ -6,6 +6,7 @@ import {useTheme} from 'styled-components/native';
 import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
 
 type Row = {sgv: number; dateString?: string};
 
@@ -23,6 +24,7 @@ const DailyReviewScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [yesterdayRows, setYesterdayRows] = useState<Row[]>([]);
   const [weekRows, setWeekRows] = useState<Row[]>([]);
+  const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -34,14 +36,23 @@ const DailyReviewScreen: React.FC = () => {
         const yStart = subDays(todayStart, 1);
         const wStart = subDays(todayStart, 8);
 
-        const [y, w] = await Promise.all([
+        const [y, w, latestBrief] = await Promise.all([
           fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
           fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
+          getLatestDailyBrief(),
         ]);
 
         if (!mounted) return;
         setYesterdayRows((y as any) ?? []);
         setWeekRows((w as any) ?? []);
+
+        if (latestBrief?.body) {
+          const lines = latestBrief.body.split('\n').map(s => s.trim()).filter(Boolean);
+          const action = lines.find(l => l.startsWith('🎯')) || lines[2] || null;
+          setLlmActionLine(action);
+        } else {
+          setLlmActionLine(null);
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -60,7 +71,8 @@ const DailyReviewScreen: React.FC = () => {
   const lowDelta = y.lows - w.lows;
 
   const streakText = y.lows === 0 ? 'Streak: 1 day without lows ✅' : 'Streak reset: lows detected';
-  const action = y.lows > 0 ? 'Action today: reduce stacking risk in afternoon' : 'Action today: keep current pattern';
+  const heuristicAction = y.lows > 0 ? 'Action today: reduce stacking risk in afternoon' : 'Action today: keep current pattern';
+  const action = llmActionLine || heuristicAction;
 
   if (loading) {
     return (

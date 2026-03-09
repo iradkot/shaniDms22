@@ -36,6 +36,7 @@ import TagMealSheet from 'app/components/MealTagging/TagMealSheet';
 import {format, subDays} from 'date-fns';
 import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {DAILY_REVIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -381,9 +382,10 @@ const Home: React.FC = () => {
         const yesterdayStart = subDays(todayStart, 1);
         const prevWeekStart = subDays(yesterdayStart, 7);
 
-        const [yRows, wRows] = await Promise.all([
+        const [yRows, wRows, latestBrief] = await Promise.all([
           fetchBgDataForDateRangeUncached(yesterdayStart, todayStart, {throwOnError: false}),
           fetchBgDataForDateRangeUncached(prevWeekStart, yesterdayStart, {throwOnError: false}),
+          getLatestDailyBrief(),
         ]);
 
         const y = (yRows as any[]) ?? [];
@@ -403,7 +405,9 @@ const Home: React.FC = () => {
 
         const nightLine = nightLows > 0 ? `🌙 Night: ${nightLows} lows` : '🌙 Night: stable';
         const dayLine = `📊 Yesterday: TIR ${yTir}% (${yTir - wTir >= 0 ? '+' : ''}${yTir - wTir} vs 7d)`;
-        const actionLine = yLows > 0 ? '🎯 Today: avoid afternoon stacking' : '🎯 Today: keep same routine';
+        const defaultActionLine = yLows > 0 ? '🎯 Today: avoid afternoon stacking' : '🎯 Today: keep same routine';
+        const briefLines = (latestBrief?.body || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
+        const actionLine = briefLines.find((l: string) => l.startsWith('🎯')) || briefLines[2] || defaultActionLine;
 
         if (!mounted) return;
         setDailySummary({nightLine, dayLine, actionLine});

@@ -10,6 +10,7 @@ const NOTIFICATION_ID = 'daily-brief-notification';
 
 const STORAGE_KEYS = {
   lastDeliveredDate: 'proactiveCare:dailyBrief:lastDeliveredDate',
+  latestBrief: 'proactiveCare:dailyBrief:latestBrief',
 };
 
 export type DailyBriefConfig = {
@@ -192,9 +193,34 @@ async function computeYesterdayBrief(glucose: GlucoseSettings, ai?: DailyBriefAi
   };
 }
 
+async function persistLatestBrief(brief: {title: string; body: string}) {
+  try {
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.latestBrief,
+      JSON.stringify({
+        ...brief,
+        createdAt: new Date().toISOString(),
+      }),
+    );
+  } catch {
+    // best effort
+  }
+}
+
+export async function getLatestDailyBrief(): Promise<{title: string; body: string; createdAt?: string} | null> {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEYS.latestBrief);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 export async function sendDailyBriefNow(glucose: GlucoseSettings, ai?: DailyBriefAiOptions) {
   await ensureChannel();
   const brief = await computeYesterdayBrief(glucose, ai);
+  await persistLatestBrief(brief);
 
   await notifee.displayNotification({
     id: `${NOTIFICATION_ID}-manual-${Date.now()}`,
@@ -234,6 +260,7 @@ export async function syncDailyBriefNotifications(params: {
   const lastDelivered = await AsyncStorage.getItem(STORAGE_KEYS.lastDeliveredDate);
 
   const brief = await computeYesterdayBrief(params.glucose, params.ai);
+  await persistLatestBrief(brief);
 
   if (now.getTime() >= todaySchedule.getTime() && lastDelivered !== todayKey) {
     await notifee.displayNotification({
