@@ -217,25 +217,37 @@ export async function getLatestDailyBrief(): Promise<{title: string; body: strin
   }
 }
 
-export async function sendDailyBriefNow(glucose: GlucoseSettings, ai?: DailyBriefAiOptions) {
-  await ensureChannel();
-  const brief = await computeYesterdayBrief(glucose, ai);
+export async function regenerateDailyBrief(params: {
+  glucose: GlucoseSettings;
+  ai?: DailyBriefAiOptions;
+  notify?: boolean;
+}) {
+  const brief = await computeYesterdayBrief(params.glucose, params.ai);
   await persistLatestBrief(brief);
 
-  await notifee.displayNotification({
-    id: `${NOTIFICATION_ID}-manual-${Date.now()}`,
-    title: brief.title,
-    body: brief.body,
-    android: {
-      channelId: CHANNEL_ID,
-      smallIcon: 'ic_launcher',
-      pressAction: {id: 'default'},
-    },
-    data: {
-      route: 'DailyReviewScreen',
-      source: 'daily_brief_manual',
-    },
-  });
+  if (params.notify) {
+    await ensureChannel();
+    await notifee.displayNotification({
+      id: `${NOTIFICATION_ID}-manual-${Date.now()}`,
+      title: brief.title,
+      body: brief.body,
+      android: {
+        channelId: CHANNEL_ID,
+        smallIcon: 'ic_launcher',
+        pressAction: {id: 'default'},
+      },
+      data: {
+        route: 'DailyReviewScreen',
+        source: 'daily_brief_manual',
+      },
+    });
+  }
+
+  return brief;
+}
+
+export async function sendDailyBriefNow(glucose: GlucoseSettings, ai?: DailyBriefAiOptions) {
+  await regenerateDailyBrief({glucose, ai, notify: true});
 }
 
 export async function syncDailyBriefNotifications(params: {

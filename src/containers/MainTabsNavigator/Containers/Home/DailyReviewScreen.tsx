@@ -1,12 +1,14 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, ScrollView, Text, View} from 'react-native';
+import {ActivityIndicator, Pressable, ScrollView, Text, View} from 'react-native';
 import {subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 
 import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
-import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
+import {getLatestDailyBrief, regenerateDailyBrief} from 'app/services/proactiveCare/dailyBrief';
+import {useAiSettings} from 'app/contexts/AiSettingsContext';
+import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 
 type Row = {sgv: number; dateString?: string};
 
@@ -21,48 +23,70 @@ function metrics(rows: Row[]) {
 
 const DailyReviewScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
+  const {settings: aiSettings} = useAiSettings();
+  const {settings: glucoseSettings} = useGlucoseSettings();
+
   const [loading, setLoading] = useState(true);
+  const [refreshingAction, setRefreshingAction] = useState(false);
   const [yesterdayRows, setYesterdayRows] = useState<Row[]>([]);
   const [weekRows, setWeekRows] = useState<Row[]>([]);
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
 
+  const loadData = async () => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const yStart = subDays(todayStart, 1);
+    const wStart = subDays(todayStart, 8);
+
+    const [y, w, latestBrief] = await Promise.all([
+      fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
+      fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
+      getLatestDailyBrief(),
+    ]);
+
+    setYesterdayRows((y as any) ?? []);
+    setWeekRows((w as any) ?? []);
+
+    if (latestBrief?.body) {
+      const lines = latestBrief.body.split('\n').map(s => s.trim()).filter(Boolean);
+      const action = lines.find(l => l.startsWith('🎯')) || lines[2] || null;
+      setLlmActionLine(action);
+    } else {
+      setLlmActionLine(null);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
-    const run = async () => {
-      try {
-        setLoading(true);
-        const now = new Date();
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        const yStart = subDays(todayStart, 1);
-        const wStart = subDays(todayStart, 8);
-
-        const [y, w, latestBrief] = await Promise.all([
-          fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
-          fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
-          getLatestDailyBrief(),
-        ]);
-
-        if (!mounted) return;
-        setYesterdayRows((y as any) ?? []);
-        setWeekRows((w as any) ?? []);
-
-        if (latestBrief?.body) {
-          const lines = latestBrief.body.split('\n').map(s => s.trim()).filter(Boolean);
-          const action = lines.find(l => l.startsWith('🎯')) || lines[2] || null;
-          setLlmActionLine(action);
-        } else {
-          setLlmActionLine(null);
-        }
-      } finally {
+    setLoading(true);
+    loadData()
+      .catch(() => {})
+      .finally(() => {
         if (mounted) setLoading(false);
-      }
-    };
+      });
 
-    run();
     return () => {
       mounted = false;
     };
   }, []);
+
+  const handleRegenerate = async () => {
+    try {
+      setRefreshingAction(true);
+      await regenerateDailyBrief({
+        glucose: glucoseSettings,
+        ai: {
+          enabled: aiSettings.enabled,
+          apiKey: aiSettings.apiKey,
+          model: aiSettings.openAiModel,
+        },
+        notify: false,
+      });
+      await loadData();
+    } finally {
+      setRefreshingAction(false);
+    }
+  };
 
   const y = useMemo(() => metrics(yesterdayRows), [yesterdayRows]);
   const w = useMemo(() => metrics(weekRows), [weekRows]);
@@ -86,6 +110,23 @@ const DailyReviewScreen: React.FC = () => {
     <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 12}}>
       <Text style={{fontSize: 24, fontWeight: '700', color: theme.textColor}}>Daily Review</Text>
       <Text style={{color: addOpacity(theme.textColor, 0.7)}}>Yesterday vs last 7-day baseline</Text>
+
+      <Pressable
+        onPress={handleRegenerate}
+        disabled={refreshingAction}
+        style={{
+          backgroundColor: theme.white,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: addOpacity(theme.textColor, 0.15),
+          padding: 10,
+          alignItems: 'center',
+        }}
+      >
+        <Text style={{color: theme.textColor, fontWeight: '700'}}>
+          {refreshingAction ? 'Regenerating…' : 'Regenerate review and recommendation'}
+        </Text>
+      </Pressable>
 
       <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>Yesterday</Text>
