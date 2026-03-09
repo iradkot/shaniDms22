@@ -278,7 +278,7 @@ const Settings: React.FC = () => {
   const triggerDailyBriefNow = async () => {
     try {
       setDailyBriefStatus('Sending brief…');
-      await sendDailyBriefNow(glucoseSettings);
+      await sendDailyBriefNow(glucoseSettings, aiSettings);
       setDailyBriefStatus('Daily brief sent.');
     } catch (e) {
       setDailyBriefStatus('Failed to send daily brief now.');

@@ -3,6 +3,7 @@ import notifee, {AndroidImportance, RepeatFrequency, TriggerType} from '@notifee
 
 import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {GlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
+import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
 
 const CHANNEL_ID = 'daily-briefs';
 const NOTIFICATION_ID = 'daily-brief-notification';
@@ -15,6 +16,12 @@ export type DailyBriefConfig = {
   enabled: boolean;
   hour: number;
   minute: number;
+};
+
+export type DailyBriefAiOptions = {
+  enabled: boolean;
+  apiKey?: string;
+  model?: string;
 };
 
 function ymd(d: Date): string {
@@ -53,7 +60,10 @@ function buildBriefText(params: {
   if (!rows.length) {
     return {
       title: 'Daily brief',
-      body: '🌙 Night: no data\n📊 Yesterday: no data\n🎯 Today: capture more readings',
+      nightLine: '🌙 Night: no data',
+      dayLine: '📊 Yesterday: no data',
+      actionLine: '🎯 Today: capture more readings',
+      stats: {tir: 0, avg: 0, lows: 0, highs: 0, nightLows: 0},
     };
   }
 
@@ -86,7 +96,16 @@ function buildBriefText(params: {
 
   return {
     title: 'Daily brief',
-    body: `${nightLine}\n${dayLine}\n${actionLine}`,
+    nightLine,
+    dayLine,
+    actionLine,
+    stats: {
+      tir,
+      avg,
+      lows: lows.length,
+      highs: highs.length,
+      nightLows: nightLows.length,
+    },
   };
 }
 
@@ -98,7 +117,51 @@ async function ensureChannel() {
   });
 }
 
-async function computeYesterdayBrief(glucose: GlucoseSettings) {
+function composeBody(lines: {nightLine: string; dayLine: string; actionLine: string}) {
+  return `${lines.nightLine}\n${lines.dayLine}\n${lines.actionLine}`;
+}
+
+async function maybeGenerateLlmActionLine(params: {
+  baseActionLine: string;
+  stats: {tir: number; avg: number; lows: number; highs: number; nightLows: number};
+  ai?: DailyBriefAiOptions;
+}): Promise<string> {
+  const {baseActionLine, stats, ai} = params;
+  const apiKey = (ai?.apiKey ?? '').trim();
+  if (!ai?.enabled || !apiKey) return baseActionLine;
+
+  try {
+    const provider = new OpenAIProvider({apiKey});
+    const model = (ai?.model ?? 'gpt-5.4').trim() || 'gpt-5.4';
+
+    const system =
+      'You write a very short daily diabetes action line. ' +
+      'Output ONLY one concise sentence (max 12 words), practical and specific.';
+
+    const user =
+      `Stats: ${JSON.stringify(stats)}\n` +
+      `Base suggestion: ${baseActionLine}\n` +
+      'Return one improved action line prefixed with "🎯 Today:".';
+
+    const res = await provider.sendChat({
+      model,
+      messages: [
+        {role: 'system', content: system},
+        {role: 'user', content: user},
+      ],
+      temperature: 0.2,
+      maxOutputTokens: 80,
+    });
+
+    const text = (res.content ?? '').trim();
+    if (!text) return baseActionLine;
+    return text.startsWith('🎯') ? text : `🎯 Today: ${text}`;
+  } catch {
+    return baseActionLine;
+  }
+}
+
+async function computeYesterdayBrief(glucose: GlucoseSettings, ai?: DailyBriefAiOptions) {
   const now = new Date();
   const todayStart = startOfDay(now);
   const yesterdayStart = new Date(todayStart);
@@ -108,15 +171,30 @@ async function computeYesterdayBrief(glucose: GlucoseSettings) {
     throwOnError: false,
   });
 
-  return buildBriefText({
+  const base = buildBriefText({
     rows: rows.map(r => ({sgv: (r as any).sgv, dateString: (r as any).dateString})),
     glucose,
   });
+
+  const llmAction = await maybeGenerateLlmActionLine({
+    baseActionLine: base.actionLine,
+    stats: base.stats,
+    ai,
+  });
+
+  return {
+    title: base.title,
+    body: composeBody({
+      nightLine: base.nightLine,
+      dayLine: base.dayLine,
+      actionLine: llmAction,
+    }),
+  };
 }
 
-export async function sendDailyBriefNow(glucose: GlucoseSettings) {
+export async function sendDailyBriefNow(glucose: GlucoseSettings, ai?: DailyBriefAiOptions) {
   await ensureChannel();
-  const brief = await computeYesterdayBrief(glucose);
+  const brief = await computeYesterdayBrief(glucose, ai);
 
   await notifee.displayNotification({
     id: `${NOTIFICATION_ID}-manual-${Date.now()}`,
@@ -137,6 +215,7 @@ export async function sendDailyBriefNow(glucose: GlucoseSettings) {
 export async function syncDailyBriefNotifications(params: {
   config: DailyBriefConfig;
   glucose: GlucoseSettings;
+  ai?: DailyBriefAiOptions;
 }) {
   const hour = toInt(params.config.hour, 8, 0, 23);
   const minute = toInt(params.config.minute, 0, 0, 59);
@@ -154,7 +233,7 @@ export async function syncDailyBriefNotifications(params: {
 
   const lastDelivered = await AsyncStorage.getItem(STORAGE_KEYS.lastDeliveredDate);
 
-  const brief = await computeYesterdayBrief(params.glucose);
+  const brief = await computeYesterdayBrief(params.glucose, params.ai);
 
   if (now.getTime() >= todaySchedule.getTime() && lastDelivered !== todayKey) {
     await notifee.displayNotification({

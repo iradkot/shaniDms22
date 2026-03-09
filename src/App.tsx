@@ -67,7 +67,7 @@ import {isE2E} from 'app/utils/e2e';
 import {NightscoutConfigProvider} from 'app/contexts/NightscoutConfigContext';
 import NightscoutSetupScreen from 'app/containers/NightscoutSetupScreen';
 import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
-import {AiSettingsProvider} from 'app/contexts/AiSettingsContext';
+import {AiSettingsProvider, useAiSettings} from 'app/contexts/AiSettingsContext';
 import {
   ProactiveCareSettingsProvider,
   useProactiveCareSettings,
@@ -183,6 +183,7 @@ const App: () => React.ReactElement = () => {
   const [notifBody, setNotifBody] = React.useState<string | undefined>();
   const {settings: proactiveSettings} = useProactiveCareSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
+  const {settings: aiSettings} = useAiSettings();
 
   useHypoNowMvp({
     enabled: !isE2E && proactiveSettings.enabled && proactiveSettings.events.hypoNow,
@@ -192,6 +193,7 @@ const App: () => React.ReactElement = () => {
     enabled: !isE2E && proactiveSettings.enabled,
     config: proactiveSettings.dailyBrief,
     glucose: glucoseSettings,
+    ai: aiSettings,
   });
 
   React.useEffect(() => {
