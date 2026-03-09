@@ -128,23 +128,23 @@ async function maybeGenerateLlmActionLine(params: {
   baseActionLine: string;
   stats: {tir: number; avg: number; lows: number; highs: number; nightLows: number};
   ai?: DailyBriefAiOptions;
-}): Promise<string> {
+}): Promise<{actionLine: string; source: 'ai' | 'fallback'}> {
   const {baseActionLine, stats, ai} = params;
   const apiKey = (ai?.apiKey ?? '').trim();
-  if (!ai?.enabled || !apiKey) return baseActionLine;
+  if (!ai?.enabled || !apiKey) return {actionLine: baseActionLine, source: 'fallback'};
 
   try {
     const provider = new OpenAIProvider({apiKey});
     const model = (ai?.model ?? 'gpt-5.4').trim() || 'gpt-5.4';
 
     const system =
-      'You write a very short daily diabetes action line. ' +
-      'Output ONLY one concise sentence (max 12 words), practical and specific.';
+      'You write one short daily action line for diabetes self-management. ' +
+      'Be specific, actionable, and vary wording naturally.';
 
     const user =
       `Stats: ${JSON.stringify(stats)}\n` +
-      `Base suggestion: ${baseActionLine}\n` +
-      'Return one improved action line prefixed with "🎯 Today:".';
+      `Baseline suggestion: ${baseActionLine}\n` +
+      'Return one line only, prefixed with "🎯 Today:" and include one concrete numeric/behavior cue.';
 
     const res = await provider.sendChat({
       model,
@@ -152,15 +152,16 @@ async function maybeGenerateLlmActionLine(params: {
         {role: 'system', content: system},
         {role: 'user', content: user},
       ],
-      temperature: 0.2,
-      maxOutputTokens: 80,
+      temperature: 0.7,
+      maxOutputTokens: 90,
     });
 
     const text = (res.content ?? '').trim();
-    if (!text) return baseActionLine;
-    return text.startsWith('🎯') ? text : `🎯 Today: ${text}`;
+    if (!text) return {actionLine: baseActionLine, source: 'fallback'};
+    const actionLine = text.startsWith('🎯') ? text : `🎯 Today: ${text}`;
+    return {actionLine, source: 'ai'};
   } catch {
-    return baseActionLine;
+    return {actionLine: baseActionLine, source: 'fallback'};
   }
 }
 
@@ -185,17 +186,25 @@ async function computeYesterdayBrief(glucose: GlucoseSettings, ai?: DailyBriefAi
     ai,
   });
 
+  const whyLine =
+    base.stats.nightLows > 0
+      ? `🧠 Why: ${base.stats.nightLows} night lows detected`
+      : base.stats.lows > 0
+        ? `🧠 Why: ${base.stats.lows} low events yesterday`
+        : `🧠 Why: TIR ${base.stats.tir}% and avg ${base.stats.avg}`;
+
   return {
     title: base.title,
     body: composeBody({
       nightLine: base.nightLine,
       dayLine: base.dayLine,
-      actionLine: llmAction,
-    }),
+      actionLine: llmAction.actionLine,
+    }) + `\n${whyLine}`,
+    source: llmAction.source,
   };
 }
 
-async function persistLatestBrief(brief: {title: string; body: string}) {
+async function persistLatestBrief(brief: {title: string; body: string; source?: 'ai' | 'fallback'}) {
   try {
     await AsyncStorage.setItem(
       STORAGE_KEYS.latestBrief,
@@ -209,7 +218,7 @@ async function persistLatestBrief(brief: {title: string; body: string}) {
   }
 }
 
-export async function getLatestDailyBrief(): Promise<{title: string; body: string; createdAt?: string} | null> {
+export async function getLatestDailyBrief(): Promise<{title: string; body: string; source?: 'ai' | 'fallback'; createdAt?: string} | null> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEYS.latestBrief);
     if (!raw) return null;

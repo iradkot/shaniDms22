@@ -3,6 +3,7 @@ import {ActivityIndicator, Pressable, ScrollView, Text, View} from 'react-native
 import {subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import {useNavigation} from '@react-navigation/native';
 
 import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {ThemeType} from 'app/types/theme';
@@ -11,6 +12,7 @@ import {getLatestDailyBrief, regenerateDailyBrief} from 'app/services/proactiveC
 import {computeRank} from 'app/services/proactiveCare/streakRank';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
+import {RANKS_INFO_SCREEN} from 'app/constants/SCREEN_NAMES';
 
 type Row = {sgv: number; dateString?: string};
 
@@ -48,6 +50,7 @@ const cardStyle = (theme: ThemeType) => ({
 
 const DailyReviewScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
+  const navigation = useNavigation<any>();
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
 
@@ -56,6 +59,8 @@ const DailyReviewScreen: React.FC = () => {
   const [yesterdayRows, setYesterdayRows] = useState<Row[]>([]);
   const [weekRows, setWeekRows] = useState<Row[]>([]);
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
+  const [whyLine, setWhyLine] = useState<string | null>(null);
+  const [actionSource, setActionSource] = useState<'ai' | 'fallback'>('fallback');
 
   const loadData = async () => {
     const now = new Date();
@@ -75,9 +80,14 @@ const DailyReviewScreen: React.FC = () => {
     if (latestBrief?.body) {
       const lines = latestBrief.body.split('\n').map(s => s.trim()).filter(Boolean);
       const action = lines.find(l => l.startsWith('🎯')) || lines[2] || null;
+      const why = lines.find(l => l.startsWith('🧠')) || null;
       setLlmActionLine(action);
+      setWhyLine(why);
+      setActionSource(latestBrief.source === 'ai' ? 'ai' : 'fallback');
     } else {
       setLlmActionLine(null);
+      setWhyLine(null);
+      setActionSource('fallback');
     }
   };
 
@@ -141,10 +151,16 @@ const DailyReviewScreen: React.FC = () => {
       <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor}}>Daily Review</Text>
       <Text style={{color: addOpacity(theme.textColor, 0.65)}}>Yesterday vs 7-day baseline</Text>
 
-      <View style={{...cardStyle(theme), backgroundColor: addOpacity(rv.color, 0.14), borderColor: addOpacity(rv.color, 0.6)}}>
+      <Pressable
+        onPress={() => navigation.navigate(RANKS_INFO_SCREEN)}
+        style={{...cardStyle(theme), backgroundColor: addOpacity(rv.color, 0.14), borderColor: addOpacity(rv.color, 0.6)}}
+      >
         <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
           <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>{rv.emoji} Ranked Streak</Text>
-          <Text style={{fontWeight: '800', color: theme.textColor}}>{rank.tier}</Text>
+          <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
+            <Text style={{fontWeight: '800', color: theme.textColor}}>{rank.tier}</Text>
+            <MaterialIcons name="chevron-right" size={18} color={addOpacity(theme.textColor, 0.6)} />
+          </View>
         </View>
         <Text style={{color: theme.textColor, marginTop: 4}}>Score {rank.score}</Text>
 
@@ -163,7 +179,7 @@ const DailyReviewScreen: React.FC = () => {
           {rank.nextTier ? `Progress to ${rank.nextTier}: ${rank.progressToNextPct}%` : 'Max tier reached'}
         </Text>
         <Text style={{color: addOpacity(theme.textColor, 0.85), marginTop: 4}}>Goal: {rank.shortGoal}</Text>
-      </View>
+      </Pressable>
 
       <Pressable
         onPress={handleRegenerate}
@@ -205,8 +221,14 @@ const DailyReviewScreen: React.FC = () => {
       </View>
 
       <View style={cardStyle(theme)}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>Today</Text>
-        <Text style={{color: theme.textColor}}>{action}</Text>
+        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+          <Text style={{fontWeight: '700', color: theme.textColor}}>Today</Text>
+          <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>
+            {actionSource === 'ai' ? 'AI recommendation' : 'Rule-based fallback'}
+          </Text>
+        </View>
+        <Text style={{color: theme.textColor, marginTop: 4}}>{action}</Text>
+        {whyLine ? <Text style={{color: addOpacity(theme.textColor, 0.72), marginTop: 6}}>{whyLine}</Text> : null}
       </View>
     </ScrollView>
   );
