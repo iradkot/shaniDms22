@@ -13,6 +13,8 @@ import {computeRank} from 'app/services/proactiveCare/streakRank';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {RANKS_INFO_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {useInsulinData} from 'app/hooks/useInsulinData';
+import {computeInsulinStats} from './components/InsulinStatsRow/InsulinDataCalculations';
 
 type Row = {sgv: number; dateString?: string};
 
@@ -54,6 +56,7 @@ const DailyReviewScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
+  const {insulinData, basalProfileData} = useInsulinData();
 
   const [loading, setLoading] = useState(true);
   const [refreshingAction, setRefreshingAction] = useState(false);
@@ -63,12 +66,13 @@ const DailyReviewScreen: React.FC = () => {
   const [whyLine, setWhyLine] = useState<string | null>(null);
   const [actionSource, setActionSource] = useState<'ai' | 'fallback'>('fallback');
 
-  const loadData = async () => {
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const yStart = subDays(todayStart, 1);
-    const wStart = subDays(todayStart, 8);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const yStart = subDays(todayStart, 1);
+  const prevDayStart = subDays(yStart, 1);
+  const wStart = subDays(todayStart, 8);
 
+  const loadData = async () => {
     const [y, w, latestBrief] = await Promise.all([
       fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
@@ -127,9 +131,26 @@ const DailyReviewScreen: React.FC = () => {
   const y = useMemo(() => metrics(yesterdayRows), [yesterdayRows]);
   const w = useMemo(() => metrics(weekRows), [weekRows]);
 
+  const insulin = useMemo(() => {
+    try {
+      const yInsulin = computeInsulinStats(insulinData, basalProfileData, yStart, todayStart).totalInsulin;
+      const prevInsulin = computeInsulinStats(insulinData, basalProfileData, prevDayStart, yStart).totalInsulin;
+      const weekInsulin = computeInsulinStats(insulinData, basalProfileData, wStart, yStart).totalInsulin;
+      return {
+        yesterday: yInsulin,
+        prevDay: prevInsulin,
+        avgDaily7: weekInsulin > 0 ? weekInsulin / 7 : 0,
+      };
+    } catch {
+      return {yesterday: 0, prevDay: 0, avgDaily7: 0};
+    }
+  }, [insulinData, basalProfileData]);
+
   const tirDelta = y.tir - w.tir;
   const lowDelta = y.lows - w.lows;
   const severeLowDelta = y.severeLows - w.severeLows;
+  const insulinDelta = insulin.yesterday - insulin.prevDay;
+
   const streakText = y.lows === 0 ? '1 day without lows ✅' : 'Streak reset: lows detected';
   const heuristicAction = y.lows > 0 ? 'Action today: reduce stacking risk in afternoon' : 'Action today: keep current pattern';
   const action = llmActionLine || heuristicAction;
@@ -150,8 +171,13 @@ const DailyReviewScreen: React.FC = () => {
 
   return (
     <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 12}}>
-      <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor}}>Daily Review</Text>
-      <Text style={{color: addOpacity(theme.textColor, 0.65)}}>Yesterday vs 7-day baseline</Text>
+      <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+        <Pressable onPress={() => navigation.goBack()}>
+          <MaterialIcons name="arrow-back" size={22} color={theme.textColor} />
+        </Pressable>
+        <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor}}>Daily Review</Text>
+      </View>
+      <Text style={{color: addOpacity(theme.textColor, 0.65)}}>Yesterday vs completed 7-day baseline</Text>
 
       <Pressable
         onPress={() => navigation.navigate(RANKS_INFO_SCREEN)}
@@ -165,18 +191,9 @@ const DailyReviewScreen: React.FC = () => {
           </View>
         </View>
         <Text style={{color: theme.textColor, marginTop: 4}}>Score {rank.score}</Text>
-
         <View style={{height: 8, borderRadius: 10, backgroundColor: addOpacity(theme.textColor, 0.12), marginTop: 8}}>
-          <View
-            style={{
-              height: 8,
-              borderRadius: 10,
-              width: `${Math.max(4, rank.progressToNextPct)}%`,
-              backgroundColor: rv.color,
-            }}
-          />
+          <View style={{height: 8, borderRadius: 10, width: `${Math.max(4, rank.progressToNextPct)}%`, backgroundColor: rv.color}} />
         </View>
-
         <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 6}}>
           {rank.nextTier ? `Progress to ${rank.nextTier}: ${rank.progressToNextPct}%` : 'Max tier reached'}
         </Text>
@@ -186,12 +203,7 @@ const DailyReviewScreen: React.FC = () => {
       <Pressable
         onPress={handleRegenerate}
         disabled={refreshingAction}
-        style={{
-          ...cardStyle(theme),
-          alignItems: 'center',
-          flexDirection: 'row',
-          justifyContent: 'center',
-          gap: 8,
+        style={{...cardStyle(theme), alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8,
           backgroundColor: refreshingAction ? addOpacity(theme.accentColor, 0.12) : theme.white,
         }}
       >
@@ -203,12 +215,18 @@ const DailyReviewScreen: React.FC = () => {
 
       <View style={cardStyle(theme)}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>Yesterday</Text>
-        <Text style={{color: theme.textColor}}>TIR {y.tir}% • Avg {y.avg} • Hypo {y.lows} • Severe hypo {y.severeLows} • Highs {y.highs}</Text>
+        <Text style={{color: theme.textColor}}>TIR {y.tir}% • Avg {y.avg} • Hypo {y.lows} • Severe {y.severeLows} • Highs {y.highs}</Text>
+        <Text style={{color: addOpacity(theme.textColor, 0.78), marginTop: 4}}>
+          Insulin {insulin.yesterday.toFixed(1)}U ({insulinDelta >= 0 ? '+' : ''}{insulinDelta.toFixed(1)} vs day before)
+        </Text>
       </View>
 
       <View style={cardStyle(theme)}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>7-day baseline</Text>
-        <Text style={{color: theme.textColor}}>TIR {w.tir}% • Avg {w.avg} • Hypo {w.lows} • Severe hypo {w.severeLows} • Highs {w.highs}</Text>
+        <Text style={{color: theme.textColor}}>TIR {w.tir}% • Avg {w.avg} • Hypo {w.lows} • Severe {w.severeLows} • Highs {w.highs}</Text>
+        <Text style={{color: addOpacity(theme.textColor, 0.78), marginTop: 4}}>
+          Avg insulin/day {insulin.avgDaily7.toFixed(1)}U (completed days only)
+        </Text>
       </View>
 
       <View style={{...cardStyle(theme), backgroundColor: addOpacity(tirDelta >= 0 ? '#2e7d32' : '#c62828', 0.1)}}>

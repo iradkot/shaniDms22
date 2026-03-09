@@ -304,9 +304,7 @@ const App: () => React.ReactElement = () => {
 
                               <Stack.Screen
                                 options={{
-                                  headerShown: true,
-                                  headerTitle: 'Daily review',
-                                  headerTitleStyle: {fontSize: 16, fontWeight: '700'},
+                                  headerShown: false,
                                 }}
                                 name={DAILY_REVIEW_SCREEN}
                                 component={DailyReviewScreen}
