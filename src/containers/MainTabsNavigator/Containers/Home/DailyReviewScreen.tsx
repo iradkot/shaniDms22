@@ -2,6 +2,7 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Pressable, ScrollView, Text, View} from 'react-native';
 import {subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {ThemeType} from 'app/types/theme';
@@ -21,6 +22,29 @@ function metrics(rows: Row[]) {
   const tir = Math.round((rows.filter(r => r.sgv >= 70 && r.sgv <= 180).length / rows.length) * 100);
   return {avg, tir, lows, highs};
 }
+
+function tierVisual(tier: string) {
+  switch (tier) {
+    case 'Diamond':
+      return {emoji: '💎', color: '#4fc3f7'};
+    case 'Platinum':
+      return {emoji: '🛡️', color: '#81d4fa'};
+    case 'Gold':
+      return {emoji: '🏆', color: '#fbc02d'};
+    case 'Silver':
+      return {emoji: '🥈', color: '#b0bec5'};
+    default:
+      return {emoji: '🥉', color: '#b87333'};
+  }
+}
+
+const cardStyle = (theme: ThemeType) => ({
+  backgroundColor: theme.white,
+  borderRadius: 14,
+  padding: 12,
+  borderWidth: 1,
+  borderColor: addOpacity(theme.textColor, 0.1),
+});
 
 const DailyReviewScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
@@ -94,8 +118,7 @@ const DailyReviewScreen: React.FC = () => {
 
   const tirDelta = y.tir - w.tir;
   const lowDelta = y.lows - w.lows;
-
-  const streakText = y.lows === 0 ? 'Streak: 1 day without lows ✅' : 'Streak reset: lows detected';
+  const streakText = y.lows === 0 ? '1 day without lows ✅' : 'Streak reset: lows detected';
   const heuristicAction = y.lows > 0 ? 'Action today: reduce stacking risk in afternoon' : 'Action today: keep current pattern';
   const action = llmActionLine || heuristicAction;
 
@@ -103,6 +126,7 @@ const DailyReviewScreen: React.FC = () => {
     () => computeRank({tir: w.tir || y.tir, lows: w.lows, highs: w.highs}),
     [w.tir, w.lows, w.highs, y.tir],
   );
+  const rv = tierVisual(rank.tier);
 
   if (loading) {
     return (
@@ -114,57 +138,73 @@ const DailyReviewScreen: React.FC = () => {
 
   return (
     <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 12}}>
-      <Text style={{fontSize: 24, fontWeight: '700', color: theme.textColor}}>Daily Review</Text>
-      <Text style={{color: addOpacity(theme.textColor, 0.7)}}>Yesterday vs last 7-day baseline</Text>
+      <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor}}>Daily Review</Text>
+      <Text style={{color: addOpacity(theme.textColor, 0.65)}}>Yesterday vs 7-day baseline</Text>
 
-      <View style={{backgroundColor: addOpacity('#6a1b9a', 0.1), borderRadius: 12, padding: 12}}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>Ranked streak</Text>
-        <Text style={{color: theme.textColor, marginTop: 4}}>Tier: {rank.tier} • Score: {rank.score}</Text>
-        <Text style={{color: theme.textColor, marginTop: 2}}>
+      <View style={{...cardStyle(theme), backgroundColor: addOpacity(rv.color, 0.14), borderColor: addOpacity(rv.color, 0.6)}}>
+        <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+          <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>{rv.emoji} Ranked Streak</Text>
+          <Text style={{fontWeight: '800', color: theme.textColor}}>{rank.tier}</Text>
+        </View>
+        <Text style={{color: theme.textColor, marginTop: 4}}>Score {rank.score}</Text>
+
+        <View style={{height: 8, borderRadius: 10, backgroundColor: addOpacity(theme.textColor, 0.12), marginTop: 8}}>
+          <View
+            style={{
+              height: 8,
+              borderRadius: 10,
+              width: `${Math.max(4, rank.progressToNextPct)}%`,
+              backgroundColor: rv.color,
+            }}
+          />
+        </View>
+
+        <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 6}}>
           {rank.nextTier ? `Progress to ${rank.nextTier}: ${rank.progressToNextPct}%` : 'Max tier reached'}
         </Text>
-        <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 4}}>Goal: {rank.shortGoal}</Text>
+        <Text style={{color: addOpacity(theme.textColor, 0.85), marginTop: 4}}>Goal: {rank.shortGoal}</Text>
       </View>
 
       <Pressable
         onPress={handleRegenerate}
         disabled={refreshingAction}
         style={{
-          backgroundColor: theme.white,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: addOpacity(theme.textColor, 0.15),
-          padding: 10,
+          ...cardStyle(theme),
           alignItems: 'center',
+          flexDirection: 'row',
+          justifyContent: 'center',
+          gap: 8,
+          backgroundColor: refreshingAction ? addOpacity(theme.accentColor, 0.12) : theme.white,
         }}
       >
+        <MaterialIcons name="auto-fix-high" size={18} color={theme.textColor} />
         <Text style={{color: theme.textColor, fontWeight: '700'}}>
-          {refreshingAction ? 'Regenerating…' : 'Regenerate review and recommendation'}
+          {refreshingAction ? 'Regenerating…' : 'Regenerate review & recommendation'}
         </Text>
       </Pressable>
 
-      <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
+      <View style={cardStyle(theme)}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>Yesterday</Text>
-        <Text style={{color: theme.textColor}}>TIR: {y.tir}% | Avg: {y.avg} | Lows: {y.lows} | Highs: {y.highs}</Text>
+        <Text style={{color: theme.textColor}}>TIR {y.tir}% • Avg {y.avg} • Lows {y.lows} • Highs {y.highs}</Text>
       </View>
 
-      <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
+      <View style={cardStyle(theme)}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>7-day baseline</Text>
-        <Text style={{color: theme.textColor}}>TIR: {w.tir}% | Avg: {w.avg} | Lows: {w.lows} | Highs: {w.highs}</Text>
+        <Text style={{color: theme.textColor}}>TIR {w.tir}% • Avg {w.avg} • Lows {w.lows} • Highs {w.highs}</Text>
       </View>
 
-      <View style={{backgroundColor: addOpacity(tirDelta >= 0 ? '#2e7d32' : '#c62828', 0.1), borderRadius: 12, padding: 12}}>
+      <View style={{...cardStyle(theme), backgroundColor: addOpacity(tirDelta >= 0 ? '#2e7d32' : '#c62828', 0.1)}}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>Comparison</Text>
         <Text style={{color: theme.textColor}}>TIR delta: {tirDelta >= 0 ? '+' : ''}{tirDelta}%</Text>
-        <Text style={{color: theme.textColor}}>Low events delta: {lowDelta >= 0 ? '+' : ''}{lowDelta}</Text>
+        <Text style={{color: theme.textColor}}>Low delta: {lowDelta >= 0 ? '+' : ''}{lowDelta}</Text>
       </View>
 
-      <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
+      <View style={cardStyle(theme)}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>Momentum</Text>
         <Text style={{color: theme.textColor}}>{streakText}</Text>
       </View>
 
-      <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
+      <View style={cardStyle(theme)}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>Today</Text>
         <Text style={{color: theme.textColor}}>{action}</Text>
       </View>
