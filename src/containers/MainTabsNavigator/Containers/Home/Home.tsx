@@ -408,14 +408,30 @@ const Home: React.FC = () => {
         });
         const nightLows = nightRows.filter(r => r.sgv < 70).length;
 
-        const insulinYesterday = computeInsulinStats(insulinData, basalProfileData, yesterdayStart, todayStart).totalInsulin;
-        const insulinWeek = computeInsulinStats(insulinData, basalProfileData, prevWeekStart, yesterdayStart).totalInsulin;
-        const insulinAvgDaily = insulinWeek > 0 ? insulinWeek / 7 : 0;
+        const prevDayStart = subDays(yesterdayStart, 1);
 
-        const nightLine = nightLows > 0 ? `🌙 Night: ${nightLows} lows` : '🌙 Night: stable';
-        const defaultActionLine = yLows > 0 ? '🎯 Today: avoid afternoon stacking' : '🎯 Today: keep same routine';
+        let insulinYesterday = 0;
+        let insulinPrevDay = 0;
+        let insulinAvgDaily = 0;
+
+        try {
+          insulinYesterday = computeInsulinStats(insulinData, basalProfileData, yesterdayStart, todayStart).totalInsulin;
+          insulinPrevDay = computeInsulinStats(insulinData, basalProfileData, prevDayStart, yesterdayStart).totalInsulin;
+          const insulinWeek = computeInsulinStats(insulinData, basalProfileData, prevWeekStart, yesterdayStart).totalInsulin;
+          insulinAvgDaily = insulinWeek > 0 ? insulinWeek / 7 : 0;
+        } catch {
+          // keep insulin metrics at zero fallback
+        }
+
+        const insulinDelta = insulinYesterday - insulinPrevDay;
+
+        const nightLine = nightLows > 0 ? `Night: ${nightLows} lows` : 'Night: stable';
+        const defaultActionLine = yLows > 0 ? 'Today: avoid afternoon stacking' : 'Today: keep same routine';
         const briefLines = (latestBrief?.body || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
-        const actionLine = briefLines.find((l: string) => l.startsWith('🎯')) || briefLines[2] || defaultActionLine;
+        const actionLine =
+          briefLines.find((l: string) => l.startsWith('🎯') || l.toLowerCase().startsWith('today:')) ||
+          briefLines[2] ||
+          defaultActionLine;
 
         if (!mounted) return;
         setDailySummary({
@@ -423,14 +439,14 @@ const Home: React.FC = () => {
           actionLine,
           tirText: `TIR ${yTir}% (${yTir - wTir >= 0 ? '+' : ''}${yTir - wTir} vs 7d)`,
           avgBgText: `Avg BG ${yAvgBg}`,
-          insulinText: `Insulin ${insulinYesterday.toFixed(1)}U (avg ${insulinAvgDaily.toFixed(1)}U/day)`,
+          insulinText: `Insulin ${insulinYesterday.toFixed(1)}U (${insulinDelta >= 0 ? '+' : ''}${insulinDelta.toFixed(1)} vs day before | avg ${insulinAvgDaily.toFixed(1)}U/day)`,
           trendText: yLows > 0 ? 'Focus: lower hypo risk today' : 'Trend: stable day, keep momentum',
         });
       } catch {
         if (mounted) {
           setDailySummary({
-            nightLine: '🌙 Night: no data',
-            actionLine: '🎯 Today: collect more data',
+            nightLine: 'Night: no data',
+            actionLine: 'Today: collect more data',
             tirText: 'TIR --',
             avgBgText: 'Avg BG --',
             insulinText: 'Insulin --',
@@ -444,7 +460,7 @@ const Home: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [insulinData, basalProfileData]);
 
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
@@ -602,3 +618,4 @@ const Home: React.FC = () => {
 };
 
 export default Home;
+
