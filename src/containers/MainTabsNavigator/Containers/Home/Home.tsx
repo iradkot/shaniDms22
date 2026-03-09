@@ -383,12 +383,17 @@ const Home: React.FC = () => {
       try {
         const now = new Date();
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        const yesterdayStart = subDays(todayStart, 1);
-        const prevWeekStart = subDays(yesterdayStart, 7);
+        const isSelectedToday = startOfDay.getTime() === todayStart.getTime();
+
+        const summaryStart = startOfDay;
+        const summaryEnd = endOfDay;
+        const prevDayStart = subDays(summaryStart, 1);
+        const baselineEnd = summaryStart;
+        const prevWeekStart = subDays(baselineEnd, 7);
 
         const [yRows, wRows, latestBrief] = await Promise.all([
-          fetchBgDataForDateRangeUncached(yesterdayStart, todayStart, {throwOnError: false}),
-          fetchBgDataForDateRangeUncached(prevWeekStart, yesterdayStart, {throwOnError: false}),
+          fetchBgDataForDateRangeUncached(summaryStart, summaryEnd, {throwOnError: false}),
+          fetchBgDataForDateRangeUncached(prevWeekStart, baselineEnd, {throwOnError: false}),
           getLatestDailyBrief(),
         ]);
 
@@ -408,28 +413,26 @@ const Home: React.FC = () => {
         });
         const nightLows = nightRows.filter(r => r.sgv < 70).length;
 
-        const prevDayStart = subDays(yesterdayStart, 1);
-
-        let insulinYesterday = 0;
+        let insulinSelectedDay = 0;
         let insulinPrevDay = 0;
         let insulinAvgDaily = 0;
 
         try {
-          insulinYesterday = computeInsulinStats(insulinData, basalProfileData, yesterdayStart, todayStart).totalInsulin;
-          insulinPrevDay = computeInsulinStats(insulinData, basalProfileData, prevDayStart, yesterdayStart).totalInsulin;
-          const insulinWeek = computeInsulinStats(insulinData, basalProfileData, prevWeekStart, yesterdayStart).totalInsulin;
+          insulinSelectedDay = computeInsulinStats(insulinData, basalProfileData, summaryStart, summaryEnd).totalInsulin;
+          insulinPrevDay = computeInsulinStats(insulinData, basalProfileData, prevDayStart, summaryStart).totalInsulin;
+          const insulinWeek = computeInsulinStats(insulinData, basalProfileData, prevWeekStart, baselineEnd).totalInsulin;
           insulinAvgDaily = insulinWeek > 0 ? insulinWeek / 7 : 0;
         } catch {
           // keep insulin metrics at zero fallback
         }
 
-        const insulinDelta = insulinYesterday - insulinPrevDay;
+        const insulinDelta = insulinSelectedDay - insulinPrevDay;
 
         const nightLine = nightLows > 0 ? `Night: ${nightLows} lows` : 'Night: stable';
         const defaultActionLine = yLows > 0 ? 'Today: avoid afternoon stacking' : 'Today: keep same routine';
         const briefLines = (latestBrief?.body || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
         const actionLine =
-          briefLines.find((l: string) => l.startsWith('🎯') || l.toLowerCase().startsWith('today:')) ||
+          briefLines.find((l: string) => l.startsWith('??') || l.toLowerCase().startsWith('today:')) ||
           briefLines[2] ||
           defaultActionLine;
 
@@ -439,7 +442,7 @@ const Home: React.FC = () => {
           actionLine,
           tirText: `TIR ${yTir}% (${yTir - wTir >= 0 ? '+' : ''}${yTir - wTir} vs 7d)`,
           avgBgText: `Avg BG ${yAvgBg}`,
-          insulinText: `Insulin ${insulinYesterday.toFixed(1)}U (${insulinDelta >= 0 ? '+' : ''}${insulinDelta.toFixed(1)} vs day before | avg ${insulinAvgDaily.toFixed(1)}U/day)`,
+          insulinText: `Insulin ${insulinSelectedDay.toFixed(1)}U (${insulinDelta >= 0 ? '+' : ''}${insulinDelta.toFixed(1)} vs day before | avg ${insulinAvgDaily.toFixed(1)}U/day)`,
           trendText: yLows > 0 ? 'Focus: lower hypo risk today' : 'Trend: stable day, keep momentum',
         });
       } catch {
@@ -460,7 +463,7 @@ const Home: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [insulinData, basalProfileData]);
+  }, [insulinData, basalProfileData, startOfDay, endOfDay, isShowingToday, debouncedCurrentDate]);
 
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
@@ -490,7 +493,7 @@ const Home: React.FC = () => {
           <DailySummaryCard onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
               <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>Daily summary</Text>
-              <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>Yesterday</Text>
+              <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>{isShowingToday ? 'Today' : format(debouncedCurrentDate, 'dd/MM')}</Text>
             </View>
 
             <View style={{marginTop: 8, gap: 4}}>
