@@ -7,6 +7,7 @@ import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {getLatestDailyBrief, regenerateDailyBrief} from 'app/services/proactiveCare/dailyBrief';
+import {computeRank} from 'app/services/proactiveCare/streakRank';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 
@@ -98,6 +99,11 @@ const DailyReviewScreen: React.FC = () => {
   const heuristicAction = y.lows > 0 ? 'Action today: reduce stacking risk in afternoon' : 'Action today: keep current pattern';
   const action = llmActionLine || heuristicAction;
 
+  const rank = useMemo(
+    () => computeRank({tir: w.tir || y.tir, lows: w.lows, highs: w.highs}),
+    [w.tir, w.lows, w.highs, y.tir],
+  );
+
   if (loading) {
     return (
       <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}>
@@ -110,6 +116,15 @@ const DailyReviewScreen: React.FC = () => {
     <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 12}}>
       <Text style={{fontSize: 24, fontWeight: '700', color: theme.textColor}}>Daily Review</Text>
       <Text style={{color: addOpacity(theme.textColor, 0.7)}}>Yesterday vs last 7-day baseline</Text>
+
+      <View style={{backgroundColor: addOpacity('#6a1b9a', 0.1), borderRadius: 12, padding: 12}}>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>Ranked streak</Text>
+        <Text style={{color: theme.textColor, marginTop: 4}}>Tier: {rank.tier} • Score: {rank.score}</Text>
+        <Text style={{color: theme.textColor, marginTop: 2}}>
+          {rank.nextTier ? `Progress to ${rank.nextTier}: ${rank.progressToNextPct}%` : 'Max tier reached'}
+        </Text>
+        <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 4}}>Goal: {rank.shortGoal}</Text>
+      </View>
 
       <Pressable
         onPress={handleRegenerate}

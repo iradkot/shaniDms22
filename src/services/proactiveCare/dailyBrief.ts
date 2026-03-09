@@ -4,6 +4,7 @@ import notifee, {AndroidImportance, RepeatFrequency, TriggerType} from '@notifee
 import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {GlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
+import {computeRank} from 'app/services/proactiveCare/streakRank';
 
 const CHANNEL_ID = 'daily-briefs';
 const NOTIFICATION_ID = 'daily-brief-notification';
@@ -86,7 +87,8 @@ function buildBriefText(params: {
       ? `🌙 Night: ${nightLows.length} lows, min ${Math.min(...nightLows.map(r => r.sgv))}`
       : `🌙 Night: stable`;
 
-  const dayLine = `📊 Yesterday: TIR ${tir}% | avg ${avg}`;
+  const rank = computeRank({tir, lows: lows.length, highs: highs.length});
+  const dayLine = `📊 Yesterday: TIR ${tir}% | ${rank.tier}`;
 
   let actionLine = '🎯 Today: keep same routine';
   if (nightLows.length > 0 || lows.length >= 2) {
