@@ -17,12 +17,13 @@ import {RANKS_INFO_SCREEN} from 'app/constants/SCREEN_NAMES';
 type Row = {sgv: number; dateString?: string};
 
 function metrics(rows: Row[]) {
-  if (!rows.length) return {avg: 0, tir: 0, lows: 0, highs: 0};
+  if (!rows.length) return {avg: 0, tir: 0, lows: 0, severeLows: 0, highs: 0};
   const avg = Math.round(rows.reduce((s, r) => s + r.sgv, 0) / rows.length);
-  const lows = rows.filter(r => r.sgv < 70).length;
+  const severeLows = rows.filter(r => r.sgv <= 55).length;
+  const lows = rows.filter(r => r.sgv > 55 && r.sgv < 70).length;
   const highs = rows.filter(r => r.sgv > 180).length;
   const tir = Math.round((rows.filter(r => r.sgv >= 70 && r.sgv <= 180).length / rows.length) * 100);
-  return {avg, tir, lows, highs};
+  return {avg, tir, lows, severeLows, highs};
 }
 
 function tierVisual(tier: string) {
@@ -128,13 +129,14 @@ const DailyReviewScreen: React.FC = () => {
 
   const tirDelta = y.tir - w.tir;
   const lowDelta = y.lows - w.lows;
+  const severeLowDelta = y.severeLows - w.severeLows;
   const streakText = y.lows === 0 ? '1 day without lows ✅' : 'Streak reset: lows detected';
   const heuristicAction = y.lows > 0 ? 'Action today: reduce stacking risk in afternoon' : 'Action today: keep current pattern';
   const action = llmActionLine || heuristicAction;
 
   const rank = useMemo(
-    () => computeRank({tir: w.tir || y.tir, lows: w.lows, highs: w.highs}),
-    [w.tir, w.lows, w.highs, y.tir],
+    () => computeRank({tir: w.tir || y.tir, lows: w.lows + w.severeLows, highs: w.highs}),
+    [w.tir, w.lows, w.severeLows, w.highs, y.tir],
   );
   const rv = tierVisual(rank.tier);
 
@@ -201,18 +203,19 @@ const DailyReviewScreen: React.FC = () => {
 
       <View style={cardStyle(theme)}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>Yesterday</Text>
-        <Text style={{color: theme.textColor}}>TIR {y.tir}% • Avg {y.avg} • Lows {y.lows} • Highs {y.highs}</Text>
+        <Text style={{color: theme.textColor}}>TIR {y.tir}% • Avg {y.avg} • Hypo {y.lows} • Severe hypo {y.severeLows} • Highs {y.highs}</Text>
       </View>
 
       <View style={cardStyle(theme)}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>7-day baseline</Text>
-        <Text style={{color: theme.textColor}}>TIR {w.tir}% • Avg {w.avg} • Lows {w.lows} • Highs {w.highs}</Text>
+        <Text style={{color: theme.textColor}}>TIR {w.tir}% • Avg {w.avg} • Hypo {w.lows} • Severe hypo {w.severeLows} • Highs {w.highs}</Text>
       </View>
 
       <View style={{...cardStyle(theme), backgroundColor: addOpacity(tirDelta >= 0 ? '#2e7d32' : '#c62828', 0.1)}}>
         <Text style={{fontWeight: '700', color: theme.textColor}}>Comparison</Text>
         <Text style={{color: theme.textColor}}>TIR delta: {tirDelta >= 0 ? '+' : ''}{tirDelta}%</Text>
-        <Text style={{color: theme.textColor}}>Low delta: {lowDelta >= 0 ? '+' : ''}{lowDelta}</Text>
+        <Text style={{color: theme.textColor}}>Hypo delta: {lowDelta >= 0 ? '+' : ''}{lowDelta}</Text>
+        <Text style={{color: theme.textColor}}>Severe hypo delta: {severeLowDelta >= 0 ? '+' : ''}{severeLowDelta}</Text>
       </View>
 
       <View style={cardStyle(theme)}>
