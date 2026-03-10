@@ -50,14 +50,6 @@ function tierVisual(tier: string) {
   }
 }
 
-const cardStyle = (theme: ThemeType) => ({
-  backgroundColor: theme.white,
-  borderRadius: 14,
-  padding: 12,
-  borderWidth: 1,
-  borderColor: addOpacity(theme.textColor, 0.1),
-});
-
 const DailyReviewScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation<any>();
@@ -111,13 +103,10 @@ const DailyReviewScreen: React.FC = () => {
     try {
       const yesterdayTotal = await getDayInsulinTotal(yStart);
       const prevDayTotal = await getDayInsulinTotal(prevDayStart);
-
       let weekSum = 0;
       for (let i = 1; i <= 7; i++) {
-        const day = subDays(todayStart, i);
-        weekSum += await getDayInsulinTotal(day);
+        weekSum += await getDayInsulinTotal(subDays(todayStart, i));
       }
-
       setInsulin({
         yesterday: yesterdayTotal,
         prevDay: prevDayTotal,
@@ -144,11 +133,9 @@ const DailyReviewScreen: React.FC = () => {
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    loadData()
-      .catch(() => {})
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
+    loadData().finally(() => {
+      if (mounted) setLoading(false);
+    });
     return () => {
       mounted = false;
     };
@@ -174,20 +161,15 @@ const DailyReviewScreen: React.FC = () => {
 
   const y = useMemo(() => metrics(yesterdayRows), [yesterdayRows]);
   const w = useMemo(() => metrics(weekRows), [weekRows]);
-
-  const tirDelta = y.tir - w.tir;
-  const lowDelta = y.lows - w.lows;
-  const severeLowDelta = y.severeLows - w.severeLows;
-  const insulinDelta = insulin.yesterday - insulin.prevDay;
-
-  const heuristicAction = y.lows > 0 ? 'Action today: reduce stacking risk in afternoon' : 'Action today: keep current pattern';
-  const action = llmActionLine || heuristicAction;
-
   const rank = useMemo(
     () => computeRank({tir: w.tir || y.tir, lows: w.lows + w.severeLows, highs: w.highs}),
     [w.tir, w.lows, w.severeLows, w.highs, y.tir],
   );
+
+  const insulinDelta = insulin.yesterday - insulin.prevDay;
+  const tirDelta = y.tir - w.tir;
   const rv = tierVisual(rank.tier);
+  const action = llmActionLine || 'Today: keep stable routine and avoid stacking';
 
   if (loading) {
     return (
@@ -199,61 +181,69 @@ const DailyReviewScreen: React.FC = () => {
 
   return (
     <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 10}}>
-      <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
-        <Pressable onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={22} color={theme.textColor} />
+      <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+        <Pressable onPress={() => navigation.goBack()} style={{padding: 4}}>
+          <MaterialIcons name="arrow-back" size={24} color={theme.textColor} />
         </Pressable>
-        <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor}}>Daily Review</Text>
+        <Text style={{fontSize: 26, fontWeight: '800', color: theme.textColor}}>Daily Review</Text>
+        <View style={{width: 24}} />
       </View>
 
       <Pressable
         onPress={() => navigation.navigate(RANKS_INFO_SCREEN)}
-        style={{...cardStyle(theme), backgroundColor: addOpacity(rv.color, 0.14), borderColor: addOpacity(rv.color, 0.6)}}
+        style={{backgroundColor: addOpacity(rv.color, 0.14), borderRadius: 16, padding: 14, borderWidth: 1, borderColor: addOpacity(rv.color, 0.6)}}
       >
-        <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-          <Text style={{fontWeight: '800', color: theme.textColor}}>{rv.emoji} Ranked Streak</Text>
-          <Text style={{fontWeight: '800', color: theme.textColor}}>{rank.tier}</Text>
+        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+          <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>{rv.emoji} {rank.tier}</Text>
+          <Text style={{fontWeight: '700', color: addOpacity(theme.textColor, 0.75)}}>Score {rank.score}</Text>
         </View>
-        <View style={{height: 8, borderRadius: 10, backgroundColor: addOpacity(theme.textColor, 0.12), marginTop: 8}}>
-          <View style={{height: 8, borderRadius: 10, width: `${Math.max(4, rank.progressToNextPct)}%`, backgroundColor: rv.color}} />
+        <View style={{height: 9, borderRadius: 12, backgroundColor: addOpacity(theme.textColor, 0.14), marginTop: 10}}>
+          <View style={{height: 9, borderRadius: 12, width: `${Math.max(5, rank.progressToNextPct)}%`, backgroundColor: rv.color}} />
         </View>
-        <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 6}}>
-          {rank.nextTier ? `Progress to ${rank.nextTier}: ${rank.progressToNextPct}%` : 'Max tier reached'}
-        </Text>
       </Pressable>
 
-      <Pressable onPress={handleRegenerate} disabled={refreshingAction} style={{...cardStyle(theme), alignItems: 'center'}}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>
-          {refreshingAction ? 'Regenerating…' : 'Regenerate recommendation'}
+      <View style={{flexDirection: 'row', gap: 8}}>
+        <View style={{flex: 1, backgroundColor: theme.white, borderRadius: 14, padding: 12}}>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>TIR</Text>
+          <Text style={{fontSize: 22, fontWeight: '800', color: theme.textColor}}>{y.tir}%</Text>
+          <Text style={{fontSize: 12, color: tirDelta >= 0 ? '#2e7d32' : '#c62828'}}>{tirDelta >= 0 ? '+' : ''}{tirDelta} vs 7d</Text>
+        </View>
+        <View style={{flex: 1, backgroundColor: theme.white, borderRadius: 14, padding: 12}}>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>Avg BG</Text>
+          <Text style={{fontSize: 22, fontWeight: '800', color: theme.textColor}}>{y.avg}</Text>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>7d: {w.avg}</Text>
+        </View>
+      </View>
+
+      <View style={{backgroundColor: theme.white, borderRadius: 14, padding: 12}}>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>Insulin</Text>
+        <Text style={{marginTop: 4, color: theme.textColor}}>
+          Yesterday: {insulin.yesterday.toFixed(1)}U ({insulinDelta >= 0 ? '+' : ''}{insulinDelta.toFixed(1)} vs day before)
         </Text>
+        <Text style={{marginTop: 2, color: addOpacity(theme.textColor, 0.75)}}>7-day avg: {insulin.avgDaily7.toFixed(1)}U/day</Text>
+      </View>
+
+      <View style={{backgroundColor: theme.white, borderRadius: 14, padding: 12}}>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>Lows & Highs</Text>
+        <Text style={{marginTop: 4, color: theme.textColor}}>Hypo: {y.lows} • Severe: {y.severeLows} • Highs: {y.highs}</Text>
+        <Text style={{marginTop: 2, color: addOpacity(theme.textColor, 0.75)}}>7d baseline: Hypo {w.lows} • Severe {w.severeLows} • Highs {w.highs}</Text>
+      </View>
+
+      <Pressable
+        onPress={handleRegenerate}
+        disabled={refreshingAction}
+        style={{backgroundColor: theme.white, borderRadius: 14, padding: 12, alignItems: 'center'}}
+      >
+        <Text style={{fontWeight: '700', color: theme.textColor}}>{refreshingAction ? 'Regenerating…' : 'Regenerate recommendation'}</Text>
       </Pressable>
 
-      <View style={cardStyle(theme)}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>Yesterday</Text>
-        <Text style={{color: theme.textColor}}>TIR {y.tir}% • Avg {y.avg} • Hypo {y.lows} • Severe {y.severeLows}</Text>
-        <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 4}}>
-          Insulin {insulin.yesterday.toFixed(1)}U ({insulinDelta >= 0 ? '+' : ''}{insulinDelta.toFixed(1)} vs day before)
-        </Text>
-      </View>
-
-      <View style={cardStyle(theme)}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>7-day baseline</Text>
-        <Text style={{color: theme.textColor}}>TIR {w.tir}% • Avg {w.avg} • Hypo {w.lows} • Severe {w.severeLows}</Text>
-        <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 4}}>Avg insulin/day {insulin.avgDaily7.toFixed(1)}U</Text>
-      </View>
-
-      <View style={cardStyle(theme)}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>Comparison</Text>
-        <Text style={{color: theme.textColor}}>TIR {tirDelta >= 0 ? '+' : ''}{tirDelta}% • Hypo {lowDelta >= 0 ? '+' : ''}{lowDelta} • Severe {severeLowDelta >= 0 ? '+' : ''}{severeLowDelta}</Text>
-      </View>
-
-      <View style={cardStyle(theme)}>
+      <View style={{backgroundColor: theme.white, borderRadius: 14, padding: 12}}>
         <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
           <Text style={{fontWeight: '700', color: theme.textColor}}>Today</Text>
-          <Text style={{color: addOpacity(theme.textColor, 0.6), fontSize: 12}}>{actionSource === 'ai' ? 'AI' : 'Fallback'}</Text>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>{actionSource === 'ai' ? 'AI' : 'Fallback'}</Text>
         </View>
-        <Text style={{color: theme.textColor, marginTop: 4}}>{action}</Text>
-        {whyLine ? <Text style={{color: addOpacity(theme.textColor, 0.72), marginTop: 6}}>{whyLine}</Text> : null}
+        <Text style={{marginTop: 4, color: theme.textColor}}>{action}</Text>
+        {whyLine ? <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.75)}}>{whyLine}</Text> : null}
       </View>
     </ScrollView>
   );
