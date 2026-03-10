@@ -188,7 +188,19 @@ const DailyReviewScreen: React.FC = () => {
         <View style={{width: 24}} />
       </View>
 
-      <Pressable onPress={() => navigation.navigate(RANKS_INFO_SCREEN)} style={{...card, backgroundColor: addOpacity(rv.color, 0.14), borderWidth: 1, borderColor: addOpacity(rv.color, 0.6)}}>
+      <Pressable
+        onPress={() =>
+          navigation.navigate(RANKS_INFO_SCREEN, {
+            tier: rank.tier,
+            score: rank.score,
+            nextTier: rank.nextTier,
+            progressToNextPct: rank.progressToNextPct,
+            breakdown: rank.breakdown,
+            weeklyMetrics: {tir: wTirPct, lows: wLows, highs: wHighs},
+          })
+        }
+        style={{...card, backgroundColor: addOpacity(rv.color, 0.14), borderWidth: 1, borderColor: addOpacity(rv.color, 0.6}}
+      >
         <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
           <Text style={{fontWeight: '800', color: theme.textColor}}>{rv.emoji} {rank.tier}</Text>
           <Text style={{fontWeight: '700', color: addOpacity(theme.textColor, 0.7)}}>Score {rank.score}</Text>
@@ -218,7 +230,7 @@ const DailyReviewScreen: React.FC = () => {
       </View>
 
       <View style={{...card}}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>Glucose range (same logic as Home)</Text>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>Glucose range</Text>
         <View style={{marginTop: 6}}>
           <TimeInRangeRow bgData={yRows as any} />
         </View>
