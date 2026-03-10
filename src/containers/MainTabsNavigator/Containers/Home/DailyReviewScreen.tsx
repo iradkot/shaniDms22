@@ -64,15 +64,6 @@ const DailyReviewScreen: React.FC = () => {
   const prevDayStart = useMemo(() => subDays(yStart, 1), [yStart]);
   const wStart = useMemo(() => subDays(todayStart, 8), [todayStart]);
 
-  const ranges = useMemo(
-    () => ({
-      severeHypo: glucoseSettings.severeHypo ?? 55,
-      hypo: glucoseSettings.hypo ?? 70,
-      hyper: glucoseSettings.hyper ?? 180,
-    }),
-    [glucoseSettings.severeHypo, glucoseSettings.hypo, glucoseSettings.hyper],
-  );
-
   const getDayInsulinTotal = async (dayStart: Date): Promise<number> => {
     const s = new Date(dayStart); s.setHours(0, 0, 0, 0);
     const e = new Date(dayStart); e.setHours(23, 59, 59, 999);
@@ -123,9 +114,7 @@ const DailyReviewScreen: React.FC = () => {
     let mounted = true;
     setLoading(true);
     loadData().finally(() => mounted && setLoading(false));
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   const handleRegenerate = async () => {
@@ -199,7 +188,7 @@ const DailyReviewScreen: React.FC = () => {
             weeklyMetrics: {tir: wTirPct, lows: wLows, highs: wHighs},
           })
         }
-        style={{...card, backgroundColor: addOpacity(rv.color, 0.14), borderWidth: 1, borderColor: addOpacity(rv.color, 0.6}}
+        style={{...card, backgroundColor: addOpacity(rv.color, 0.14), borderWidth: 1, borderColor: addOpacity(rv.color, 0.6)}}
       >
         <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
           <Text style={{fontWeight: '800', color: theme.textColor}}>{rv.emoji} {rank.tier}</Text>

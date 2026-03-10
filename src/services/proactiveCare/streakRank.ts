@@ -6,12 +6,20 @@ export interface RankMetrics {
   highs: number;
 }
 
+export interface RankBreakdown {
+  base: number;
+  tirBonus: number;
+  lowPenalty: number;
+  highPenalty: number;
+}
+
 export interface RankState {
   tier: RankTier;
   score: number;
   nextTier: RankTier | null;
   progressToNextPct: number;
   shortGoal: string;
+  breakdown: RankBreakdown;
 }
 
 const TIERS: Array<{tier: RankTier; minScore: number}> = [
@@ -27,11 +35,12 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export function computeRank(metrics: RankMetrics): RankState {
-  const tirScore = clamp((metrics.tir - 50) * 1.2, 0, 60);
+  const base = 35;
+  const tirBonus = clamp((metrics.tir - 50) * 1.2, 0, 60);
   const lowPenalty = clamp(metrics.lows * 2.8, 0, 30);
   const highPenalty = clamp(metrics.highs * 0.6, 0, 25);
 
-  const score = Math.round(clamp(tirScore - lowPenalty - highPenalty + 35, 0, 100));
+  const score = Math.round(clamp(base + tirBonus - lowPenalty - highPenalty, 0, 100));
 
   let tier: RankTier = 'Bronze';
   for (const t of TIERS) {
@@ -56,5 +65,11 @@ export function computeRank(metrics: RankMetrics): RankState {
     nextTier: next?.tier ?? null,
     progressToNextPct,
     shortGoal,
+    breakdown: {
+      base,
+      tirBonus: Math.round(tirBonus),
+      lowPenalty: Math.round(lowPenalty),
+      highPenalty: Math.round(highPenalty),
+    },
   };
 }
