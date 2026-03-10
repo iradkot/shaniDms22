@@ -17,6 +17,7 @@ import {computeRank} from 'app/services/proactiveCare/streakRank';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {RANKS_INFO_SCREEN} from 'app/constants/SCREEN_NAMES';
+import TimeInRangeRow from './components/TimeInRangeRow';
 import {
   extractBasalProfileFromNightscoutProfileData,
   mapNightscoutTreatmentsToInsulinDataEntries,
@@ -25,14 +26,9 @@ import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsul
 
 type Row = {sgv: number; dateString?: string};
 
-function metricRows(rows: Row[], ranges: {hypo: number; severeHypo: number; hyper: number}) {
-  if (!rows.length) return {avg: 0, tir: 0, lows: 0, severeLows: 0, highs: 0};
-  const avg = Math.round(rows.reduce((s, r) => s + r.sgv, 0) / rows.length);
-  const severeLows = rows.filter(r => r.sgv <= ranges.severeHypo).length;
-  const lows = rows.filter(r => r.sgv > ranges.severeHypo && r.sgv < ranges.hypo).length;
-  const highs = rows.filter(r => r.sgv > ranges.hyper).length;
-  const tir = Math.round((rows.filter(r => r.sgv >= ranges.hypo && r.sgv <= ranges.hyper).length / rows.length) * 100);
-  return {avg, tir, lows, severeLows, highs};
+function averageBg(rows: Row[]) {
+  if (!rows.length) return 0;
+  return Math.round(rows.reduce((s, r) => s + r.sgv, 0) / rows.length);
 }
 
 function tierVisual(tier: string) {
@@ -146,18 +142,35 @@ const DailyReviewScreen: React.FC = () => {
     }
   };
 
-  const y = useMemo(() => metricRows(yRows, ranges), [yRows, ranges]);
-  const w = useMemo(() => metricRows(wRows, ranges), [wRows, ranges]);
+  const yAvg = useMemo(() => averageBg(yRows), [yRows]);
+  const wAvg = useMemo(() => averageBg(wRows), [wRows]);
+
+  const yTirPct = useMemo(() => {
+    if (!yRows.length) return 0;
+    const inRange = yRows.filter(r => r.sgv >= (glucoseSettings.hypo ?? 70) && r.sgv <= (glucoseSettings.hyper ?? 180)).length;
+    return Math.round((inRange / yRows.length) * 100);
+  }, [yRows, glucoseSettings.hypo, glucoseSettings.hyper]);
+
+  const wTirPct = useMemo(() => {
+    if (!wRows.length) return 0;
+    const inRange = wRows.filter(r => r.sgv >= (glucoseSettings.hypo ?? 70) && r.sgv <= (glucoseSettings.hyper ?? 180)).length;
+    return Math.round((inRange / wRows.length) * 100);
+  }, [wRows, glucoseSettings.hypo, glucoseSettings.hyper]);
+
+  const yLows = useMemo(() => yRows.filter(r => r.sgv < (glucoseSettings.hypo ?? 70)).length, [yRows, glucoseSettings.hypo]);
+  const yHighs = useMemo(() => yRows.filter(r => r.sgv > (glucoseSettings.hyper ?? 180)).length, [yRows, glucoseSettings.hyper]);
+  const wLows = useMemo(() => wRows.filter(r => r.sgv < (glucoseSettings.hypo ?? 70)).length, [wRows, glucoseSettings.hypo]);
+  const wHighs = useMemo(() => wRows.filter(r => r.sgv > (glucoseSettings.hyper ?? 180)).length, [wRows, glucoseSettings.hyper]);
 
   const rank = useMemo(
-    () => computeRank({tir: w.tir || y.tir, lows: w.lows + w.severeLows, highs: w.highs}),
-    [w.tir, w.lows, w.severeLows, w.highs, y.tir],
+    () => computeRank({tir: wTirPct || yTirPct, lows: wLows, highs: wHighs}),
+    [wTirPct, yTirPct, wLows, wHighs],
   );
   const rv = tierVisual(rank.tier);
 
   const action = llmActionLine || 'Today: keep stable routine and avoid stacking';
   const insulinDelta = insulin.yesterday - insulin.prevDay;
-  const tirDelta = y.tir - w.tir;
+  const tirDelta = yTirPct - wTirPct;
 
   const card = {backgroundColor: theme.white, borderRadius: 14, padding: 12};
 
@@ -188,13 +201,13 @@ const DailyReviewScreen: React.FC = () => {
       <View style={{flexDirection: 'row', gap: 8}}>
         <View style={{...card, flex: 1}}>
           <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>TIR</Text>
-          <Text style={{fontSize: 22, fontWeight: '800', color: theme.textColor}}>{y.tir}%</Text>
+          <Text style={{fontSize: 22, fontWeight: '800', color: theme.textColor}}>{yTirPct}%</Text>
           <Text style={{fontSize: 12, color: tirDelta >= 0 ? '#2e7d32' : '#c62828'}}>{tirDelta >= 0 ? '+' : ''}{tirDelta} vs 7d</Text>
         </View>
         <View style={{...card, flex: 1}}>
           <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>Avg BG</Text>
-          <Text style={{fontSize: 22, fontWeight: '800', color: theme.textColor}}>{y.avg}</Text>
-          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>7d {w.avg}</Text>
+          <Text style={{fontSize: 22, fontWeight: '800', color: theme.textColor}}>{yAvg}</Text>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>7d {wAvg}</Text>
         </View>
       </View>
 
@@ -205,8 +218,13 @@ const DailyReviewScreen: React.FC = () => {
       </View>
 
       <View style={{...card}}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>Glucose events</Text>
-        <Text style={{marginTop: 4, color: theme.textColor}}>Hypo {y.lows} • Severe {y.severeLows} • Highs {y.highs}</Text>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>Glucose range (same logic as Home)</Text>
+        <View style={{marginTop: 6}}>
+          <TimeInRangeRow bgData={yRows as any} />
+        </View>
+        <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75)}}>
+          Baseline (7d): lows {wLows} • highs {wHighs}
+        </Text>
       </View>
 
       <Pressable onPress={handleRegenerate} disabled={refreshingAction} style={{...card, alignItems: 'center'}}>
