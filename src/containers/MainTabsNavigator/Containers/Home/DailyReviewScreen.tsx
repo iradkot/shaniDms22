@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, I18nManager, Pressable, ScrollView, Text, View} from 'react-native';
-import {subDays} from 'date-fns';
+import {format, subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useNavigation} from '@react-navigation/native';
@@ -192,6 +192,7 @@ const DailyReviewScreen: React.FC = () => {
 
   const tirDelta = yTirPct - wTirPct;
   const insulinDelta = insulin.yesterday - insulin.prevDay;
+  const yDateLabel = format(yStart, 'd/M');
 
   const keyInsight = useMemo(() => {
     if (!yRows.length) return 'אין מספיק נתוני סוכר מאתמול כדי לזהות מגמה ברורה.';
@@ -208,6 +209,14 @@ const DailyReviewScreen: React.FC = () => {
       : '(אין מספיק השוואה שבועית)';
     return `אתמול: ${tirPart} ${trendPart}. ממוצע הסוכר היה ${yAvg}.`;
   }, [yRows.length, yTirPct, tirDelta, yAvg, wRows.length]);
+
+  const heroSummary = useMemo(() => {
+    if (!yRows.length) return 'אין מספיק נתונים על אתמול כדי לקבוע תמונה מלאה.';
+    if (yTirPct >= 75 && yLows <= 2) return 'אתמול היה יום יציב יחסית עם שליטה טובה.';
+    if (yLows > yHighs) return 'אתמול היו יותר ירידות סוכר מהרגיל.';
+    if (yHighs > yLows) return 'אתמול בלטו יותר ערכים גבוהים מהרגיל.';
+    return 'אתמול היה יום מעורב, עם נקודות טובות לצד אתגרים.';
+  }, [yRows.length, yTirPct, yLows, yHighs]);
 
   const actionText = llmActionLine || (yRows.length
     ? 'להיום: לשמור על שגרה יציבה, להימנע מתיקונים צפופים, ולבדוק מגמה לפני החלטה.'
@@ -228,7 +237,10 @@ const DailyReviewScreen: React.FC = () => {
         <Pressable onPress={() => navigation.goBack()} style={{padding: 4}}>
           <MaterialIcons name="arrow-back" size={24} color={theme.textColor} />
         </Pressable>
-        <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor, textAlign}}>סיכום היום הקודם</Text>
+        <View>
+          <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor, textAlign}}>סיכום אתמול</Text>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65), textAlign}}>תאריך: {yDateLabel}</Text>
+        </View>
         <View style={{width: 24}} />
       </View>
 
@@ -252,6 +264,7 @@ const DailyReviewScreen: React.FC = () => {
         <View style={{height: 8, borderRadius: 10, backgroundColor: addOpacity(theme.textColor, 0.12), marginTop: 8}}>
           <View style={{height: 8, borderRadius: 10, width: `${Math.max(5, rank.progressToNextPct)}%`, backgroundColor: rv.color}} />
         </View>
+        <Text style={{marginTop: 8, color: theme.textColor, textAlign}}>{heroSummary}</Text>
       </Pressable>
 
       <View style={card}>
@@ -276,7 +289,7 @@ const DailyReviewScreen: React.FC = () => {
           <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75), textAlign}}>{whyLine}</Text>
         ) : null}
         <Text style={{marginTop: 4, fontSize: 12, color: addOpacity(theme.textColor, 0.6), textAlign}}>
-          מקור המלצה: {actionSource === 'ai' ? 'AI' : 'בסיסי'}
+          מקור המלצה: {actionSource === 'ai' ? 'מותאם אישית' : 'המלצה אוטומטית'}
         </Text>
       </View>
 
