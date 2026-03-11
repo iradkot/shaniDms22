@@ -191,24 +191,10 @@ const DailyReviewScreen: React.FC = () => {
   const rv = tierVisual(rank.tier);
 
   const tirDelta = yTirPct - wTirPct;
+  const avgDelta = yAvg - wAvg;
   const insulinDelta = insulin.yesterday - insulin.prevDay;
   const yDateLabel = format(yStart, 'd/M');
-
-  const keyInsight = useMemo(() => {
-    if (!yRows.length) return 'אין מספיק נתוני סוכר מאתמול כדי לזהות מגמה ברורה.';
-    if (yLows > yHighs && yLows > 0) return `הנקודה המרכזית: היו יותר נפילות (${yLows}) מעליות (${yHighs}).`;
-    if (yHighs > yLows && yHighs > 0) return `הנקודה המרכזית: היו יותר עליות (${yHighs}) מנפילות (${yLows}).`;
-    return 'היום היה יחסית מאוזן בין עליות לנפילות.';
-  }, [yRows.length, yLows, yHighs]);
-
-  const naturalSummary = useMemo(() => {
-    if (!yRows.length) return 'אתמול לא נאספו מספיק נתונים, לכן אי אפשר לתת סיכום אמין.';
-    const tirPart = `זמן בטווח היה ${yTirPct}%`;
-    const trendPart = wRows.length
-      ? `(${tirDelta >= 0 ? 'שיפור' : 'ירידה'} של ${Math.abs(tirDelta)}% לעומת ממוצע 7 ימים)`
-      : '(אין מספיק השוואה שבועית)';
-    return `אתמול: ${tirPart} ${trendPart}. ממוצע הסוכר היה ${yAvg}.`;
-  }, [yRows.length, yTirPct, tirDelta, yAvg, wRows.length]);
+  const canRefreshRecommendation = !!(aiSettings.enabled && (aiSettings.apiKey || '').trim());
 
   const heroSummary = useMemo(() => {
     if (!yRows.length) return 'אין מספיק נתונים על אתמול כדי לקבוע תמונה מלאה.';
@@ -218,9 +204,37 @@ const DailyReviewScreen: React.FC = () => {
     return 'אתמול היה יום מעורב, עם נקודות טובות לצד אתגרים.';
   }, [yRows.length, yTirPct, yLows, yHighs]);
 
+  const keyInsights = useMemo(() => {
+    if (!yRows.length) return ['אין מספיק נתונים ליצירת תובנות על אתמול.'];
+    const list: string[] = [];
+    if (yLows > yHighs && yLows > 0) list.push(`רוב החריגות היו ירידות סוכר (${yLows} קריאות נמוכות).`);
+    if (yHighs > yLows && yHighs > 0) list.push(`רוב החריגות היו ערכים גבוהים (${yHighs} קריאות גבוהות).`);
+    if (Math.abs(tirDelta) >= 5) {
+      list.push(tirDelta > 0 ? `יש שיפור של ${Math.abs(tirDelta)}% בזמן בטווח לעומת השבוע האחרון.` : `זמן בטווח נמוך ב-${Math.abs(tirDelta)}% לעומת השבוע האחרון.`);
+    }
+    if (!list.length) list.push('התמונה הכללית מאוזנת יחסית, בלי חריגה בולטת אחת.');
+    return list.slice(0, 2);
+  }, [yRows.length, yLows, yHighs, tirDelta]);
+
   const actionText = llmActionLine || (yRows.length
     ? 'להיום: לשמור על שגרה יציבה, להימנע מתיקונים צפופים, ולבדוק מגמה לפני החלטה.'
     : 'להיום: להתחיל באיסוף נתונים רציף כדי שנוכל לייצר המלצה מדויקת יותר.');
+
+  const tirTrendText = wRows.length
+    ? (tirDelta >= 0 ? `גבוה ב-${Math.abs(tirDelta)}% מהממוצע השבועי` : `נמוך ב-${Math.abs(tirDelta)}% מהממוצע השבועי`)
+    : 'אין מספיק נתוני השוואה שבועיים';
+
+  const avgTrendText = wRows.length
+    ? (avgDelta >= 0 ? `גבוה ב-${Math.abs(avgDelta)} מהממוצע השבועי` : `נמוך ב-${Math.abs(avgDelta)} מהממוצע השבועי`)
+    : 'אין מספיק נתוני השוואה שבועיים';
+
+  const lowCompare = wRows.length
+    ? (yLows > Math.round(wLows / 7) ? 'יותר ירידות מהרגיל' : 'פחות ירידות מהרגיל')
+    : 'אין מספיק נתוני שבוע להשוואה';
+
+  const highCompare = wRows.length
+    ? (yHighs > Math.round(wHighs / 7) ? 'יותר ערכים גבוהים מהרגיל' : 'פחות ערכים גבוהים מהרגיל')
+    : 'אין מספיק נתוני שבוע להשוואה';
 
   const card = {backgroundColor: theme.white, borderRadius: 14, padding: 12};
 
@@ -229,10 +243,7 @@ const DailyReviewScreen: React.FC = () => {
   }
 
   return (
-    <ScrollView
-      style={{flex: 1, backgroundColor: theme.backgroundColor}}
-      contentContainerStyle={{padding: 16, gap: 10}}
-    >
+    <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 10}}>
       <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
         <Pressable onPress={() => navigation.goBack()} style={{padding: 4}}>
           <MaterialIcons name="arrow-back" size={24} color={theme.textColor} />
@@ -245,16 +256,14 @@ const DailyReviewScreen: React.FC = () => {
       </View>
 
       <Pressable
-        onPress={() =>
-          navigation.navigate(RANKS_INFO_SCREEN, {
-            tier: rank.tier,
-            score: rank.score,
-            nextTier: rank.nextTier,
-            progressToNextPct: rank.progressToNextPct,
-            breakdown: rank.breakdown,
-            weeklyMetrics: {tir: wTirPct, lows: wLows, highs: wHighs},
-          })
-        }
+        onPress={() => navigation.navigate(RANKS_INFO_SCREEN, {
+          tier: rank.tier,
+          score: rank.score,
+          nextTier: rank.nextTier,
+          progressToNextPct: rank.progressToNextPct,
+          breakdown: rank.breakdown,
+          weeklyMetrics: {tir: wTirPct, lows: wLows, highs: wHighs},
+        })}
         style={{...card, backgroundColor: addOpacity(rv.color, 0.14), borderWidth: 1, borderColor: addOpacity(rv.color, 0.6)}}
       >
         <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
@@ -267,49 +276,65 @@ const DailyReviewScreen: React.FC = () => {
         <Text style={{marginTop: 8, color: theme.textColor, textAlign}}>{heroSummary}</Text>
       </Pressable>
 
-      <View style={card}>
-        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>איך עבר אתמול</Text>
-        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>{naturalSummary}</Text>
+      <View style={{flexDirection: 'row', gap: 8}}>
+        <View style={{...card, flex: 1}}>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65), textAlign}}>זמן בטווח</Text>
+          <Text style={{fontSize: 22, fontWeight: '800', color: theme.textColor, textAlign}}>{yTirPct}%</Text>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.7), textAlign}}>{tirTrendText}</Text>
+        </View>
+        <View style={{...card, flex: 1}}>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65), textAlign}}>ממוצע סוכר</Text>
+          <Text style={{fontSize: 22, fontWeight: '800', color: theme.textColor, textAlign}}>{yRows.length ? yAvg : '-'}</Text>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.7), textAlign}}>{avgTrendText}</Text>
+        </View>
       </View>
 
       <View style={card}>
-        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>מה הכי חשוב לדעת</Text>
-        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>{keyInsight}</Text>
-        <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75), textAlign}}>
-          אינסולין אתמול: {insulin.yesterday > 0 ? `${insulin.yesterday.toFixed(1)} יח׳` : 'אין נתון'}
-          {insulin.yesterday > 0 && insulin.prevDay > 0 ? ` (${formatDelta(Number(insulinDelta.toFixed(1)), ' יח׳')} מול יום קודם)` : ''}
-          {insulin.avgDaily7 > 0 ? ` • ממוצע 7 ימים: ${insulin.avgDaily7.toFixed(1)} יח׳` : ''}
+        <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65), textAlign}}>אינסולין יומי</Text>
+        <Text style={{fontSize: 22, fontWeight: '800', color: theme.textColor, textAlign}}>{insulin.yesterday > 0 ? `${insulin.yesterday.toFixed(1)} יח׳` : 'אין נתון'}</Text>
+        <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.7), textAlign}}>
+          {insulin.prevDay > 0 ? `${formatDelta(Number(insulinDelta.toFixed(1)), ' יח׳')} לעומת שלשום` : 'אין מספיק נתון להשוואה לשלשום'}
         </Text>
       </View>
 
       <View style={card}>
-        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>מה כדאי לעשות היום</Text>
-        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>{actionText}</Text>
-        {whyLine ? (
-          <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75), textAlign}}>{whyLine}</Text>
-        ) : null}
-        <Text style={{marginTop: 4, fontSize: 12, color: addOpacity(theme.textColor, 0.6), textAlign}}>
-          מקור המלצה: {actionSource === 'ai' ? 'מותאם אישית' : 'המלצה אוטומטית'}
-        </Text>
+        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>מה בלט אתמול</Text>
+        {keyInsights.map((line, idx) => (
+          <Text key={`insight-${idx}`} style={{marginTop: 6, color: theme.textColor, textAlign}}>• {line}</Text>
+        ))}
       </View>
 
       <View style={card}>
-        <Text style={{fontWeight: '700', color: theme.textColor, textAlign}}>פירוט טווח סוכר</Text>
+        <Text style={{fontWeight: '700', color: theme.textColor, textAlign}}>חלוקת רמות הסוכר</Text>
         <View style={{marginTop: 6}}>
           {yRows.length ? (
             <TimeInRangeRow bgData={yRows as any} />
           ) : (
-            <Text style={{color: addOpacity(theme.textColor, 0.75), textAlign}}>אין מספיק נתונים להצגת פירוט טווח.</Text>
+            <Text style={{color: addOpacity(theme.textColor, 0.75), textAlign}}>אין מספיק נתונים להצגת חלוקת רמות הסוכר.</Text>
           )}
         </View>
         <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75), textAlign}}>
-          השוואת שבוע: TIR {wTirPct}% • נמוכים {wLows} • גבוהים {wHighs} • ממוצע {wAvg || '-'}
+          ביחס לשבוע האחרון: {lowCompare} • {highCompare}
+        </Text>
+        <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.55), fontSize: 12, textAlign}}>
+          המספרים מייצגים קריאות סוכר, לא אירועים רפואיים.
         </Text>
       </View>
 
-      <Pressable onPress={handleRegenerate} disabled={refreshingAction} style={{...card, alignItems: 'center'}}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>{refreshingAction ? 'מעדכן המלצה…' : 'רענון המלצה'}</Text>
-      </Pressable>
+      <View style={card}>
+        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>ההמלצה שלך להיום</Text>
+        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>{actionText}</Text>
+        {whyLine ? <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75), textAlign}}>{whyLine}</Text> : null}
+        <Text style={{marginTop: 4, fontSize: 12, color: addOpacity(theme.textColor, 0.6), textAlign}}>
+          מקור: {actionSource === 'ai' ? 'המלצה מותאמת אישית' : 'המלצה אוטומטית'}
+        </Text>
+      </View>
+
+      {canRefreshRecommendation ? (
+        <Pressable onPress={handleRegenerate} disabled={refreshingAction} style={{...card, alignItems: 'center'}}>
+          <Text style={{fontWeight: '700', color: theme.textColor}}>{refreshingAction ? 'מעדכן המלצה…' : 'רענן המלצה'}</Text>
+        </Pressable>
+      ) : null}
     </ScrollView>
   );
 };
