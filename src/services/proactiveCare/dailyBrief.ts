@@ -6,6 +6,15 @@ import {GlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
 import {computeRank} from 'app/services/proactiveCare/streakRank';
 
+function isHebrewLocale() {
+  try {
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale || 'en';
+    return locale.toLowerCase().startsWith('he');
+  } catch {
+    return false;
+  }
+}
+
 const CHANNEL_ID = 'daily-briefs';
 const NOTIFICATION_ID = 'daily-brief-notification';
 
@@ -26,6 +35,13 @@ export type DailyBriefAiOptions = {
   model?: string;
 };
 
+type StoredBrief = {
+  title: string;
+  body: string;
+  source: 'ai' | 'fallback';
+  createdAt: string;
+};
+
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -43,73 +59,15 @@ function nextScheduledTime(now: Date, hour: number, minute: number): Date {
   return candidate;
 }
 
-function isNightHour(hour: number, start: number, end: number): boolean {
-  if (start === end) return true;
-  if (start < end) return hour >= start && hour < end;
-  return hour >= start || hour < end;
-}
-
-function toInt(n: number, fallback: number, min: number, max: number): number {
+function clampInt(n: number, fallback: number, min: number, max: number): number {
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
-function buildBriefText(params: {
-  rows: Array<{sgv: number; dateString?: string}>;
-  glucose: GlucoseSettings;
-}) {
-  const {rows, glucose} = params;
-  if (!rows.length) {
-    return {
-      title: 'Daily brief',
-      nightLine: '🌙 Night: no data',
-      dayLine: '📊 Yesterday: no data',
-      actionLine: '🎯 Today: capture more readings',
-      stats: {tir: 0, avg: 0, lows: 0, highs: 0, nightLows: 0},
-    };
-  }
-
-  const lows = rows.filter(r => r.sgv < glucose.hypo);
-  const highs = rows.filter(r => r.sgv > glucose.hyper);
-  const inRange = rows.filter(r => r.sgv >= glucose.hypo && r.sgv <= glucose.hyper);
-  const avg = Math.round(rows.reduce((s, r) => s + r.sgv, 0) / rows.length);
-  const tir = Math.round((inRange.length / rows.length) * 100);
-
-  const nightRows = rows.filter(r => {
-    if (!r.dateString) return false;
-    const hour = new Date(r.dateString).getHours();
-    return isNightHour(hour, glucose.nightStartHour, glucose.nightEndHour);
-  });
-  const nightLows = nightRows.filter(r => r.sgv < glucose.hypo);
-
-  const nightLine =
-    nightLows.length > 0
-      ? `🌙 Night: ${nightLows.length} lows, min ${Math.min(...nightLows.map(r => r.sgv))}`
-      : `🌙 Night: stable`;
-
-  const rank = computeRank({tir, lows: lows.length, highs: highs.length});
-  const dayLine = `📊 Yesterday: TIR ${tir}% | ${rank.tier}`;
-
-  let actionLine = '🎯 Today: keep same routine';
-  if (nightLows.length > 0 || lows.length >= 2) {
-    actionLine = '🎯 Today: avoid insulin stacking';
-  } else if (highs.length > inRange.length * 0.25) {
-    actionLine = '🎯 Today: improve meal bolus timing';
-  }
-
-  return {
-    title: 'Daily brief',
-    nightLine,
-    dayLine,
-    actionLine,
-    stats: {
-      tir,
-      avg,
-      lows: lows.length,
-      highs: highs.length,
-      nightLows: nightLows.length,
-    },
-  };
+function isNightHour(hour: number, start: number, end: number): boolean {
+  if (start === end) return true;
+  if (start < end) return hour >= start && hour < end;
+  return hour >= start || hour < end;
 }
 
 async function ensureChannel() {
@@ -120,8 +78,95 @@ async function ensureChannel() {
   });
 }
 
-function composeBody(lines: {nightLine: string; dayLine: string; actionLine: string}) {
-  return `${lines.nightLine}\n${lines.dayLine}\n${lines.actionLine}`;
+async function persistLatestBrief(brief: Omit<StoredBrief, 'createdAt'>) {
+  const payload: StoredBrief = {
+    ...brief,
+    createdAt: new Date().toISOString(),
+  };
+  await AsyncStorage.setItem(STORAGE_KEYS.latestBrief, JSON.stringify(payload));
+}
+
+export async function getLatestDailyBrief(): Promise<StoredBrief | null> {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEYS.latestBrief);
+    if (!raw) return null;
+    return JSON.parse(raw) as StoredBrief;
+  } catch {
+    return null;
+  }
+}
+
+async function buildFallbackBrief(glucose: GlucoseSettings) {
+  const now = new Date();
+  const isHe = isHebrewLocale();
+  const todayStart = startOfDay(now);
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+  const rows = await fetchBgDataForDateRangeUncached(yesterdayStart, todayStart, {
+    throwOnError: false,
+  });
+  const list = (rows as any[]) ?? [];
+
+  if (!list.length) {
+    return {
+      title: isHe ? 'סיכום יומי' : 'Daily brief',
+      nightLine: isHe ? '🌙 לילה: אין נתונים' : '🌙 Night: no data',
+      dayLine: isHe ? '📊 אתמול: אין נתונים' : '📊 Yesterday: no data',
+      actionLine: isHe ? '🎯 היום: כדאי לאסוף עוד נתונים' : '🎯 Today: capture more readings',
+      source: 'fallback' as const,
+      stats: {tir: 0, avg: 0, lows: 0, highs: 0, nightLows: 0},
+    };
+  }
+
+  const hypo = glucose.hypo ?? 70;
+  const hyper = glucose.hyper ?? 180;
+
+  const lows = list.filter(r => (r.sgv ?? 0) < hypo);
+  const highs = list.filter(r => (r.sgv ?? 0) > hyper);
+  const inRange = list.filter(r => (r.sgv ?? 0) >= hypo && (r.sgv ?? 0) <= hyper);
+
+  const avg = Math.round(list.reduce((s, r) => s + (r.sgv ?? 0), 0) / Math.max(1, list.length));
+  const tir = Math.round((inRange.length / Math.max(1, list.length)) * 100);
+
+  const nightRows = list.filter(r => {
+    const ds = r?.dateString;
+    if (!ds) return false;
+    const h = new Date(ds).getHours();
+    return isNightHour(h, glucose.nightStartHour, glucose.nightEndHour);
+  });
+  const nightLows = nightRows.filter(r => (r.sgv ?? 0) < hypo);
+
+  const rank = computeRank({tir, lows: lows.length, highs: highs.length});
+
+  const nightLine =
+    nightLows.length > 0
+      ? (isHe ? `🌙 לילה: ${nightLows.length} ירידות` : `🌙 Night: ${nightLows.length} lows`)
+      : (isHe ? '🌙 לילה: יציב' : '🌙 Night: stable');
+
+  const dayLine = isHe ? `📊 אתמול: TIR ${tir}% | ${rank.tier}` : `📊 Yesterday: TIR ${tir}% | ${rank.tier}`;
+
+  let actionLine = isHe ? '🎯 היום: לשמור על אותה שגרה' : '🎯 Today: keep same routine';
+  if (nightLows.length > 0 || lows.length >= 2) {
+    actionLine = isHe ? '🎯 היום: להימנע מערימת אינסולין' : '🎯 Today: avoid insulin stacking';
+  } else if (highs.length > inRange.length * 0.25) {
+    actionLine = isHe ? '🎯 היום: לשפר תזמון בולוס בארוחות' : '🎯 Today: improve meal bolus timing';
+  }
+
+  return {
+    title: isHe ? 'סיכום יומי' : 'Daily brief',
+    nightLine,
+    dayLine,
+    actionLine,
+    source: 'fallback' as const,
+    stats: {
+      tir,
+      avg,
+      lows: lows.length,
+      highs: highs.length,
+      nightLows: nightLows.length,
+    },
+  };
 }
 
 async function maybeGenerateLlmActionLine(params: {
@@ -130,6 +175,7 @@ async function maybeGenerateLlmActionLine(params: {
   ai?: DailyBriefAiOptions;
 }): Promise<{actionLine: string; source: 'ai' | 'fallback'}> {
   const {baseActionLine, stats, ai} = params;
+  const isHe = isHebrewLocale();
   const apiKey = (ai?.apiKey ?? '').trim();
   if (!ai?.enabled || !apiKey) return {actionLine: baseActionLine, source: 'fallback'};
 
@@ -137,20 +183,20 @@ async function maybeGenerateLlmActionLine(params: {
     const provider = new OpenAIProvider({apiKey});
     const model = (ai?.model ?? 'gpt-5.4').trim() || 'gpt-5.4';
 
-    const system =
-      'You write one short daily action line for diabetes self-management. ' +
-      'Be specific, actionable, and vary wording naturally.';
-
-    const user =
-      `Stats: ${JSON.stringify(stats)}\n` +
-      `Baseline suggestion: ${baseActionLine}\n` +
-      'Return one line only, prefixed with "🎯 Today:" and include one concrete numeric/behavior cue.';
-
     const res = await provider.sendChat({
       model,
       messages: [
-        {role: 'system', content: system},
-        {role: 'user', content: user},
+        {
+          role: 'system',
+          content:
+            isHe
+              ? 'כתוב שורת פעולה יומית קצרה לסוכרת. פרקטי וספציפי, עד 14 מילים. להתחיל ב-"🎯 היום:".'
+              : 'Write one short daily diabetes action line. Practical, specific, max 14 words. Start with "🎯 Today:".',
+        },
+        {
+          role: 'user',
+          content: `Stats: ${JSON.stringify(stats)}\nBase suggestion: ${baseActionLine}`,
+        },
       ],
       temperature: 0.7,
       maxOutputTokens: 90,
@@ -158,29 +204,18 @@ async function maybeGenerateLlmActionLine(params: {
 
     const text = (res.content ?? '').trim();
     if (!text) return {actionLine: baseActionLine, source: 'fallback'};
-    const actionLine = text.startsWith('🎯') ? text : `🎯 Today: ${text}`;
-    return {actionLine, source: 'ai'};
+    if (text.startsWith('🎯')) return {actionLine: text, source: 'ai'};
+    return {actionLine: isHe ? `🎯 היום: ${text}` : `🎯 Today: ${text}`, source: 'ai'};
   } catch {
     return {actionLine: baseActionLine, source: 'fallback'};
   }
 }
 
 async function computeYesterdayBrief(glucose: GlucoseSettings, ai?: DailyBriefAiOptions) {
-  const now = new Date();
-  const todayStart = startOfDay(now);
-  const yesterdayStart = new Date(todayStart);
-  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const base = await buildFallbackBrief(glucose);
+  const isHe = isHebrewLocale();
 
-  const rows = await fetchBgDataForDateRangeUncached(yesterdayStart, todayStart, {
-    throwOnError: false,
-  });
-
-  const base = buildBriefText({
-    rows: rows.map(r => ({sgv: (r as any).sgv, dateString: (r as any).dateString})),
-    glucose,
-  });
-
-  const llmAction = await maybeGenerateLlmActionLine({
+  const generated = await maybeGenerateLlmActionLine({
     baseActionLine: base.actionLine,
     stats: base.stats,
     ai,
@@ -188,44 +223,18 @@ async function computeYesterdayBrief(glucose: GlucoseSettings, ai?: DailyBriefAi
 
   const whyLine =
     base.stats.nightLows > 0
-      ? `🧠 Why: ${base.stats.nightLows} night lows detected`
+      ? (isHe ? `🧠 למה: זוהו ${base.stats.nightLows} ירידות בלילה` : `🧠 Why: ${base.stats.nightLows} night lows detected`)
       : base.stats.lows > 0
-        ? `🧠 Why: ${base.stats.lows} low events yesterday`
-        : `🧠 Why: TIR ${base.stats.tir}% and avg ${base.stats.avg}`;
+      ? (isHe ? `🧠 למה: היו ${base.stats.lows} ירידות אתמול` : `🧠 Why: ${base.stats.lows} low events yesterday`)
+      : (isHe ? `🧠 למה: TIR ${base.stats.tir}% וממוצע ${base.stats.avg}` : `🧠 Why: TIR ${base.stats.tir}% and avg ${base.stats.avg}`);
+
+  const source = generated.source === 'ai' ? 'ai' : base.source;
 
   return {
     title: base.title,
-    body: composeBody({
-      nightLine: base.nightLine,
-      dayLine: base.dayLine,
-      actionLine: llmAction.actionLine,
-    }) + `\n${whyLine}`,
-    source: llmAction.source,
-  };
-}
-
-async function persistLatestBrief(brief: {title: string; body: string; source?: 'ai' | 'fallback'}) {
-  try {
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.latestBrief,
-      JSON.stringify({
-        ...brief,
-        createdAt: new Date().toISOString(),
-      }),
-    );
-  } catch {
-    // best effort
-  }
-}
-
-export async function getLatestDailyBrief(): Promise<{title: string; body: string; source?: 'ai' | 'fallback'; createdAt?: string} | null> {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEYS.latestBrief);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+    body: `${base.nightLine}\n${base.dayLine}\n${generated.actionLine}\n${whyLine}`,
+    source,
+  } as const;
 }
 
 export async function regenerateDailyBrief(params: {
@@ -233,11 +242,12 @@ export async function regenerateDailyBrief(params: {
   ai?: DailyBriefAiOptions;
   notify?: boolean;
 }) {
+  await ensureChannel();
+
   const brief = await computeYesterdayBrief(params.glucose, params.ai);
-  await persistLatestBrief(brief);
+  await persistLatestBrief({title: brief.title, body: brief.body, source: brief.source});
 
   if (params.notify) {
-    await ensureChannel();
     await notifee.displayNotification({
       id: `${NOTIFICATION_ID}-manual-${Date.now()}`,
       title: brief.title,
@@ -266,11 +276,10 @@ export async function syncDailyBriefNotifications(params: {
   glucose: GlucoseSettings;
   ai?: DailyBriefAiOptions;
 }) {
-  const hour = toInt(params.config.hour, 8, 0, 23);
-  const minute = toInt(params.config.minute, 0, 0, 59);
+  const hour = clampInt(params.config.hour, 8, 0, 23);
+  const minute = clampInt(params.config.minute, 0, 0, 59);
 
   await ensureChannel();
-
   await notifee.cancelNotification(NOTIFICATION_ID);
 
   if (!params.config.enabled) return;
@@ -282,25 +291,8 @@ export async function syncDailyBriefNotifications(params: {
 
   const lastDelivered = await AsyncStorage.getItem(STORAGE_KEYS.lastDeliveredDate);
 
-  const brief = await computeYesterdayBrief(params.glucose, params.ai);
-  await persistLatestBrief(brief);
-
   if (now.getTime() >= todaySchedule.getTime() && lastDelivered !== todayKey) {
-    await notifee.displayNotification({
-      id: NOTIFICATION_ID,
-      title: brief.title,
-      body: brief.body,
-      android: {
-        channelId: CHANNEL_ID,
-        smallIcon: 'ic_launcher',
-        pressAction: {id: 'default'},
-      },
-      data: {
-        route: 'DailyReviewScreen',
-        source: 'daily_brief',
-      },
-    });
-
+    await regenerateDailyBrief({glucose: params.glucose, ai: params.ai, notify: true});
     await AsyncStorage.setItem(STORAGE_KEYS.lastDeliveredDate, todayKey);
   }
 
@@ -309,8 +301,8 @@ export async function syncDailyBriefNotifications(params: {
   await notifee.createTriggerNotification(
     {
       id: NOTIFICATION_ID,
-      title: brief.title,
-      body: brief.body,
+      title: 'Daily brief is ready',
+      body: 'Open Daily Review to see your updated summary.',
       android: {
         channelId: CHANNEL_ID,
         smallIcon: 'ic_launcher',
@@ -318,7 +310,7 @@ export async function syncDailyBriefNotifications(params: {
       },
       data: {
         route: 'DailyReviewScreen',
-        source: 'daily_brief',
+        source: 'daily_brief_trigger',
       },
     },
     {
@@ -329,4 +321,3 @@ export async function syncDailyBriefNotifications(params: {
     },
   );
 }
-

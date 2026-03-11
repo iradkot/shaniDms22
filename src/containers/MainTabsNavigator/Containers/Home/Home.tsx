@@ -492,7 +492,7 @@ const Home: React.FC = () => {
         {dailySummary ? (
           <DailySummaryCard onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-              <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>Daily summary</Text>
+              <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>Yesterday summary</Text>
               <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>{isShowingToday ? 'Today' : format(debouncedCurrentDate, 'dd/MM')}</Text>
             </View>
 
