@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Pressable, ScrollView, Text, View} from 'react-native';
+import {ActivityIndicator, I18nManager, Pressable, ScrollView, Text, View} from 'react-native';
 import {subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -41,6 +41,12 @@ function tierVisual(tier: string) {
   }
 }
 
+function formatDelta(value: number, unit = '') {
+  const abs = Math.abs(value);
+  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  return `${sign}${abs}${unit}`;
+}
+
 const DailyReviewScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation<any>();
@@ -55,6 +61,9 @@ const DailyReviewScreen: React.FC = () => {
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
   const [whyLine, setWhyLine] = useState<string | null>(null);
   const [actionSource, setActionSource] = useState<'ai' | 'fallback'>('fallback');
+
+  const isRtl = I18nManager.isRTL;
+  const textAlign: 'left' | 'right' = isRtl ? 'right' : 'left';
 
   const todayStart = useMemo(() => {
     const n = new Date();
@@ -80,13 +89,16 @@ const DailyReviewScreen: React.FC = () => {
   };
 
   const loadData = async () => {
-    const [y, w, latestBrief] = await Promise.all([
+    const [y, w, latestBriefRaw] = await Promise.all([
       fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
       getLatestDailyBrief(),
     ]);
+
     setYRows((y as any) ?? []);
     setWRows((w as any) ?? []);
+
+    let latestBrief: any = latestBriefRaw;
 
     try {
       const yesterdayTotal = await getDayInsulinTotal(yStart);
@@ -98,10 +110,31 @@ const DailyReviewScreen: React.FC = () => {
       setInsulin({yesterday: 0, prevDay: 0, avgDaily7: 0});
     }
 
+    if (latestBrief?.source === 'fallback' && aiSettings.enabled && (aiSettings.apiKey || '').trim()) {
+      try {
+        const regenerated = await regenerateDailyBrief({
+          glucose: glucoseSettings,
+          ai: {
+            enabled: aiSettings.enabled,
+            apiKey: aiSettings.apiKey,
+            model: aiSettings.openAiModel,
+          },
+          notify: false,
+        });
+        latestBrief = {
+          title: regenerated.title,
+          body: regenerated.body,
+          source: regenerated.source,
+        } as any;
+      } catch {
+        // keep fallback
+      }
+    }
+
     if (latestBrief?.body) {
-      const lines = latestBrief.body.split('\n').map(s => s.trim()).filter(Boolean);
-      setLlmActionLine(lines.find(l => l.startsWith('🎯')) || lines[2] || null);
-      setWhyLine(lines.find(l => l.startsWith('🧠')) || null);
+      const lines = latestBrief.body.split('\n').map((s: string) => s.trim()).filter(Boolean);
+      setLlmActionLine(lines.find((l: string) => l.startsWith('🎯')) || lines[2] || null);
+      setWhyLine(lines.find((l: string) => l.startsWith('🧠')) || null);
       setActionSource(latestBrief.source === 'ai' ? 'ai' : 'fallback');
     } else {
       setLlmActionLine(null);
@@ -157,9 +190,28 @@ const DailyReviewScreen: React.FC = () => {
   );
   const rv = tierVisual(rank.tier);
 
-  const action = llmActionLine || 'Today: keep stable routine and avoid stacking';
-  const insulinDelta = insulin.yesterday - insulin.prevDay;
   const tirDelta = yTirPct - wTirPct;
+  const insulinDelta = insulin.yesterday - insulin.prevDay;
+
+  const keyInsight = useMemo(() => {
+    if (!yRows.length) return 'אין מספיק נתוני סוכר מאתמול כדי לזהות מגמה ברורה.';
+    if (yLows > yHighs && yLows > 0) return `הנקודה המרכזית: היו יותר נפילות (${yLows}) מעליות (${yHighs}).`;
+    if (yHighs > yLows && yHighs > 0) return `הנקודה המרכזית: היו יותר עליות (${yHighs}) מנפילות (${yLows}).`;
+    return 'היום היה יחסית מאוזן בין עליות לנפילות.';
+  }, [yRows.length, yLows, yHighs]);
+
+  const naturalSummary = useMemo(() => {
+    if (!yRows.length) return 'אתמול לא נאספו מספיק נתונים, לכן אי אפשר לתת סיכום אמין.';
+    const tirPart = `זמן בטווח היה ${yTirPct}%`;
+    const trendPart = wRows.length
+      ? `(${tirDelta >= 0 ? 'שיפור' : 'ירידה'} של ${Math.abs(tirDelta)}% לעומת ממוצע 7 ימים)`
+      : '(אין מספיק השוואה שבועית)';
+    return `אתמול: ${tirPart} ${trendPart}. ממוצע הסוכר היה ${yAvg}.`;
+  }, [yRows.length, yTirPct, tirDelta, yAvg, wRows.length]);
+
+  const actionText = llmActionLine || (yRows.length
+    ? 'להיום: לשמור על שגרה יציבה, להימנע מתיקונים צפופים, ולבדוק מגמה לפני החלטה.'
+    : 'להיום: להתחיל באיסוף נתונים רציף כדי שנוכל לייצר המלצה מדויקת יותר.');
 
   const card = {backgroundColor: theme.white, borderRadius: 14, padding: 12};
 
@@ -168,12 +220,15 @@ const DailyReviewScreen: React.FC = () => {
   }
 
   return (
-    <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 10}}>
+    <ScrollView
+      style={{flex: 1, backgroundColor: theme.backgroundColor}}
+      contentContainerStyle={{padding: 16, gap: 10}}
+    >
       <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
         <Pressable onPress={() => navigation.goBack()} style={{padding: 4}}>
           <MaterialIcons name="arrow-back" size={24} color={theme.textColor} />
         </Pressable>
-        <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor}}>Daily Review</Text>
+        <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor, textAlign}}>סיכום היום הקודם</Text>
         <View style={{width: 24}} />
       </View>
 
@@ -192,54 +247,56 @@ const DailyReviewScreen: React.FC = () => {
       >
         <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
           <Text style={{fontWeight: '800', color: theme.textColor}}>{rv.emoji} {rank.tier}</Text>
-          <Text style={{fontWeight: '700', color: addOpacity(theme.textColor, 0.7)}}>Score {rank.score}</Text>
+          <Text style={{fontWeight: '700', color: addOpacity(theme.textColor, 0.7)}}>ציון {rank.score}</Text>
         </View>
         <View style={{height: 8, borderRadius: 10, backgroundColor: addOpacity(theme.textColor, 0.12), marginTop: 8}}>
           <View style={{height: 8, borderRadius: 10, width: `${Math.max(5, rank.progressToNextPct)}%`, backgroundColor: rv.color}} />
         </View>
       </Pressable>
 
-      <View style={{flexDirection: 'row', gap: 8}}>
-        <View style={{...card, flex: 1}}>
-          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>TIR</Text>
-          <Text style={{fontSize: 22, fontWeight: '800', color: theme.textColor}}>{yTirPct}%</Text>
-          <Text style={{fontSize: 12, color: tirDelta >= 0 ? '#2e7d32' : '#c62828'}}>{tirDelta >= 0 ? '+' : ''}{tirDelta} vs 7d</Text>
-        </View>
-        <View style={{...card, flex: 1}}>
-          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>Avg BG</Text>
-          <Text style={{fontSize: 22, fontWeight: '800', color: theme.textColor}}>{yAvg}</Text>
-          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>7d {wAvg}</Text>
-        </View>
+      <View style={card}>
+        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>איך עבר אתמול</Text>
+        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>{naturalSummary}</Text>
       </View>
 
-      <View style={{...card}}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>Insulin</Text>
-        <Text style={{marginTop: 4, color: theme.textColor}}>Yesterday {insulin.yesterday.toFixed(1)}U ({insulinDelta >= 0 ? '+' : ''}{insulinDelta.toFixed(1)} vs day before)</Text>
-        <Text style={{marginTop: 2, color: addOpacity(theme.textColor, 0.75)}}>7d avg {insulin.avgDaily7.toFixed(1)}U/day</Text>
+      <View style={card}>
+        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>מה הכי חשוב לדעת</Text>
+        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>{keyInsight}</Text>
+        <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75), textAlign}}>
+          אינסולין אתמול: {insulin.yesterday > 0 ? `${insulin.yesterday.toFixed(1)} יח׳` : 'אין נתון'}
+          {insulin.yesterday > 0 && insulin.prevDay > 0 ? ` (${formatDelta(Number(insulinDelta.toFixed(1)), ' יח׳')} מול יום קודם)` : ''}
+          {insulin.avgDaily7 > 0 ? ` • ממוצע 7 ימים: ${insulin.avgDaily7.toFixed(1)} יח׳` : ''}
+        </Text>
       </View>
 
-      <View style={{...card}}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>Glucose range</Text>
+      <View style={card}>
+        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>מה כדאי לעשות היום</Text>
+        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>{actionText}</Text>
+        {whyLine ? (
+          <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75), textAlign}}>{whyLine}</Text>
+        ) : null}
+        <Text style={{marginTop: 4, fontSize: 12, color: addOpacity(theme.textColor, 0.6), textAlign}}>
+          מקור המלצה: {actionSource === 'ai' ? 'AI' : 'בסיסי'}
+        </Text>
+      </View>
+
+      <View style={card}>
+        <Text style={{fontWeight: '700', color: theme.textColor, textAlign}}>פירוט טווח סוכר</Text>
         <View style={{marginTop: 6}}>
-          <TimeInRangeRow bgData={yRows as any} />
+          {yRows.length ? (
+            <TimeInRangeRow bgData={yRows as any} />
+          ) : (
+            <Text style={{color: addOpacity(theme.textColor, 0.75), textAlign}}>אין מספיק נתונים להצגת פירוט טווח.</Text>
+          )}
         </View>
-        <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75)}}>
-          Baseline (7d): lows {wLows} • highs {wHighs}
+        <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75), textAlign}}>
+          השוואת שבוע: TIR {wTirPct}% • נמוכים {wLows} • גבוהים {wHighs} • ממוצע {wAvg || '-'}
         </Text>
       </View>
 
       <Pressable onPress={handleRegenerate} disabled={refreshingAction} style={{...card, alignItems: 'center'}}>
-        <Text style={{fontWeight: '700', color: theme.textColor}}>{refreshingAction ? 'Regenerating…' : 'Regenerate recommendation'}</Text>
+        <Text style={{fontWeight: '700', color: theme.textColor}}>{refreshingAction ? 'מעדכן המלצה…' : 'רענון המלצה'}</Text>
       </Pressable>
-
-      <View style={{...card}}>
-        <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-          <Text style={{fontWeight: '700', color: theme.textColor}}>Today</Text>
-          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65)}}>{actionSource === 'ai' ? 'AI' : 'Fallback'}</Text>
-        </View>
-        <Text style={{marginTop: 4, color: theme.textColor}}>{action}</Text>
-        {whyLine ? <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.75)}}>{whyLine}</Text> : null}
-      </View>
     </ScrollView>
   );
 };
