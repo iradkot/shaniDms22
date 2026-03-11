@@ -1,125 +1,159 @@
-import React, {useMemo} from 'react';
-import {ScrollView, Text, View} from 'react-native';
+import React, {useMemo, useState} from 'react';
+import {Pressable, ScrollView, Text, View} from 'react-native';
 import {useTheme} from 'styled-components/native';
 import {useRoute} from '@react-navigation/native';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
 const TIERS = [
-  {name: 'Bronze', color: '#b87333', minScore: 0, target: 'Base level'},
-  {name: 'Silver', color: '#b0bec5', minScore: 35, target: 'TIR > 65%, fewer lows'},
-  {name: 'Gold', color: '#fbc02d', minScore: 55, target: 'TIR > 72%, stable post-meal'},
-  {name: 'Platinum', color: '#81d4fa', minScore: 75, target: 'TIR > 78%, very low hypo count'},
-  {name: 'Diamond', color: '#4fc3f7', minScore: 90, target: 'TIR > 85%, minimal hypo/hyper'},
+  {name: 'Bronze', color: '#b87333', minScore: 0, target: 'בסיס יציב'},
+  {name: 'Silver', color: '#b0bec5', minScore: 35, target: 'שיפור יציבות יומי'},
+  {name: 'Gold', color: '#fbc02d', minScore: 55, target: 'ביצועים טובים ועקביים'},
+  {name: 'Platinum', color: '#81d4fa', minScore: 75, target: 'מעט חריגות, שליטה גבוהה'},
+  {name: 'Diamond', color: '#4fc3f7', minScore: 90, target: 'רמה עליונה'},
 ];
 
-const LOW_PENALTY_PER_EVENT = 2.8;
-const HIGH_PENALTY_PER_EVENT = 0.6;
 const TIR_BONUS_FACTOR = 1.2;
+const LOW_IMPACT_PER_EVENT = 2.8;
+const HIGH_IMPACT_PER_EVENT = 0.6;
+
+function tierIcon(name: string) {
+  switch (name) {
+    case 'Diamond': return '💎';
+    case 'Platinum': return '🛡️';
+    case 'Gold': return '🏆';
+    case 'Silver': return '🥈';
+    default: return '🥉';
+  }
+}
 
 const RanksInfoScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const route = useRoute<any>();
   const p = route.params ?? {};
+  const [showMath, setShowMath] = useState(false);
 
   const score = Number(p.score ?? 0);
+  const tier = String(p.tier ?? 'Bronze');
+  const nextTier = p.nextTier ? String(p.nextTier) : null;
+  const progress = Number(p.progressToNextPct ?? 0);
+
   const tir = Number(p.weeklyMetrics?.tir ?? 0);
   const lows = Number(p.weeklyMetrics?.lows ?? 0);
   const highs = Number(p.weeklyMetrics?.highs ?? 0);
 
-  const neededPoints = useMemo(() => {
-    if (!p.nextTier) return 0;
-    const nextTier = TIERS.find(t => t.name === p.nextTier);
+  const base = Number(p.breakdown?.base ?? 35);
+  const tirBonus = Number(p.breakdown?.tirBonus ?? 0);
+  const lowImpact = Number(p.breakdown?.lowPenalty ?? 0);
+  const highImpact = Number(p.breakdown?.highPenalty ?? 0);
+
+  const pointsToNext = useMemo(() => {
     if (!nextTier) return 0;
-    return Math.max(0, nextTier.minScore - score);
-  }, [p.nextTier, score]);
+    const t = TIERS.find(x => x.name === nextTier);
+    if (!t) return 0;
+    return Math.max(0, t.minScore - score);
+  }, [nextTier, score]);
 
   const whatIf = useMemo(() => {
-    if (!p.nextTier || neededPoints <= 0) {
-      return 'You are at max tier. Keep consistency to maintain rank.';
+    if (!nextTier || pointsToNext <= 0) {
+      return {
+        headline: 'אתה ברמה הגבוהה ביותר כרגע 👑',
+        tasks: ['שמור על עקביות במדדים השבועיים'],
+      };
     }
 
-    const tirNeeded = Math.max(1, Math.ceil(neededPoints / TIR_BONUS_FACTOR));
-    const lowsToReduce = Math.max(1, Math.ceil(neededPoints / LOW_PENALTY_PER_EVENT));
-    const highsToReduce = Math.max(1, Math.ceil(neededPoints / HIGH_PENALTY_PER_EVENT));
+    const tirNeeded = Math.max(1, Math.ceil(pointsToNext / TIR_BONUS_FACTOR));
+    const lowDrop = Math.max(1, Math.ceil(pointsToNext / LOW_IMPACT_PER_EVENT));
+    const highDrop = Math.max(1, Math.ceil(pointsToNext / HIGH_IMPACT_PER_EVENT));
 
     return {
-      summary: `Need +${neededPoints} points to reach ${p.nextTier}.`,
-      optionA: `Raise weekly TIR by ~${tirNeeded}%`,
-      optionB: `Reduce weekly lows by ~${lowsToReduce} events`,
-      optionC: `Reduce weekly highs by ~${highsToReduce} events`,
-      optionMix: 'Or combine smaller improvements from all three.',
+      headline: `עוד ${pointsToNext} נק׳ ל-${nextTier}`,
+      tasks: [
+        `🎯 העלאת TIR שבועי בכ~${tirNeeded}%`,
+        `🎯 הורדת אירועי Low בכ~${lowDrop}`,
+        `🎯 הורדת אירועי High בכ~${highDrop}`,
+        'לא חייבים הכול — כל שיפור קטן מקדם אותך',
+      ],
     };
-  }, [neededPoints, p.nextTier]);
+  }, [nextTier, pointsToNext]);
+
+  const tierColor = TIERS.find(t => t.name === tier)?.color ?? '#b87333';
 
   return (
     <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 12}}>
-      <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor}}>Rank System</Text>
-      <Text style={{color: addOpacity(theme.textColor, 0.75)}}>
-        Scoring window: last 7 completed days (not including today)
-      </Text>
-
-      <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
-        <Text style={{fontWeight: '800', color: theme.textColor}}>Current rank</Text>
-        <Text style={{color: theme.textColor, marginTop: 4}}>
-          Tier: {p.tier ?? '-'} • Score: {score}
-        </Text>
-        <Text style={{color: addOpacity(theme.textColor, 0.78), marginTop: 2}}>
-          Progress to {p.nextTier ?? 'max'}: {p.progressToNextPct ?? 0}%
-        </Text>
-      </View>
-
-      <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
-        <Text style={{fontWeight: '800', color: theme.textColor}}>Exact score formula</Text>
-        <Text style={{color: theme.textColor, marginTop: 6}}>
-          Score = Base + TIR bonus - Low penalty - High penalty
-        </Text>
-        <Text style={{color: addOpacity(theme.textColor, 0.85), marginTop: 6}}>
-          = +{p.breakdown?.base ?? '-'} + {p.breakdown?.tirBonus ?? '-'} - {p.breakdown?.lowPenalty ?? '-'} - {p.breakdown?.highPenalty ?? '-'}
-        </Text>
-      </View>
-
-      <View style={{backgroundColor: theme.white, borderRadius: 12, padding: 12}}>
-        <Text style={{fontWeight: '800', color: theme.textColor}}>Why you got this score</Text>
-
-        <Text style={{color: theme.textColor, marginTop: 8}}>TIR bonus</Text>
-        <Text style={{color: addOpacity(theme.textColor, 0.82)}}>
-          TIR {tir}% → (TIR - 50) × {TIR_BONUS_FACTOR} = +{p.breakdown?.tirBonus ?? '-'}
-        </Text>
-
-        <Text style={{color: theme.textColor, marginTop: 8}}>Low penalty</Text>
-        <Text style={{color: addOpacity(theme.textColor, 0.82)}}>
-          {lows} lows × {LOW_PENALTY_PER_EVENT} points = -{p.breakdown?.lowPenalty ?? '-'}
-        </Text>
-
-        <Text style={{color: theme.textColor, marginTop: 8}}>High penalty</Text>
-        <Text style={{color: addOpacity(theme.textColor, 0.82)}}>
-          {highs} highs × {HIGH_PENALTY_PER_EVENT} points = -{p.breakdown?.highPenalty ?? '-'}
-        </Text>
-      </View>
-
-      <View style={{backgroundColor: addOpacity('#2e7d32', 0.12), borderRadius: 12, padding: 12}}>
-        <Text style={{fontWeight: '800', color: theme.textColor}}>What-if to rank up</Text>
-        {typeof whatIf === 'string' ? (
-          <Text style={{color: theme.textColor, marginTop: 6}}>{whatIf}</Text>
-        ) : (
-          <>
-            <Text style={{color: theme.textColor, marginTop: 6}}>{whatIf.summary}</Text>
-            <Text style={{color: theme.textColor, marginTop: 4}}>• {whatIf.optionA}</Text>
-            <Text style={{color: theme.textColor}}>• {whatIf.optionB}</Text>
-            <Text style={{color: theme.textColor}}>• {whatIf.optionC}</Text>
-            <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 4}}>{whatIf.optionMix}</Text>
-          </>
-        )}
-      </View>
-
-      {TIERS.map(t => (
-        <View key={t.name} style={{backgroundColor: theme.white, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: addOpacity(t.color, 0.55)}}>
-          <Text style={{fontWeight: '800', color: theme.textColor}}>{t.name}</Text>
-          <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 4}}>Min score: {t.minScore}</Text>
-          <Text style={{color: addOpacity(theme.textColor, 0.8)}}>{t.target}</Text>
+      {/* HERO */}
+      <View style={{backgroundColor: addOpacity(tierColor, 0.14), borderColor: addOpacity(tierColor, 0.6), borderWidth: 1, borderRadius: 18, padding: 16}}>
+        <View style={{alignItems: 'center'}}>
+          <View style={{width: 110, height: 110, borderRadius: 55, borderWidth: 8, borderColor: addOpacity(tierColor, 0.35), alignItems: 'center', justifyContent: 'center', backgroundColor: theme.white}}>
+            <Text style={{fontSize: 36}}>{tierIcon(tier)}</Text>
+          </View>
+          <Text style={{marginTop: 10, fontSize: 24, fontWeight: '800', color: theme.textColor}}>{tier}</Text>
+          <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.8), fontWeight: '700'}}>ציון {score}</Text>
+          <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.8)}}>{nextTier ? `עוד ${pointsToNext} נק׳ בלבד ל-${nextTier}` : 'רמה מקסימלית הושגה'}</Text>
         </View>
-      ))}
+
+        <View style={{height: 10, borderRadius: 12, backgroundColor: addOpacity(theme.textColor, 0.12), marginTop: 14}}>
+          <View style={{height: 10, borderRadius: 12, width: `${Math.max(4, progress)}%`, backgroundColor: tierColor}} />
+        </View>
+      </View>
+
+      {/* MISSIONS */}
+      <View style={{backgroundColor: addOpacity('#2e7d32', 0.12), borderRadius: 14, padding: 12}}>
+        <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>המשימות שלי לשדרוג</Text>
+        <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.8), fontWeight: '700'}}>{whatIf.headline}</Text>
+        {whatIf.tasks.map((t, idx) => (
+          <Text key={idx} style={{marginTop: 6, color: theme.textColor}}>{t}</Text>
+        ))}
+      </View>
+
+      {/* SCORE BREAKDOWN */}
+      <View style={{backgroundColor: theme.white, borderRadius: 14, padding: 12}}>
+        <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>הרכב הציון שלך</Text>
+
+        <View style={{marginTop: 8, gap: 6}}>
+          <Text style={{color: theme.textColor}}>זמן בטווח (TIR): +{tirBonus}</Text>
+          <Text style={{color: theme.textColor}}>השפעת אירועי Low: -{lowImpact}</Text>
+          <Text style={{color: theme.textColor}}>השפעת אירועי High: -{highImpact}</Text>
+        </View>
+
+        <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.78)}}>
+          חלון חישוב: 7 ימים שהסתיימו (בלי היום הנוכחי)
+        </Text>
+
+        <Pressable onPress={() => setShowMath(v => !v)} style={{marginTop: 10}}>
+          <Text style={{color: theme.accentColor, fontWeight: '700'}}>{showMath ? 'הסתר נוסחה' : 'הצג נוסחה מלאה'}</Text>
+        </Pressable>
+
+        {showMath ? (
+          <View style={{marginTop: 8, backgroundColor: addOpacity(theme.textColor, 0.06), borderRadius: 10, padding: 10}}>
+            <Text style={{color: theme.textColor}}>Score = Base + TIR bonus - Low impact - High impact</Text>
+            <Text style={{color: theme.textColor, marginTop: 4}}>
+              = {base} + {tirBonus} - {lowImpact} - {highImpact}
+            </Text>
+            <Text style={{color: addOpacity(theme.textColor, 0.75), marginTop: 6}}>
+              TIR {tir}% • Lows {lows} • Highs {highs}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* ROADMAP */}
+      <View style={{backgroundColor: theme.white, borderRadius: 14, padding: 12}}>
+        <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>מפת דרגות</Text>
+        <View style={{marginTop: 8, gap: 8}}>
+          {TIERS.map((t, idx) => {
+            const active = t.name === tier;
+            const unlocked = score >= t.minScore;
+            return (
+              <View key={t.name} style={{borderRadius: 10, padding: 10, borderWidth: 1, borderColor: addOpacity(t.color, 0.55), backgroundColor: unlocked ? addOpacity(t.color, active ? 0.2 : 0.1) : addOpacity(theme.textColor, 0.04)}}>
+                <Text style={{fontWeight: '800', color: theme.textColor}}>{tierIcon(t.name)} {t.name}</Text>
+                <Text style={{color: addOpacity(theme.textColor, 0.8), marginTop: 2}}>מינימום: {t.minScore} נק׳</Text>
+                <Text style={{color: addOpacity(theme.textColor, 0.8)}}>{t.target}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
     </ScrollView>
   );
 };
