@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {RefreshControl, ScrollView, View} from 'react-native';
+import {RefreshControl, ScrollView, View, Text} from 'react-native';
 
 import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -33,7 +33,11 @@ import {useMealSegments} from 'app/containers/MainTabsNavigator/Containers/Home/
 import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useMealSegments';
 import {useMealTags} from 'app/hooks/useMealTags';
 import TagMealSheet from 'app/components/MealTagging/TagMealSheet';
-import {format} from 'date-fns';
+import {format, subDays} from 'date-fns';
+import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
+import {DAILY_REVIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
+import {computeInsulinStats} from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinDataCalculations';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -69,6 +73,16 @@ const StatsToggleText = styled.Text<{theme: ThemeType}>`
   font-weight: 700;
   color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.6)};
   margin-left: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+`;
+
+const DailySummaryCard = styled.Pressable<{theme: ThemeType}>`
+  margin-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  padding: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  border-radius: ${(p: {theme: ThemeType}) => p.theme.borderRadius + 2}px;
+  background-color: ${(p: {theme: ThemeType}) => p.theme.white};
+  border-width: 1px;
+  border-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.12)};
 `;
 
 // create dummy home component with typescript
@@ -353,6 +367,104 @@ const Home: React.FC = () => {
     return d;
   }, [debouncedCurrentDate]);
 
+  const [dailySummary, setDailySummary] = useState<{
+    nightLine: string;
+    actionLine: string;
+    tirText: string;
+    avgBgText: string;
+    insulinText: string;
+    trendText: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const run = async () => {
+      try {
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const isSelectedToday = startOfDay.getTime() === todayStart.getTime();
+
+        const summaryStart = startOfDay;
+        const summaryEnd = endOfDay;
+        const prevDayStart = subDays(summaryStart, 1);
+        const baselineEnd = summaryStart;
+        const prevWeekStart = subDays(baselineEnd, 7);
+
+        const [yRows, wRows, latestBrief] = await Promise.all([
+          fetchBgDataForDateRangeUncached(summaryStart, summaryEnd, {throwOnError: false}),
+          fetchBgDataForDateRangeUncached(prevWeekStart, baselineEnd, {throwOnError: false}),
+          getLatestDailyBrief(),
+        ]);
+
+        const y = (yRows as any[]) ?? [];
+        const w = (wRows as any[]) ?? [];
+
+        const yTir = y.length ? Math.round((y.filter(r => r.sgv >= 70 && r.sgv <= 180).length / y.length) * 100) : 0;
+        const wTir = w.length ? Math.round((w.filter(r => r.sgv >= 70 && r.sgv <= 180).length / w.length) * 100) : 0;
+        const yLows = y.filter(r => r.sgv < 70).length;
+        const yAvgBg = y.length ? Math.round(y.reduce((s, r) => s + (r.sgv ?? 0), 0) / y.length) : 0;
+
+        const nightRows = y.filter(r => {
+          const dt = r?.dateString ? new Date(r.dateString) : null;
+          if (!dt || Number.isNaN(dt.getTime())) return false;
+          const h = dt.getHours();
+          return h >= 0 && h < 6;
+        });
+        const nightLows = nightRows.filter(r => r.sgv < 70).length;
+
+        let insulinSelectedDay = 0;
+        let insulinPrevDay = 0;
+        let insulinAvgDaily = 0;
+
+        try {
+          insulinSelectedDay = computeInsulinStats(insulinData, basalProfileData, summaryStart, summaryEnd).totalInsulin;
+          insulinPrevDay = computeInsulinStats(insulinData, basalProfileData, prevDayStart, summaryStart).totalInsulin;
+          const insulinWeek = computeInsulinStats(insulinData, basalProfileData, prevWeekStart, baselineEnd).totalInsulin;
+          insulinAvgDaily = insulinWeek > 0 ? insulinWeek / 7 : 0;
+        } catch {
+          // keep insulin metrics at zero fallback
+        }
+
+        const insulinDelta = insulinSelectedDay - insulinPrevDay;
+
+        const nightLine = nightLows > 0 ? `Night: ${nightLows} lows` : 'Night: stable';
+        const defaultActionLine = yLows > 0 ? 'Today: avoid afternoon stacking' : 'Today: keep same routine';
+        const briefLines = (latestBrief?.body || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
+        const actionLine =
+          briefLines.find((l: string) => l.startsWith('??') || l.toLowerCase().startsWith('today:')) ||
+          briefLines[2] ||
+          defaultActionLine;
+
+        if (!mounted) return;
+        setDailySummary({
+          nightLine,
+          actionLine,
+          tirText: `TIR ${yTir}% (${yTir - wTir >= 0 ? '+' : ''}${yTir - wTir} vs 7d)`,
+          avgBgText: `Avg BG ${yAvgBg}`,
+          insulinText: `Insulin ${insulinSelectedDay.toFixed(1)}U (${insulinDelta >= 0 ? '+' : ''}${insulinDelta.toFixed(1)} vs day before | avg ${insulinAvgDaily.toFixed(1)}U/day)`,
+          trendText: yLows > 0 ? 'Focus: lower hypo risk today' : 'Trend: stable day, keep momentum',
+        });
+      } catch {
+        if (mounted) {
+          setDailySummary({
+            nightLine: 'Night: no data',
+            actionLine: 'Today: collect more data',
+            tirText: 'TIR --',
+            avgBgText: 'Avg BG --',
+            insulinText: 'Insulin --',
+            trendText: 'Collect more data for a stronger summary',
+          });
+        }
+      }
+    };
+
+    run();
+    return () => {
+      mounted = false;
+    };
+  }, [insulinData, basalProfileData, startOfDay, endOfDay, isShowingToday, debouncedCurrentDate]);
+
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
       <ScrollView
@@ -376,6 +488,35 @@ const Home: React.FC = () => {
           maxCobReference={maxCobReference}
           onRefreshBgData={getUpdatedBgData}
         />
+
+        {dailySummary ? (
+          <DailySummaryCard onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+              <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>Yesterday summary</Text>
+              <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>{isShowingToday ? 'Today' : format(debouncedCurrentDate, 'dd/MM')}</Text>
+            </View>
+
+            <View style={{marginTop: 8, gap: 4}}>
+              <Text style={{color: theme.textColor}}>{dailySummary.nightLine}</Text>
+              <Text style={{color: addOpacity(theme.textColor, 0.86)}}>{dailySummary.actionLine}</Text>
+            </View>
+
+            <View style={{marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
+              <View style={{paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10, backgroundColor: addOpacity(theme.inRangeColor, 0.14)}}>
+                <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>{dailySummary.tirText}</Text>
+              </View>
+              <View style={{paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10, backgroundColor: addOpacity(theme.accentColor, 0.14)}}>
+                <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>{dailySummary.avgBgText}</Text>
+              </View>
+              <View style={{paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10, backgroundColor: addOpacity(theme.aboveRangeColor, 0.14)}}>
+                <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>{dailySummary.insulinText}</Text>
+              </View>
+            </View>
+
+            <Text style={{marginTop: 10, color: addOpacity(theme.textColor, 0.75)}}>{dailySummary.trendText}</Text>
+            <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.65)}}>Tap for full daily review</Text>
+          </DailySummaryCard>
+        ) : null}
 
         {/* 2. Collapsible detailed stats (BG + Insulin) — at top for quick access */}
         <StatsToggleRow
@@ -480,3 +621,4 @@ const Home: React.FC = () => {
 };
 
 export default Home;
+

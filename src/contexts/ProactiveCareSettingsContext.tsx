@@ -8,6 +8,11 @@ export type ProactiveCareSettings = {
     hypoRiskSoon: boolean;
     postHypoFollowUp: boolean;
   };
+  dailyBrief: {
+    enabled: boolean;
+    hour: number;
+    minute: number;
+  };
 };
 
 type ProactiveCareSettingsContextValue = {
@@ -28,6 +33,11 @@ const DEFAULT_SETTINGS: ProactiveCareSettings = {
     hypoNow: true,
     hypoRiskSoon: false,
     postHypoFollowUp: true,
+  },
+  dailyBrief: {
+    enabled: true,
+    hour: 8,
+    minute: 0,
   },
 };
 
@@ -77,6 +87,10 @@ export const ProactiveCareSettingsProvider = ({children}: {children: React.React
           events: {
             ...prev.events,
             ...(migrated.events ?? {}),
+          },
+          dailyBrief: {
+            ...prev.dailyBrief,
+            ...(migrated.dailyBrief ?? {}),
           },
         }));
       } finally {

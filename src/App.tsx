@@ -29,10 +29,12 @@ import {
   MAIN_TAB_NAVIGATOR,
   FULL_SCREEN_VIEW_SCREEN,
   HYPO_INVESTIGATION_SCREEN,
+  DAILY_REVIEW_SCREEN,
+  RANKS_INFO_SCREEN,
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 import {TabsSettingsProvider} from 'app/contexts/TabsSettingsContext';
-import {GlucoseSettingsProvider} from 'app/contexts/GlucoseSettingsContext';
+import {GlucoseSettingsProvider, useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import AddNotificationScreen from './containers/forms/AddNotificationScreen/AddNotificationScreen';
 import EditNotificationScreen from 'app/containers/forms/EditNotificationScreen/EditNotificationScreen';
 import { getApp } from '@react-native-firebase/app';
@@ -42,6 +44,7 @@ import notifee, {EventType} from '@notifee/react-native';
 import { registerDeviceToken, unregisterDeviceToken, syncTokenIfNeeded } from 'app/services/rebaseService';
 import NotificationModal from 'app/components/NotificationModal';
 import {useHypoNowMvp} from 'app/hooks/useHypoNowMvp';
+import {useDailyBriefNotifications} from 'app/hooks/useDailyBriefNotifications';
 import {
   navigateToHypoInvestigation,
   rootNavigationRef,
@@ -58,13 +61,15 @@ import EditFoodItemScreen from './containers/forms/Food/EditFoodItemScreen';
 import EditSportItem from './containers/forms/Sport/EditSportItem';
 import FullScreenViewScreen from 'app/containers/FullScreen/FullScreenViewScreen';
 import HypoInvestigationScreen from 'app/containers/MainTabsNavigator/Containers/Trends/HypoInvestigationScreen';
+import DailyReviewScreen from 'app/containers/MainTabsNavigator/Containers/Home/DailyReviewScreen';
+import RanksInfoScreen from 'app/containers/MainTabsNavigator/Containers/Home/RanksInfoScreen';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TouchProvider} from './components/charts/CgmGraph/contextStores/TouchContext';
 import {isE2E} from 'app/utils/e2e';
 import {NightscoutConfigProvider} from 'app/contexts/NightscoutConfigContext';
 import NightscoutSetupScreen from 'app/containers/NightscoutSetupScreen';
 import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
-import {AiSettingsProvider} from 'app/contexts/AiSettingsContext';
+import {AiSettingsProvider, useAiSettings} from 'app/contexts/AiSettingsContext';
 import {
   ProactiveCareSettingsProvider,
   useProactiveCareSettings,
@@ -109,13 +114,20 @@ function parseMs(value: unknown): number | undefined {
 
 function handleNotificationNavigation(initialNotification: {notification?: {data?: Record<string, string>}} | null) {
   const data = initialNotification?.notification?.data;
-  if (!data || data.route !== HYPO_INVESTIGATION_SCREEN) return;
+  if (!data) return;
 
-  navigateToHypoInvestigation({
-    startMs: parseMs(data.startMs),
-    endMs: parseMs(data.endMs),
-    lowThreshold: parseMs(data.lowThreshold),
-  });
+  if (data.route === HYPO_INVESTIGATION_SCREEN) {
+    navigateToHypoInvestigation({
+      startMs: parseMs(data.startMs),
+      endMs: parseMs(data.endMs),
+      lowThreshold: parseMs(data.lowThreshold),
+    });
+    return;
+  }
+
+  if (data.route === DAILY_REVIEW_SCREEN && rootNavigationRef.isReady()) {
+    rootNavigationRef.navigate(DAILY_REVIEW_SCREEN as never);
+  }
 }
 
 const App: () => React.ReactElement = () => {
@@ -172,9 +184,18 @@ const App: () => React.ReactElement = () => {
   const [notifTitle, setNotifTitle] = React.useState<string | undefined>();
   const [notifBody, setNotifBody] = React.useState<string | undefined>();
   const {settings: proactiveSettings} = useProactiveCareSettings();
+  const {settings: glucoseSettings} = useGlucoseSettings();
+  const {settings: aiSettings} = useAiSettings();
 
   useHypoNowMvp({
     enabled: !isE2E && proactiveSettings.enabled && proactiveSettings.events.hypoNow,
+  });
+
+  useDailyBriefNotifications({
+    enabled: !isE2E && proactiveSettings.enabled,
+    config: proactiveSettings.dailyBrief,
+    glucose: glucoseSettings,
+    ai: aiSettings,
   });
 
   React.useEffect(() => {
@@ -279,6 +300,24 @@ const App: () => React.ReactElement = () => {
                                 options={{headerShown: false}}
                                 name={FULL_SCREEN_VIEW_SCREEN}
                                 component={FullScreenViewScreen}
+                              />
+
+                              <Stack.Screen
+                                options={{
+                                  headerShown: false,
+                                }}
+                                name={DAILY_REVIEW_SCREEN}
+                                component={DailyReviewScreen}
+                              />
+
+                              <Stack.Screen
+                                options={{
+                                  headerShown: true,
+                                  headerTitle: 'Rank system',
+                                  headerTitleStyle: {fontSize: 16, fontWeight: '700'},
+                                }}
+                                name={RANKS_INFO_SCREEN}
+                                component={RanksInfoScreen}
                               />
 
                               <Stack.Screen
