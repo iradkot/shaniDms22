@@ -5,15 +5,7 @@ import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {GlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
 import {computeRank} from 'app/services/proactiveCare/streakRank';
-
-function isHebrewLocale() {
-  try {
-    const locale = Intl.DateTimeFormat().resolvedOptions().locale || 'en';
-    return locale.toLowerCase().startsWith('he');
-  } catch {
-    return false;
-  }
-}
+import {getStoredAppLanguage} from 'app/contexts/AppLanguageContext';
 
 const CHANNEL_ID = 'daily-briefs';
 const NOTIFICATION_ID = 'daily-brief-notification';
@@ -98,7 +90,7 @@ export async function getLatestDailyBrief(): Promise<StoredBrief | null> {
 
 async function buildFallbackBrief(glucose: GlucoseSettings) {
   const now = new Date();
-  const isHe = isHebrewLocale();
+  const isHe = (await getStoredAppLanguage()) === 'he';
   const todayStart = startOfDay(now);
   const yesterdayStart = new Date(todayStart);
   yesterdayStart.setDate(yesterdayStart.getDate() - 1);
@@ -175,7 +167,7 @@ async function maybeGenerateLlmActionLine(params: {
   ai?: DailyBriefAiOptions;
 }): Promise<{actionLine: string; source: 'ai' | 'fallback'}> {
   const {baseActionLine, stats, ai} = params;
-  const isHe = isHebrewLocale();
+  const isHe = (await getStoredAppLanguage()) === 'he';
   const apiKey = (ai?.apiKey ?? '').trim();
   if (!ai?.enabled || !apiKey) return {actionLine: baseActionLine, source: 'fallback'};
 
@@ -213,7 +205,7 @@ async function maybeGenerateLlmActionLine(params: {
 
 async function computeYesterdayBrief(glucose: GlucoseSettings, ai?: DailyBriefAiOptions) {
   const base = await buildFallbackBrief(glucose);
-  const isHe = isHebrewLocale();
+  const isHe = (await getStoredAppLanguage()) === 'he';
 
   const generated = await maybeGenerateLlmActionLine({
     baseActionLine: base.actionLine,

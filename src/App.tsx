@@ -74,6 +74,7 @@ import {
   ProactiveCareSettingsProvider,
   useProactiveCareSettings,
 } from 'app/contexts/ProactiveCareSettingsContext';
+import {AppLanguageProvider} from 'app/contexts/AppLanguageContext';
 
 // Suppress deprecation warnings from Firebase React Native v21 with Hermes
 LogBox.ignoreLogs([
@@ -249,6 +250,7 @@ const App: () => React.ReactElement = () => {
                           <GlucoseSettingsProvider>
                             <AiSettingsProvider>
                               <ProactiveCareSettingsProvider>
+                                <AppLanguageProvider>
                             <NavigationContainer ref={rootNavigationRef}>
                               <Stack.Navigator screenOptions={{headerShown: false}}>
                                 <Stack.Screen name="initScreen" component={AppInitScreen} />
@@ -331,6 +333,7 @@ const App: () => React.ReactElement = () => {
                               />
                               </Stack.Navigator>
                             </NavigationContainer>
+                                </AppLanguageProvider>
                               </ProactiveCareSettingsProvider>
                             </AiSettingsProvider>
                           </GlucoseSettingsProvider>

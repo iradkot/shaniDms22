@@ -23,6 +23,7 @@ import {
   mapNightscoutTreatmentsToInsulinDataEntries,
 } from 'app/utils/nightscoutTreatments.utils';
 import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsulin';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 
 type Row = {sgv: number; dateString?: string};
 
@@ -47,10 +48,8 @@ const DailyReviewScreen: React.FC = () => {
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
 
-  const locale = (() => {
-    try { return Intl.DateTimeFormat().resolvedOptions().locale || 'en'; } catch { return 'en'; }
-  })();
-  const isHe = locale.toLowerCase().startsWith('he');
+  const {language} = useAppLanguage();
+  const isHe = language === 'he';
   const t = {
     title: isHe ? 'סיכום אתמול' : 'Yesterday summary',
     date: isHe ? 'תאריך' : 'Date',

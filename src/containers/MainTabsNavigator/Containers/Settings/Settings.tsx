@@ -16,6 +16,7 @@ import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {useNightscoutConfig} from 'app/contexts/NightscoutConfigContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useProactiveCareSettings} from 'app/contexts/ProactiveCareSettingsContext';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import ADIcon from 'react-native-vector-icons/AntDesign';
 import {useNavigation} from '@react-navigation/native';
@@ -35,6 +36,7 @@ const Settings: React.FC = () => {
   const {profiles, activeProfile, setActiveProfileId, deleteProfile} = useNightscoutConfig();
   const {settings: aiSettings, setSetting: setAiSetting, isLoaded: aiLoaded} = useAiSettings();
   const {settings: proactiveSettings, setSetting: setProactiveSetting} = useProactiveCareSettings();
+  const {language, setLanguage} = useAppLanguage();
 
   const [showDisplayedTabs, setShowDisplayedTabs] = useState(true);
   const [showNightscout, setShowNightscout] = useState(false);
@@ -532,11 +534,8 @@ const Settings: React.FC = () => {
               </Text>
             </View>
 
-            <View style={rowStyle}>
-              <View style={iconContainerStyle}>
-                <MaterialIcons name="vpn-key" size={theme.typography.size.xl} color={theme.textColor} />
-              </View>
-              <Text style={labelStyle}>OpenAI API key</Text>
+            <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md}}>
+              <Text style={{color: theme.textColor, fontWeight: '600', marginBottom: theme.spacing.xs}}>OpenAI API key</Text>
               <TextInput
                 testID={E2E_TEST_IDS.settings.aiApiKeyInput}
                 value={aiApiKeyText}
@@ -549,7 +548,7 @@ const Settings: React.FC = () => {
                 secureTextEntry={true}
                 placeholder="sk-..."
                 placeholderTextColor={theme.textColor}
-                style={{...inputStyle, minWidth: 160, textAlign: 'left'}}
+                style={{...inputStyle, width: '100%', textAlign: 'left'}}
               />
             </View>
 
@@ -703,6 +702,47 @@ const Settings: React.FC = () => {
           </>
         )}
       </View>
+
+      <View>
+        <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.sm}}>
+          <Text style={{color: theme.textColor, fontSize: theme.typography.size.md, fontWeight: '700'}}>Language</Text>
+        </View>
+        <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md}}>
+          <View style={{flexDirection: 'row', gap: theme.spacing.sm}}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setLanguage('en')}
+              style={({pressed}) => ({
+                flex: 1,
+                paddingVertical: theme.spacing.md,
+                borderRadius: theme.borderRadius,
+                borderWidth: 1,
+                borderColor: language === 'en' ? theme.accentColor : theme.borderColor,
+                backgroundColor: pressed ? theme.borderColor : theme.white,
+                alignItems: 'center',
+              })}
+            >
+              <Text style={{color: theme.textColor, fontWeight: '700'}}>English</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setLanguage('he')}
+              style={({pressed}) => ({
+                flex: 1,
+                paddingVertical: theme.spacing.md,
+                borderRadius: theme.borderRadius,
+                borderWidth: 1,
+                borderColor: language === 'he' ? theme.accentColor : theme.borderColor,
+                backgroundColor: pressed ? theme.borderColor : theme.white,
+                alignItems: 'center',
+              })}
+            >
+              <Text style={{color: theme.textColor, fontWeight: '700'}}>עברית</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
       <View>
         <SectionHeader
           title="Proactive Care"
