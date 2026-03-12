@@ -435,7 +435,7 @@ const Home: React.FC = () => {
         const defaultActionLine = yLows > 0 ? tr(language, 'home.todayAvoidStacking') : tr(language, 'home.todayKeepRoutine');
         const briefLines = (latestBrief?.body || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
         const actionLine =
-          briefLines.find((l: string) => l.startsWith('??') || l.toLowerCase().startsWith('today:')) ||
+          briefLines.find((l: string) => l.startsWith('🎯') || l.toLowerCase().startsWith('today:') || l.includes('היום:')) ||
           briefLines[2] ||
           defaultActionLine;
 

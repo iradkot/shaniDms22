@@ -385,7 +385,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Home</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.tabHome')}</Text>
               <Switch value={true} disabled={true} />
             </View>
 
@@ -397,7 +397,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Trends</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.tabTrends')}</Text>
               <Switch value={true} disabled={true} />
             </View>
 
@@ -409,7 +409,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Settings</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.tabSettings')}</Text>
               <Switch value={true} disabled={true} />
             </View>
 
@@ -421,7 +421,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Oracle</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.tabOracle')}</Text>
               <Switch
                 testID={E2E_TEST_IDS.settings.toggleOracleTab}
                 value={settings.showOracle}
@@ -437,7 +437,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Food Tracking</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.tabFoodTracking')}</Text>
               <Switch
                 testID={E2E_TEST_IDS.settings.toggleFoodTab}
                 value={settings.showFoodTracking}
@@ -453,7 +453,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Sport Tracking</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.tabSportTracking')}</Text>
               <Switch
                 testID={E2E_TEST_IDS.settings.toggleSportTab}
                 value={settings.showSportTracking}
@@ -469,7 +469,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Notifications</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.tabNotifications')}</Text>
               <Switch
                 testID={E2E_TEST_IDS.settings.toggleNotificationsTab}
                 value={settings.showNotifications}
@@ -485,7 +485,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>AI Analyst</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.tabAiAnalyst')}</Text>
               <Switch
                 testID={E2E_TEST_IDS.settings.toggleAiAnalystTab}
                 value={settings.showAiAnalyst}
@@ -501,7 +501,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Loop Tuner</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.tabLoopTuner')}</Text>
               <Switch
                 testID={E2E_TEST_IDS.settings.toggleLoopTunerTab}
                 value={settings.showLoopTuner}
@@ -723,7 +723,7 @@ const Settings: React.FC = () => {
                 alignItems: 'center',
               })}
             >
-              <Text style={{color: theme.textColor, fontWeight: '700'}}>English</Text>
+              <Text style={{color: theme.textColor, fontWeight: '700'}}>{tr(language, 'settings.languageEnglish')}</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -738,7 +738,7 @@ const Settings: React.FC = () => {
                 alignItems: 'center',
               })}
             >
-              <Text style={{color: theme.textColor, fontWeight: '700'}}>עברית</Text>
+              <Text style={{color: theme.textColor, fontWeight: '700'}}>{tr(language, 'settings.languageHebrew')}</Text>
             </Pressable>
           </View>
         </View>
