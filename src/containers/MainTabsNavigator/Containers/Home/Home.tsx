@@ -38,6 +38,8 @@ import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {DAILY_REVIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
 import {computeInsulinStats} from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinDataCalculations';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -89,6 +91,7 @@ const DailySummaryCard = styled.Pressable<{theme: ThemeType}>`
 const Home: React.FC = () => {
   const navigation = useNavigation();
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [tooltipModel, setTooltipModel] = useState<StackedChartsTooltipModel | null>(null);
@@ -428,8 +431,8 @@ const Home: React.FC = () => {
 
         const insulinDelta = insulinSelectedDay - insulinPrevDay;
 
-        const nightLine = nightLows > 0 ? `Night: ${nightLows} lows` : 'Night: stable';
-        const defaultActionLine = yLows > 0 ? 'Today: avoid afternoon stacking' : 'Today: keep same routine';
+        const nightLine = nightLows > 0 ? tr(language, 'home.nightLows', {count: nightLows}) : tr(language, 'home.nightStable');
+        const defaultActionLine = yLows > 0 ? tr(language, 'home.todayAvoidStacking') : tr(language, 'home.todayKeepRoutine');
         const briefLines = (latestBrief?.body || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
         const actionLine =
           briefLines.find((l: string) => l.startsWith('??') || l.toLowerCase().startsWith('today:')) ||
@@ -440,20 +443,20 @@ const Home: React.FC = () => {
         setDailySummary({
           nightLine,
           actionLine,
-          tirText: `TIR ${yTir}% (${yTir - wTir >= 0 ? '+' : ''}${yTir - wTir} vs 7d)`,
-          avgBgText: `Avg BG ${yAvgBg}`,
-          insulinText: `Insulin ${insulinSelectedDay.toFixed(1)}U (${insulinDelta >= 0 ? '+' : ''}${insulinDelta.toFixed(1)} vs day before | avg ${insulinAvgDaily.toFixed(1)}U/day)`,
-          trendText: yLows > 0 ? 'Focus: lower hypo risk today' : 'Trend: stable day, keep momentum',
+          tirText: tr(language, 'home.tirVs7d', {tir: yTir, delta: `${yTir - wTir >= 0 ? '+' : ''}${yTir - wTir}`}),
+          avgBgText: tr(language, 'home.avgBg', {value: yAvgBg}),
+          insulinText: tr(language, 'home.insulinLine', {value: insulinSelectedDay.toFixed(1), delta: `${insulinDelta >= 0 ? '+' : ''}${insulinDelta.toFixed(1)}`, avg: insulinAvgDaily.toFixed(1)}),
+          trendText: yLows > 0 ? tr(language, 'home.trendHypo') : tr(language, 'home.trendStable'),
         });
       } catch {
         if (mounted) {
           setDailySummary({
-            nightLine: 'Night: no data',
-            actionLine: 'Today: collect more data',
-            tirText: 'TIR --',
-            avgBgText: 'Avg BG --',
-            insulinText: 'Insulin --',
-            trendText: 'Collect more data for a stronger summary',
+            nightLine: tr(language, 'home.nightNoData'),
+            actionLine: tr(language, 'home.todayCollectMore'),
+            tirText: tr(language, 'home.tirEmpty'),
+            avgBgText: tr(language, 'home.avgBgEmpty'),
+            insulinText: tr(language, 'home.insulinEmpty'),
+            trendText: tr(language, 'home.trendCollectMore'),
           });
         }
       }
@@ -492,8 +495,8 @@ const Home: React.FC = () => {
         {dailySummary ? (
           <DailySummaryCard onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-              <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>Yesterday summary</Text>
-              <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>{isShowingToday ? 'Today' : format(debouncedCurrentDate, 'dd/MM')}</Text>
+              <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 16}}>{tr(language, 'home.yesterdaySummary')}</Text>
+              <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>{isShowingToday ? tr(language, 'common.today') : format(debouncedCurrentDate, 'dd/MM')}</Text>
             </View>
 
             <View style={{marginTop: 8, gap: 4}}>
@@ -514,7 +517,7 @@ const Home: React.FC = () => {
             </View>
 
             <Text style={{marginTop: 10, color: addOpacity(theme.textColor, 0.75)}}>{dailySummary.trendText}</Text>
-            <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.65)}}>Tap for full daily review</Text>
+            <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.65)}}>{tr(language, 'home.tapForFullReview')}</Text>
           </DailySummaryCard>
         ) : null}
 
@@ -528,7 +531,7 @@ const Home: React.FC = () => {
             color={addOpacity('#000000', 0.5)}
           />
           <StatsToggleText>
-            {showDetailedStats ? 'Hide Detailed Stats' : 'BG Stats & Insulin Details'}
+            {showDetailedStats ? tr(language, 'home.hideDetailed') : tr(language, 'home.showDetailed')}
           </StatsToggleText>
         </StatsToggleRow>
 

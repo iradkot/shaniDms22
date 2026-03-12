@@ -16,14 +16,15 @@ import {getLatestDailyBrief, regenerateDailyBrief} from 'app/services/proactiveC
 import {computeRank} from 'app/services/proactiveCare/streakRank';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {RANKS_INFO_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {t as tr} from 'app/i18n/translations';
 import TimeInRangeRow from './components/TimeInRangeRow';
 import {
   extractBasalProfileFromNightscoutProfileData,
   mapNightscoutTreatmentsToInsulinDataEntries,
 } from 'app/utils/nightscoutTreatments.utils';
 import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsulin';
-import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 
 type Row = {sgv: number; dateString?: string};
 
@@ -47,27 +48,12 @@ const DailyReviewScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
-
   const {language} = useAppLanguage();
-  const isHe = language === 'he';
-  const t = {
-    title: isHe ? 'סיכום אתמול' : 'Yesterday summary',
-    date: isHe ? 'תאריך' : 'Date',
-    key: isHe ? 'What stood out yesterday' : 'What stood out yesterday',
-    range: isHe ? 'Glucose distribution' : 'Glucose distribution',
-    rec: isHe ? 'Your recommendation for today' : 'Your recommendation for today',
-    refresh: isHe ? 'רענן המלצה' : 'Refresh recommendation',
-    refreshing: isHe ? 'מעדכן המלצה…' : 'Refreshing recommendation…',
-    noData: isHe ? 'אין מספיק נתונים להצגת סיכום אמין.' : 'Not enough data for a reliable summary.',
-    sourceAi: isHe ? 'Personalized recommendation' : 'Personalized recommendation',
-    sourceAuto: isHe ? 'Automatic recommendation' : 'Automatic recommendation',
-  };
 
   const [loading, setLoading] = useState(true);
   const [refreshingAction, setRefreshingAction] = useState(false);
   const [yRows, setYRows] = useState<Row[]>([]);
   const [wRows, setWRows] = useState<Row[]>([]);
-  const [insulin, setInsulin] = useState({yesterday: 0, prevDay: 0, avgDaily7: 0});
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
   const [whyLine, setWhyLine] = useState<string | null>(null);
   const [actionSource, setActionSource] = useState<'ai' | 'fallback'>('fallback');
@@ -104,14 +90,12 @@ const DailyReviewScreen: React.FC = () => {
     setYRows((y as any) ?? []);
     setWRows((w as any) ?? []);
 
+    // keep insulin calculation for parity with existing data flow
     try {
-      const yesterdayTotal = await getDayInsulinTotal(yStart);
-      const prevDayTotal = await getDayInsulinTotal(prevDayStart);
-      let weekSum = 0;
-      for (let i = 1; i <= 7; i++) weekSum += await getDayInsulinTotal(subDays(todayStart, i));
-      setInsulin({yesterday: yesterdayTotal, prevDay: prevDayTotal, avgDaily7: weekSum / 7});
+      await getDayInsulinTotal(yStart);
+      await getDayInsulinTotal(prevDayStart);
     } catch {
-      setInsulin({yesterday: 0, prevDay: 0, avgDaily7: 0});
+      // ignore
     }
 
     if (latestBrief?.body) {
@@ -130,7 +114,9 @@ const DailyReviewScreen: React.FC = () => {
     let mounted = true;
     setLoading(true);
     loadData().finally(() => mounted && setLoading(false));
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleRegenerate = async () => {
@@ -153,20 +139,23 @@ const DailyReviewScreen: React.FC = () => {
     const inRange = yRows.filter(r => r.sgv >= (glucoseSettings.hypo ?? 70) && r.sgv <= (glucoseSettings.hyper ?? 180)).length;
     return Math.round((inRange / yRows.length) * 100);
   }, [yRows, glucoseSettings.hypo, glucoseSettings.hyper]);
+
+  const yLows = useMemo(() => yRows.filter(r => r.sgv < (glucoseSettings.hypo ?? 70)).length, [yRows, glucoseSettings.hypo]);
+  const yHighs = useMemo(() => yRows.filter(r => r.sgv > (glucoseSettings.hyper ?? 180)).length, [yRows, glucoseSettings.hyper]);
   const wTirPct = useMemo(() => {
     if (!wRows.length) return 0;
     const inRange = wRows.filter(r => r.sgv >= (glucoseSettings.hypo ?? 70) && r.sgv <= (glucoseSettings.hyper ?? 180)).length;
     return Math.round((inRange / wRows.length) * 100);
   }, [wRows, glucoseSettings.hypo, glucoseSettings.hyper]);
-  const yLows = useMemo(() => yRows.filter(r => r.sgv < (glucoseSettings.hypo ?? 70)).length, [yRows, glucoseSettings.hypo]);
-  const yHighs = useMemo(() => yRows.filter(r => r.sgv > (glucoseSettings.hyper ?? 180)).length, [yRows, glucoseSettings.hyper]);
   const wLows = useMemo(() => wRows.filter(r => r.sgv < (glucoseSettings.hypo ?? 70)).length, [wRows, glucoseSettings.hypo]);
   const wHighs = useMemo(() => wRows.filter(r => r.sgv > (glucoseSettings.hyper ?? 180)).length, [wRows, glucoseSettings.hyper]);
 
   const rank = useMemo(() => computeRank({tir: wTirPct || yTirPct, lows: wLows, highs: wHighs}), [wTirPct, yTirPct, wLows, wHighs]);
   const rv = tierVisual(rank.tier);
 
-  if (loading) return <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}><ActivityIndicator /></View>;
+  if (loading) {
+    return <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}><ActivityIndicator /></View>;
+  }
 
   const card = {backgroundColor: theme.white, borderRadius: 14, padding: 12};
 
@@ -175,8 +164,8 @@ const DailyReviewScreen: React.FC = () => {
       <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
         <Pressable onPress={() => navigation.goBack()} style={{padding: 4}}><MaterialIcons name="arrow-back" size={24} color={theme.textColor} /></Pressable>
         <View>
-          <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor, textAlign}}>{t.title}</Text>
-          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65), textAlign}}>{t.date}: {format(yStart, 'd/M')}</Text>
+          <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor, textAlign}}>{tr(language, 'dailyReview.title')}</Text>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65), textAlign}}>{tr(language, 'common.date')}: {format(yStart, 'd/M')}</Text>
         </View>
         <View style={{width: 24}} />
       </View>
@@ -184,34 +173,40 @@ const DailyReviewScreen: React.FC = () => {
       <Pressable onPress={() => navigation.navigate(RANKS_INFO_SCREEN, {tier: rank.tier, score: rank.score, nextTier: rank.nextTier, progressToNextPct: rank.progressToNextPct, breakdown: rank.breakdown, weeklyMetrics: {tir: wTirPct, lows: wLows, highs: wHighs}})} style={{...card, backgroundColor: addOpacity(rv.color, 0.14), borderWidth: 1, borderColor: addOpacity(rv.color, 0.6)}}>
         <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
           <Text style={{fontWeight: '800', color: theme.textColor}}>{rv.emoji} {rank.tier}</Text>
-          <Text style={{fontWeight: '700', color: addOpacity(theme.textColor, 0.7)}}>Score {rank.score}</Text>
+          <Text style={{fontWeight: '700', color: addOpacity(theme.textColor, 0.7)}}>{tr(language, 'dailyReview.score')} {rank.score}</Text>
         </View>
       </Pressable>
 
       <View style={card}>
-        <Text style={{color: theme.textColor, textAlign}}>{yRows.length ? `Yesterday TIR ${yTirPct}% • Avg glucose ${yAvg}` : t.noData}</Text>
+        <Text style={{color: theme.textColor, textAlign}}>
+          {yRows.length ? tr(language, 'dailyReview.summaryLine', {tir: yTirPct, avg: yAvg}) : tr(language, 'dailyReview.noData')}
+        </Text>
       </View>
 
       <View style={card}>
-        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{t.key}</Text>
-        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>{yLows > yHighs ? `More lows than highs (${yLows} vs ${yHighs}).` : `More highs than lows (${yHighs} vs ${yLows}).`}</Text>
+        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{tr(language, 'dailyReview.key')}</Text>
+        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>
+          {yLows > yHighs
+            ? tr(language, 'dailyReview.lowsVsHighs', {lows: yLows, highs: yHighs})
+            : tr(language, 'dailyReview.highsVsLows', {lows: yLows, highs: yHighs})}
+        </Text>
       </View>
 
       <View style={card}>
-        <Text style={{fontWeight: '700', color: theme.textColor, textAlign}}>{t.range}</Text>
-        <View style={{marginTop: 6}}>{yRows.length ? <TimeInRangeRow bgData={yRows as any} /> : <Text style={{color: addOpacity(theme.textColor, 0.75), textAlign}}>{t.noData}</Text>}</View>
+        <Text style={{fontWeight: '700', color: theme.textColor, textAlign}}>{tr(language, 'dailyReview.range')}</Text>
+        <View style={{marginTop: 6}}>{yRows.length ? <TimeInRangeRow bgData={yRows as any} /> : <Text style={{color: addOpacity(theme.textColor, 0.75), textAlign}}>{tr(language, 'dailyReview.noData')}</Text>}</View>
       </View>
 
       <View style={card}>
-        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{t.rec}</Text>
-        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>{llmActionLine || (isHe ? '🎯 היום: שמרו על שגרה יציבה והימנעו מערימת אינסולין.' : '🎯 Today: keep a stable routine and avoid insulin stacking.')}</Text>
+        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{tr(language, 'dailyReview.rec')}</Text>
+        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>{llmActionLine || tr(language, 'dailyReview.fallbackAction')}</Text>
         {whyLine ? <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75), textAlign}}>{whyLine}</Text> : null}
-        <Text style={{marginTop: 4, fontSize: 12, color: addOpacity(theme.textColor, 0.6), textAlign}}>{actionSource === 'ai' ? t.sourceAi : t.sourceAuto}</Text>
+        <Text style={{marginTop: 4, fontSize: 12, color: addOpacity(theme.textColor, 0.6), textAlign}}>{actionSource === 'ai' ? tr(language, 'dailyReview.sourceAi') : tr(language, 'dailyReview.sourceAuto')}</Text>
       </View>
 
       {!!(aiSettings.enabled && (aiSettings.apiKey || '').trim()) && (
         <Pressable onPress={handleRegenerate} disabled={refreshingAction} style={{...card, alignItems: 'center'}}>
-          <Text style={{fontWeight: '700', color: theme.textColor}}>{refreshingAction ? t.refreshing : t.refresh}</Text>
+          <Text style={{fontWeight: '700', color: theme.textColor}}>{refreshingAction ? tr(language, 'dailyReview.refreshing') : tr(language, 'dailyReview.refresh')}</Text>
         </Pressable>
       )}
     </ScrollView>

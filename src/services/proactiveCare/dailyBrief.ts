@@ -3,9 +3,10 @@ import notifee, {AndroidImportance, RepeatFrequency, TriggerType} from '@notifee
 
 import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {GlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
+import {getStoredAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr, Lang} from 'app/i18n/translations';
 import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
 import {computeRank} from 'app/services/proactiveCare/streakRank';
-import {getStoredAppLanguage} from 'app/contexts/AppLanguageContext';
 
 const CHANNEL_ID = 'daily-briefs';
 const NOTIFICATION_ID = 'daily-brief-notification';
@@ -45,9 +46,7 @@ function startOfDay(d: Date): Date {
 function nextScheduledTime(now: Date, hour: number, minute: number): Date {
   const candidate = new Date(now);
   candidate.setHours(hour, minute, 0, 0);
-  if (candidate.getTime() <= now.getTime()) {
-    candidate.setDate(candidate.getDate() + 1);
-  }
+  if (candidate.getTime() <= now.getTime()) candidate.setDate(candidate.getDate() + 1);
   return candidate;
 }
 
@@ -62,20 +61,19 @@ function isNightHour(hour: number, start: number, end: number): boolean {
   return hour >= start || hour < end;
 }
 
-async function ensureChannel() {
+async function ensureChannel(lang: Lang) {
   await notifee.createChannel({
     id: CHANNEL_ID,
-    name: 'Daily briefs',
+    name: tr(lang, 'brief.channelName'),
     importance: AndroidImportance.DEFAULT,
   });
 }
 
 async function persistLatestBrief(brief: Omit<StoredBrief, 'createdAt'>) {
-  const payload: StoredBrief = {
-    ...brief,
-    createdAt: new Date().toISOString(),
-  };
-  await AsyncStorage.setItem(STORAGE_KEYS.latestBrief, JSON.stringify(payload));
+  await AsyncStorage.setItem(
+    STORAGE_KEYS.latestBrief,
+    JSON.stringify({...brief, createdAt: new Date().toISOString()}),
+  );
 }
 
 export async function getLatestDailyBrief(): Promise<StoredBrief | null> {
@@ -88,9 +86,8 @@ export async function getLatestDailyBrief(): Promise<StoredBrief | null> {
   }
 }
 
-async function buildFallbackBrief(glucose: GlucoseSettings) {
+async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
   const now = new Date();
-  const isHe = (await getStoredAppLanguage()) === 'he';
   const todayStart = startOfDay(now);
   const yesterdayStart = new Date(todayStart);
   yesterdayStart.setDate(yesterdayStart.getDate() - 1);
@@ -102,10 +99,10 @@ async function buildFallbackBrief(glucose: GlucoseSettings) {
 
   if (!list.length) {
     return {
-      title: isHe ? 'סיכום יומי' : 'Daily brief',
-      nightLine: isHe ? '🌙 לילה: אין נתונים' : '🌙 Night: no data',
-      dayLine: isHe ? '📊 אתמול: אין נתונים' : '📊 Yesterday: no data',
-      actionLine: isHe ? '🎯 היום: כדאי לאסוף עוד נתונים' : '🎯 Today: capture more readings',
+      title: tr(lang, 'brief.title'),
+      nightLine: tr(lang, 'brief.noDataNight'),
+      dayLine: tr(lang, 'brief.noDataYesterday'),
+      actionLine: tr(lang, 'brief.actionCollect'),
       source: 'fallback' as const,
       stats: {tir: 0, avg: 0, lows: 0, highs: 0, nightLows: 0},
     };
@@ -113,51 +110,41 @@ async function buildFallbackBrief(glucose: GlucoseSettings) {
 
   const hypo = glucose.hypo ?? 70;
   const hyper = glucose.hyper ?? 180;
-
   const lows = list.filter(r => (r.sgv ?? 0) < hypo);
   const highs = list.filter(r => (r.sgv ?? 0) > hyper);
   const inRange = list.filter(r => (r.sgv ?? 0) >= hypo && (r.sgv ?? 0) <= hyper);
-
   const avg = Math.round(list.reduce((s, r) => s + (r.sgv ?? 0), 0) / Math.max(1, list.length));
   const tir = Math.round((inRange.length / Math.max(1, list.length)) * 100);
 
   const nightRows = list.filter(r => {
     const ds = r?.dateString;
     if (!ds) return false;
-    const h = new Date(ds).getHours();
-    return isNightHour(h, glucose.nightStartHour, glucose.nightEndHour);
+    return isNightHour(new Date(ds).getHours(), glucose.nightStartHour, glucose.nightEndHour);
   });
   const nightLows = nightRows.filter(r => (r.sgv ?? 0) < hypo);
-
   const rank = computeRank({tir, lows: lows.length, highs: highs.length});
 
   const nightLine =
     nightLows.length > 0
-      ? (isHe ? `🌙 לילה: ${nightLows.length} ירידות` : `🌙 Night: ${nightLows.length} lows`)
-      : (isHe ? '🌙 לילה: יציב' : '🌙 Night: stable');
+      ? tr(lang, 'brief.nightLows', {count: nightLows.length})
+      : tr(lang, 'brief.nightStable');
 
-  const dayLine = isHe ? `📊 אתמול: TIR ${tir}% | ${rank.tier}` : `📊 Yesterday: TIR ${tir}% | ${rank.tier}`;
+  const dayLine = tr(lang, 'brief.yesterdayTir', {tir, tier: rank.tier});
 
-  let actionLine = isHe ? '🎯 היום: לשמור על אותה שגרה' : '🎯 Today: keep same routine';
+  let actionLine = tr(lang, 'brief.actionKeep');
   if (nightLows.length > 0 || lows.length >= 2) {
-    actionLine = isHe ? '🎯 היום: להימנע מערימת אינסולין' : '🎯 Today: avoid insulin stacking';
+    actionLine = tr(lang, 'brief.actionAvoid');
   } else if (highs.length > inRange.length * 0.25) {
-    actionLine = isHe ? '🎯 היום: לשפר תזמון בולוס בארוחות' : '🎯 Today: improve meal bolus timing';
+    actionLine = tr(lang, 'brief.actionBolus');
   }
 
   return {
-    title: isHe ? 'סיכום יומי' : 'Daily brief',
+    title: tr(lang, 'brief.title'),
     nightLine,
     dayLine,
     actionLine,
     source: 'fallback' as const,
-    stats: {
-      tir,
-      avg,
-      lows: lows.length,
-      highs: highs.length,
-      nightLows: nightLows.length,
-    },
+    stats: {tir, avg, lows: lows.length, highs: highs.length, nightLows: nightLows.length},
   };
 }
 
@@ -165,9 +152,9 @@ async function maybeGenerateLlmActionLine(params: {
   baseActionLine: string;
   stats: {tir: number; avg: number; lows: number; highs: number; nightLows: number};
   ai?: DailyBriefAiOptions;
+  lang: Lang;
 }): Promise<{actionLine: string; source: 'ai' | 'fallback'}> {
-  const {baseActionLine, stats, ai} = params;
-  const isHe = (await getStoredAppLanguage()) === 'he';
+  const {baseActionLine, stats, ai, lang} = params;
   const apiKey = (ai?.apiKey ?? '').trim();
   if (!ai?.enabled || !apiKey) return {actionLine: baseActionLine, source: 'fallback'};
 
@@ -178,17 +165,8 @@ async function maybeGenerateLlmActionLine(params: {
     const res = await provider.sendChat({
       model,
       messages: [
-        {
-          role: 'system',
-          content:
-            isHe
-              ? 'כתוב שורת פעולה יומית קצרה לסוכרת. פרקטי וספציפי, עד 14 מילים. להתחיל ב-"🎯 היום:".'
-              : 'Write one short daily diabetes action line. Practical, specific, max 14 words. Start with "🎯 Today:".',
-        },
-        {
-          role: 'user',
-          content: `Stats: ${JSON.stringify(stats)}\nBase suggestion: ${baseActionLine}`,
-        },
+        {role: 'system', content: tr(lang, 'brief.llmSystem')},
+        {role: 'user', content: `Stats: ${JSON.stringify(stats)}\nBase suggestion: ${baseActionLine}`},
       ],
       temperature: 0.7,
       maxOutputTokens: 90,
@@ -197,35 +175,36 @@ async function maybeGenerateLlmActionLine(params: {
     const text = (res.content ?? '').trim();
     if (!text) return {actionLine: baseActionLine, source: 'fallback'};
     if (text.startsWith('🎯')) return {actionLine: text, source: 'ai'};
-    return {actionLine: isHe ? `🎯 היום: ${text}` : `🎯 Today: ${text}`, source: 'ai'};
+    return {
+      actionLine: lang === 'he' ? `🎯 היום: ${text}` : `🎯 Today: ${text}`,
+      source: 'ai',
+    };
   } catch {
     return {actionLine: baseActionLine, source: 'fallback'};
   }
 }
 
-async function computeYesterdayBrief(glucose: GlucoseSettings, ai?: DailyBriefAiOptions) {
-  const base = await buildFallbackBrief(glucose);
-  const isHe = (await getStoredAppLanguage()) === 'he';
+async function computeYesterdayBrief(glucose: GlucoseSettings, lang: Lang, ai?: DailyBriefAiOptions) {
+  const base = await buildFallbackBrief(glucose, lang);
 
   const generated = await maybeGenerateLlmActionLine({
     baseActionLine: base.actionLine,
     stats: base.stats,
     ai,
+    lang,
   });
 
   const whyLine =
     base.stats.nightLows > 0
-      ? (isHe ? `🧠 למה: זוהו ${base.stats.nightLows} ירידות בלילה` : `🧠 Why: ${base.stats.nightLows} night lows detected`)
+      ? tr(lang, 'brief.whyNight', {count: base.stats.nightLows})
       : base.stats.lows > 0
-      ? (isHe ? `🧠 למה: היו ${base.stats.lows} ירידות אתמול` : `🧠 Why: ${base.stats.lows} low events yesterday`)
-      : (isHe ? `🧠 למה: TIR ${base.stats.tir}% וממוצע ${base.stats.avg}` : `🧠 Why: TIR ${base.stats.tir}% and avg ${base.stats.avg}`);
-
-  const source = generated.source === 'ai' ? 'ai' : base.source;
+      ? tr(lang, 'brief.whyLows', {count: base.stats.lows})
+      : tr(lang, 'brief.whyTirAvg', {tir: base.stats.tir, avg: base.stats.avg});
 
   return {
     title: base.title,
     body: `${base.nightLine}\n${base.dayLine}\n${generated.actionLine}\n${whyLine}`,
-    source,
+    source: generated.source === 'ai' ? 'ai' : base.source,
   } as const;
 }
 
@@ -234,9 +213,10 @@ export async function regenerateDailyBrief(params: {
   ai?: DailyBriefAiOptions;
   notify?: boolean;
 }) {
-  await ensureChannel();
+  const lang = (await getStoredAppLanguage()) as Lang;
+  await ensureChannel(lang);
 
-  const brief = await computeYesterdayBrief(params.glucose, params.ai);
+  const brief = await computeYesterdayBrief(params.glucose, lang, params.ai);
   await persistLatestBrief({title: brief.title, body: brief.body, source: brief.source});
 
   if (params.notify) {
@@ -249,10 +229,7 @@ export async function regenerateDailyBrief(params: {
         smallIcon: 'ic_launcher',
         pressAction: {id: 'default'},
       },
-      data: {
-        route: 'DailyReviewScreen',
-        source: 'daily_brief_manual',
-      },
+      data: {route: 'DailyReviewScreen', source: 'daily_brief_manual'},
     });
   }
 
@@ -268,12 +245,12 @@ export async function syncDailyBriefNotifications(params: {
   glucose: GlucoseSettings;
   ai?: DailyBriefAiOptions;
 }) {
+  const lang = (await getStoredAppLanguage()) as Lang;
   const hour = clampInt(params.config.hour, 8, 0, 23);
   const minute = clampInt(params.config.minute, 0, 0, 59);
 
-  await ensureChannel();
+  await ensureChannel(lang);
   await notifee.cancelNotification(NOTIFICATION_ID);
-
   if (!params.config.enabled) return;
 
   const now = new Date();
@@ -282,28 +259,23 @@ export async function syncDailyBriefNotifications(params: {
   todaySchedule.setHours(hour, minute, 0, 0);
 
   const lastDelivered = await AsyncStorage.getItem(STORAGE_KEYS.lastDeliveredDate);
-
   if (now.getTime() >= todaySchedule.getTime() && lastDelivered !== todayKey) {
     await regenerateDailyBrief({glucose: params.glucose, ai: params.ai, notify: true});
     await AsyncStorage.setItem(STORAGE_KEYS.lastDeliveredDate, todayKey);
   }
 
   const nextTs = nextScheduledTime(new Date(), hour, minute);
-
   await notifee.createTriggerNotification(
     {
       id: NOTIFICATION_ID,
-      title: 'Daily brief is ready',
-      body: 'Open Daily Review to see your updated summary.',
+      title: tr(lang, 'brief.notifReadyTitle'),
+      body: tr(lang, 'brief.notifReadyBody'),
       android: {
         channelId: CHANNEL_ID,
         smallIcon: 'ic_launcher',
         pressAction: {id: 'default'},
       },
-      data: {
-        route: 'DailyReviewScreen',
-        source: 'daily_brief_trigger',
-      },
+      data: {route: 'DailyReviewScreen', source: 'daily_brief_trigger'},
     },
     {
       type: TriggerType.TIMESTAMP,

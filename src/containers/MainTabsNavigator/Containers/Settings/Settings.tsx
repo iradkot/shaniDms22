@@ -25,6 +25,7 @@ import {validateOpenAiApiKey} from 'app/services/llm/providers/openaiProvider';
 import {sendDailyBriefNow} from 'app/services/proactiveCare/dailyBrief';
 import {NightscoutSection} from './sections/NightscoutSection';
 import {iconContainerStyle, labelStyle, rowStyle, SectionHeader} from './settingsShared';
+import {t as tr} from 'app/i18n/translations';
 
 const UI_STORAGE_KEY = 'settings.ui.v1';
 
@@ -219,13 +220,13 @@ const Settings: React.FC = () => {
     const severeHyper = parseIntStrict(severeHyperText);
 
     if (severeHypo === null || hypo === null || hyper === null || severeHyper === null) {
-      setRangeError('Please enter all range values.');
+      setRangeError(tr(language, 'settings.errEnterAllRanges'));
       return;
     }
 
     const isOrdered = severeHypo < hypo && hypo < hyper && hyper < severeHyper;
     if (!isOrdered) {
-      setRangeError('Ranges must be ordered: severe hypo < hypo < hyper < severe hyper.');
+      setRangeError(tr(language, 'settings.errRangeOrder'));
       return;
     }
 
@@ -241,12 +242,12 @@ const Settings: React.FC = () => {
     const end = parseIntStrict(nightEndText);
 
     if (start === null || end === null) {
-      setRangeError('Please enter both night start and end hours (0–23).');
+      setRangeError(tr(language, 'settings.errNightHoursRequired'));
       return;
     }
 
     if (start < 0 || start > 23 || end < 0 || end > 23) {
-      setRangeError('Night window hours must be between 0 and 23.');
+      setRangeError(tr(language, 'settings.errNightHoursRange'));
       return;
     }
 
@@ -260,12 +261,12 @@ const Settings: React.FC = () => {
     const minute = parseIntStrict(dailyBriefMinuteText);
 
     if (hour === null || minute === null) {
-      setRangeError('Please enter daily brief time as HH:MM.');
+      setRangeError(tr(language, 'settings.errBriefTimeRequired'));
       return;
     }
 
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-      setRangeError('Daily brief time must be valid (hour 0–23, minute 0–59).');
+      setRangeError(tr(language, 'settings.errBriefTimeRange'));
       return;
     }
 
@@ -279,11 +280,11 @@ const Settings: React.FC = () => {
 
   const triggerDailyBriefNow = async () => {
     try {
-      setDailyBriefStatus('Sending brief…');
+      setDailyBriefStatus(tr(language, 'settings.sendingBrief'));
       await sendDailyBriefNow(glucoseSettings, aiSettings);
-      setDailyBriefStatus('Daily brief sent.');
+      setDailyBriefStatus(tr(language, 'settings.briefSent'));
     } catch (e) {
-      setDailyBriefStatus('Failed to send daily brief now.');
+      setDailyBriefStatus(tr(language, 'settings.briefSendFailed'));
     }
   };
 
@@ -302,7 +303,7 @@ const Settings: React.FC = () => {
   const checkAndSaveOpenAiKey = async () => {
     const trimmedKey = (aiApiKeyText ?? '').trim();
     if (!trimmedKey) {
-      setAiKeyStatus({state: 'invalid', message: 'Please enter an API key first.'});
+      setAiKeyStatus({state: 'invalid', message: tr(language, 'settings.enterApiKeyFirst')});
       return;
     }
 
@@ -311,12 +312,12 @@ const Settings: React.FC = () => {
 
     if (result.ok) {
       persistAiSettings();
-      setAiKeyStatus({state: 'valid', message: 'Key looks valid. Saved.'});
+      setAiKeyStatus({state: 'valid', message: tr(language, 'settings.keyValidSaved')});
       return;
     }
 
     if (result.reason === 'unauthorized') {
-      setAiKeyStatus({state: 'invalid', message: 'Invalid key (unauthorized). Please retry.'});
+      setAiKeyStatus({state: 'invalid', message: tr(language, 'settings.keyInvalid')});
       return;
     }
 
@@ -324,14 +325,14 @@ const Settings: React.FC = () => {
       persistAiSettings();
       setAiKeyStatus({
         state: 'valid',
-        message: 'Key saved, but OpenAI returned 429 (quota/rate limit).',
+        message: tr(language, 'settings.keyRateLimited'),
       });
       return;
     }
 
     setAiKeyStatus({
       state: 'error',
-      message: result.message || 'Could not verify key. Please retry.',
+      message: result.message || tr(language, 'settings.keyCouldNotVerify'),
     });
   };
 
@@ -353,7 +354,7 @@ const Settings: React.FC = () => {
             marginBottom: theme.spacing.md,
           }}
         >
-          Settings
+          {tr(language, 'settings.title')}
         </Text>
         <Text
           style={{
@@ -363,13 +364,13 @@ const Settings: React.FC = () => {
             marginBottom: theme.spacing.lg,
           }}
         >
-          Choose which tabs are visible in the bottom bar.
+          {tr(language, 'settings.subtitle')}
         </Text>
       </View>
 
       <View>
         <SectionHeader
-          title="Displayed Tabs"
+          title={tr(language, 'settings.displayedTabs')}
           expanded={showDisplayedTabs}
           onToggle={() => setShowDisplayedTabs(v => !v)}
         />
@@ -512,7 +513,7 @@ const Settings: React.FC = () => {
       </View>
 
       <View>
-        <SectionHeader title="AI Analyst" expanded={showAi} onToggle={() => setShowAi(v => !v)} />
+        <SectionHeader title={tr(language, 'settings.aiAnalyst')} expanded={showAi} onToggle={() => setShowAi(v => !v)} />
 
         {showAi && (
           <>
@@ -520,7 +521,7 @@ const Settings: React.FC = () => {
               <View style={iconContainerStyle}>
                 <MaterialIcons name="toggle-on" size={theme.typography.size.xl} color={theme.textColor} />
               </View>
-              <Text style={labelStyle}>Enable AI Analyst</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.enableAiAnalyst')}</Text>
               <Switch
                 testID={E2E_TEST_IDS.settings.aiEnabledToggle}
                 value={aiSettings.enabled}
@@ -530,12 +531,12 @@ const Settings: React.FC = () => {
 
             <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.xs}}>
               <Text style={{color: theme.textColor, opacity: 0.75, fontSize: theme.typography.size.sm}}>
-                Requires your own OpenAI key. We don’t provide free LLM tokens.
+                {tr(language, 'settings.aiKeyHint')}
               </Text>
             </View>
 
             <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md}}>
-              <Text style={{color: theme.textColor, fontWeight: '600', marginBottom: theme.spacing.xs}}>OpenAI API key</Text>
+              <Text style={{color: theme.textColor, fontWeight: '600', marginBottom: theme.spacing.xs}}>{tr(language, 'settings.openAiApiKey')}</Text>
               <TextInput
                 testID={E2E_TEST_IDS.settings.aiApiKeyInput}
                 value={aiApiKeyText}
@@ -568,7 +569,7 @@ const Settings: React.FC = () => {
                   alignItems: 'center',
                 })}
               >
-                <Text style={{color: theme.textColor, fontWeight: '600'}}>Save</Text>
+                <Text style={{color: theme.textColor, fontWeight: '600'}}>{tr(language, 'common.save')}</Text>
               </Pressable>
 
               <Pressable
@@ -599,7 +600,7 @@ const Settings: React.FC = () => {
                   <MaterialIcons name="check-circle" size={18} color={theme.textColor} />
                 )}
                 <Text style={{color: theme.textColor, fontWeight: '600', marginLeft: theme.spacing.sm}}>
-                  {aiKeyStatus.state === 'checking' ? 'Checking…' : 'Check key'}
+                  {aiKeyStatus.state === 'checking' ? tr(language, 'settings.checking') : tr(language, 'settings.checkKey')}
                 </Text>
               </Pressable>
             </View>
@@ -619,7 +620,7 @@ const Settings: React.FC = () => {
                   }}
                 >
                   {aiKeyStatus.state === 'checking'
-                    ? 'Verifying your key with OpenAI…'
+                    ? tr(language, 'settings.verifyingKey')
                     : aiKeyStatus.message}
                 </Text>
               </View>
@@ -627,10 +628,10 @@ const Settings: React.FC = () => {
 
             <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
               <Text style={{color: theme.textColor, fontSize: theme.typography.size.md, fontWeight: '600'}}>
-                Model
+                {tr(language, 'settings.model')}
               </Text>
               <Text style={{color: theme.textColor, opacity: 0.75, fontSize: theme.typography.size.sm, paddingTop: theme.spacing.xs}}>
-                App is currently pinned to latest model (gpt-5.4).
+                {tr(language, 'settings.modelPinned')}
               </Text>
             </View>
 
@@ -678,7 +679,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Custom model</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.customModel')}</Text>
             </Pressable>
 
             {aiModelPreset === 'custom' && (
@@ -686,7 +687,7 @@ const Settings: React.FC = () => {
                 <View style={iconContainerStyle}>
                   <MaterialIcons name="tune" size={theme.typography.size.xl} color={theme.textColor} />
                 </View>
-                <Text style={labelStyle}>Custom model id</Text>
+                <Text style={labelStyle}>{tr(language, 'settings.customModelId')}</Text>
                 <TextInput
                   testID={E2E_TEST_IDS.settings.aiModelCustomInput}
                   value={aiModelText}
@@ -705,7 +706,7 @@ const Settings: React.FC = () => {
 
       <View>
         <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.sm}}>
-          <Text style={{color: theme.textColor, fontSize: theme.typography.size.md, fontWeight: '700'}}>Language</Text>
+          <Text style={{color: theme.textColor, fontSize: theme.typography.size.md, fontWeight: '700'}}>{tr(language, 'settings.language')}</Text>
         </View>
         <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md}}>
           <View style={{flexDirection: 'row', gap: theme.spacing.sm}}>
@@ -745,7 +746,7 @@ const Settings: React.FC = () => {
 
       <View>
         <SectionHeader
-          title="Proactive Care"
+          title={tr(language, 'settings.proactiveCare')}
           expanded={showProactiveCare}
           onToggle={() => setShowProactiveCare(v => !v)}
         />
@@ -756,7 +757,7 @@ const Settings: React.FC = () => {
               <View style={iconContainerStyle}>
                 <MaterialIcons name="auto-awesome" size={theme.typography.size.xl} color={theme.textColor} />
               </View>
-              <Text style={labelStyle}>Enable proactive care</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.enableProactive')}</Text>
               <Switch
                 value={proactiveSettings.enabled}
                 onValueChange={v => setProactiveSetting('enabled', v)}
@@ -767,7 +768,7 @@ const Settings: React.FC = () => {
               <View style={iconContainerStyle}>
                 <MaterialIcons name="notifications-active" size={theme.typography.size.xl} color={theme.textColor} />
               </View>
-              <Text style={labelStyle}>Hypo now event</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.hypoNow')}</Text>
               <Switch
                 value={proactiveSettings.events.hypoNow}
                 onValueChange={v =>
@@ -783,7 +784,7 @@ const Settings: React.FC = () => {
               <View style={iconContainerStyle}>
                 <MaterialIcons name="wb-sunny" size={theme.typography.size.xl} color={theme.textColor} />
               </View>
-              <Text style={labelStyle}>Morning daily brief</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.morningBrief')}</Text>
               <Switch
                 value={proactiveSettings.dailyBrief.enabled}
                 onValueChange={v =>
@@ -799,7 +800,7 @@ const Settings: React.FC = () => {
               <View style={iconContainerStyle}>
                 <MaterialIcons name="schedule" size={theme.typography.size.xl} color={theme.textColor} />
               </View>
-              <Text style={labelStyle}>Brief time (HH:MM)</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.briefTime')}</Text>
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
                 <TextInput
                   value={dailyBriefHourText}
@@ -834,7 +835,7 @@ const Settings: React.FC = () => {
                   alignItems: 'center',
                 })}
               >
-                <Text style={{color: theme.textColor, fontWeight: '600'}}>Send daily brief now</Text>
+                <Text style={{color: theme.textColor, fontWeight: '600'}}>{tr(language, 'settings.sendBriefNow')}</Text>
               </Pressable>
               {dailyBriefStatus ? (
                 <Text style={{color: theme.textColor, opacity: 0.8, fontSize: theme.typography.size.sm, paddingTop: theme.spacing.xs}}>
@@ -845,7 +846,7 @@ const Settings: React.FC = () => {
 
             <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm}}>
               <Text style={{color: theme.textColor, opacity: 0.75, fontSize: theme.typography.size.sm}}>
-                Brief includes: night status, yesterday summary, and one action for today.
+                {tr(language, 'settings.briefIncludes')}
               </Text>
             </View>
           </>
@@ -869,7 +870,7 @@ const Settings: React.FC = () => {
 
       <View>
         <SectionHeader
-          title="Ranges"
+          title={tr(language, 'settings.ranges')}
           expanded={showRanges}
           onToggle={() => setShowRanges(v => !v)}
         />
@@ -884,7 +885,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Severe Hypo (mg/dL)</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.severeHypo')}</Text>
               <TextInput
                 testID={E2E_TEST_IDS.settings.severeHypoInput}
                 value={severeHypoText}
@@ -903,7 +904,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Hypo (mg/dL)</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.hypo')}</Text>
               <TextInput
                 testID={E2E_TEST_IDS.settings.hypoInput}
                 value={hypoText}
@@ -922,7 +923,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Hyper (mg/dL)</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.hyper')}</Text>
               <TextInput
                 testID={E2E_TEST_IDS.settings.hyperInput}
                 value={hyperText}
@@ -941,7 +942,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Severe Hyper (mg/dL)</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.severeHyper')}</Text>
               <TextInput
                 testID={E2E_TEST_IDS.settings.severeHyperInput}
                 value={severeHyperText}
@@ -961,13 +962,13 @@ const Settings: React.FC = () => {
                 paddingTop: theme.spacing.sm,
               }}
             >
-              Changes affect time-in-range and charts.
+              {tr(language, 'settings.rangesHint')}
             </Text>
           </>
         )}
 
         <SectionHeader
-          title="Night Window"
+          title={tr(language, 'settings.nightWindow')}
           expanded={showNightWindow}
           onToggle={() => setShowNightWindow(v => !v)}
         />
@@ -982,7 +983,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Night start (0–23)</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.nightStart')}</Text>
               <TextInput
                 testID={E2E_TEST_IDS.settings.nightStartHourInput}
                 value={nightStartText}
@@ -1001,7 +1002,7 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>Night end (0–23)</Text>
+              <Text style={labelStyle}>{tr(language, 'settings.nightEnd')}</Text>
               <TextInput
                 testID={E2E_TEST_IDS.settings.nightEndHourInput}
                 value={nightEndText}
