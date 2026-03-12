@@ -11,6 +11,8 @@ import type {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const ChartControlsRow = styled.View`
   flex-direction: row;
@@ -106,6 +108,7 @@ export const HomeChartSection: React.FC<Props> = ({
   testID,
 }) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
 
   const chartWidth = useMemo(() => Dimensions.get('window').width, []);
 
@@ -172,7 +175,7 @@ export const HomeChartSection: React.FC<Props> = ({
         <ChartControlsRow>
         <ChartControlButton
           accessibilityRole="button"
-          accessibilityLabel="Pan chart left"
+          accessibilityLabel={tr(language, 'home.chartPanLeft')}
           disabled={!isZoomed || !canPanLeft}
           onPress={() => onPan('left')}>
           <Icon name="chevron-left" size={20} color={theme.textColor} />
@@ -180,7 +183,7 @@ export const HomeChartSection: React.FC<Props> = ({
 
         <ChartControlButton
           accessibilityRole="button"
-          accessibilityLabel={isZoomed ? 'Zoom out' : 'Zoom in'}
+          accessibilityLabel={isZoomed ? tr(language, 'home.chartZoomOut') : tr(language, 'home.chartZoomIn')}
           accessibilityHint="Toggles chart zoom"
           onPress={onToggleZoom}>
           <Icon
@@ -188,12 +191,12 @@ export const HomeChartSection: React.FC<Props> = ({
             size={18}
             color={theme.textColor}
           />
-          <ChartControlText>{isZoomed ? 'Zoom out' : 'Zoom in'}</ChartControlText>
+          <ChartControlText>{isZoomed ? tr(language, 'home.chartZoomOut') : tr(language, 'home.chartZoomIn')}</ChartControlText>
         </ChartControlButton>
 
         <ChartControlButton
           accessibilityRole="button"
-          accessibilityLabel="Pan chart right"
+          accessibilityLabel={tr(language, 'home.chartPanRight')}
           disabled={!isZoomed || !canPanRight}
           onPress={() => onPan('right')}>
           <Icon name="chevron-right" size={20} color={theme.textColor} />
@@ -204,8 +207,8 @@ export const HomeChartSection: React.FC<Props> = ({
       {!shouldRenderCharts && !collapsed ? (
         <ChartPlaceholder style={{opacity: placeholderOpacity}}>
           <PlaceholderCard>
-            <PlaceholderTitle>Loading charts…</PlaceholderTitle>
-            <PlaceholderSub>Tap and drag to explore once ready.</PlaceholderSub>
+            <PlaceholderTitle>{tr(language, 'common.loadingCharts')}</PlaceholderTitle>
+            <PlaceholderSub>{tr(language, 'home.chartTapHint')}</PlaceholderSub>
           </PlaceholderCard>
         </ChartPlaceholder>
       ) : null}

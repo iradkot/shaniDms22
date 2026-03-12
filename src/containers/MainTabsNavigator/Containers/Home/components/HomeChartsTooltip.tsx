@@ -8,6 +8,8 @@ import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {addOpacity, determineBgColorByGlucoseValue} from 'app/style/styling.utils';
 import {InsulinDataEntry} from 'app/types/insulin.types';
 import {CarbEvent} from 'app/components/charts/CgmGraph/utils/carbsUtils';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 import {
   formatBolusCloseEventsDetails,
   formatCarbCloseEventsDetails,
@@ -57,6 +59,7 @@ const HomeChartsTooltip: React.FC<Props> = ({
   maxWidthPx,
 }) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
 
   const timeText = useMemo(() => formatDateToLocaleTimeString(anchorTimeMs), [anchorTimeMs]);
   const bgText = useMemo(() => {
@@ -155,7 +158,7 @@ const HomeChartsTooltip: React.FC<Props> = ({
         <Grid>
           <Stat>
             <StatLabel>
-              <Icon name="needle" size={16} color={theme.colors.insulin} /> Active insulin
+              <Icon name="needle" size={16} color={theme.colors.insulin} /> {tr(language, 'home.tooltipActiveInsulin')}
             </StatLabel>
             <StatValue>{activeText}</StatValue>
           </Stat>
@@ -167,35 +170,35 @@ const HomeChartsTooltip: React.FC<Props> = ({
                 size={16}
                 color={addOpacity(theme.textColor, 0.75)}
               />
-              {'  '}Basal
+              {'  '}{tr(language, 'home.tooltipBasal')}
             </StatLabel>
             <StatValue>{basalText}</StatValue>
           </Stat>
 
           <Stat>
             <StatLabel>
-              <Icon name="food-apple" size={16} color={theme.colors.carbs} /> COB
+              <Icon name="food-apple" size={16} color={theme.colors.carbs} /> {tr(language, 'home.tooltipCob')}
             </StatLabel>
             <StatValue>{cobText}</StatValue>
           </Stat>
 
           <Stat>
             <StatLabel>
-              <Icon name="needle" size={16} color={theme.colors.insulinSecondary} /> Bolus
+              <Icon name="needle" size={16} color={theme.colors.insulinSecondary} /> {tr(language, 'home.tooltipBolus')}
             </StatLabel>
             <StatValue>{bolusText}</StatValue>
             {bolusDetailsText ? (
-              <StatDetails numberOfLines={2}>Close events: {bolusDetailsText}</StatDetails>
+              <StatDetails numberOfLines={2}>{tr(language, 'home.tooltipCloseEvents', {text: bolusDetailsText})}</StatDetails>
             ) : null}
           </Stat>
 
           <Stat $fullWidth>
             <StatLabel>
-              <Icon name="bread-slice-outline" size={16} color={theme.colors.carbs} /> Carbs
+              <Icon name="bread-slice-outline" size={16} color={theme.colors.carbs} /> {tr(language, 'home.tooltipCarbs')}
             </StatLabel>
             <StatValue>{carbsText}</StatValue>
             {carbDetailsText ? (
-              <StatDetails numberOfLines={2}>Close events: {carbDetailsText}</StatDetails>
+              <StatDetails numberOfLines={2}>{tr(language, 'home.tooltipCloseEvents', {text: carbDetailsText})}</StatDetails>
             ) : null}
           </Stat>
         </Grid>

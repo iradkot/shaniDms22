@@ -10,6 +10,8 @@ import {
 } from 'app/utils/bg.utils';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const BG_CHANGE_TIME_RANGE_MINUTES = 30;
 const CARD_GAP = 8;
@@ -108,6 +110,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({
   onNavigateToSample,
 }) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
   const data = bgData ?? [];
   if (data.length === 0) return null;
 
@@ -159,7 +162,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({
               marginRight: theme.spacing.sm,
             }}>
             <CardSurface testID={averageTitleTestID} collapsable={false}>
-              <CardTitle>Average</CardTitle>
+              <CardTitle>{tr(language, 'home.statsAverage')}</CardTitle>
               <CardValue color={avgColor}>
                 {averageBg}
               </CardValue>
@@ -177,8 +180,8 @@ export const StatsRow: React.FC<StatsRowProps> = ({
               active={activeKey === 'lowest'}
               disabled={!canNavigate}
               accessibilityRole={canNavigate ? 'button' : undefined}
-              accessibilityLabel={canNavigate ? 'Lowest BG' : undefined}
-              accessibilityHint={canNavigate ? 'Scroll to this reading' : undefined}
+              accessibilityLabel={canNavigate ? tr(language, 'home.statsLowestLabel') : undefined}
+              accessibilityHint={canNavigate ? tr(language, 'home.statsScrollHint') : undefined}
               onPress={() =>
                 onNavigateToSample?.({
                   key: 'lowest',
@@ -187,7 +190,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({
                 })
               }>
               <TitleRow>
-                <CardTitle>Lowest</CardTitle>
+                <CardTitle>{tr(language, 'home.statsLowest')}</CardTitle>
                 {renderPressableChevron(canNavigate)}
               </TitleRow>
               <CardValue color={lowColor}>{lowestBg.sgv}</CardValue>
@@ -204,8 +207,8 @@ export const StatsRow: React.FC<StatsRowProps> = ({
               active={activeKey === 'highest'}
               disabled={!canNavigate}
               accessibilityRole={canNavigate ? 'button' : undefined}
-              accessibilityLabel={canNavigate ? 'Highest BG' : undefined}
-              accessibilityHint={canNavigate ? 'Scroll to this reading' : undefined}
+              accessibilityLabel={canNavigate ? tr(language, 'home.statsHighestLabel') : undefined}
+              accessibilityHint={canNavigate ? tr(language, 'home.statsScrollHint') : undefined}
               onPress={() =>
                 onNavigateToSample?.({
                   key: 'highest',
@@ -214,7 +217,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({
                 })
               }>
               <TitleRow>
-                <CardTitle>Highest</CardTitle>
+                <CardTitle>{tr(language, 'home.statsHighest')}</CardTitle>
                 {renderPressableChevron(canNavigate)}
               </TitleRow>
               <CardValue color={highColor}>{highestBg.sgv}</CardValue>
@@ -234,8 +237,8 @@ export const StatsRow: React.FC<StatsRowProps> = ({
               active={activeKey === 'biggestRise'}
               disabled={!canNavigate}
               accessibilityRole={canNavigate ? 'button' : undefined}
-              accessibilityLabel={canNavigate ? 'Biggest rise' : undefined}
-              accessibilityHint={canNavigate ? 'Scroll to these readings' : undefined}
+              accessibilityLabel={canNavigate ? tr(language, 'home.statsRiseLabel') : undefined}
+              accessibilityHint={canNavigate ? tr(language, 'home.statsScrollManyHint') : undefined}
               onPress={() =>
                 onNavigateToSample?.({
                   key: 'biggestRise',
@@ -246,7 +249,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({
                 })
               }>
               <TitleRow>
-                <CardTitle>Biggest Rise</CardTitle>
+                <CardTitle>{tr(language, 'home.statsRise')}</CardTitle>
                 {renderPressableChevron(canNavigate)}
               </TitleRow>
               <InlineRow>
@@ -276,8 +279,8 @@ export const StatsRow: React.FC<StatsRowProps> = ({
               active={activeKey === 'biggestFall'}
               disabled={!canNavigate}
               accessibilityRole={canNavigate ? 'button' : undefined}
-              accessibilityLabel={canNavigate ? 'Biggest fall' : undefined}
-              accessibilityHint={canNavigate ? 'Scroll to these readings' : undefined}
+              accessibilityLabel={canNavigate ? tr(language, 'home.statsFallLabel') : undefined}
+              accessibilityHint={canNavigate ? tr(language, 'home.statsScrollManyHint') : undefined}
               onPress={() =>
                 onNavigateToSample?.({
                   key: 'biggestFall',
@@ -288,7 +291,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({
                 })
               }>
               <TitleRow>
-                <CardTitle>Biggest Fall</CardTitle>
+                <CardTitle>{tr(language, 'home.statsFall')}</CardTitle>
                 {renderPressableChevron(canNavigate)}
               </TitleRow>
               <InlineRow>

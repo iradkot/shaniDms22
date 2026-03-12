@@ -10,6 +10,8 @@ import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {Theme} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {calculateTimeInRangePercentages} from 'app/utils/glucose/timeInRange';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const Container = styled.View`
   margin: ${({theme}) => (theme as Theme).spacing.md - 2}px 0;
@@ -130,6 +132,7 @@ type AnimationValues = {
 
 export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
   const theme = useTheme() as Theme;
+  const {language} = useAppLanguage();
 
   const animatedSevereLow = useRef(new Animated.Value(0)).current;
   const animatedLow = useRef(new Animated.Value(0)).current;
@@ -196,12 +199,12 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
   ]);
 
   const lowLabel = useMemo(
-    () => `Low ${Math.round(buckets.severeLow + buckets.low)}%`,
-    [buckets.low, buckets.severeLow],
+    () => tr(language, 'home.tirLowShort', {value: Math.round(buckets.severeLow + buckets.low)}),
+    [language, buckets.low, buckets.severeLow],
   );
   const highLabel = useMemo(
-    () => `High ${Math.round(buckets.high + buckets.severeHigh)}%`,
-    [buckets.high, buckets.severeHigh],
+    () => tr(language, 'home.tirHighShort', {value: Math.round(buckets.high + buckets.severeHigh)}),
+    [language, buckets.high, buckets.severeHigh],
   );
 
   useEffect(() => {
@@ -299,26 +302,26 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
       <LegendRow>
         <LegendItem>
           <LegendDot color={theme.belowRangeColor} />
-          <LegendText>Low: {legendLow}%</LegendText>
+          <LegendText>{tr(language, 'home.tirLow', {value: legendLow})}</LegendText>
         </LegendItem>
         <LegendItem>
           <LegendDot color={theme.inRangeColor} />
-          <LegendText>In Range: {legendTarget}%</LegendText>
+          <LegendText>{tr(language, 'home.tirInRange', {value: legendTarget})}</LegendText>
         </LegendItem>
         <LegendItem>
           <LegendDot color={theme.aboveRangeColor} />
-          <LegendText>High: {legendHigh}%</LegendText>
+          <LegendText>{tr(language, 'home.tirHigh', {value: legendHigh})}</LegendText>
         </LegendItem>
       </LegendRow>
 
       <LegendRow>
         <LegendItem>
           <LegendDot color={theme.severeBelowRange} />
-          <LegendText>Severe Hypo: {legendSevereLow}%</LegendText>
+          <LegendText>{tr(language, 'home.tirSevereHypo', {value: legendSevereLow})}</LegendText>
         </LegendItem>
         <LegendItem>
           <LegendDot color={theme.severeAboveRange} />
-          <LegendText>Severe Hyper: {legendSevereHigh}%</LegendText>
+          <LegendText>{tr(language, 'home.tirSevereHyper', {value: legendSevereHigh})}</LegendText>
         </LegendItem>
       </LegendRow>
     </Container>

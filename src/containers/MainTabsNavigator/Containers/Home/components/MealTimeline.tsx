@@ -16,6 +16,8 @@ import MealTimelineCard from 'app/containers/MainTabsNavigator/Containers/Home/c
 import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useMealSegments';
 import type {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 // ── Props ───────────────────────────────────────────────────────────────
 
@@ -30,6 +32,7 @@ type Props = {
 // ── Component ───────────────────────────────────────────────────────────
 
 const MealTimeline: React.FC<Props> = ({meals, isLoading, isToday, onTagPress}) => {
+  const {language} = useAppLanguage();
   const reversedMeals = React.useMemo(
     () => [...meals].reverse(), // latest first
     [meals],
@@ -38,10 +41,8 @@ const MealTimeline: React.FC<Props> = ({meals, isLoading, isToday, onTagPress}) 
   if (reversedMeals.length === 0 && !isLoading) {
     return (
       <EmptyContainer>
-        <EmptyTitle>No meals detected yet</EmptyTitle>
-        <EmptySub>
-          Meals appear automatically when carb or bolus events are recorded in Nightscout.
-        </EmptySub>
+        <EmptyTitle>{tr(language, 'home.noMealsTitle')}</EmptyTitle>
+        <EmptySub>{tr(language, 'home.noMealsSub')}</EmptySub>
       </EmptyContainer>
     );
   }
@@ -49,7 +50,7 @@ const MealTimeline: React.FC<Props> = ({meals, isLoading, isToday, onTagPress}) 
   return (
     <>
       <SectionHeader>
-        <SectionTitle>{isToday ? "Today's Meals" : 'Meals'}</SectionTitle>
+        <SectionTitle>{isToday ? tr(language, 'home.mealsToday') : tr(language, 'home.meals')}</SectionTitle>
         <MealCount>{reversedMeals.length}</MealCount>
       </SectionHeader>
       {reversedMeals.map((meal, index) => (

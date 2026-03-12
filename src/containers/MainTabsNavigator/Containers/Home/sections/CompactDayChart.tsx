@@ -20,6 +20,8 @@ import type {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 // ── Props ───────────────────────────────────────────────────────────────
 
@@ -49,6 +51,7 @@ const CompactDayChart: React.FC<Props> = ({
   testID,
 }) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
   const chartWidth = useMemo(() => Dimensions.get('window').width, []);
 
   const [shouldRender, setShouldRender] = useState(false);
@@ -79,11 +82,11 @@ const CompactDayChart: React.FC<Props> = ({
   return (
     <Container>
       <HeaderRow>
-        <ChartLabel>Day Chart</ChartLabel>
+        <ChartLabel>{tr(language, 'home.chartLabel')}</ChartLabel>
         <HeaderButtons>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={chartMode === 'separate' ? 'Switch to mixed chart' : 'Switch to separate charts'}
+            accessibilityLabel={chartMode === 'separate' ? tr(language, 'home.switchMixed') : tr(language, 'home.switchSeparate')}
             onPress={toggleChartMode}
             hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
             <Icon
@@ -94,7 +97,7 @@ const CompactDayChart: React.FC<Props> = ({
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Full screen chart"
+            accessibilityLabel={tr(language, 'home.fullScreenChart')}
             onPress={onPressFullScreen}>
             <Icon name="fullscreen" size={20} color={theme.textColor} />
           </Pressable>
@@ -103,7 +106,7 @@ const CompactDayChart: React.FC<Props> = ({
 
       {!shouldRender ? (
         <PlaceholderBox>
-          <PlaceholderText>Loading chart…</PlaceholderText>
+          <PlaceholderText>{tr(language, 'common.loadingChart')}</PlaceholderText>
         </PlaceholderBox>
       ) : (
         <Animated.View style={{opacity: fadeAnim}}>

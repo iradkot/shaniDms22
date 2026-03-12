@@ -4,6 +4,8 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {theme} from 'app/style/theme';
 import {NightscoutProfile} from 'app/services/nightscoutProfiles';
 import {iconContainerStyle, rowStyle, SectionHeader} from '../settingsShared';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 export function NightscoutSection(props: {
   expanded: boolean;
@@ -15,6 +17,7 @@ export function NightscoutSection(props: {
   onDeleteProfile: (profileId: string) => void;
   onAddProfile: () => void;
 }) {
+  const {language} = useAppLanguage();
   const {
     expanded,
     onToggleExpanded,
@@ -28,21 +31,17 @@ export function NightscoutSection(props: {
 
   return (
     <View>
-      <SectionHeader title="Nightscout" expanded={expanded} onToggle={onToggleExpanded} />
+      <SectionHeader title={tr(language, 'settings.nightscout')} expanded={expanded} onToggle={onToggleExpanded} />
 
       {expanded && (
         <>
           <View style={rowStyle}>
             <View style={iconContainerStyle}>
-              <MaterialIcons
-                name="cloud"
-                size={theme.typography.size.xl}
-                color={theme.textColor}
-              />
+              <MaterialIcons name="cloud" size={theme.typography.size.xl} color={theme.textColor} />
             </View>
             <View style={{flex: 1, paddingRight: theme.spacing.md}}>
               <Text style={{color: theme.textColor, fontSize: theme.typography.size.md}}>
-                Active profile
+                {tr(language, 'settings.activeProfile')}
               </Text>
               <Text
                 style={{
@@ -54,7 +53,7 @@ export function NightscoutSection(props: {
               >
                 {activeProfile
                   ? `${activeProfile.label} (${activeProfile.baseUrl})`
-                  : 'Not configured'}
+                  : tr(language, 'settings.notConfigured')}
               </Text>
             </View>
           </View>
@@ -64,12 +63,12 @@ export function NightscoutSection(props: {
 
             const confirmDelete = () => {
               Alert.alert(
-                'Delete Nightscout profile?',
-                `This will remove "${p.label}" from this device.`,
+                tr(language, 'settings.deleteNightscoutTitle'),
+                tr(language, 'settings.deleteNightscoutBody', {label: p.label}),
                 [
-                  {text: 'Cancel', style: 'cancel'},
+                  {text: tr(language, 'settings.cancel'), style: 'cancel'},
                   {
-                    text: 'Delete',
+                    text: tr(language, 'settings.delete'),
                     style: 'destructive',
                     onPress: () => onDeleteProfile(p.id),
                   },
@@ -118,7 +117,7 @@ export function NightscoutSection(props: {
                   onPress={() => onEditProfile(p.id)}
                   style={{paddingHorizontal: theme.spacing.sm, paddingVertical: theme.spacing.sm}}
                 >
-                  <Text style={{color: theme.accentColor, fontWeight: '600'}}>Edit</Text>
+                  <Text style={{color: theme.accentColor, fontWeight: '600'}}>{tr(language, 'settings.edit')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -126,7 +125,7 @@ export function NightscoutSection(props: {
                   onPress={confirmDelete}
                   style={{paddingHorizontal: theme.spacing.sm, paddingVertical: theme.spacing.sm}}
                 >
-                  <Text style={{color: theme.belowRangeColor, fontWeight: '600'}}>Delete</Text>
+                  <Text style={{color: theme.belowRangeColor, fontWeight: '600'}}>{tr(language, 'settings.delete')}</Text>
                 </TouchableOpacity>
               </View>
             );
@@ -145,7 +144,7 @@ export function NightscoutSection(props: {
               }}
             >
               <Text style={{color: theme.buttonTextColor, fontWeight: '600'}}>
-                Add Nightscout profile
+                {tr(language, 'settings.addNightscoutProfile')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -160,7 +159,7 @@ export function NightscoutSection(props: {
                 paddingTop: theme.spacing.sm,
               }}
             >
-              You need at least one Nightscout profile to view data.
+              {tr(language, 'settings.nightscoutRequired')}
             </Text>
           )}
         </>
