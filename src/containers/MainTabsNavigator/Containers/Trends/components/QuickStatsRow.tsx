@@ -8,6 +8,8 @@ import {addOpacity} from 'app/style/styling.utils';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW, formatHourWindowLabel} from 'app/constants/GLUCOSE_WINDOWS';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 type Props = {
   avgTddUPerDay: number | null;
@@ -123,6 +125,7 @@ export const QuickStatsRow: React.FC<Props> = ({
   isSevereHyposLoading,
 }) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
 
   const avgTddRounded =
     typeof avgTddUPerDay === 'number' && Number.isFinite(avgTddUPerDay)
@@ -145,23 +148,23 @@ export const QuickStatsRow: React.FC<Props> = ({
       <CardRow>
         <CardWrap $withGap>
           <CardSurface testID={avgTddTestID} collapsable={false}>
-            <CardTitle numberOfLines={1}>Avg TDD</CardTitle>
+            <CardTitle numberOfLines={1}>{tr(language, 'trends.avgTdd')}</CardTitle>
             <CardValue>{fmtMaybe(avgTddRounded, ' U/day')}</CardValue>
-            <CardSubtle>Basal + bolus</CardSubtle>
+            <CardSubtle>{tr(language, 'trends.basalPlusBolus')}</CardSubtle>
           </CardSurface>
         </CardWrap>
 
         <CardWrap>
           <CardSurface>
-            <CardTitle numberOfLines={1}>Basal / Bolus</CardTitle>
+            <CardTitle numberOfLines={1}>{tr(language, 'trends.basalBolus')}</CardTitle>
             <CardValue>{basalBolusText}</CardValue>
-            <CardSubtle>Percent of total</CardSubtle>
+            <CardSubtle>{tr(language, 'trends.percentOfTotal')}</CardSubtle>
           </CardSurface>
         </CardWrap>
       </CardRow>
 
       <SectionLabelWrap>
-        <SectionLabel>Hypo investigation</SectionLabel>
+        <SectionLabel>{tr(language, 'trends.hypoInvestigation')}</SectionLabel>
       </SectionLabelWrap>
 
       <CardRow>
@@ -170,8 +173,8 @@ export const QuickStatsRow: React.FC<Props> = ({
             <PressableCardSurface
               testID={E2E_TEST_IDS.trends.quickStatsSevereHyposCard}
               accessibilityRole="button"
-              accessibilityLabel="Severe Hypos"
-              accessibilityHint="Opens hypo investigation"
+              accessibilityLabel={tr(language, 'trends.severeHypos')}
+              accessibilityHint={tr(language, 'trends.opensHypoInvestigation')}
               accessibilityState={{disabled: Boolean(isSevereHyposLoading)}}
               disabled={Boolean(isSevereHyposLoading)}
               onPress={onPressSevereHypos}
@@ -182,7 +185,7 @@ export const QuickStatsRow: React.FC<Props> = ({
             >
               <TitleWrap>
                 <View style={{paddingRight: 32}}>
-                  <CardTitle numberOfLines={1}>Severe Hypos</CardTitle>
+                  <CardTitle numberOfLines={1}>{tr(language, 'trends.severeHypos')}</CardTitle>
                 </View>
                 {isSevereHyposLoading ? (
                   <RightIconWrap>
@@ -197,15 +200,15 @@ export const QuickStatsRow: React.FC<Props> = ({
               <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
               <CardSubtle>
                 {isSevereHyposLoading
-                  ? 'Opening…'
-                  : `Events < ${severeHypoThreshold} mg/dL`}
+                  ? tr(language, 'trends.opening')
+                  : tr(language, 'trends.eventsBelowThreshold', {threshold: severeHypoThreshold})}
               </CardSubtle>
             </PressableCardSurface>
           ) : (
             <CardSurface>
-              <CardTitle numberOfLines={1}>Severe Hypos</CardTitle>
+              <CardTitle numberOfLines={1}>{tr(language, 'trends.severeHypos')}</CardTitle>
               <CardValue>{`${hyposPerWeek.toFixed(1)}/wk`}</CardValue>
-              <CardSubtle>Events &lt; {severeHypoThreshold} mg/dL</CardSubtle>
+              <CardSubtle>{tr(language, 'trends.eventsBelowThreshold', {threshold: severeHypoThreshold})}</CardSubtle>
             </CardSurface>
           )}
         </CardWrap>
@@ -215,8 +218,8 @@ export const QuickStatsRow: React.FC<Props> = ({
             <PressableCardSurface
               testID={E2E_TEST_IDS.trends.quickStatsLongestHypoCard}
               accessibilityRole="button"
-              accessibilityLabel="Longest hypo"
-              accessibilityHint="Opens hypo investigation"
+              accessibilityLabel={tr(language, 'trends.longestHypo')}
+              accessibilityHint={tr(language, 'trends.opensHypoInvestigation')}
               accessibilityState={{disabled: Boolean(isSevereHyposLoading)}}
               disabled={Boolean(isSevereHyposLoading)}
               onPress={onPressSevereHypos}
@@ -227,7 +230,7 @@ export const QuickStatsRow: React.FC<Props> = ({
             >
               <TitleWrap>
                 <View style={{paddingRight: 32}}>
-                  <CardTitle numberOfLines={1}>Longest hypo</CardTitle>
+                  <CardTitle numberOfLines={1}>{tr(language, 'trends.longestHypo')}</CardTitle>
                 </View>
                 {isSevereHyposLoading ? (
                   <RightIconWrap>
@@ -244,9 +247,9 @@ export const QuickStatsRow: React.FC<Props> = ({
             </PressableCardSurface>
           ) : (
             <CardSurface>
-              <CardTitle numberOfLines={1}>Longest hypo</CardTitle>
+              <CardTitle numberOfLines={1}>{tr(language, 'trends.longestHypo')}</CardTitle>
               <CardValue>{longestHypoDurationLabel ?? '—'}</CardValue>
-              <CardSubtle>In this range</CardSubtle>
+              <CardSubtle>{tr(language, 'trends.inThisRange')}</CardSubtle>
             </CardSurface>
           )}
         </CardWrap>
@@ -255,7 +258,7 @@ export const QuickStatsRow: React.FC<Props> = ({
       <CardRow>
         <CardWrap $withGap>
           <CardSurface>
-            <CardTitle numberOfLines={1}>Night TIR</CardTitle>
+            <CardTitle numberOfLines={1}>{tr(language, 'trends.nightTir')}</CardTitle>
             <CardValue>{fmtMaybe(nightTirPct !== null ? Math.round(nightTirPct) : null, '%')}</CardValue>
             <CardSubtle>{formatHourWindowLabel(DEFAULT_NIGHT_WINDOW)}</CardSubtle>
           </CardSurface>
@@ -263,9 +266,9 @@ export const QuickStatsRow: React.FC<Props> = ({
 
         <CardWrap>
           <CardSurface>
-            <CardTitle numberOfLines={1}>Avg Carbs</CardTitle>
+            <CardTitle numberOfLines={1}>{tr(language, 'trends.avgCarbs')}</CardTitle>
             <CardValue>{fmtMaybe(avgCarbsGPerDay !== null ? Math.round(avgCarbsGPerDay) : null, ' g/day')}</CardValue>
-            <CardSubtle>Treatments carbs</CardSubtle>
+            <CardSubtle>{tr(language, 'trends.treatmentsCarbs')}</CardSubtle>
           </CardSurface>
         </CardWrap>
       </CardRow>

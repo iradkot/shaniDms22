@@ -17,6 +17,8 @@ import Loader from 'app/components/common-ui/Loader/Loader';
 import {useOracleInsights} from 'app/hooks/useOracleInsights';
 import OracleGhostGraph from 'app/components/charts/OracleGhostGraph/OracleGhostGraph';
 import {addOpacity} from 'app/style/styling.utils';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 import {
   ORACLE_SLOPE_POINTS_DEFAULT,
   ORACLE_SLOPE_POINTS_MAX,
@@ -232,6 +234,7 @@ function clampInt(v: number, min: number, max: number): number {
 const Oracle: React.FC = () => {
   const {width} = useWindowDimensions();
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
   const [selectedEventTs, setSelectedEventTs] = useState<number | null>(null);
   const [selectedPreviousTs, setSelectedPreviousTs] = useState<number | null>(null);
   const [previousSortMode, setPreviousSortMode] = useState<PreviousSortMode>('recent');
@@ -573,7 +576,7 @@ const Oracle: React.FC = () => {
           paddingBottom: theme.spacing.xl * 2,
         }}>
         <Card>
-          <CardTitle>Investigate Events</CardTitle>
+          <CardTitle>{tr(language, 'oracle.investigateEvents')}</CardTitle>
           {!!selectedLabel && <CardSubtle>{selectedLabel}</CardSubtle>}
           <CardSubtle testID={E2E_TEST_IDS.oracle.headerSummary}>{summaryText}</CardSubtle>
 
@@ -614,7 +617,7 @@ const Oracle: React.FC = () => {
               {!!loadAvailabilityHint && <CardSubtle>{loadAvailabilityHint}</CardSubtle>}
               <ToggleRow>
                 <ToggleLabel>
-                  Include IOB/COB in similar-event search
+                  {tr(language, 'oracle.includeLoad')}
                 </ToggleLabel>
                 <Switch
                   testID={E2E_TEST_IDS.oracle.loadToggle}
@@ -632,7 +635,7 @@ const Oracle: React.FC = () => {
 
               <StepperRow>
                 <ToggleLabel>
-                  History window (days)
+                  {tr(language, 'oracle.historyWindowDays')}
                 </ToggleLabel>
                 <StepperControls>
                   <StepperButton
@@ -665,12 +668,12 @@ const Oracle: React.FC = () => {
                 </StepperControls>
               </StepperRow>
               <CardSubtle>
-                Execute runs: (1) refresh cache, then (2) scan history, then (3) build strategies.
+                {tr(language, 'oracle.executeRuns')}
               </CardSubtle>
 
               <StepperRow>
                 <ToggleLabel>
-                  Slope points (noise smoothing)
+                  {tr(language, 'oracle.slopePoints')}
                 </ToggleLabel>
                 <StepperControls>
                   <StepperButton
@@ -703,11 +706,11 @@ const Oracle: React.FC = () => {
                 </StepperControls>
               </StepperRow>
               <CardSubtle>
-                Uses least-squares slope over the last 15 minutes.
+                {tr(language, 'oracle.slopeHint')}
               </CardSubtle>
               {isPendingSlope && (
                 <CardSubtle>
-                  Updating matches after you stop tapping…
+                  {tr(language, 'oracle.slopeUpdating')}
                 </CardSubtle>
               )}
             </>
@@ -721,13 +724,13 @@ const Oracle: React.FC = () => {
             onPress={execute}
           >
             <ExecuteButtonText $disabled={!selectedEvent || isBusy}>
-              {isBusy ? 'Running…' : 'Execute'}
+              {isBusy ? tr(language, 'oracle.running') : tr(language, 'oracle.execute')}
             </ExecuteButtonText>
           </ExecuteButton>
 
           {typeof lastSyncedMs === 'number' && (
             <CardSubtle>
-              Cache updated: {formatDateToDateAndTimeString(lastSyncedMs)}
+              {tr(language, 'oracle.cacheUpdated', {time: formatDateToDateAndTimeString(lastSyncedMs)})}
             </CardSubtle>
           )}
 
@@ -752,7 +755,7 @@ const Oracle: React.FC = () => {
             <OracleStatusBanner
               testID={E2E_TEST_IDS.oracle.statusBanner}
               tone="warn"
-              message="Live fetch unavailable; showing cached data when possible."
+              message={tr(language, 'oracle.liveFetchUnavailable')}
               actionLabel="Execute"
               actionTestID={E2E_TEST_IDS.oracle.retryButton}
               onPressAction={execute}
@@ -771,8 +774,8 @@ const Oracle: React.FC = () => {
         <Spacer h={theme.spacing.md} />
 
         <Card testID={E2E_TEST_IDS.oracle.eventsList}>
-          <CardTitle>Pick an event</CardTitle>
-          <CardSubtle>Choose a recent point to compare against history.</CardSubtle>
+          <CardTitle>{tr(language, 'oracle.pickEvent')}</CardTitle>
+          <CardSubtle>{tr(language, 'oracle.pickEventHint')}</CardSubtle>
 
           <Spacer h={theme.spacing.sm} />
 
@@ -801,7 +804,7 @@ const Oracle: React.FC = () => {
               );
             })
           ) : (
-            <CardSubtle>No recent events yet.</CardSubtle>
+            <CardSubtle>{tr(language, 'oracle.noRecentEvents')}</CardSubtle>
           )}
         </Card>
 
@@ -828,7 +831,7 @@ const Oracle: React.FC = () => {
             <Spacer h={theme.spacing.md} />
 
             <Card testID={E2E_TEST_IDS.oracle.strategiesList}>
-              <CardTitle>What tended to work</CardTitle>
+              <CardTitle>{tr(language, 'oracle.whatWorked')}</CardTitle>
               <CardSubtle>
                 Strategy cards group similar past events by actions recorded in the first 30 minutes.
                 Historical associations only — not dosing advice.
@@ -838,7 +841,7 @@ const Oracle: React.FC = () => {
                 <View style={{marginTop: theme.spacing.sm, flexDirection: 'row', alignItems: 'center'}}>
                   <ActivityIndicator size="small" color={theme.accentColor} />
                   <CardSubtle style={{marginTop: 0, marginLeft: theme.spacing.sm}}>
-                    Scanning history and updating strategy cards…
+                    {tr(language, 'oracle.scanningHistoryCards')}
                   </CardSubtle>
                 </View>
               )}

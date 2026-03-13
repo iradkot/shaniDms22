@@ -12,6 +12,8 @@ import {oracleLoadPointsToBgSamples, oracleMatchToCgmGraphData} from 'app/servic
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {BgSample} from 'app/types/day_bgs.types';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 import {Card, CardSubtle, CardTitle, Spacer} from './OracleCards';
 
@@ -104,6 +106,7 @@ export function OracleMatchDetailsCard(props: {
 }): React.JSX.Element {
   const {match, width, currentSeries, medianSeries} = props;
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
   const [viewMode, setViewMode] = useState<'chart' | 'ghost'>('chart');
   const [cursorTimeMs, setCursorTimeMs] = useState<number | null>(null);
 
@@ -168,7 +171,9 @@ export function OracleMatchDetailsCard(props: {
 
     if (!parts.length) return null;
 
-    return cursorTimeMs != null ? `Load at cursor: ${parts.join(' • ')}` : `Load: ${parts.join(' • ')}`;
+    return cursorTimeMs != null
+      ? tr(language, 'oracle.loadAtCursor', {text: parts.join(' • ')})
+      : tr(language, 'oracle.load', {text: parts.join(' • ')});
   }, [cursorTimeMs, loadSampleAtCursor]);
 
   const xTickLabelFormatter = useMemo(() => {
@@ -191,15 +196,15 @@ export function OracleMatchDetailsCard(props: {
 
   return (
     <Card testID={props.testID}>
-      <CardTitle>Event details</CardTitle>
+      <CardTitle>{tr(language, 'oracle.eventDetails')}</CardTitle>
       <CardSubtle>{formatDateToDateAndTimeString(match.anchorTs)}</CardSubtle>
 
       <SegmentRow>
         <SegmentButton $active={viewMode === 'chart'} onPress={() => setViewMode('chart')}>
-          <SegmentText $active={viewMode === 'chart'}>Chart</SegmentText>
+          <SegmentText $active={viewMode === 'chart'}>{tr(language, 'oracle.chart')}</SegmentText>
         </SegmentButton>
         <SegmentButton $active={viewMode === 'ghost'} onPress={() => setViewMode('ghost')}>
-          <SegmentText $active={viewMode === 'ghost'}>Overlay</SegmentText>
+          <SegmentText $active={viewMode === 'ghost'}>{tr(language, 'oracle.overlay')}</SegmentText>
         </SegmentButton>
       </SegmentRow>
 
@@ -276,20 +281,24 @@ export function OracleMatchDetailsCard(props: {
       <Spacer h={8} />
 
       <CardSubtle>
-        Boluses (0–30m): {match.actionCounts30m?.boluses ?? 0} • Insulin:{' '}
-        {match.actions30m?.insulin?.toFixed?.(1) ?? '0.0'}U • Carbs:{' '}
-        {match.actions30m?.carbs != null ? Math.round(match.actions30m.carbs) : 0}g
+        {tr(language, 'oracle.bolusCarbsSummary', {
+          boluses: match.actionCounts30m?.boluses ?? 0,
+          insulin: match.actions30m?.insulin?.toFixed?.(1) ?? '0.0',
+          carbs: match.actions30m?.carbs != null ? Math.round(match.actions30m.carbs) : 0,
+        })}
       </CardSubtle>
 
       {viewMode === 'chart' && (
         <CardSubtle>
-          Chart shows -2h to +4h around the match; bolus/carbs markers are from 0–30m after the match.
+          {tr(language, 'oracle.chartWindowHint')}
         </CardSubtle>
       )}
 
       <CardSubtle>
-        IOB/COB at event: {match.iob != null ? `${match.iob.toFixed(1)}U` : '—'} /{' '}
-        {match.cob != null ? `${Math.round(match.cob)}g` : '—'}
+        {tr(language, 'oracle.iobCobAtEvent', {
+          iob: match.iob != null ? `${match.iob.toFixed(1)}U` : '—',
+          cob: match.cob != null ? `${Math.round(match.cob)}g` : '—',
+        })}
       </CardSubtle>
     </Card>
   );
