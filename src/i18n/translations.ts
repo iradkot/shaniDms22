@@ -84,6 +84,18 @@ const en = {
     tooltipCarbs: 'Carbs',
     tooltipCloseEvents: 'Close events: {{text}}',
   },
+  trends: {
+    noBgData: 'No BG data available for this period.',
+    loadingCancelledPartial: 'Loading cancelled. Showing partial results for {{daysFetched}}/{{rangeDays}} days.',
+    keyGlucoseTrends: 'Key Glucose Trends',
+    quickStats: 'Quick Stats',
+    agp: 'AGP',
+    selectMetricTitle: 'Select Metric for Best/Worst Day',
+    selectMetricHint: 'Choose how to determine best/worst day:',
+    metricTir: 'TIR',
+    metricFewestHypos: 'Fewest Hypos',
+    metricFewestHypers: 'Fewest Hypers'
+  },
   dailyReview: {
     title: 'Yesterday summary',
     noData: 'Not enough data for a reliable summary.',
@@ -310,6 +322,18 @@ const he: typeof en = {
     tooltipBolus: 'בולוס',
     tooltipCarbs: 'פחמימות',
     tooltipCloseEvents: 'אירועים קרובים: {{text}}',
+  },
+  trends: {
+    noBgData: 'אין נתוני סוכר לתקופה הזו.',
+    loadingCancelledPartial: 'הטעינה בוטלה. מוצגות תוצאות חלקיות עבור {{daysFetched}}/{{rangeDays}} ימים.',
+    keyGlucoseTrends: 'מגמות סוכר מרכזיות',
+    quickStats: 'נתונים מהירים',
+    agp: 'AGP',
+    selectMetricTitle: 'בחירת מדד ליום הטוב/הקשה ביותר',
+    selectMetricHint: 'בחרו איך לקבוע יום טוב/קשה:',
+    metricTir: 'TIR',
+    metricFewestHypos: 'הכי מעט היפו',
+    metricFewestHypers: 'הכי מעט היפר'
   },
   dailyReview: {
     title: 'סיכום אתמול',

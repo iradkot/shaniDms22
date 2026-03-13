@@ -39,12 +39,15 @@ import {
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {HYPO_INVESTIGATION_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 type MetricType = 'tir' | 'hypos' | 'hypers';
 
 const Trends: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation();
+  const {language} = useAppLanguage();
 
   const [presetDays, setPresetDays] = useState<number>(7);
   const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
@@ -342,16 +345,14 @@ const Trends: React.FC = () => {
       {/* 4. No data case */}
       {!isLoading && !fetchError && bgData.length === 0 && !fetchCancelled && (
         <View style={{alignItems: 'center', marginVertical: theme.spacing.sm + 2}}>
-          <Text style={{color: theme.textColor}}>No BG data available for this period.</Text>
+          <Text style={{color: theme.textColor}}>{tr(language, 'trends.noBgData')}</Text>
         </View>
       )}
 
       {/* 5. Partial data if user canceled */}
       {!isLoading && fetchCancelled && finalMetrics.dailyDetails.length > 0 && (
         <View style={{alignItems: 'center', marginVertical: theme.spacing.sm + 2}}>
-          <Text>
-            Loading cancelled. Showing partial results for {daysFetched}/{rangeDays} days.
-          </Text>
+          <Text>{tr(language, 'trends.loadingCancelledPartial', {daysFetched, rangeDays})}</Text>
         </View>
       )}
 
@@ -360,7 +361,7 @@ const Trends: React.FC = () => {
         <ScrollView removeClippedSubviews={false}>
           {/* (a) Time In Range */}
           <View style={{marginBottom: theme.spacing.lg - 1}}>
-            <SectionTitle>Key Glucose Trends</SectionTitle>
+            <SectionTitle>{tr(language, 'trends.keyGlucoseTrends')}</SectionTitle>
             <TimeInRangeRow bgData={bgData} />
           </View>
 
@@ -368,7 +369,7 @@ const Trends: React.FC = () => {
           <View
             testID={E2E_TEST_IDS.trends.quickStatsSection}
             style={{marginBottom: theme.spacing.lg - 1}}>
-            <SectionTitle>Quick Stats</SectionTitle>
+            <SectionTitle>{tr(language, 'trends.quickStats')}</SectionTitle>
             <QuickStatsRow
               avgTddUPerDay={quickStats.avgTddUPerDay}
               basalPct={quickStats.basalPct}
@@ -385,7 +386,7 @@ const Trends: React.FC = () => {
 
           {/* (c) AGP Summary */}
           <View style={{marginBottom: theme.spacing.lg - 1}}>
-            <SectionTitle>AGP</SectionTitle>
+            <SectionTitle>{tr(language, 'trends.agp')}</SectionTitle>
             <AGPSummary bgData={bgData} testID={E2E_TEST_IDS.charts.agpSummary} />
           </View>
 
@@ -407,9 +408,9 @@ const Trends: React.FC = () => {
 
           {/* (e) Best/Worst Day Selection */}
           <Collapsable
-            title="Select Metric for Best/Worst Day"
+            title={tr(language, 'trends.selectMetricTitle')}
             testID={E2E_TEST_IDS.trends.metricSelectorCollapsable}>
-            <ExplanationText>Choose how to determine best/worst day:</ExplanationText>
+            <ExplanationText>{tr(language, 'trends.selectMetricHint')}</ExplanationText>
             <View
               style={{
                 flexDirection: 'row',
@@ -421,7 +422,7 @@ const Trends: React.FC = () => {
                   selected={selectedMetric === 'tir'}
                   onPress={() => setSelectedMetric('tir')}
                 >
-                  <MetricButtonText selected={selectedMetric === 'tir'}>TIR</MetricButtonText>
+                  <MetricButtonText selected={selectedMetric === 'tir'}>{tr(language, 'trends.metricTir')}</MetricButtonText>
                 </MetricButton>
               </View>
               <View style={{marginHorizontal: theme.spacing.xs + 1}}>
@@ -429,7 +430,7 @@ const Trends: React.FC = () => {
                   selected={selectedMetric === 'hypos'}
                   onPress={() => setSelectedMetric('hypos')}
                 >
-                  <MetricButtonText selected={selectedMetric === 'hypos'}>Fewest Hypos</MetricButtonText>
+                  <MetricButtonText selected={selectedMetric === 'hypos'}>{tr(language, 'trends.metricFewestHypos')}</MetricButtonText>
                 </MetricButton>
               </View>
               <View style={{marginHorizontal: theme.spacing.xs + 1}}>
@@ -437,7 +438,7 @@ const Trends: React.FC = () => {
                   selected={selectedMetric === 'hypers'}
                   onPress={() => setSelectedMetric('hypers')}
                 >
-                  <MetricButtonText selected={selectedMetric === 'hypers'}>Fewest Hypers</MetricButtonText>
+                  <MetricButtonText selected={selectedMetric === 'hypers'}>{tr(language, 'trends.metricFewestHypers')}</MetricButtonText>
                 </MetricButton>
               </View>
             </View>
