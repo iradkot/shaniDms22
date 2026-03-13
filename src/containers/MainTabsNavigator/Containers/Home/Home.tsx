@@ -441,6 +441,10 @@ const Home: React.FC = () => {
             <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.78)}}>{tr(language, 'home.yesterdaySummaryReadyBody')}</Text>
             <Text style={{marginTop: 8, color: theme.accentColor, fontWeight: '700'}}>{tr(language, 'home.viewYesterdaySummary')}</Text>
           </DailySummaryAlert>
+        ) : !isShowingToday ? (
+          <DailySummaryAlert onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
+            <Text style={{fontWeight: '700', color: theme.textColor, fontSize: 14}}>{tr(language, 'home.openDailySummary')}</Text>
+          </DailySummaryAlert>
         ) : null}
 
         {/* 2. Collapsible detailed stats (BG + Insulin) — at top for quick access */}

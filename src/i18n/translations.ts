@@ -85,7 +85,8 @@ const en = {
     tooltipCloseEvents: 'Close events: {{text}}',
     yesterdaySummaryReadyTitle: 'Yesterday summary is ready',
     yesterdaySummaryReadyBody: 'Open it once to review yesterday insights.',
-    viewYesterdaySummary: 'Open yesterday summary'
+    viewYesterdaySummary: 'Open yesterday summary',
+    openDailySummary: 'Open daily summary'
   },
   trends: {
     noBgData: 'No BG data available for this period.',
@@ -467,7 +468,8 @@ const he: typeof en = {
     tooltipCloseEvents: 'אירועים קרובים: {{text}}',
     yesterdaySummaryReadyTitle: 'סיכום אתמול מוכן',
     yesterdaySummaryReadyBody: 'פתחו אותו פעם אחת כדי לעבור על התובנות של אתמול.',
-    viewYesterdaySummary: 'פתח סיכום אתמול'
+    viewYesterdaySummary: 'פתח סיכום אתמול',
+    openDailySummary: 'פתח סיכום יומי'
   },
   trends: {
     noBgData: 'אין נתוני סוכר לתקופה הזו.',
