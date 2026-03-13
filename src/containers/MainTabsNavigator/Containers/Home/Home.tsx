@@ -37,7 +37,7 @@ import {format, subDays} from 'date-fns';
 import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
 import {DAILY_REVIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
-import {computeInsulinStats} from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinDataCalculations';
+import {getInsulinRangeMetrics} from 'app/services/insulin/insulinRangeMetrics';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 
@@ -421,10 +421,15 @@ const Home: React.FC = () => {
         let insulinAvgDaily = 0;
 
         try {
-          insulinSelectedDay = computeInsulinStats(insulinData, basalProfileData, summaryStart, summaryEnd).totalInsulin;
-          insulinPrevDay = computeInsulinStats(insulinData, basalProfileData, prevDayStart, summaryStart).totalInsulin;
-          const insulinWeek = computeInsulinStats(insulinData, basalProfileData, prevWeekStart, baselineEnd).totalInsulin;
-          insulinAvgDaily = insulinWeek > 0 ? insulinWeek / 7 : 0;
+          const [selectedDayMetrics, prevDayMetrics, weekMetrics] = await Promise.all([
+            getInsulinRangeMetrics(summaryStart, summaryEnd),
+            getInsulinRangeMetrics(prevDayStart, summaryStart),
+            getInsulinRangeMetrics(prevWeekStart, baselineEnd),
+          ]);
+
+          insulinSelectedDay = selectedDayMetrics.totalInsulin;
+          insulinPrevDay = prevDayMetrics.totalInsulin;
+          insulinAvgDaily = weekMetrics.totalInsulin > 0 ? weekMetrics.totalInsulin / 7 : 0;
         } catch {
           // keep insulin metrics at zero fallback
         }
@@ -466,7 +471,7 @@ const Home: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [insulinData, basalProfileData, startOfDay, endOfDay, isShowingToday, debouncedCurrentDate]);
+  }, [startOfDay, endOfDay, isShowingToday, debouncedCurrentDate, language]);
 
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>

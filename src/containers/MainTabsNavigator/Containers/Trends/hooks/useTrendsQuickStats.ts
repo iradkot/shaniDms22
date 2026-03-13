@@ -2,12 +2,7 @@ import {useEffect, useMemo, useState} from 'react';
 
 import {BgSample} from 'app/types/day_bgs.types';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
-import {
-  fetchTreatmentsForDateRangeUncached,
-  getUserProfileFromNightscout,
-} from 'app/api/apiRequests';
-import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsulin';
-import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
+import {getInsulinRangeMetrics} from 'app/services/insulin/insulinRangeMetrics';
 import {isE2E} from 'app/utils/e2e';
 import {DEFAULT_NIGHT_WINDOW, isInHourWindowLocal} from 'app/constants/GLUCOSE_WINDOWS';
 import {calculateTargetTimeInRangePct} from 'app/utils/glucose/timeInRange';
@@ -73,59 +68,6 @@ function computeNightTirPct(bgData: BgSample[]): number | null {
   });
 }
 
-function extractBasalProfile(profileData: any): BasalProfile {
-  const entry = Array.isArray(profileData) ? profileData[0] : null;
-  const defaultProfile = entry?.defaultProfile;
-  const basal = entry?.store?.[defaultProfile]?.basal;
-  return Array.isArray(basal) ? basal : [];
-}
-
-function mapTreatmentsToInsulinEntries(treatments: any[]): InsulinDataEntry[] {
-  const out: InsulinDataEntry[] = [];
-
-  for (const t of treatments ?? []) {
-    const createdAt = t?.created_at;
-    const eventType = t?.eventType;
-
-    if (
-      t?.insulin &&
-      ['Bolus', 'Meal Bolus', 'Correction Bolus', 'Combo Bolus'].includes(eventType)
-    ) {
-      out.push({
-        type: 'bolus',
-        amount: t.insulin || t.amount || 0,
-        timestamp: createdAt,
-      });
-      continue;
-    }
-
-    if (eventType === 'Temp Basal') {
-      out.push({
-        type: 'tempBasal',
-        rate: t.rate || 0,
-        duration: t.duration || 0,
-        timestamp: createdAt,
-      });
-      continue;
-    }
-
-    // Optional: pump suspend support if event types match your Nightscout.
-    if (eventType === 'Suspend Pump' || eventType === 'Pump Suspend') {
-      if (t?.created_at && t?.duration) {
-        const start = new Date(t.created_at);
-        const end = new Date(start.getTime() + Number(t.duration) * 60 * 1000);
-        out.push({
-          type: 'suspendPump',
-          startTime: start.toISOString(),
-          endTime: end.toISOString(),
-        });
-      }
-    }
-  }
-
-  return out;
-}
-
 export function useTrendsQuickStats(params: {
   bgData: BgSample[];
   start: Date;
@@ -151,9 +93,6 @@ export function useTrendsQuickStats(params: {
       ? severeLowThresholdRaw
       : cgmRange.TARGET.min;
 
-  const targetMin = cgmRange.TARGET.min;
-  const targetMax = cgmRange.TARGET.max;
-
   const hyposPerWeek = useMemo(() => {
     const events = countHypoEvents(bgData, severeLowThreshold);
     const days = Math.max(1, rangeDays || 1);
@@ -166,7 +105,6 @@ export function useTrendsQuickStats(params: {
 
   useEffect(() => {
     if (isE2E) {
-      // Deterministic values for E2E builds.
       setAvgTddUPerDay(42.0);
       setBasalPct(55);
       setBolusPct(45);
@@ -183,36 +121,16 @@ export function useTrendsQuickStats(params: {
       setError(null);
 
       try {
-        const [treatments, profileData] = await Promise.all([
-          fetchTreatmentsForDateRangeUncached(start, end),
-          getUserProfileFromNightscout(start.toISOString()),
-        ]);
+        const metrics = await getInsulinRangeMetrics(start, end);
 
         if (!isMounted) return;
 
-        const basalProfile = extractBasalProfile(profileData);
-        const insulinEntries = mapTreatmentsToInsulinEntries(treatments);
-
-        // Carbs
-        const totalCarbs = (treatments ?? []).reduce((sum, t) => {
-          const c = t?.carbs;
-          return typeof c === 'number' && Number.isFinite(c) ? sum + c : sum;
-        }, 0);
         const days = Math.max(1, rangeDays || 1);
-        setAvgCarbsGPerDay(totalCarbs > 0 ? totalCarbs / days : null);
+        setAvgCarbsGPerDay(metrics.totalCarbs > 0 ? metrics.totalCarbs / days : null);
 
-        // Insulin totals
-        const {totalBasal, totalBolus} = calculateTotalInsulin(
-          insulinEntries,
-          basalProfile,
-          start,
-          end,
-        );
-
-        const total = totalBasal + totalBolus;
-        if (total > 0) {
-          setAvgTddUPerDay(total / days);
-          const basal = (totalBasal / total) * 100;
+        if (metrics.totalInsulin > 0) {
+          setAvgTddUPerDay(metrics.totalInsulin / days);
+          const basal = (metrics.totalBasal / metrics.totalInsulin) * 100;
           setBasalPct(basal);
           setBolusPct(100 - basal);
         } else {
