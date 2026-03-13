@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import ErrorBoundary from 'app/components/ErrorBoundary';
-import {LogBox} from 'react-native';
+import {LogBox, Platform, Alert} from 'react-native';
 import {StatusBar} from 'react-native';
 import Login from './containers/Login';
 import {NavigationContainer} from '@react-navigation/native';
@@ -168,9 +168,37 @@ const App: () => React.ReactElement = () => {
         // Notifee iOS/Android permission prompt
         const settings = await notifee.requestPermission();
         console.log('App: notifee permission settings:', settings);
+
         // Request FCM push permission (iOS & Android)
         const authorizationStatus = await messaging().requestPermission();
         console.log('App: FCM permission status:', authorizationStatus);
+
+        if (Platform.OS === 'android') {
+          const notifSettings: any = await notifee.getNotificationSettings();
+          const alarmEnabled = notifSettings?.android?.alarm;
+          console.log('App: android alarm setting:', alarmEnabled, notifSettings?.android);
+
+          if (alarmEnabled === 0) {
+            Alert.alert(
+              'Enable alarm permission',
+              'To deliver scheduled notifications reliably in background, allow alarms for this app.',
+              [
+                {text: 'Later', style: 'cancel'},
+                {
+                  text: 'Open settings',
+                  onPress: () => {
+                    notifee.openAlarmPermissionSettings().catch(() => {});
+                  },
+                },
+              ],
+            );
+          }
+
+          const batteryOptimized = await notifee.isBatteryOptimizationEnabled();
+          if (batteryOptimized) {
+            console.log('App: battery optimization is enabled for this app');
+          }
+        }
       } catch (permErr) {
         console.error('App: notification permission error', permErr);
       }

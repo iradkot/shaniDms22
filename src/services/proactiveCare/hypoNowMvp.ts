@@ -80,7 +80,7 @@ async function scheduleFollowUpNotification(params: {
   const trigger = {
     type: TriggerType.TIMESTAMP,
     timestamp: baseTimestampMs + DEFAULTS.followUpDelayMs,
-    alarmManager: true,
+    alarmManager: false,
   } as const;
 
   const title = 'Quick follow-up';

@@ -281,7 +281,7 @@ export async function syncDailyBriefNotifications(params: {
       type: TriggerType.TIMESTAMP,
       timestamp: nextTs.getTime(),
       repeatFrequency: RepeatFrequency.DAILY,
-      alarmManager: true,
+      alarmManager: false,
     },
   );
 }
