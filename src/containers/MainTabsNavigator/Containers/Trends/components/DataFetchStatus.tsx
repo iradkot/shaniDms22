@@ -5,6 +5,8 @@ import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import { loadingSteps } from '../Trends.constants';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 interface Props {
   isLoading: boolean;
@@ -30,6 +32,7 @@ export const DataFetchStatus: React.FC<Props> = ({
                                                    showMaxWaitReached,
                                                  }) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
 
   if (isLoading && !fetchError && !fetchCancelled) {
     return (
@@ -37,7 +40,7 @@ export const DataFetchStatus: React.FC<Props> = ({
         <ActivityIndicator size="large" color={theme.accentColor} />
         <Text style={{color: theme.textColor}}>{loadingSteps[loadingStepIndex]}</Text>
         <Text style={{color: theme.textColor}}>
-          Fetched {daysFetched} / {rangeDays} days so far...
+          {tr(language, 'trends.fetchedSoFar', {daysFetched, rangeDays})}
         </Text>
         {showLongWaitWarning && (
           <Text
@@ -45,17 +48,17 @@ export const DataFetchStatus: React.FC<Props> = ({
               color: theme.aboveRangeColor,
               marginTop: theme.spacing.xs + 1,
             }}>
-            Taking longer than usual. You can wait or cancel.
+            {tr(language, 'trends.takingLonger')}
           </Text>
         )}
         {showMaxWaitReached && (
           <View style={{marginTop: theme.spacing.xs + 1, alignItems: 'center'}}>
             <Text style={{color: theme.belowRangeColor}}>
-              Very long loading time. Maybe reduce the date range.
+              {tr(language, 'trends.veryLongLoading')}
             </Text>
           </View>
         )}
-        <Button title="Cancel" onPress={cancelFetch} />
+        <Button title={tr(language, 'trends.cancel')} onPress={cancelFetch} />
       </View>
     );
   }
@@ -64,7 +67,7 @@ export const DataFetchStatus: React.FC<Props> = ({
     return (
       <View style={{ alignItems: 'center', marginVertical: theme.spacing.sm + 2 }}>
         <Text style={{color: theme.belowRangeColor}}>
-          Failed to fetch data: {fetchError}. Check your network and try again.
+          {tr(language, 'trends.failedFetch', {error: fetchError || ''})}
         </Text>
       </View>
     );

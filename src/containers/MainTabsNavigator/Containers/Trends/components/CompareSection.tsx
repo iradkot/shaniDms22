@@ -17,6 +17,8 @@ import {
   ComparisonDateRange,
 } from '../styles/Trends.styles';
 import { calculateTrendsMetrics } from '../utils/trendsCalculations';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 interface CompareSectionProps {
   showComparison: boolean;
@@ -42,6 +44,7 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
   hideComparison,
 }) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
 
   if (!currentMetrics.dailyDetails.length) return null;
 
@@ -76,7 +79,7 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
     <View style={{ marginVertical: theme.spacing.sm + 2 }}>
       {!showComparison && !comparing && (
         <Button
-          title="Compare With Previous Period"
+          title={tr(language, 'trends.comparePrevious')}
           onPress={handleCompare}
           color={theme.accentColor}
         />
@@ -91,15 +94,15 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-            <ComparisonTitle>Comparison</ComparisonTitle>
+            <ComparisonTitle>{tr(language, 'trends.comparison')}</ComparisonTitle>
             <Button
-              title="Hide"
+              title={tr(language, 'trends.hide')}
               onPress={hideComparison}
               color={theme.belowRangeColor}
             />
           </View>
           <ComparisonSubtitle>
-            Current vs. Another {rangeDays}-Day Period
+            {tr(language, 'trends.currentVsPeriod', {rangeDays})}
           </ComparisonSubtitle>
           <ComparisonDateRange>
             {comparisonDateRange.start.toDateString()} -{' '}
@@ -113,17 +116,17 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
               marginBottom: theme.spacing.sm + 2,
             }}>
             <Button
-              title="< Shift Back"
+              title={tr(language, 'trends.shiftBack')}
               onPress={() => changeComparisonPeriod('back')}
             />
             <Button
-              title="Shift Forward >"
+              title={tr(language, 'trends.shiftForward')}
               onPress={() => changeComparisonPeriod('forward')}
             />
           </View>
 
           <StatRow>
-            <StatLabel>Average BG</StatLabel>
+            <StatLabel>{tr(language, 'trends.averageBg')}</StatLabel>
             {renderComparisonValue(
               currentMetrics.averageBg,
               previousMetrics.averageBg,
@@ -133,7 +136,7 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
           </StatRow>
 
           <StatRow>
-            <StatLabel>Time in Range (TIR)</StatLabel>
+            <StatLabel>{tr(language, 'trends.timeInRangeTir')}</StatLabel>
             {renderComparisonValue(
               currentMetrics.tir,
               previousMetrics.tir,
@@ -142,7 +145,7 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
           </StatRow>
 
           <StatRow>
-            <StatLabel>Serious Hypos/Day</StatLabel>
+            <StatLabel>{tr(language, 'trends.seriousHyposPerDay')}</StatLabel>
             {renderComparisonValue(
               currentMetrics.seriousHyposCount / rangeDays,
               previousMetrics.seriousHyposCount / rangeDays,
@@ -152,7 +155,7 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
           </StatRow>
 
           <StatRow>
-            <StatLabel>Serious Hypers/Day</StatLabel>
+            <StatLabel>{tr(language, 'trends.seriousHypersPerDay')}</StatLabel>
             {renderComparisonValue(
               currentMetrics.seriousHypersCount / rangeDays,
               previousMetrics.seriousHypersCount / rangeDays,
@@ -162,8 +165,7 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
           </StatRow>
 
           <ExplanationText style={{ marginTop: theme.spacing.lg - 1 }}>
-            Green indicates an improvement, while red suggests a decline. Use
-            these insights to adjust your diabetes management plan.
+            {tr(language, 'trends.compareInsight')}
           </ExplanationText>
         </CompareBox>
       )}

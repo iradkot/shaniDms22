@@ -7,6 +7,8 @@ import styled from 'styled-components/native';
 import {addOpacity} from 'app/style/styling.utils';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {isE2E} from 'app/utils/e2e';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 interface Props {
   presetDays: number;
@@ -31,6 +33,7 @@ export const DateRangeSelector: React.FC<Props> = ({
   onStartDateChange,
   onEndDateChange,
 }) => {
+  const {language} = useAppLanguage();
   const today = useMemo(() => new Date(), []);
   const startLabel = useMemo(() => startDate.toLocaleDateString(), [startDate]);
   const endLabel = useMemo(() => endDate.toLocaleDateString(), [endDate]);
@@ -65,11 +68,11 @@ export const DateRangeSelector: React.FC<Props> = ({
       });
     } catch (e) {
       Alert.alert(
-        'Date picker unavailable',
-        'The native date picker module is not available in this build. Please rebuild the Android app.',
+        tr(language, 'trends.datePickerUnavailableTitle'),
+        tr(language, 'trends.datePickerUnavailableBody'),
       );
     }
-  }, [addDays, clampDate, endDate, onStartDateChange, startDate, today]);
+  }, [addDays, clampDate, endDate, onStartDateChange, startDate, today, language]);
 
   const openEndPicker = useCallback(() => {
     if (isE2E) {
@@ -90,11 +93,11 @@ export const DateRangeSelector: React.FC<Props> = ({
       });
     } catch (e) {
       Alert.alert(
-        'Date picker unavailable',
-        'The native date picker module is not available in this build. Please rebuild the Android app.',
+        tr(language, 'trends.datePickerUnavailableTitle'),
+        tr(language, 'trends.datePickerUnavailableBody'),
       );
     }
-  }, [addDays, clampDate, endDate, onEndDateChange, startDate, today]);
+  }, [addDays, clampDate, endDate, onEndDateChange, startDate, today, language]);
 
   const isPresetMode = !isCustomRange;
 
@@ -106,24 +109,24 @@ export const DateRangeSelector: React.FC<Props> = ({
             testID={E2E_TEST_IDS.trends.dateRangePreset7}
             selected={isPresetMode && presetDays === 7}
             onPress={() => onPresetDaysChange(7)}>
-            <PillSegmentText selected={isPresetMode && presetDays === 7}>7 Days</PillSegmentText>
+            <PillSegmentText selected={isPresetMode && presetDays === 7}>{tr(language, 'trends.days7')}</PillSegmentText>
           </PillSegment>
           <PillSegment
             testID={E2E_TEST_IDS.trends.dateRangePreset14}
             selected={isPresetMode && presetDays === 14}
             onPress={() => onPresetDaysChange(14)}>
-            <PillSegmentText selected={isPresetMode && presetDays === 14}>14 Days</PillSegmentText>
+            <PillSegmentText selected={isPresetMode && presetDays === 14}>{tr(language, 'trends.days14')}</PillSegmentText>
           </PillSegment>
           <PillSegment
             testID={E2E_TEST_IDS.trends.dateRangePreset30}
             selected={isPresetMode && presetDays === 30}
             onPress={() => onPresetDaysChange(30)}>
-            <PillSegmentText selected={isPresetMode && presetDays === 30}>30 Days</PillSegmentText>
+            <PillSegmentText selected={isPresetMode && presetDays === 30}>{tr(language, 'trends.days30')}</PillSegmentText>
           </PillSegment>
 
           {isCustomRange ? (
             <PillSegmentPassive selected>
-              <PillSegmentText selected>{`Custom (${rangeDays}d)`}</PillSegmentText>
+              <PillSegmentText selected>{tr(language, 'trends.customDays', {days: rangeDays})}</PillSegmentText>
             </PillSegmentPassive>
           ) : null}
         </Pill>
@@ -131,14 +134,14 @@ export const DateRangeSelector: React.FC<Props> = ({
 
       <CustomRow>
         <RangeButton testID={E2E_TEST_IDS.trends.dateRangeFromButton} onPress={openStartPicker}>
-          <RangeButtonText>From: {startLabel}</RangeButtonText>
+          <RangeButtonText>{tr(language, 'trends.from', {date: startLabel})}</RangeButtonText>
         </RangeButton>
         <RangeButton testID={E2E_TEST_IDS.trends.dateRangeToButton} onPress={openEndPicker}>
-          <RangeButtonText>To: {endLabel}</RangeButtonText>
+          <RangeButtonText>{tr(language, 'trends.to', {date: endLabel})}</RangeButtonText>
         </RangeButton>
       </CustomRow>
 
-      <HelpText>{isCustomRange ? `Custom range selected (${rangeDays} days)` : 'Or pick exact dates'}</HelpText>
+      <HelpText>{isCustomRange ? tr(language, 'trends.customRangeSelected', {days: rangeDays}) : tr(language, 'trends.pickExactDates')}</HelpText>
     </Container>
   );
 };
