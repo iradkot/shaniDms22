@@ -243,7 +243,7 @@ export const QuickStatsRow: React.FC<Props> = ({
                 )}
               </TitleWrap>
               <CardValue>{longestHypoDurationLabel ?? '—'}</CardValue>
-              <CardSubtle>In this range</CardSubtle>
+              <CardSubtle>{tr(language, 'trends.inThisRange')}</CardSubtle>
             </PressableCardSurface>
           ) : (
             <CardSurface>

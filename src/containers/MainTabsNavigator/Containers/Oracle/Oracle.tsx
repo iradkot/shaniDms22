@@ -852,13 +852,13 @@ const Oracle: React.FC = () => {
                 insights.strategies.map((s, idx) => {
                   const outcomeText =
                     typeof s.avgBg2h === 'number'
-                      ? `Avg +2h BG ${s.avgBg2h}`
-                      : 'Avg +2h BG unavailable';
+                      ? tr(language, 'oracle.avg2hFormat', {value: s.avgBg2h})
+                      : tr(language, 'oracle.avg2hUnavailable');
 
                   const successText =
                     typeof s.successRate === 'number'
-                      ? `${Math.round(s.successRate * 100)}% in 70–140 at +2h`
-                      : 'Success rate unavailable';
+                      ? tr(language, 'oracle.inRange2hFormat', {value: Math.round(s.successRate * 100)})
+                      : tr(language, 'oracle.successUnavailable');
 
                   const accent =
                     typeof s.avgBg2h === 'number'
@@ -878,7 +878,7 @@ const Oracle: React.FC = () => {
                         <StrategyTitleRow>
                           <StrategyTitle>{s.title}</StrategyTitle>
                           <StrategyBadge $best={!!s.isBest}>
-                            {s.isBest ? 'Best historical outcome' : `${s.count} matches`}
+                            {s.isBest ? tr(language, 'oracle.bestHistoricalOutcome') : tr(language, 'oracle.matchesCount', {count: s.count})}
                           </StrategyBadge>
                         </StrategyTitleRow>
                         <StrategyMeta>{s.actionSummary}</StrategyMeta>
@@ -892,8 +892,8 @@ const Oracle: React.FC = () => {
               ) : (
                 <CardSubtle>
                   {isComputingInsights
-                    ? 'Strategies will appear as matches accumulate…'
-                    : 'No strategies yet (not enough similar events).'}
+                    ? tr(language, 'oracle.strategiesAccumulating')
+                    : tr(language, 'oracle.noStrategies')}
                 </CardSubtle>
               )}
 
@@ -907,10 +907,8 @@ const Oracle: React.FC = () => {
             <Spacer h={theme.spacing.md} />
 
             <Card testID={E2E_TEST_IDS.oracle.previousList}>
-              <CardTitle>Previous events</CardTitle>
-              <CardSubtle>
-                Compare historical matches by closeness and outcome. Tap a row to open a rich chart.
-              </CardSubtle>
+              <CardTitle>{tr(language, 'oracle.previousEvents')}</CardTitle>
+              <CardSubtle>{tr(language, 'oracle.previousEventsHint')}</CardSubtle>
 
               {!!insights.matches.length && (
                 <>
@@ -919,37 +917,35 @@ const Oracle: React.FC = () => {
                       $active={previousSortMode === 'recent'}
                       onPress={() => setPreviousSortMode('recent')}
                     >
-                      <SegmentText $active={previousSortMode === 'recent'}>Recent</SegmentText>
+                      <SegmentText $active={previousSortMode === 'recent'}>{tr(language, 'oracle.recent')}</SegmentText>
                     </SegmentButton>
                     <SegmentButton
                       $active={previousSortMode === 'closest'}
                       onPress={() => setPreviousSortMode('closest')}
                     >
-                      <SegmentText $active={previousSortMode === 'closest'}>Closest</SegmentText>
+                      <SegmentText $active={previousSortMode === 'closest'}>{tr(language, 'oracle.closest')}</SegmentText>
                     </SegmentButton>
                     <SegmentButton
                       $active={previousSortMode === 'bestOutcome'}
                       onPress={() => setPreviousSortMode('bestOutcome')}
                     >
-                      <SegmentText $active={previousSortMode === 'bestOutcome'}>Best outcome</SegmentText>
+                      <SegmentText $active={previousSortMode === 'bestOutcome'}>{tr(language, 'oracle.bestOutcome')}</SegmentText>
                     </SegmentButton>
                   </SegmentRow>
 
                   {(closestMatch || bestOutcomeMatch) && (
                     <CardSubtle>
-                      Quick picks:{' '}
-                      {closestMatch ? 'Closest' : ''}
-                      {closestMatch && bestOutcomeMatch ? ' • ' : ''}
-                      {bestOutcomeMatch ? 'Best outcome' : ''}
-                      {' — tap the sort above to bring them to the top.'}
+                      {tr(language, 'oracle.quickPicksLine', {
+                        closest: closestMatch ? tr(language, 'oracle.closest') : '',
+                        sep: closestMatch && bestOutcomeMatch ? ' • ' : '',
+                        best: bestOutcomeMatch ? tr(language, 'oracle.bestOutcome') : '',
+                      })}
                     </CardSubtle>
                   )}
                 </>
               )}
               {isComputingInsights && (
-                <CardSubtle>
-                  Updating list…
-                </CardSubtle>
+                <CardSubtle>{tr(language, 'oracle.updatingList')}</CardSubtle>
               )}
 
               <Spacer h={theme.spacing.sm} />
@@ -969,21 +965,21 @@ const Oracle: React.FC = () => {
 
                   const metaParts: string[] = [];
                   if (s.min2h != null && s.max4h != null) {
-                    metaParts.push(`2h min ${fmtBg(s.min2h)} • 4h max ${fmtBg(s.max4h)}`);
+                    metaParts.push(tr(language, 'oracle.outcome2h4h', {min: fmtBg(s.min2h), max: fmtBg(s.max4h)}));
                   } else {
-                    metaParts.push('Outcome unavailable');
+                    metaParts.push(tr(language, 'oracle.outcomeUnavailable'));
                   }
 
                   if (dBg != null && dSlope != null) {
-                    metaParts.push(`ΔBG ${dBg} • Δslope ${dSlope.toFixed(1)}`);
+                    metaParts.push(tr(language, 'oracle.deltaBgSlope', {bg: dBg, slope: dSlope.toFixed(1)}));
                   }
                   if (shapeRmse != null) {
-                    metaParts.push(`Shape ${Math.round(shapeRmse)}`);
+                    metaParts.push(tr(language, 'oracle.shape', {value: Math.round(shapeRmse)}));
                   }
 
-                  metaParts.push(`IOB ${fmtIob(m.iob ?? null)} • COB ${fmtCob(m.cob ?? null)}`);
-                  metaParts.push(`TIR(0–2h) ${formatPercent(m.tir2h)}`);
-                  metaParts.push(within2h ? 'Within next 2h' : 'Outside next 2h');
+                  metaParts.push(tr(language, 'oracle.iobCobMeta', {iob: fmtIob(m.iob ?? null), cob: fmtCob(m.cob ?? null)}));
+                  metaParts.push(tr(language, 'oracle.tir2h', {value: formatPercent(m.tir2h)}));
+                  metaParts.push(within2h ? tr(language, 'oracle.withinNext2h') : tr(language, 'oracle.outsideNext2h'));
 
                   const meta = metaParts.join(' • ');
 
@@ -1009,7 +1005,7 @@ const Oracle: React.FC = () => {
                   Scanning history… matches will appear here as they’re found.
                 </CardSubtle>
               ) : isSyncing ? (
-                <CardSubtle>Searching history…</CardSubtle>
+                <CardSubtle>{tr(language, 'oracle.searchingHistory')}</CardSubtle>
               ) : (
                 <CardSubtle testID={E2E_TEST_IDS.oracle.noMatches}>
                   No similar events found.

@@ -187,7 +187,15 @@ const en = {
     load: 'Load: {{text}}',
     chartWindowHint: 'Chart shows -2h to +4h around the match; bolus/carbs markers are from 0–30m after the match.',
     bolusCarbsSummary: 'Boluses (0–30m): {{boluses}} • Insulin: {{insulin}}U • Carbs: {{carbs}}g',
-    iobCobAtEvent: 'IOB/COB at event: {{iob}} / {{cob}}'
+    iobCobAtEvent: 'IOB/COB at event: {{iob}} / {{cob}}',
+    avg2hFormat: 'Avg +2h BG {{value}}',
+    inRange2hFormat: '{{value}}% in 70–140 at +2h',
+    quickPicksLine: 'Quick picks: {{closest}}{{sep}}{{best}} — tap the sort above to bring them to the top.',
+    outcome2h4h: '2h min {{min}} • 4h max {{max}}',
+    deltaBgSlope: 'ΔBG {{bg}} • Δslope {{slope}}',
+    shape: 'Shape {{value}}',
+    iobCobMeta: 'IOB {{iob}} • COB {{cob}}',
+    tir2h: 'TIR(0–2h) {{value}}'
   },
   dailyReview: {
     title: 'Yesterday summary',
@@ -519,7 +527,15 @@ const he: typeof en = {
     load: 'Load: {{text}}',
     chartWindowHint: 'הגרף מציג -2ש׳ עד +4ש׳ סביב ההתאמה; סמני בולוס/פחמימות הם מ-0 עד 30 דקות אחרי ההתאמה.',
     bolusCarbsSummary: 'בולוסים (0–30ד׳): {{boluses}} • אינסולין: {{insulin}}U • פחמימות: {{carbs}}g',
-    iobCobAtEvent: 'IOB/COB בזמן האירוע: {{iob}} / {{cob}}'
+    iobCobAtEvent: 'IOB/COB בזמן האירוע: {{iob}} / {{cob}}',
+    avg2hFormat: 'ממוצע +2ש׳ {{value}}',
+    inRange2hFormat: '{{value}}% בטווח 70–140 אחרי +2ש׳',
+    quickPicksLine: 'בחירות מהירות: {{closest}}{{sep}}{{best}} — לחצו על המיון למעלה כדי להביא לראש הרשימה.',
+    outcome2h4h: 'מינ׳ ב-2ש׳ {{min}} • מקס׳ ב-4ש׳ {{max}}',
+    deltaBgSlope: 'ΔBG {{bg}} • Δשיפוע {{slope}}',
+    shape: 'צורה {{value}}',
+    iobCobMeta: 'IOB {{iob}} • COB {{cob}}',
+    tir2h: 'TIR(0–2ש׳) {{value}}'
   },
   dailyReview: {
     title: 'סיכום אתמול',
