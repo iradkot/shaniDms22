@@ -19,11 +19,14 @@ import LoopTuner from 'app/containers/MainTabsNavigator/Containers/LoopTuner';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import SettingsNavigator from 'app/containers/MainTabsNavigator/Containers/Settings/SettingsNavigator';
 import {useTabsSettings} from 'app/contexts/TabsSettingsContext';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const Tab = createBottomTabNavigator();
 
 const MainTabsNavigator: React.FC = () => {
   const {settings} = useTabsSettings();
+  const {language} = useAppLanguage();
 
   const makeTabBarButton =
     (testID: string) => (props: BottomTabBarButtonProps) => (
@@ -67,7 +70,7 @@ const MainTabsNavigator: React.FC = () => {
             tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="home" color={color} size={size} />
             ),
-            tabBarLabel: 'Home',
+            tabBarLabel: tr(language, 'nav.home'),
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.home),
           }}
         />
@@ -78,7 +81,7 @@ const MainTabsNavigator: React.FC = () => {
             tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="timeline" color={color} size={size} />
             ),
-            tabBarLabel: 'Trends',
+            tabBarLabel: tr(language, 'nav.trends'),
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.trends),
           }}
         />
@@ -91,7 +94,7 @@ const MainTabsNavigator: React.FC = () => {
             tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="insights" color={color} size={size} />
             ),
-            tabBarLabel: 'Oracle',
+            tabBarLabel: tr(language, 'nav.oracle'),
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.oracle),
           }}
         />
@@ -104,7 +107,7 @@ const MainTabsNavigator: React.FC = () => {
             tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="smart-toy" color={color} size={size} />
             ),
-            tabBarLabel: 'AI Analyst',
+            tabBarLabel: tr(language, 'nav.aiAnalyst'),
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.aiAnalyst),
           }}
         />
@@ -117,7 +120,7 @@ const MainTabsNavigator: React.FC = () => {
             tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="tune" color={color} size={size} />
             ),
-            tabBarLabel: 'Loop Tuner',
+            tabBarLabel: tr(language, 'nav.loopTuner'),
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.loopTuner),
           }}
         />
@@ -129,7 +132,7 @@ const MainTabsNavigator: React.FC = () => {
             tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="settings" color={color} size={size} />
             ),
-            tabBarLabel: 'Settings',
+            tabBarLabel: tr(language, 'nav.settings'),
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.settings),
           }}
         />
@@ -142,7 +145,7 @@ const MainTabsNavigator: React.FC = () => {
             tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="fastfood" color={color} size={size} />
             ),
-            tabBarLabel: 'Food Tracking',
+            tabBarLabel: tr(language, 'nav.foodTracking'),
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.food),
           }}
         />
@@ -154,7 +157,7 @@ const MainTabsNavigator: React.FC = () => {
             tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="directions-run" color={color} size={size} />
             ),
-            tabBarLabel: 'Sport Tracking',
+            tabBarLabel: tr(language, 'nav.sportTracking'),
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.sport),
           }}
         />
@@ -166,7 +169,7 @@ const MainTabsNavigator: React.FC = () => {
             tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <ADIcon name="notification" color={color} size={size} />
             ),
-            tabBarLabel: 'Notifications',
+            tabBarLabel: tr(language, 'nav.notifications'),
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.notifications),
           }}
         />
