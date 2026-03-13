@@ -10,6 +10,8 @@ import {BgSample} from 'app/types/day_bgs.types';
 import AGPSummary from 'app/components/charts/AGPGraph/components/AGPSummary';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 import {runAiAnalystTool} from 'app/services/aiAnalyst/aiAnalystLocalTools';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 import {EvidenceRequest} from '../types';
 import {Container, Title, Subtle} from '../styled';
@@ -21,6 +23,7 @@ interface EvidenceScreenProps {
 
 const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
   const [isLoading, setIsLoading] = useState(true);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [bgData, setBgData] = useState<BgSample[]>([]);
@@ -108,16 +111,16 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
         <Pressable
           onPress={onBack}
           accessibilityRole="button"
-          accessibilityLabel="Back to chat"
+          accessibilityLabel={tr(language, 'ai.backToChat')}
           hitSlop={10}
           style={{alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center'}}
         >
           <MaterialIcons name="arrow-back" size={18} color={addOpacity(theme.textColor, 0.8)} />
-          <Text style={{marginLeft: 6, color: addOpacity(theme.textColor, 0.8)}}>Back to chat</Text>
+          <Text style={{marginLeft: 6, color: addOpacity(theme.textColor, 0.8)}}>{tr(language, 'ai.backToChat')}</Text>
         </Pressable>
 
         <View style={{marginTop: theme.spacing.sm}}>
-          <Title>Evidence</Title>
+          <Title>{tr(language, 'ai.evidence')}</Title>
           <Subtle>{subtitle}</Subtle>
           {normalizedFocusDate ? (
             <Text style={{marginTop: 6, color: addOpacity(theme.accentColor, 0.9), fontWeight: '700'}}>
@@ -131,7 +134,7 @@ const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
         {isLoading ? (
           <View style={{marginTop: theme.spacing.xl, alignItems: 'center'}}>
             <ActivityIndicator />
-            <Text style={{marginTop: 10, color: addOpacity(theme.textColor, 0.7)}}>Loading data…</Text>
+            <Text style={{marginTop: 10, color: addOpacity(theme.textColor, 0.7)}}>{tr(language, 'ai.loadingData')}</Text>
           </View>
         ) : errorText ? (
           <Text style={{color: theme.belowRangeColor}}>{errorText}</Text>

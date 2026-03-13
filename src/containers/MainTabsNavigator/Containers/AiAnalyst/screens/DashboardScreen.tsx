@@ -8,6 +8,8 @@ import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {addOpacity} from 'app/style/styling.utils';
 
 import {DISCLOSURE_TEXT} from '../constants';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 import {
   Container,
   Header,
@@ -50,12 +52,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   errorText,
 }) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
 
   return (
     <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
       <ScrollView contentContainerStyle={{paddingBottom: theme.spacing.xl}} style={{flex: 1}}>
         <Header>
-          <Title>AI Analyst</Title>
+          <Title>{tr(language, 'ai.title')}</Title>
           <Subtle>{DISCLOSURE_TEXT}</Subtle>
         </Header>
 
@@ -64,14 +67,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <CardRow
             onPress={onOpenHistory}
             accessibilityRole="button"
-            accessibilityLabel="Conversation History"
+            accessibilityLabel={tr(language, 'ai.conversationHistory')}
           >
             <CardIcon>
               <MaterialIcons name="history" size={22} color={theme.accentColor} />
             </CardIcon>
             <View style={{flex: 1}}>
-              <CardTitle>Conversation history</CardTitle>
-              <CardSubtitle>Saved text only (limited)</CardSubtitle>
+              <CardTitle>{tr(language, 'ai.conversationHistory')}</CardTitle>
+              <CardSubtitle>{tr(language, 'ai.savedTextOnly')}</CardSubtitle>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
           </CardRow>
@@ -83,14 +86,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             onPress={onStartOpenChat}
             disabled={isBusy}
             accessibilityRole="button"
-            accessibilityLabel="Open Chat"
+            accessibilityLabel={tr(language, 'ai.openChat')}
           >
             <CardIcon>
               <MaterialIcons name="chat" size={22} color={theme.accentColor} />
             </CardIcon>
             <View style={{flex: 1}}>
-              <CardTitle>Open Chat</CardTitle>
-              <CardSubtitle>Ask anything about your diabetes data</CardSubtitle>
+              <CardTitle>{tr(language, 'ai.openChat')}</CardTitle>
+              <CardSubtitle>{tr(language, 'ai.openChatSubtitle')}</CardSubtitle>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
           </CardRow>
@@ -103,14 +106,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             onPress={onStartHypoDetective}
             disabled={isBusy}
             accessibilityRole="button"
-            accessibilityLabel="Hypo Detective"
+            accessibilityLabel={tr(language, 'ai.hypoDetective')}
           >
             <CardIcon>
               <MaterialIcons name="trending-down" size={22} color={theme.accentColor} />
             </CardIcon>
             <View style={{flex: 1}}>
-              <CardTitle>Hypo Detective</CardTitle>
-              <CardSubtitle>Why do I keep going low?</CardSubtitle>
+              <CardTitle>{tr(language, 'ai.hypoDetective')}</CardTitle>
+              <CardSubtitle>{tr(language, 'ai.hypoDetectiveSubtitle')}</CardSubtitle>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
           </CardRow>
@@ -122,14 +125,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             onPress={onStartUserBehavior}
             disabled={isBusy}
             accessibilityRole="button"
-            accessibilityLabel="User Behavior Tips"
+            accessibilityLabel={tr(language, 'ai.userBehaviorTips')}
           >
             <CardIcon>
               <MaterialIcons name="lightbulb-outline" size={22} color={theme.accentColor} />
             </CardIcon>
             <View style={{flex: 1}}>
-              <CardTitle>User Behavior Tips</CardTitle>
-              <CardSubtitle>Improve my daily habits</CardSubtitle>
+              <CardTitle>{tr(language, 'ai.userBehaviorTips')}</CardTitle>
+              <CardSubtitle>{tr(language, 'ai.userBehaviorTipsSubtitle')}</CardSubtitle>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
           </CardRow>
@@ -141,14 +144,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             onPress={onStartLoopSettings}
             disabled={isBusy}
             accessibilityRole="button"
-            accessibilityLabel="Loop Settings Advisor"
+            accessibilityLabel={tr(language, 'ai.loopSettingsAdvisor')}
           >
             <CardIcon>
               <MaterialIcons name="tune" size={22} color={theme.accentColor} />
             </CardIcon>
             <View style={{flex: 1}}>
-              <CardTitle>Loop Settings Advisor</CardTitle>
-              <CardSubtitle>Optimize targets, CR, ISF, DIA</CardSubtitle>
+              <CardTitle>{tr(language, 'ai.loopSettingsAdvisor')}</CardTitle>
+              <CardSubtitle>{tr(language, 'ai.loopSettingsAdvisorSubtitle')}</CardSubtitle>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
           </CardRow>
@@ -157,7 +160,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <View style={{marginTop: 12, flexDirection: 'row', alignItems: 'center'}}>
               <ActivityIndicator />
               <Text style={{marginLeft: 10, color: addOpacity(theme.textColor, 0.8)}}>
-                {progressText || 'Working…'}
+                {progressText || tr(language, 'ai.working')}
               </Text>
             </View>
           ) : null}

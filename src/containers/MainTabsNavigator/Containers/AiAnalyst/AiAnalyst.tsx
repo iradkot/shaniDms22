@@ -5,6 +5,8 @@ import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {addOpacity} from 'app/style/styling.utils';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 import {DISCLOSURE_TEXT} from './constants';
 import {useAiAnalystEngine} from './hooks/useAiAnalystEngine';
@@ -15,58 +17,50 @@ import MissionChatScreen from './screens/MissionChatScreen';
 import EvidenceScreen from './screens/EvidenceScreen';
 import {Container, Header, Title, Subtle, Card, Button, ButtonText} from './styled';
 
-// ---------------------------------------------------------------------------
-// Component – thin screen router
-// ---------------------------------------------------------------------------
-
 const AiAnalyst: React.FC = () => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
   const engine = useAiAnalystEngine();
 
-  // ── Disabled guard ────────────────────────────────────────────────────
   if (!engine.isEnabled) {
     return (
       <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
         <Header>
-          <Title>AI Analyst</Title>
-          <Subtle>Disabled in Settings.</Subtle>
+          <Title>{tr(language, 'ai.title')}</Title>
+          <Subtle>{tr(language, 'ai.disabledInSettings')}</Subtle>
         </Header>
         <Card>
-          <Text style={{color: theme.textColor}}>
-            Enable AI Analyst in Settings to use this tab.
-          </Text>
+          <Text style={{color: theme.textColor}}>{tr(language, 'ai.enableInSettings')}</Text>
           <Button onPress={engine.openSettings}>
-            <ButtonText>Open Settings</ButtonText>
+            <ButtonText>{tr(language, 'ai.openSettings')}</ButtonText>
           </Button>
         </Card>
       </Container>
     );
   }
 
-  // ── Locked (no API key) ───────────────────────────────────────────────
   if (!engine.hasKey) {
     return (
       <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
         <Header>
-          <Title>AI Analyst</Title>
+          <Title>{tr(language, 'ai.title')}</Title>
           <Subtle>{DISCLOSURE_TEXT}</Subtle>
         </Header>
         <Card>
           <Text style={{color: theme.textColor, fontWeight: '700', fontSize: theme.typography.size.md}}>
-            Token required
+            {tr(language, 'ai.tokenRequired')}
           </Text>
           <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.8)}}>
-            To use AI Analyst, add your own LLM API key in Settings.
+            {tr(language, 'ai.addKeyHint')}
           </Text>
           <Button onPress={engine.openSettings}>
-            <ButtonText>Open Settings</ButtonText>
+            <ButtonText>{tr(language, 'ai.openSettings')}</ButtonText>
           </Button>
         </Card>
       </Container>
     );
   }
 
-  // ── History list ──────────────────────────────────────────────────────
   if (engine.state.mode === 'history') {
     return (
       <HistoryScreen
@@ -79,7 +73,6 @@ const AiAnalyst: React.FC = () => {
     );
   }
 
-  // ── History detail ────────────────────────────────────────────────────
   if (engine.state.mode === 'historyDetail') {
     return (
       <HistoryDetailScreen
@@ -92,17 +85,10 @@ const AiAnalyst: React.FC = () => {
     );
   }
 
-  // ── Evidence page ─────────────────────────────────────────────────────
   if (engine.state.mode === 'evidence') {
-    return (
-      <EvidenceScreen
-        request={engine.state.request}
-        onBack={engine.backToMissionFromEvidence}
-      />
-    );
+    return <EvidenceScreen request={engine.state.request} onBack={engine.backToMissionFromEvidence} />;
   }
 
-  // ── Active mission (chat) ─────────────────────────────────────────────
   if (engine.state.mode === 'mission') {
     return (
       <MissionChatScreen
@@ -124,7 +110,6 @@ const AiAnalyst: React.FC = () => {
     );
   }
 
-  // ── Dashboard (default) ───────────────────────────────────────────────
   return (
     <DashboardScreen
       onStartOpenChat={engine.startOpenChat}

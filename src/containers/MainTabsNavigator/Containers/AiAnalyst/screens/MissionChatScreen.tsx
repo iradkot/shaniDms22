@@ -18,6 +18,8 @@ import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {addOpacity} from 'app/style/styling.utils';
 import {LlmChatMessage} from 'app/services/llm/llmTypes';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 import {EvidenceRequest, MissionKey, MarkdownConfig} from '../types';
 import {extractEvidenceLinks, stripEvidenceTags} from '../helpers/evidenceLinks';
@@ -75,11 +77,12 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
   markdown,
 }) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
 
   const copyToClipboard = (text: string) => {
     Clipboard.setString(text || '');
     if (Platform.OS === 'android') {
-      ToastAndroid.show('Copied to clipboard', ToastAndroid.SHORT);
+      ToastAndroid.show(tr(language, 'ai.copySuccess'), ToastAndroid.SHORT);
     }
   };
 
@@ -92,12 +95,12 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
             testID={E2E_TEST_IDS.aiAnalyst.backButton}
             onPress={onBack}
             accessibilityRole="button"
-            accessibilityLabel="Back to AI Analyst"
+            accessibilityLabel={tr(language, 'ai.back')}
             hitSlop={10}
             style={{alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center'}}
           >
             <MaterialIcons name="arrow-back" size={18} color={addOpacity(theme.textColor, 0.8)} />
-            <Text style={{marginLeft: 6, color: addOpacity(theme.textColor, 0.8)}}>Back</Text>
+            <Text style={{marginLeft: 6, color: addOpacity(theme.textColor, 0.8)}}>{tr(language, 'ai.back')}</Text>
           </Pressable>
 
           <View
@@ -116,12 +119,12 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
             <Pressable
               onPress={onExport}
               accessibilityRole="button"
-              accessibilityLabel="Export discussion"
+              accessibilityLabel={tr(language, 'ai.export')}
               hitSlop={10}
               style={{flexDirection: 'row', alignItems: 'center'}}
             >
               <MaterialIcons name="download" size={18} color={addOpacity(theme.textColor, 0.8)} />
-              <Text style={{marginLeft: 6, color: addOpacity(theme.textColor, 0.8)}}>Export</Text>
+              <Text style={{marginLeft: 6, color: addOpacity(theme.textColor, 0.8)}}>{tr(language, 'ai.export')}</Text>
             </Pressable>
           </View>
         </View>
@@ -148,11 +151,11 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                     <Pressable
                       onPress={() => copyToClipboard(visibleText)}
                       accessibilityRole="button"
-                      accessibilityLabel="Copy response"
+                      accessibilityLabel={tr(language, 'ai.copy')}
                       style={{alignSelf: 'flex-end', marginTop: 6, flexDirection: 'row', alignItems: 'center'}}
                     >
                       <MaterialIcons name="content-copy" size={14} color={addOpacity(theme.textColor, 0.7)} />
-                      <Text style={{marginLeft: 4, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>Copy</Text>
+                      <Text style={{marginLeft: 4, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>{tr(language, 'ai.copy')}</Text>
                     </Pressable>
                   </>
                 ) : (
@@ -190,15 +193,15 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
             <View style={{marginTop: 6, marginLeft: 12, flexDirection: 'row', alignItems: 'center'}}>
               <ActivityIndicator />
               <Text style={{marginLeft: 10, color: addOpacity(theme.textColor, 0.75)}}>
-                {progressText ? progressText : 'Thinking…'}
+                {progressText ? progressText : tr(language, 'ai.thinking')}
               </Text>
               <Pressable
                 onPress={onCancel}
                 accessibilityRole="button"
-                accessibilityLabel="Stop"
+                accessibilityLabel={tr(language, 'ai.stop')}
                 style={{marginLeft: 'auto', marginRight: 12, paddingVertical: 6, paddingHorizontal: 10}}
               >
-                <Text style={{color: theme.belowRangeColor}}>Stop</Text>
+                <Text style={{color: theme.belowRangeColor}}>{tr(language, 'ai.stop')}</Text>
               </Pressable>
             </View>
           ) : null}
@@ -217,7 +220,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
             value={input}
             onChangeText={setInput}
             onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), SCROLL_DELAY_MS)}
-            placeholder="Ask anything…"
+            placeholder={tr(language, 'ai.askAnything')}
             placeholderTextColor={addOpacity(theme.textColor, 0.5)}
             editable
           />
@@ -226,7 +229,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
             onPress={onSend}
             disabled={isBusy}
             accessibilityRole="button"
-            accessibilityLabel="Send"
+            accessibilityLabel={tr(language, 'ai.openChat')}
           >
             <MaterialIcons name="send" size={18} color={theme.white} />
           </SendButton>
@@ -234,7 +237,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
 
         <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md}}>
           <Pressable onPress={onBack} accessibilityRole="button">
-            <Text style={{color: addOpacity(theme.textColor, 0.7)}}>Back to missions</Text>
+            <Text style={{color: addOpacity(theme.textColor, 0.7)}}>{tr(language, 'ai.backToMissions')}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>

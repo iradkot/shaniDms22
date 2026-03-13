@@ -6,6 +6,8 @@ import Markdown from 'react-native-markdown-display';
 import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {addOpacity} from 'app/style/styling.utils';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 import {MarkdownConfig} from '../types';
 import {Container, Title, Subtle, MessageBubble, MessageText} from '../styled';
@@ -34,13 +36,14 @@ const HistoryDetailScreen: React.FC<HistoryDetailScreenProps> = ({
   onDelete,
 }) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
   const item = (historyItems ?? []).find((x: any) => x.id === detailId);
   const messages = (item?.messages ?? []) as Array<{role: 'user' | 'assistant'; content: string}>;
 
   return (
     <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
       <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
-        <Title>{item?.title || 'Conversation'}</Title>
+        <Title>{item?.title || tr(language, 'ai.conversation')}</Title>
         <Subtle>{item?.updatedAt ? new Date(item.updatedAt).toLocaleString() : ''}</Subtle>
       </View>
 
@@ -60,11 +63,11 @@ const HistoryDetailScreen: React.FC<HistoryDetailScreenProps> = ({
 
       <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md, gap: theme.spacing.sm}}>
         <Pressable onPress={onBack} accessibilityRole="button">
-          <Text style={{color: addOpacity(theme.textColor, 0.7)}}>Back to history</Text>
+          <Text style={{color: addOpacity(theme.textColor, 0.7)}}>{tr(language, 'ai.backToHistory')}</Text>
         </Pressable>
 
         <Pressable onPress={() => onDelete(detailId)} accessibilityRole="button">
-          <Text style={{color: theme.belowRangeColor}}>Delete conversation</Text>
+          <Text style={{color: theme.belowRangeColor}}>{tr(language, 'ai.deleteConversation')}</Text>
         </Pressable>
       </View>
     </Container>

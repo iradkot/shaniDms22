@@ -6,6 +6,8 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {addOpacity} from 'app/style/styling.utils';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 import {
   Container,
@@ -42,31 +44,32 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
   onOpenDetail,
 }) => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
 
   return (
     <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
       <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
-        <Title>History</Title>
-        <Subtle>Text-only snapshots. Old items are pruned automatically.</Subtle>
+        <Title>{tr(language, 'ai.history')}</Title>
+        <Subtle>{tr(language, 'ai.historySubtitle')}</Subtle>
       </View>
 
       <ScrollView style={{flex: 1}} contentContainerStyle={{paddingBottom: theme.spacing.xl * 2}}>
         <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md}}>
           <Pressable onPress={onClearHistory} accessibilityRole="button">
-            <Text style={{color: theme.belowRangeColor}}>Clear history</Text>
+            <Text style={{color: theme.belowRangeColor}}>{tr(language, 'ai.clearHistory')}</Text>
           </Pressable>
         </View>
 
         {historyBusy ? (
           <View style={{marginTop: 12, paddingHorizontal: theme.spacing.lg, flexDirection: 'row', alignItems: 'center'}}>
             <ActivityIndicator />
-            <Text style={{marginLeft: 10, color: addOpacity(theme.textColor, 0.75)}}>Loading…</Text>
+            <Text style={{marginLeft: 10, color: addOpacity(theme.textColor, 0.75)}}>{tr(language, 'ai.loading')}</Text>
           </View>
         ) : null}
 
         {(historyItems ?? []).length === 0 && !historyBusy ? (
           <View style={{padding: theme.spacing.lg}}>
-            <Text style={{color: addOpacity(theme.textColor, 0.8)}}>No saved conversations yet.</Text>
+            <Text style={{color: addOpacity(theme.textColor, 0.8)}}>{tr(language, 'ai.noSavedConversations')}</Text>
           </View>
         ) : null}
 
@@ -75,13 +78,13 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
             <CardRow
               onPress={() => onOpenDetail(item.id)}
               accessibilityRole="button"
-              accessibilityLabel="Open conversation"
+              accessibilityLabel={tr(language, 'ai.conversation')}
             >
               <CardIcon>
                 <MaterialIcons name="chat" size={22} color={theme.accentColor} />
               </CardIcon>
               <View style={{flex: 1}}>
-                <CardTitle>{item.title || 'Conversation'}</CardTitle>
+                <CardTitle>{item.title || tr(language, 'ai.conversation')}</CardTitle>
                 <CardSubtitle>
                   {item.mission ? `${item.mission} · ` : ''}
                   {new Date(item.updatedAt).toLocaleString()}
@@ -95,7 +98,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
 
       <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md}}>
         <Pressable onPress={onBack} accessibilityRole="button">
-          <Text style={{color: addOpacity(theme.textColor, 0.7)}}>Back</Text>
+          <Text style={{color: addOpacity(theme.textColor, 0.7)}}>{tr(language, 'ai.back')}</Text>
         </Pressable>
       </View>
     </Container>
