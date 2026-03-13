@@ -83,6 +83,9 @@ const en = {
     tooltipBolus: 'Bolus',
     tooltipCarbs: 'Carbs',
     tooltipCloseEvents: 'Close events: {{text}}',
+    yesterdaySummaryReadyTitle: 'Yesterday summary is ready',
+    yesterdaySummaryReadyBody: 'Open it once to review yesterday insights.',
+    viewYesterdaySummary: 'Open yesterday summary'
   },
   trends: {
     noBgData: 'No BG data available for this period.',
@@ -462,6 +465,9 @@ const he: typeof en = {
     tooltipBolus: 'בולוס',
     tooltipCarbs: 'פחמימות',
     tooltipCloseEvents: 'אירועים קרובים: {{text}}',
+    yesterdaySummaryReadyTitle: 'סיכום אתמול מוכן',
+    yesterdaySummaryReadyBody: 'פתחו אותו פעם אחת כדי לעבור על התובנות של אתמול.',
+    viewYesterdaySummary: 'פתח סיכום אתמול'
   },
   trends: {
     noBgData: 'אין נתוני סוכר לתקופה הזו.',
