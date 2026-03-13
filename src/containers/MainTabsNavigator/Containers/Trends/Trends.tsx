@@ -401,7 +401,7 @@ const Trends: React.FC = () => {
           */}
 
           {/* (d) Overall Stats in a collapsible (optional)
-          <Collapsable title="Overall Stats (Key Indicators)">
+          <Collapsable title={tr(language, 'trends.quickStats')}>
             <OverallStatsSection metrics={finalMetrics} />
           </Collapsable>
           */}

@@ -32,6 +32,8 @@ import {
   HypoEvent,
 } from 'app/containers/MainTabsNavigator/Containers/Trends/utils/hypoInvestigation.utils';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 type RouteParams = {
   bgData?: BgSample[];
@@ -148,6 +150,7 @@ function formatCarbsSummary(summary: {count: number; totalG: number}): string {
 
 const HypoInvestigationScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
   const navigation = useNavigation();
   const route = useRoute();
 
@@ -478,14 +481,14 @@ const HypoInvestigationScreen: React.FC = () => {
       badges.push({label: 'High IOB', tone: 'danger'});
     }
     if (derived.bolusIobU != null && derived.bolusIobU >= HIGH_BOLUS_IOB_U) {
-      badges.push({label: 'High bolus IOB', tone: 'info'});
+      badges.push({label: tr(language, 'trends.highBolusIob'), tone: 'info'});
     }
     if (derived.basalIobU != null && derived.basalIobU >= HIGH_BASAL_IOB_U) {
-      badges.push({label: 'High basal IOB', tone: 'info'});
+      badges.push({label: tr(language, 'trends.highBasalIob'), tone: 'info'});
     }
     if (item.driver) {
       badges.push({
-        label: item.driver === 'basal' ? 'Basal-driven' : 'Bolus-driven',
+        label: item.driver === 'basal' ? tr(language, 'trends.basalDriven') : tr(language, 'trends.bolusDriven'),
         tone: 'neutral',
       });
     }
@@ -512,13 +515,13 @@ const HypoInvestigationScreen: React.FC = () => {
 
         <EventStatsRow>
           <StatBlock>
-            <StatLabel>Duration</StatLabel>
+            <StatLabel>{tr(language, 'trends.duration')}</StatLabel>
             <StatValue>{durationLabel}</StatValue>
             <StatSub numberOfLines={1}>{timeRangeLabel}</StatSub>
           </StatBlock>
 
           <StatBlock $align="right">
-            <StatLabel>At nadir</StatLabel>
+            <StatLabel>{tr(language, 'trends.atNadir')}</StatLabel>
             <StatValue>{`IOB ${iobAtNadirLabel}`}</StatValue>
             <StatSub numberOfLines={1}>{`COB ${cobAtNadirLabel}`}</StatSub>
           </StatBlock>
@@ -528,7 +531,7 @@ const HypoInvestigationScreen: React.FC = () => {
           <TreatmentCell>
             <TreatmentLabelRow>
               <Icon name="needle" size={14} color={theme.colors.insulinSecondary} />
-              <TreatmentLabel>Bolus</TreatmentLabel>
+              <TreatmentLabel>{tr(language, 'trends.bolus')}</TreatmentLabel>
               <TreatmentWindow>−1h</TreatmentWindow>
             </TreatmentLabelRow>
             <TreatmentValue>{isFetchingTreatments ? '…' : formatBolusSummary(bolusBefore)}</TreatmentValue>
@@ -537,7 +540,7 @@ const HypoInvestigationScreen: React.FC = () => {
           <TreatmentCell>
             <TreatmentLabelRow>
               <Icon name="bread-slice-outline" size={14} color={theme.colors.carbs} />
-              <TreatmentLabel>Carbs</TreatmentLabel>
+              <TreatmentLabel>{tr(language, 'trends.carbs')}</TreatmentLabel>
               <TreatmentWindow>−2h</TreatmentWindow>
             </TreatmentLabelRow>
             <TreatmentValue>{isFetchingTreatments ? '…' : formatCarbsSummary(carbsBefore)}</TreatmentValue>
@@ -546,8 +549,8 @@ const HypoInvestigationScreen: React.FC = () => {
           <TreatmentCell>
             <TreatmentLabelRow>
               <Icon name="food-apple" size={14} color={theme.colors.carbs} />
-              <TreatmentLabel>Carbs</TreatmentLabel>
-              <TreatmentWindow>during</TreatmentWindow>
+              <TreatmentLabel>{tr(language, 'trends.carbs')}</TreatmentLabel>
+              <TreatmentWindow>{tr(language, 'trends.during')}</TreatmentWindow>
             </TreatmentLabelRow>
             <TreatmentValue>{isFetchingTreatments ? '…' : formatCarbsSummary(carbsDuring)}</TreatmentValue>
           </TreatmentCell>
@@ -555,7 +558,7 @@ const HypoInvestigationScreen: React.FC = () => {
           <TreatmentCell>
             <TreatmentLabelRow>
               <Icon name="needle" size={14} color={theme.colors.insulinSecondary} />
-              <TreatmentLabel>Bolus</TreatmentLabel>
+              <TreatmentLabel>{tr(language, 'trends.bolus')}</TreatmentLabel>
               <TreatmentWindow>+3h</TreatmentWindow>
             </TreatmentLabelRow>
             <TreatmentValue>{isFetchingTreatments ? '…' : formatBolusSummary(bolusAfter)}</TreatmentValue>
@@ -585,32 +588,32 @@ const HypoInvestigationScreen: React.FC = () => {
   return (
     <Screen testID={E2E_TEST_IDS.hypoInvestigation.screen}>
       <Header>
-        <SubTitle>Severe hypos: events &lt; {lowThreshold} mg/dL</SubTitle>
-        {avgDurationLabel ? <SubTitle>Avg duration: {avgDurationLabel}</SubTitle> : null}
+        <SubTitle>{tr(language, 'trends.severeHyposRange', {threshold: lowThreshold})}</SubTitle>
+        {avgDurationLabel ? <SubTitle>{tr(language, 'trends.avgDuration', {value: avgDurationLabel})}</SubTitle> : null}
         {isStillFetchingBg ? (
           <LoadingRow>
             <ActivityIndicator size="small" color={theme.accentColor} />
-            <LoadingText>Loading hypos…</LoadingText>
+            <LoadingText>{tr(language, 'trends.loadingHypos')}</LoadingText>
           </LoadingRow>
         ) : null}
-        {!isFetchingBg && isEnriching ? <SubTitle>Loading active insulin / device status…</SubTitle> : null}
+        {!isFetchingBg && isEnriching ? <SubTitle>{tr(language, 'trends.loadingActiveInsulin')}</SubTitle> : null}
       </Header>
 
       {summary.classifiedEvents > 0 ? (
         <CardsRow>
           <Card>
-            <CardTitle>Basal-driven</CardTitle>
+            <CardTitle>{tr(language, 'trends.basalDriven')}</CardTitle>
             <CardValue>{summary.basalCount}</CardValue>
             <CardSubtle>
-              {summary.basalPct != null ? `${Math.round(summary.basalPct)}% of classified` : '—'}
+              {summary.basalPct != null ? tr(language, 'trends.ofClassified', {value: Math.round(summary.basalPct)}) : '—'}
             </CardSubtle>
           </Card>
 
           <Card>
-            <CardTitle>Bolus-driven</CardTitle>
+            <CardTitle>{tr(language, 'trends.bolusDriven')}</CardTitle>
             <CardValue>{summary.bolusCount}</CardValue>
             <CardSubtle>
-              {summary.bolusPct != null ? `${Math.round(summary.bolusPct)}% of classified` : '—'}
+              {summary.bolusPct != null ? tr(language, 'trends.ofClassified', {value: Math.round(summary.bolusPct)}) : '—'}
             </CardSubtle>
           </Card>
         </CardsRow>
@@ -618,10 +621,10 @@ const HypoInvestigationScreen: React.FC = () => {
 
       <ListHeader>
         <ListHeaderText>
-          Hypos ({summary.totalEvents})
+          {tr(language, 'trends.hyposCount', {count: summary.totalEvents})}
         </ListHeaderText>
         <ListHeaderHint>
-          Tap a hypo to open a chart window: 3 hours before and 3 hours after the lowest reading.
+          {tr(language, 'trends.hypoTapHint')}
         </ListHeaderHint>
       </ListHeader>
 
@@ -633,9 +636,9 @@ const HypoInvestigationScreen: React.FC = () => {
         ListEmptyComponent={
           <EmptyWrap>
             {isStillFetchingBg ? (
-              <EmptyText>Loading hypos…</EmptyText>
+              <EmptyText>{tr(language, 'trends.loadingHypos')}</EmptyText>
             ) : (
-              <EmptyText>No severe hypos in this range.</EmptyText>
+              <EmptyText>{tr(language, 'trends.noSevereHypos')}</EmptyText>
             )}
           </EmptyWrap>
         }
