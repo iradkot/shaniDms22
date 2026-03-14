@@ -2,11 +2,15 @@
 import React from 'react';
 import {View, Text, StyleSheet} from 'react-native';
 import {theme} from 'app/style/theme';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const SportTrackerHeader = () => {
+  const {language} = useAppLanguage();
+
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Sport Tracker</Text>
+      <Text style={styles.text}>{tr(language, 'sport.trackerTitle')}</Text>
     </View>
   );
 };

@@ -21,6 +21,8 @@ import {
 import {NotificationResponse} from 'app/types/notifications';
 import {NotificationsCard} from './components/NotificationCard';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const NotificationsManagerContainer = styled.View`
   flex: 1;
@@ -35,6 +37,7 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
 }) => {
   const {data, isLoading, getNotificationsData} = useGetNotifications();
   const {deleteNotification} = useDeleteNotification();
+  const {language} = useAppLanguage();
 
   const getKeyExtractor = (notification: NotificationResponse) =>
     notification.id;
@@ -83,6 +86,7 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
       {renderNotifications()}
       <AddNotificationButton
         callback={() => navigation.navigate(ADD_NOTIFICATION_SCREEN)}
+        label={tr(language, 'notificationsUi.addNotification')}
       />
     </NotificationsManagerContainer>
   );
@@ -100,12 +104,12 @@ const AddNotificationButtonText = styled.Text`
   font-size: 18px;
 `;
 
-const AddNotificationButton: FC<{callback: () => void}> = ({callback}) => {
+const AddNotificationButton: FC<{callback: () => void; label: string}> = ({callback, label}) => {
   return (
     <AddNotificationButtonContainer
       testID={E2E_TEST_IDS.notifications.addButton}
       onPress={callback}>
-      <AddNotificationButtonText>Add Notification</AddNotificationButtonText>
+      <AddNotificationButtonText>{label}</AddNotificationButtonText>
     </AddNotificationButtonContainer>
   );
 };

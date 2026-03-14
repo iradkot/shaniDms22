@@ -19,6 +19,8 @@ import SportItemsContext from 'app/contexts/SportItemsContext';
 import {fetchSportItems} from 'app/utils/sportItems.utils';
 import {SportItemDTO} from 'app/types/sport.types';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
@@ -26,6 +28,7 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
   navigation,
 }) => {
   const {sportItems, setSportItems} = useContext(SportItemsContext);
+  const {language} = useAppLanguage();
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -79,13 +82,13 @@ const SportTracker: React.FC<{navigation: NavigationProp<any>}> = ({
           renderItem={renderItem}
           ItemSeparatorComponent={() => <Styled.Separator />}
           ListEmptyComponent={() => (
-            <Styled.EmptyListText>No sport items yet</Styled.EmptyListText>
+            <Styled.EmptyListText>{tr(language, 'sport.noItemsYet')}</Styled.EmptyListText>
           )}
         />
       </Styled.BackgroundImage>
       <Button
         onClick={handleAddSportItemPress}
-        text="Add Sport Item"
+        text={tr(language, 'sport.addItem')}
         testID={E2E_TEST_IDS.sport.addButton}
         icon={<Icon name="add-circle" size={30} color="white" />}
       />

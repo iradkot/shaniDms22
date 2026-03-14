@@ -4,6 +4,8 @@ import {Text} from 'react-native';
 import {Camera, PhotoFile, useCameraDevices} from 'react-native-vision-camera';
 import styled from 'styled-components/native';
 import {RouteProp, useNavigation, useRoute} from '@react-navigation/native';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 type CameraScreenNavigationProp = RouteProp<{
   CameraScreen: {onTakePhoto: (photo: PhotoFile | undefined) => void};
@@ -21,6 +23,7 @@ const CameraScreen: React.FC<Props> = () => {
   const navigation = useNavigation();
   const route = useRoute<CameraScreenNavigationProp>();
   const {params} = route;
+  const {language} = useAppLanguage();
 
   if (!params || !params.onTakePhoto) {
     throw new Error(
@@ -51,10 +54,10 @@ const CameraScreen: React.FC<Props> = () => {
   }, []);
 
   if (hasCameraPermission === null || !device) {
-    return <Text>No permission or not supported device</Text>;
+    return <Text>{tr(language, 'camera.noPermissionOrDevice')}</Text>;
   }
   if (hasCameraPermission === false) {
-    return <Text>No permission to camera</Text>;
+    return <Text>{tr(language, 'camera.noPermission')}</Text>;
   }
 
   const takePicture = async () => {

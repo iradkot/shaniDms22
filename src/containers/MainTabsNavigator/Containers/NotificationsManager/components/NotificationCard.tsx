@@ -91,7 +91,7 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
           </NotificationTitle>
         </NotificationCardRow>
         <NotificationCardRow>
-          <NotificationCardText>Time:</NotificationCardText>
+          <NotificationCardText>{tr(language, 'notificationsUi.time')}</NotificationCardText>
           <NotificationCardText>
             {formatMinutesToLocaleTimeString(notification.hour_from_in_minutes)}
             {' - '}
@@ -99,13 +99,13 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
           </NotificationCardText>
         </NotificationCardRow>
         <NotificationCardRow>
-          <NotificationCardText>Range:</NotificationCardText>
+          <NotificationCardText>{tr(language, 'notificationsUi.range')}</NotificationCardText>
           <NotificationCardText>
             {notification.range_start} - {notification.range_end}
           </NotificationCardText>
         </NotificationCardRow>
         <NotificationCardRow>
-          <NotificationCardText>Trend:</NotificationCardText>
+          <NotificationCardText>{tr(language, 'notificationsUi.trend')}</NotificationCardText>
           <NotificationCardText>
             {require('app/components/DirectionArrows').default ? (
               React.createElement(require('app/components/DirectionArrows').default, {
@@ -128,7 +128,9 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
         )}
       </NotificationSwitchContainer>
       <DeleteButtonContainer>
-        <DeleteButton onPress={openDeleteAlert} accessibilityLabel="Delete notification">
+        <DeleteButton
+          onPress={openDeleteAlert}
+          accessibilityLabel={tr(language, 'notificationsUi.deleteAccessibility')}>
           <DeleteButtonText>
             <Icon name="trash" size={20} color="red" />
           </DeleteButtonText>

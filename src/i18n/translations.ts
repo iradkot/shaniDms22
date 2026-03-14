@@ -379,6 +379,22 @@ const en = {
     getTokens: 'Get tokens',
     e2eLogin: 'E2E Login',
   },
+  sport: {
+    trackerTitle: 'Sport Tracker',
+    noItemsYet: 'No sport items yet',
+    addItem: 'Add Sport Item',
+  },
+  camera: {
+    noPermissionOrDevice: 'No permission or not supported device',
+    noPermission: 'No permission to camera',
+  },
+  notificationsUi: {
+    addNotification: 'Add Notification',
+    time: 'Time:',
+    range: 'Range:',
+    trend: 'Trend:',
+    deleteAccessibility: 'Delete notification',
+  },
   ai: {
     title: 'AI Analyst',
     disabledInSettings: 'Disabled in Settings.',
@@ -822,6 +838,22 @@ const he: typeof en = {
   auth: {
     getTokens: 'קבל טוקנים',
     e2eLogin: 'התחברות E2E',
+  },
+  sport: {
+    trackerTitle: 'מעקב ספורט',
+    noItemsYet: 'עדיין אין פריטי ספורט',
+    addItem: 'הוסף פריט ספורט',
+  },
+  camera: {
+    noPermissionOrDevice: 'אין הרשאה או שהמכשיר לא נתמך',
+    noPermission: 'אין הרשאה למצלמה',
+  },
+  notificationsUi: {
+    addNotification: 'הוסף התראה',
+    time: 'זמן:',
+    range: 'טווח:',
+    trend: 'מגמה:',
+    deleteAccessibility: 'מחק התראה',
   },
   ai: {
     title: 'AI Analyst',
