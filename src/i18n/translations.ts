@@ -426,6 +426,10 @@ const en = {
     addSubmit: 'Add',
     editTitle: 'Edit Notification',
     editSubmit: 'Edit',
+    saving: 'Saving…',
+    addSuccess: 'Notification added successfully',
+    editSuccess: 'Notification updated successfully',
+    saveErrorTitle: 'Could not save notification',
   },
   ai: {
     title: 'AI Analyst',
@@ -918,6 +922,10 @@ const he: typeof en = {
     addSubmit: 'הוסף',
     editTitle: 'עריכת התראה',
     editSubmit: 'שמור',
+    saving: 'שומר…',
+    addSuccess: 'ההתראה נוספה בהצלחה',
+    editSuccess: 'ההתראה עודכנה בהצלחה',
+    saveErrorTitle: 'לא הצלחנו לשמור את ההתראה',
   },
   ai: {
     title: 'AI Analyst',

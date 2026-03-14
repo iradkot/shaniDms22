@@ -6,7 +6,7 @@
  */
 import React, {FC} from 'react';
 import {NavigationProp, useNavigation} from '@react-navigation/native';
-import {Keyboard} from 'react-native';
+import {Alert, Keyboard, Platform, ToastAndroid} from 'react-native';
 import {NotificationRequest} from 'app/types/notifications';
 import {useAddNotification} from 'app/hooks/notifications/useAddNotification';
 import {
@@ -29,6 +29,15 @@ const AddNotificationScreen: FC = () => {
   const navigation = useNavigation<NavigationProp<any>>();
   const {addNotification} = useAddNotification();
   const {language} = useAppLanguage();
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  const showStatus = (message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+      return;
+    }
+    Alert.alert(message);
+  };
   const goBack = () => {
     // Reset to MAIN_TAB_NAVIGATOR and set the initial tab to NotificationTabScreen
     navigation.reset({
@@ -43,10 +52,21 @@ const AddNotificationScreen: FC = () => {
   };
 
   const onSubmit = async (notification: NotificationRequest) => {
+    if (isSubmitting) return;
     Keyboard.dismiss();
-
-    await addNotification(notification);
-    goBack();
+    setIsSubmitting(true);
+    try {
+      await addNotification(notification);
+      showStatus(tr(language, 'notificationScreens.addSuccess'));
+      goBack();
+    } catch (e: any) {
+      Alert.alert(
+        tr(language, 'notificationScreens.saveErrorTitle'),
+        e?.message ?? '',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const submitHandlerRef = React.useRef<null | (() => void)>(null);
@@ -64,9 +84,13 @@ const AddNotificationScreen: FC = () => {
       />
       <AddNotificationScreenButton
         testID={E2E_TEST_IDS.notifications.addSubmit}
+        disabled={isSubmitting}
+        style={{opacity: isSubmitting ? 0.6 : 1}}
         onPress={() => submitHandlerRef?.current?.()}>
         <AddNotificationScreenButtonText>
-          {tr(language, 'notificationScreens.addSubmit')}
+          {isSubmitting
+            ? tr(language, 'notificationScreens.saving')
+            : tr(language, 'notificationScreens.addSubmit')}
         </AddNotificationScreenButtonText>
       </AddNotificationScreenButton>
     </AddNotificationScreenContainer>

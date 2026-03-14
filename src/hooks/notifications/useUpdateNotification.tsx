@@ -33,6 +33,7 @@ export const useUpdateNotification = () => {
     } catch (err) {
       setError((err as Error).message);
       setIsLoading(false);
+      throw err;
     }
   };
 
