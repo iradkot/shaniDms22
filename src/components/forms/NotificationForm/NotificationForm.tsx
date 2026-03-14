@@ -39,14 +39,14 @@ interface InputControllerProps {
   rules: any;
 }
 
-const TREND_OPTIONS: Array<{label: string; value: TrendDirectionString}> = [
-  {label: 'Double Down', value: 'DoubleDown'},
-  {label: 'Single Down', value: 'SingleDown'},
-  {label: '45 Down', value: 'FortyFiveDown'},
-  {label: 'Flat', value: 'Flat'},
-  {label: '45 Up', value: 'FortyFiveUp'},
-  {label: 'Single Up', value: 'SingleUp'},
-  {label: 'Double Up', value: 'DoubleUp'},
+const TREND_OPTIONS: TrendDirectionString[] = [
+  'DoubleDown',
+  'SingleDown',
+  'FortyFiveDown',
+  'Flat',
+  'FortyFiveUp',
+  'SingleUp',
+  'DoubleUp',
 ];
 
 function getErrorText(type: string | undefined, label: string, language: 'en' | 'he') {
@@ -64,6 +64,8 @@ function getErrorText(type: string | undefined, label: string, language: 'en' | 
       return tr(language, 'notificationForm.errMax', {label});
     case 'pattern':
       return tr(language, 'notificationForm.errNumber', {label});
+    case 'validate':
+      return '';
     default:
       return '';
   }
@@ -81,6 +83,8 @@ const NotificationForm = ({
   const {
     control,
     handleSubmit,
+    setError,
+    clearErrors,
     formState: {errors},
   } = useForm<NotificationRequest>({
     defaultValues: {
@@ -98,11 +102,30 @@ const NotificationForm = ({
   const [isHourToPickerVisible, setIsHourToPickerVisible] = useState(false);
 
   useEffect(() => {
-    const onSubmitForm = (data: NotificationRequest) => {
-      onSubmit(data);
+    const onSubmitForm = async (data: NotificationRequest) => {
+      clearErrors('name');
+      clearErrors('hour_to_in_minutes');
+
+      if (Number(data.range_start) >= Number(data.range_end)) {
+        setError('name', {
+          type: 'validate',
+          message: tr(language, 'notificationForm.errRangeOrder'),
+        });
+        return;
+      }
+
+      if (Number(data.hour_from_in_minutes) === Number(data.hour_to_in_minutes)) {
+        setError('hour_to_in_minutes', {
+          type: 'validate',
+          message: tr(language, 'notificationForm.errTimeWindow'),
+        });
+        return;
+      }
+
+      await onSubmit(data);
     };
     submitHandlerRef.current = () => handleSubmit(onSubmitForm)();
-  }, [handleSubmit, onSubmit, submitHandlerRef]);
+  }, [clearErrors, handleSubmit, language, onSubmit, setError, submitHandlerRef]);
 
   const nameRef = React.useRef<any>(null);
   const rangeStartRef = React.useRef<any>(null);
@@ -191,7 +214,9 @@ const NotificationForm = ({
           />
           {errors?.[input.name] && (
             <S.ErrorText>
-              {getErrorText(errors?.[input.name]?.type, input.label, language)}
+              {errors?.[input.name]?.type === 'validate'
+                ? String(errors?.[input.name]?.message || '')
+                : getErrorText(errors?.[input.name]?.type, input.label, language)}
             </S.ErrorText>
           )}
         </S.InputWrapper>
@@ -230,7 +255,11 @@ const NotificationForm = ({
       />
 
       {errors.hour_to_in_minutes && (
-        <S.ErrorText>{tr(language, 'notificationForm.hourToRequired')}</S.ErrorText>
+        <S.ErrorText>
+          {errors.hour_to_in_minutes.type === 'validate'
+            ? String(errors.hour_to_in_minutes.message || '')
+            : tr(language, 'notificationForm.hourToRequired')}
+        </S.ErrorText>
       )}
       <Controller
         control={control}
@@ -283,16 +312,16 @@ const NotificationForm = ({
             <S.TrendSelectorScroll horizontal showsHorizontalScrollIndicator={false}>
               {TREND_OPTIONS.map(opt => (
                 <S.TrendOptionButton
-                  key={opt.value}
-                  selected={value === opt.value}
-                  onPress={() => onChange(opt.value)}>
+                  key={opt}
+                  selected={value === opt}
+                  onPress={() => onChange(opt)}>
                   <S.TrendIconWrapper>
                     {require('app/components/DirectionArrows').default
                       ? React.createElement(require('app/components/DirectionArrows').default, {
-                          trendDirection: opt.value,
+                          trendDirection: opt,
                           size: 32,
                           color:
-                            value === opt.value
+                            value === opt
                               ? theme.accentColor
                               : addOpacity(theme.textColor, 0.55),
                         })

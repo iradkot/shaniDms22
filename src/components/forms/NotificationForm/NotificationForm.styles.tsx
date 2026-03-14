@@ -1,4 +1,4 @@
-import styled, {css} from 'styled-components/native';
+import styled from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
@@ -26,16 +26,6 @@ export const TrendInfoText = styled.Text`
   font-size: 14px;
 `;
 
-export const TrendInfoBullet = styled.Text`
-  color: ${({theme}: {theme: ThemeType}) => theme.accentColor};
-  font-size: 16px;
-  font-weight: bold;
-`;
-
-export const Bold = styled.Text`
-  font-weight: bold;
-  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
-`;
 export const TrendSelectorScroll = styled.ScrollView`
   flex-direction: row;
   margin: 12px 0 8px 0;
@@ -58,13 +48,6 @@ export const TrendOptionButton = styled.TouchableOpacity<{selected: boolean}>`
 
 export const TrendIconWrapper = styled.View`
   margin-bottom: 2px;
-`;
-
-export const TrendOptionLabel = styled.Text<{selected: boolean}>`
-  font-size: 13px;
-  color: ${({selected, theme}: {selected: boolean; theme: ThemeType}) =>
-    selected ? theme.accentColor : addOpacity(theme.textColor, 0.6)};
-  font-weight: ${({selected}) => (selected ? 'bold' : 'normal')};
 `;
 
 export const Container = styled.View`
@@ -93,79 +76,6 @@ export const TextInput = styled.TextInput`
   font-size: 16px;
   color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
-
-export const Button = styled.TouchableOpacity`
-  height: 40px;
-  background-color: ${({theme}: {theme: ThemeType}) => theme.borderColor};
-  padding: 10px;
-  margin: 10px;
-  align-items: center;
-  justify-content: center;
-`;
-
-export const ButtonText = styled.Text`
-  color: ${({theme}: {theme: ThemeType}) => theme.buttonTextColor};
-`;
-
-export const Switch = styled.Switch`
-  margin: 10px;
-`;
-
-// Select and SelectItem are used for choosing trend
-export const Select = styled.View`
-  min-height: 40px;
-  border-color: ${({theme}: {theme: ThemeType}) => theme.borderColor};
-  border-width: 1px;
-  padding: 10px;
-  margin: 10px;
-`;
-
-const SelectItemContainer = styled.TouchableOpacity`
-  height: 40px;
-  padding: 10px;
-  margin: 5px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid ${({theme}: {theme: ThemeType}) => theme.borderColor};
-  ${(props: {selected: boolean}) =>
-    props.selected
-      ? css`
-          background-color: ${({theme}: {theme: ThemeType}) => theme.borderColor};
-        `
-      : css`
-          background-color: ${({theme}: {theme: ThemeType}) => theme.white};
-        `}
-`;
-
-export const SelectItemText = styled.Text`
-  color: ${({theme}: {theme: ThemeType}) => theme.buttonTextColor};
-  ${(props: {selected: boolean}) =>
-    props.selected
-      ? css`
-          color: ${({theme}: {theme: ThemeType}) => theme.buttonTextColor};
-        `
-      : css`
-          color: ${({theme}: {theme: ThemeType}) => theme.textColor};
-        `}
-`;
-
-export const SelectItem = ({
-  label,
-  value,
-  selected,
-  onPress,
-}: {
-  label: string;
-  value: string;
-  selected: boolean;
-  onPress: (value: string) => void;
-}) => {
-  return (
-    <SelectItemContainer onPress={() => onPress(value)} selected={selected}>
-      <SelectItemText selected={selected}>{label}</SelectItemText>
-    </SelectItemContainer>
-  );
-};
 
 export const ErrorText = styled.Text`
   color: ${({theme}: {theme: ThemeType}) => theme.belowRangeColor};
