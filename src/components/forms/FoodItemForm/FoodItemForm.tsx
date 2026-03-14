@@ -23,6 +23,8 @@ import {isDate} from 'lodash';
 import ImageField from 'app/components/forms/FoodItemForm/components/ImageField';
 import {EditFoodItem} from 'app/hooks/foods/useEditFoodItem';
 import {AddFoodItem} from 'app/types/food.types';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const FoodItemForm = ({
   foodItem,
@@ -31,6 +33,7 @@ const FoodItemForm = ({
 }: FoodItemFormProps) => {
   const isEditMode = !!foodItem;
   const navigation = useNavigation<NavigationProp<any>>();
+  const {language} = useAppLanguage();
   const [photo, setPhoto] = React.useState<PhotoFile | {uri: string} | undefined>(
     foodItem?.image ? {uri: foodItem.image} : undefined
   );
@@ -59,9 +62,9 @@ const FoodItemForm = ({
     const onSubmitForm = (data: AddFoodItem | EditFoodItem) => {
       if (!photo || !date) {
         Alert.alert(
-          'Image Required',
-          'Please add an image to submit the form.',
-          [{text: 'OK', onPress: () => {}}],
+          tr(language, 'foodForm.imageRequiredTitle'),
+          tr(language, 'foodForm.imageRequiredBody'),
+          [{text: tr(language, 'common.ok'), onPress: () => {}}],
         );
         return;
       }

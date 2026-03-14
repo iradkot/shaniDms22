@@ -5,8 +5,17 @@ const en = {
     today: 'Today',
     date: 'Date',
     save: 'Save',
+    ok: 'OK',
+    cancel: 'Cancel',
+    later: 'Later',
+    openSettings: 'Open settings',
     loadingChart: 'Loading chart…',
     loadingCharts: 'Loading charts…',
+  },
+  app: {
+    enableAlarmPermissionTitle: 'Enable alarm permission',
+    enableAlarmPermissionBody:
+      'To deliver scheduled notifications reliably in background, allow alarms for this app.',
   },
   nav: {
     home: 'Home',
@@ -337,6 +346,14 @@ const en = {
     keyRateLimited: 'Key saved, but OpenAI returned 429 (quota/rate limit).',
     keyCouldNotVerify: 'Could not verify key. Please retry.'
   },
+  foodForm: {
+    imageRequiredTitle: 'Image Required',
+    imageRequiredBody: 'Please add an image to submit the form.',
+  },
+  notifications: {
+    deleteTitle: 'Delete this notification?',
+    deleteBody: 'Are you sure you want to delete?',
+  },
   ai: {
     title: 'AI Analyst',
     disabledInSettings: 'Disabled in Settings.',
@@ -373,7 +390,13 @@ const en = {
     stop: 'Stop',
     askAnything: 'Ask anything…',
     conversation: 'Conversation',
-    copySuccess: 'Copied to clipboard'
+    copySuccess: 'Copied to clipboard',
+    exportTitle: 'Export',
+    exportBody: 'Share a summary of this discussion (and the diabetes data used).',
+    shareSummary: 'Share Summary',
+    shareDataJson: 'Share Data (JSON)',
+    shareSummaryTitle: 'AI Analyst Summary',
+    shareDataTitle: 'AI Analyst Export (JSON)'
   },
   brief: {
     title: 'Daily brief',
@@ -401,8 +424,17 @@ const he: typeof en = {
     today: 'היום',
     date: 'תאריך',
     save: 'שמור',
+    ok: 'אישור',
+    cancel: 'ביטול',
+    later: 'אחר כך',
+    openSettings: 'פתח הגדרות',
     loadingChart: 'טוען גרף…',
     loadingCharts: 'טוען גרפים…',
+  },
+  app: {
+    enableAlarmPermissionTitle: 'הפעלת הרשאת אזעקות',
+    enableAlarmPermissionBody:
+      'כדי לשלוח התראות מתוזמנות בצורה אמינה ברקע, אפשרו הרשאת אזעקות לאפליקציה.',
   },
   nav: {
     home: 'בית',
@@ -733,6 +765,14 @@ const he: typeof en = {
     keyRateLimited: 'המפתח נשמר, אבל OpenAI החזיר 429 (מכסה/קצב).',
     keyCouldNotVerify: 'לא הצלחנו לאמת את המפתח. נסו שוב.'
   },
+  foodForm: {
+    imageRequiredTitle: 'נדרשת תמונה',
+    imageRequiredBody: 'כדי לשלוח את הטופס צריך להוסיף תמונה.',
+  },
+  notifications: {
+    deleteTitle: 'למחוק את ההתראה הזו?',
+    deleteBody: 'בטוחים שרוצים למחוק?',
+  },
   ai: {
     title: 'AI Analyst',
     disabledInSettings: 'כבוי בהגדרות.',
@@ -769,7 +809,13 @@ const he: typeof en = {
     stop: 'עצור',
     askAnything: 'שאלו כל דבר…',
     conversation: 'שיחה',
-    copySuccess: 'הועתק ללוח'
+    copySuccess: 'הועתק ללוח',
+    exportTitle: 'ייצוא',
+    exportBody: 'לשתף סיכום של השיחה הזו (כולל נתוני הסוכרת שהיו בשימוש).',
+    shareSummary: 'שיתוף סיכום',
+    shareDataJson: 'שיתוף נתונים (JSON)',
+    shareSummaryTitle: 'סיכום AI Analyst',
+    shareDataTitle: 'ייצוא AI Analyst (JSON)'
   },
   brief: {
     title: 'סיכום יומי',

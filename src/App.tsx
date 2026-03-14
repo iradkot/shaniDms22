@@ -181,12 +181,12 @@ const AppInner: () => React.ReactElement = () => {
 
           if (alarmEnabled === 0) {
             Alert.alert(
-              'Enable alarm permission',
-              'To deliver scheduled notifications reliably in background, allow alarms for this app.',
+              tr(language, 'app.enableAlarmPermissionTitle'),
+              tr(language, 'app.enableAlarmPermissionBody'),
               [
-                {text: 'Later', style: 'cancel'},
+                {text: tr(language, 'common.later'), style: 'cancel'},
                 {
-                  text: 'Open settings',
+                  text: tr(language, 'common.openSettings'),
                   onPress: () => {
                     notifee.openAlarmPermissionSettings().catch(() => {});
                   },
@@ -205,7 +205,7 @@ const AppInner: () => React.ReactElement = () => {
       }
     };
     checkPermissions();
-  }, []);
+  }, [language]);
   console.log('App.tsx: App component render');
 
   console.log('App.tsx: App component rendering');

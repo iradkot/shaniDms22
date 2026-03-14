@@ -7,6 +7,8 @@ import {ThemeType} from 'app/types/theme';
 import * as SCREEN_NAMES from 'app/constants/SCREEN_NAMES';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 import {AI_ANALYST_SYSTEM_PROMPT} from 'app/services/llm/systemPrompts';
 import {createLlmProvider} from 'app/services/llm/llmClient';
@@ -76,6 +78,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   const navigation = useNavigation<any>();
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
+  const {language} = useAppLanguage();
 
   const hasKey = (aiSettings.apiKey ?? '').trim().length > 0;
 
@@ -245,27 +248,27 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     });
 
     Alert.alert(
-      'Export',
-      'Share a summary of this discussion (and the diabetes data used).',
+      tr(language, 'ai.exportTitle'),
+      tr(language, 'ai.exportBody'),
       [
         {
-          text: 'Share Summary',
+          text: tr(language, 'ai.shareSummary'),
           onPress: async () => {
             const md = buildAiAnalystExportMarkdown(payload);
-            await Share.share({title: 'AI Analyst Summary', message: md});
+            await Share.share({title: tr(language, 'ai.shareSummaryTitle'), message: md});
           },
         },
         {
-          text: 'Share Data (JSON)',
+          text: tr(language, 'ai.shareDataJson'),
           onPress: async () => {
             const json = buildAiAnalystExportJson(payload);
-            await Share.share({title: 'AI Analyst Export (JSON)', message: json});
+            await Share.share({title: tr(language, 'ai.shareDataTitle'), message: json});
           },
         },
-        {text: 'Cancel', style: 'cancel'},
+        {text: tr(language, 'common.cancel'), style: 'cancel'},
       ],
     );
-  }, [conversationId, sessionDataUsed, state, uiMessages]);
+  }, [conversationId, sessionDataUsed, state, uiMessages, language]);
 
   // ====================================================================
   // Mission starters

@@ -17,6 +17,8 @@ import {
   NotificationTitle,
 } from './NotificationCard.style';
 import Loader from 'app/components/common-ui/Loader/Loader';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 type ContextType = {
   translateX: number;
@@ -37,6 +39,7 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
   const {toggleNotification, isEnabled, isLoading} = useToggleNotification(
     notification.enabled,
   );
+  const {language} = useAppLanguage();
 
   const handleDeleteNotification = () => {
     onDeleteNotification(notification.id);
@@ -60,15 +63,15 @@ export const NotificationsCard: FC<NotificationCardProp> = ({
 
   const openDeleteAlert = () => {
     Alert.alert(
-      'Delete this notification?',
-      'Are you sure you want to delete?',
+      tr(language, 'notifications.deleteTitle'),
+      tr(language, 'notifications.deleteBody'),
       [
         {
-          text: 'Cancel',
+          text: tr(language, 'common.cancel'),
           onPress: () => {},
         },
         {
-          text: 'Delete',
+          text: tr(language, 'settings.delete'),
           onPress: handleDeleteNotification,
         },
       ],
