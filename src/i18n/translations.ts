@@ -109,7 +109,20 @@ const en = {
     yesterdaySummaryReadyTitle: 'Yesterday summary is ready',
     yesterdaySummaryReadyBody: 'Open it once to review yesterday insights.',
     viewYesterdaySummary: 'Open yesterday summary',
-    openDailySummary: 'Open daily summary'
+    openDailySummary: 'Open daily summary',
+    todayRecommendationTitle: 'Recommendation for right now',
+    todayRecoHypoTitle: 'Low risk is high now',
+    todayRecoHypoBody: 'Treat low now (15g fast carbs) and recheck in 15 minutes before any bolus.',
+    todayRecoWatchLowTitle: 'Watch for a near-low trend',
+    todayRecoWatchLowBody: 'You are near low and trending down. Avoid correction; recheck soon.',
+    todayRecoWalkTitle: 'Good window for a short walk',
+    todayRecoWalkBody: 'Post-meal looks stable with active insulin. A 10–15 min walk can support TIR.',
+    todayRecoHighTitle: 'Glucose is high with little active insulin',
+    todayRecoHighBody: 'Check meal timing/correction plan and monitor closely over the next hour.',
+    todayRecoMealPrepTitle: 'Meal prep reminder',
+    todayRecoMealPrepBody: 'If lunch is soon, plan carbs and bolus timing now to avoid a sharp rise.',
+    todayRecoStableTitle: 'You are on a stable track',
+    todayRecoStableBody: 'Keep the current routine and do one glucose check before the next meal.'
   },
   trends: {
     noBgData: 'No BG data available for this period.',
@@ -605,7 +618,20 @@ const he: typeof en = {
     yesterdaySummaryReadyTitle: 'סיכום אתמול מוכן',
     yesterdaySummaryReadyBody: 'פתחו אותו פעם אחת כדי לעבור על התובנות של אתמול.',
     viewYesterdaySummary: 'פתח סיכום אתמול',
-    openDailySummary: 'פתח סיכום יומי'
+    openDailySummary: 'פתח סיכום יומי',
+    todayRecommendationTitle: 'המלצה לרגע זה',
+    todayRecoHypoTitle: 'סיכון גבוה לנמוך כרגע',
+    todayRecoHypoBody: 'לטפל בנמוך עכשיו (15 גר׳ פחמימה מהירה) ולבדוק שוב תוך 15 דקות לפני תיקון.',
+    todayRecoWatchLowTitle: 'לשים לב לירידה מתקרבת',
+    todayRecoWatchLowBody: 'את/ה קרוב/ה לנמוך ובמגמת ירידה. להימנע מתיקון ולעשות בדיקה חוזרת בקרוב.',
+    todayRecoWalkTitle: 'חלון טוב להליכה קצרה',
+    todayRecoWalkBody: 'אחרי הארוחה נראה יציב עם אינסולין פעיל. הליכה של 10–15 דק׳ יכולה לעזור ל‑TIR.',
+    todayRecoHighTitle: 'הסוכר גבוה עם מעט אינסולין פעיל',
+    todayRecoHighBody: 'לבדוק תזמון ארוחה/תיקון ולעקוב מקרוב בשעה הקרובה.',
+    todayRecoMealPrepTitle: 'תזכורת לקראת ארוחה',
+    todayRecoMealPrepBody: 'אם ארוחת צהריים בקרוב, לתכנן פחמימות ותזמון בולוס עכשיו כדי למנוע קפיצה.',
+    todayRecoStableTitle: 'את/ה במסלול יציב',
+    todayRecoStableBody: 'להמשיך בשגרה הנוכחית ולעשות בדיקת סוכר אחת לפני הארוחה הבאה.'
   },
   trends: {
     noBgData: 'אין נתוני סוכר לתקופה הזו.',

@@ -37,7 +37,6 @@ import TagMealSheet from 'app/components/MealTagging/TagMealSheet';
 import {format, subDays} from 'date-fns';
 import {DAILY_REVIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
-import {getInsulinRangeMetrics} from 'app/services/insulin/insulinRangeMetrics';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 
@@ -85,6 +84,28 @@ const DailySummaryAlert = styled.Pressable<{theme: ThemeType}>`
   background-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.accentColor, 0.08)};
   border-width: 1px;
   border-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.accentColor, 0.35)};
+`;
+
+const TodayRecommendationCard = styled.View<{theme: ThemeType}>`
+  margin-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+  border-radius: ${(p: {theme: ThemeType}) => p.theme.borderRadius + 2}px;
+  background-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.accentColor, 0.08)};
+  border-width: 1px;
+  border-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.accentColor, 0.35)};
+  overflow: hidden;
+`;
+
+const TodayRecommendationHeader = styled.Pressable<{theme: ThemeType}>`
+  padding: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const TodayRecommendationBody = styled.View<{theme: ThemeType}>`
+  padding-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  padding-bottom: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
 `;
 
 // create dummy home component with typescript
@@ -359,6 +380,69 @@ const Home: React.FC = () => {
     return headerLatestBgSample ?? undefined;
   }, [liveSnapshot, headerLatestBgSample]);
 
+  const [showTodayRecommendation, setShowTodayRecommendation] = useState(true);
+
+  const todayRecommendation = useMemo(() => {
+    if (!isShowingToday) return null;
+
+    const bg = liveBgSample?.sgv;
+    const dir = liveBgSample?.direction;
+    const iob = typeof liveBgSample?.iob === 'number' ? liveBgSample.iob : null;
+    const now = new Date();
+    const hour = now.getHours() + now.getMinutes() / 60;
+    const lastMealMs = lastMealSegment?.startMs ?? null;
+    const minsSinceMeal = lastMealMs ? Math.round((Date.now() - lastMealMs) / 60000) : null;
+
+    if (typeof bg === 'number' && bg < 75) {
+      return {
+        title: tr(language, 'home.todayRecoHypoTitle'),
+        body: tr(language, 'home.todayRecoHypoBody'),
+      };
+    }
+
+    if (typeof bg === 'number' && bg <= 95 && ['SingleDown', 'DoubleDown', 'FortyFiveDown'].includes(String(dir))) {
+      return {
+        title: tr(language, 'home.todayRecoWatchLowTitle'),
+        body: tr(language, 'home.todayRecoWatchLowBody'),
+      };
+    }
+
+    if (
+      minsSinceMeal != null &&
+      minsSinceMeal >= 45 &&
+      minsSinceMeal <= 120 &&
+      typeof bg === 'number' &&
+      bg >= 80 &&
+      bg <= 160 &&
+      iob != null &&
+      iob >= 0.8
+    ) {
+      return {
+        title: tr(language, 'home.todayRecoWalkTitle'),
+        body: tr(language, 'home.todayRecoWalkBody'),
+      };
+    }
+
+    if (typeof bg === 'number' && bg >= 180 && (iob == null || iob < 0.6)) {
+      return {
+        title: tr(language, 'home.todayRecoHighTitle'),
+        body: tr(language, 'home.todayRecoHighBody'),
+      };
+    }
+
+    if (hour >= 10.5 && hour <= 13.5 && (minsSinceMeal == null || minsSinceMeal > 180)) {
+      return {
+        title: tr(language, 'home.todayRecoMealPrepTitle'),
+        body: tr(language, 'home.todayRecoMealPrepBody'),
+      };
+    }
+
+    return {
+      title: tr(language, 'home.todayRecoStableTitle'),
+      body: tr(language, 'home.todayRecoStableBody'),
+    };
+  }, [isShowingToday, language, lastMealSegment?.startMs, liveBgSample?.direction, liveBgSample?.iob, liveBgSample?.sgv]);
+
   // ── InsulinStatsRow needs startOfDay / endOfDay ───────────────────────
   const startOfDay = useMemo(() => {
     const d = new Date(debouncedCurrentDate);
@@ -445,6 +529,27 @@ const Home: React.FC = () => {
           <DailySummaryAlert onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
             <Text style={{fontWeight: '700', color: theme.textColor, fontSize: 14}}>{tr(language, 'home.openDailySummary')}</Text>
           </DailySummaryAlert>
+        ) : null}
+
+        {isShowingToday && todayRecommendation ? (
+          <TodayRecommendationCard>
+            <TodayRecommendationHeader onPress={() => setShowTodayRecommendation(prev => !prev)}>
+              <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 15}}>
+                {tr(language, 'home.todayRecommendationTitle')}
+              </Text>
+              <Icon
+                name={showTodayRecommendation ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={addOpacity(theme.textColor, 0.6)}
+              />
+            </TodayRecommendationHeader>
+            {showTodayRecommendation ? (
+              <TodayRecommendationBody>
+                <Text style={{fontWeight: '700', color: theme.textColor}}>{todayRecommendation.title}</Text>
+                <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.82)}}>{todayRecommendation.body}</Text>
+              </TodayRecommendationBody>
+            ) : null}
+          </TodayRecommendationCard>
         ) : null}
 
         {/* 2. Collapsible detailed stats (BG + Insulin) — at top for quick access */}
