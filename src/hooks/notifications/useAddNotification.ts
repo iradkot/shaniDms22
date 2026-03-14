@@ -3,24 +3,38 @@
  */
 
 import {useCallback} from 'react';
-import firestore from '@react-native-firebase/firestore';
-import {NotificationRequest} from 'src/types/notifications';
+import firestore, {FirebaseFirestoreTypes} from '@react-native-firebase/firestore';
+import {NotificationRequest, NotificationStored} from 'src/types/notifications';
 import {useGetUser} from 'app/hooks/useGetUser';
+
+function toNumber(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
 
 export const useAddNotification = () => {
   const {userData} = useGetUser();
+
   const addNotification = useCallback(
     async (notification: NotificationRequest) => {
-      const notificationRequest = {
+      if (!userData?.id) {
+        throw new Error('Missing user context for notification create');
+      }
+
+      const userRef = firestore().collection('users').doc(userData.id);
+      const payload: NotificationStored = {
         ...notification,
-        related_user: firestore().collection('users').doc(userData?.id),
+        range_start: toNumber(notification.range_start),
+        range_end: toNumber(notification.range_end),
+        hour_from_in_minutes: toNumber(notification.hour_from_in_minutes),
+        hour_to_in_minutes: toNumber(notification.hour_to_in_minutes),
+        related_user: userRef as FirebaseFirestoreTypes.DocumentReference,
       };
-      await firestore().collection('notifications').add(notificationRequest);
+
+      await firestore().collection('notifications').add(payload);
     },
     [userData?.id],
   );
 
-  return {
-    addNotification,
-  };
+  return {addNotification};
 };

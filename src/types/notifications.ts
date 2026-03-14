@@ -20,9 +20,13 @@ export interface NotificationRequest {
   hour_from_in_minutes: number;
   hour_to_in_minutes: number;
   trend: TrendDirectionString;
+}
+
+export interface NotificationStored extends NotificationRequest {
   related_user: DocumentReference;
 }
-export interface NotificationResponse extends NotificationRequest {
+
+export interface NotificationResponse extends NotificationStored {
   id: string;
   times_called: number[];
   time_read: number;

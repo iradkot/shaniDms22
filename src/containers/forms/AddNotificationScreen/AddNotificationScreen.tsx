@@ -10,7 +10,7 @@ import {Keyboard} from 'react-native';
 import {NotificationRequest} from 'app/types/notifications';
 import {useAddNotification} from 'app/hooks/notifications/useAddNotification';
 import {
-  HOME_TAB_SCREEN,
+  MAIN_TAB_NAVIGATOR,
   NOTIFICATION_TAB_SCREEN,
 } from 'app/constants/SCREEN_NAMES';
 import NotificationForm from 'app/components/forms/NotificationForm/NotificationForm';
@@ -32,8 +32,8 @@ const AddNotificationScreen: FC = () => {
       index: 0,
       routes: [
         {
-          name: 'HomeScreen',
-          params: { screen: 'NotificationTabScreen' },
+          name: MAIN_TAB_NAVIGATOR,
+          params: {screen: NOTIFICATION_TAB_SCREEN},
         },
       ],
     });

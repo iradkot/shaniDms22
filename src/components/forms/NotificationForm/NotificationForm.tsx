@@ -144,8 +144,15 @@ const NotificationForm = ({
                 returnKeyType={input.returnKeyType}
                 onSubmitEditing={input.onSubmitEditing}
                 onBlur={onBlur}
-                onChangeText={onChange}
-                value={value}
+                onChangeText={text => {
+                  if (input.keyboardType === 'number-pad') {
+                    const n = Number(text.replace(/[^0-9.]/g, ''));
+                    onChange(Number.isFinite(n) ? n : 0);
+                    return;
+                  }
+                  onChange(text);
+                }}
+                value={String(value ?? '')}
               />
             )}
           />

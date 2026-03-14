@@ -13,7 +13,7 @@ import {
 } from 'app/types/notifications';
 import {useUpdateNotification} from 'app/hooks/notifications/useUpdateNotification';
 import {
-  HOME_TAB_SCREEN,
+  MAIN_TAB_NAVIGATOR,
   NOTIFICATION_TAB_SCREEN,
 } from 'app/constants/SCREEN_NAMES';
 
@@ -37,8 +37,8 @@ const EditNotificationScreen: FC = (props: any) => {
       index: 0,
       routes: [
         {
-          name: 'HomeScreen',
-          params: { screen: 'NotificationTabScreen' },
+          name: MAIN_TAB_NAVIGATOR,
+          params: {screen: NOTIFICATION_TAB_SCREEN},
         },
       ],
     });
@@ -46,7 +46,7 @@ const EditNotificationScreen: FC = (props: any) => {
 
   const onSubmit = async (updatedNotification: NotificationRequest) => {
     Keyboard.dismiss();
-    await updateNotification({...notification, ...updatedNotification});
+    await updateNotification(notification.id, updatedNotification);
     goBack();
   };
 
