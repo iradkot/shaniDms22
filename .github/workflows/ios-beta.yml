@@ -78,14 +78,17 @@ jobs:
           ')" 
 
           echo "Calling App Store Connect API..."
-          STATUS="$(curl -s -o /dev/null -w "%{http_code}" \
+          RESP_FILE="$(mktemp)"
+          STATUS="$(curl -s -o "${RESP_FILE}" -w "%{http_code}" \
             -H "Authorization: Bearer ${JWT}" \
             "https://api.appstoreconnect.apple.com/v1/apps?limit=1")"
 
           if [[ "${STATUS}" == "200" ]]; then
             echo "ASC token OK"
           else
-            echo "::error::ASC token FAILED (HTTP ${STATUS}). Most common cause: KEY_ID / ISSUER_ID / .p8 do not belong to the same key."
+            echo "ASC token FAILED (HTTP ${STATUS}). Apple response body:"
+            cat "${RESP_FILE}"
+            echo "::error::ASC token FAILED (HTTP ${STATUS}). See Apple response body above for exact reason."
             exit 1
           fi
 
