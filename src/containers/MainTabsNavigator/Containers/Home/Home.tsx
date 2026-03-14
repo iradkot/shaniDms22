@@ -42,6 +42,8 @@ import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
 import {t as tr} from 'app/i18n/translations';
 
+const HOME_RECOMMENDATION_STORAGE_KEY = 'home:todayRecommendation:v1';
+
 const HomeContainer = styled.View`
   flex: 1;
   background-color: ${(props: {theme: ThemeType}) => props.theme.backgroundColor};
@@ -387,6 +389,9 @@ const Home: React.FC = () => {
   const [isRefreshingRecommendation, setIsRefreshingRecommendation] = useState(false);
   const [aiRecommendationBody, setAiRecommendationBody] = useState<string | null>(null);
   const [recommendationGeneratedAt, setRecommendationGeneratedAt] = useState<number>(Date.now());
+  const [hasLoadedSavedRecommendation, setHasLoadedSavedRecommendation] = useState(false);
+
+  const todayYmd = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
 
   const todayRecommendation = useMemo(() => {
     if (!isShowingToday) return null;
@@ -499,9 +504,33 @@ const Home: React.FC = () => {
   ]);
 
   useEffect(() => {
-    setRecommendationGeneratedAt(Date.now());
-    setAiRecommendationBody(null);
-  }, [todayRecommendation?.title, todayRecommendation?.body, todayRecommendation?.details]);
+    let mounted = true;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(HOME_RECOMMENDATION_STORAGE_KEY);
+        if (!mounted) return;
+        if (!raw) {
+          setHasLoadedSavedRecommendation(true);
+          return;
+        }
+        const parsed = JSON.parse(raw) as {date?: string; text?: string; generatedAt?: number};
+        if (parsed?.date === todayYmd && parsed?.text) {
+          setAiRecommendationBody(parsed.text);
+          setRecommendationGeneratedAt(
+            typeof parsed.generatedAt === 'number' ? parsed.generatedAt : Date.now(),
+          );
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (mounted) setHasLoadedSavedRecommendation(true);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [todayYmd]);
 
   const recommendationContextPrompt = useMemo(() => {
     if (!todayRecommendation) return '';
@@ -553,8 +582,6 @@ const Home: React.FC = () => {
     try {
       const apiKey = (aiSettings.apiKey ?? '').trim();
       if (!aiSettings.enabled || !apiKey) {
-        setAiRecommendationBody(null);
-        setRecommendationGeneratedAt(Date.now());
         return;
       }
 
@@ -613,11 +640,17 @@ const Home: React.FC = () => {
       });
 
       const text = (response.content ?? '').trim();
+      const nowMs = Date.now();
       setAiRecommendationBody(text || null);
-      setRecommendationGeneratedAt(Date.now());
+      setRecommendationGeneratedAt(nowMs);
+      if (text) {
+        await AsyncStorage.setItem(
+          HOME_RECOMMENDATION_STORAGE_KEY,
+          JSON.stringify({date: todayYmd, text, generatedAt: nowMs}),
+        );
+      }
     } catch {
-      setAiRecommendationBody(null);
-      setRecommendationGeneratedAt(Date.now());
+      // keep last successful recommendation
     } finally {
       setIsRefreshingRecommendation(false);
     }
@@ -635,6 +668,7 @@ const Home: React.FC = () => {
     liveBgSample?.sgv,
     liveSnapshot?.predictions,
     todayRecommendation,
+    todayYmd,
   ]);
 
   // ── InsulinStatsRow needs startOfDay / endOfDay ───────────────────────
@@ -740,37 +774,60 @@ const Home: React.FC = () => {
             {showTodayRecommendation ? (
               <TodayRecommendationBody>
                 <Text style={{fontWeight: '700', color: theme.textColor}}>{todayRecommendation.title}</Text>
-                <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.82)}}>
-                  {aiRecommendationBody || todayRecommendation.body}
-                </Text>
-                {todayRecommendation.details ? (
-                  <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.68), fontSize: 12}}>
-                    {todayRecommendation.details}
-                  </Text>
-                ) : null}
-                <View style={{marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-                  <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.62)}}>
-                    {tr(language, 'home.recommendationUpdatedAt', {time: recommendationTimeLabel})}
-                  </Text>
-                  <Pressable onPress={handleRefreshRecommendation} disabled={isRefreshingRecommendation}>
-                    <Text style={{fontSize: 12, fontWeight: '700', color: theme.accentColor}}>
-                      {isRefreshingRecommendation
-                        ? tr(language, 'home.recommendationRefreshing')
-                        : tr(language, 'home.recommendationRefresh')}
+
+                {aiRecommendationBody ? (
+                  <>
+                    <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.82)}}>
+                      {aiRecommendationBody}
                     </Text>
-                  </Pressable>
-                </View>
-                <Pressable
-                  style={{marginTop: 10}}
-                  onPress={() =>
-                    (navigation as any).navigate(AI_ANALYST_TAB_SCREEN, {
-                      homeRecommendationContext: recommendationContextPrompt,
-                    })
-                  }>
-                  <Text style={{fontSize: 13, fontWeight: '700', color: theme.accentColor}}>
-                    {tr(language, 'home.recommendationStartChat')}
-                  </Text>
-                </Pressable>
+                    {todayRecommendation.details ? (
+                      <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.68), fontSize: 12}}>
+                        {todayRecommendation.details}
+                      </Text>
+                    ) : null}
+                    <View style={{marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                      <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.62)}}>
+                        {tr(language, 'home.recommendationUpdatedAt', {time: recommendationTimeLabel})}
+                      </Text>
+                      <Pressable onPress={handleRefreshRecommendation} disabled={isRefreshingRecommendation}>
+                        <Text style={{fontSize: 12, fontWeight: '700', color: theme.accentColor}}>
+                          {isRefreshingRecommendation
+                            ? tr(language, 'home.recommendationRefreshing')
+                            : tr(language, 'home.recommendationRefresh')}
+                        </Text>
+                      </Pressable>
+                    </View>
+                    <Pressable
+                      style={{marginTop: 10}}
+                      onPress={() =>
+                        (navigation as any).navigate(AI_ANALYST_TAB_SCREEN, {
+                          homeRecommendationContext: recommendationContextPrompt,
+                        })
+                      }>
+                      <Text style={{fontSize: 13, fontWeight: '700', color: theme.accentColor}}>
+                        {tr(language, 'home.recommendationStartChat')}
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.72)}}>
+                      {hasLoadedSavedRecommendation
+                        ? tr(language, 'home.recommendationNotRequestedYet')
+                        : tr(language, 'home.recommendationLoading')}
+                    </Text>
+                    <Pressable
+                      style={{marginTop: 10}}
+                      onPress={handleRefreshRecommendation}
+                      disabled={isRefreshingRecommendation || !hasLoadedSavedRecommendation}>
+                      <Text style={{fontSize: 13, fontWeight: '700', color: theme.accentColor}}>
+                        {isRefreshingRecommendation
+                          ? tr(language, 'home.recommendationRefreshing')
+                          : tr(language, 'home.recommendationRequest')}
+                      </Text>
+                    </Pressable>
+                  </>
+                )}
               </TodayRecommendationBody>
             ) : null}
           </TodayRecommendationCard>

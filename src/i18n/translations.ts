@@ -129,7 +129,10 @@ const en = {
     recommendationRefresh: 'Refresh recommendation',
     recommendationRefreshing: 'Refreshing…',
     recommendationUpdatedAt: 'Updated at {{time}}',
-    recommendationStartChat: 'Start chat about this'
+    recommendationStartChat: 'Start chat about this',
+    recommendationRequest: 'Request recommendation',
+    recommendationNotRequestedYet: 'No recommendation requested yet for today.',
+    recommendationLoading: 'Loading latest recommendation…'
   },
   trends: {
     noBgData: 'No BG data available for this period.',
@@ -645,7 +648,10 @@ const he: typeof en = {
     recommendationRefresh: 'רענן המלצה',
     recommendationRefreshing: 'מרענן…',
     recommendationUpdatedAt: 'עודכן ב־{{time}}',
-    recommendationStartChat: 'התחל שיחה על זה'
+    recommendationStartChat: 'התחל שיחה על זה',
+    recommendationRequest: 'בקש המלצה',
+    recommendationNotRequestedYet: 'עדיין לא ביקשת המלצה להיום.',
+    recommendationLoading: 'טוען המלצה אחרונה…'
   },
   trends: {
     noBgData: 'אין נתוני סוכר לתקופה הזו.',
