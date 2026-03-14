@@ -21,11 +21,14 @@ import {
   AddNotificationScreenTitle,
 } from './AddNotificationScreen.style';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const AddNotificationScreen: FC = () => {
 
   const navigation = useNavigation<NavigationProp<any>>();
   const {addNotification} = useAddNotification();
+  const {language} = useAppLanguage();
   const goBack = () => {
     // Reset to MAIN_TAB_NAVIGATOR and set the initial tab to NotificationTabScreen
     navigation.reset({
@@ -51,7 +54,7 @@ const AddNotificationScreen: FC = () => {
   return (
     <AddNotificationScreenContainer testID={E2E_TEST_IDS.screens.notificationsAdd}>
       <AddNotificationScreenTitle testID={E2E_TEST_IDS.notifications.addTitle}>
-        Add Notification
+        {tr(language, 'notificationScreens.addTitle')}
       </AddNotificationScreenTitle>
 
       <NotificationForm
@@ -62,7 +65,9 @@ const AddNotificationScreen: FC = () => {
       <AddNotificationScreenButton
         testID={E2E_TEST_IDS.notifications.addSubmit}
         onPress={() => submitHandlerRef?.current?.()}>
-        <AddNotificationScreenButtonText>Add</AddNotificationScreenButtonText>
+        <AddNotificationScreenButtonText>
+          {tr(language, 'notificationScreens.addSubmit')}
+        </AddNotificationScreenButtonText>
       </AddNotificationScreenButton>
     </AddNotificationScreenContainer>
   );

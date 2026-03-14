@@ -24,10 +24,13 @@ import {
   AddNotificationScreenTitle,
 } from 'app/containers/forms/AddNotificationScreen/AddNotificationScreen.style';
 import NotificationForm from 'app/components/forms/NotificationForm/NotificationForm';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const EditNotificationScreen: FC = (props: any) => {
 
   const navigation = useNavigation<NavigationProp<any>>();
+  const {language} = useAppLanguage();
   // get the notification from the navigation params
   const notification = props.route.params as NotificationResponse;
   const {updateNotification} = useUpdateNotification();
@@ -54,7 +57,9 @@ const EditNotificationScreen: FC = (props: any) => {
 
   return (
     <AddNotificationScreenContainer>
-      <AddNotificationScreenTitle>Edit Notification</AddNotificationScreenTitle>
+      <AddNotificationScreenTitle>
+        {tr(language, 'notificationScreens.editTitle')}
+      </AddNotificationScreenTitle>
 
       <NotificationForm
         onSubmit={onSubmit}
@@ -63,7 +68,9 @@ const EditNotificationScreen: FC = (props: any) => {
       />
       <AddNotificationScreenButton
         onPress={() => submitHandlerRef?.current?.()}>
-        <AddNotificationScreenButtonText>Edit</AddNotificationScreenButtonText>
+        <AddNotificationScreenButtonText>
+          {tr(language, 'notificationScreens.editSubmit')}
+        </AddNotificationScreenButtonText>
       </AddNotificationScreenButton>
     </AddNotificationScreenContainer>
   );
