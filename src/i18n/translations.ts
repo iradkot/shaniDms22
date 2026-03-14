@@ -9,6 +9,7 @@ const en = {
     cancel: 'Cancel',
     later: 'Later',
     openSettings: 'Open settings',
+    close: 'Close',
     loadingChart: 'Loading chart…',
     loadingCharts: 'Loading charts…',
   },
@@ -354,6 +355,30 @@ const en = {
     deleteTitle: 'Delete this notification?',
     deleteBody: 'Are you sure you want to delete?',
   },
+  systemModal: {
+    notificationTitleFallback: 'Notification',
+  },
+  errors: {
+    somethingWentWrong: 'Something went wrong.',
+    tryAgain: 'Try again',
+  },
+  nightscoutSetup: {
+    saveFailed: 'Failed to save Nightscout settings.',
+    editTitle: 'Edit Nightscout',
+    connectTitle: 'Connect Nightscout',
+    intro:
+      'Enter your Nightscout URL and API secret. The app accepts either the full secret (e.g. {{example}}) or the SHA1 "minified" value (40 hex).',
+    urlLabel: 'Nightscout URL',
+    urlPlaceholder: 'https://your-nightscout-site.com',
+    secretLabel: 'API secret / token',
+    secretPlaceholderKeep: 'Leave blank to keep current',
+    secretPlaceholder: 'API secret',
+    saveContinue: 'Save & Continue',
+  },
+  auth: {
+    getTokens: 'Get tokens',
+    e2eLogin: 'E2E Login',
+  },
   ai: {
     title: 'AI Analyst',
     disabledInSettings: 'Disabled in Settings.',
@@ -428,6 +453,7 @@ const he: typeof en = {
     cancel: 'ביטול',
     later: 'אחר כך',
     openSettings: 'פתח הגדרות',
+    close: 'סגור',
     loadingChart: 'טוען גרף…',
     loadingCharts: 'טוען גרפים…',
   },
@@ -772,6 +798,30 @@ const he: typeof en = {
   notifications: {
     deleteTitle: 'למחוק את ההתראה הזו?',
     deleteBody: 'בטוחים שרוצים למחוק?',
+  },
+  systemModal: {
+    notificationTitleFallback: 'התראה',
+  },
+  errors: {
+    somethingWentWrong: 'משהו השתבש.',
+    tryAgain: 'נסו שוב',
+  },
+  nightscoutSetup: {
+    saveFailed: 'שמירת הגדרות Nightscout נכשלה.',
+    editTitle: 'עריכת Nightscout',
+    connectTitle: 'חיבור Nightscout',
+    intro:
+      'הזינו כתובת Nightscout וסוד API. אפשר להזין את הסוד המלא (למשל {{example}}) או ערך SHA1 "מיניפייד" (40 תווים הקסדצימליים).',
+    urlLabel: 'כתובת Nightscout',
+    urlPlaceholder: 'https://your-nightscout-site.com',
+    secretLabel: 'סוד API / טוקן',
+    secretPlaceholderKeep: 'השאירו ריק כדי לשמור את הקיים',
+    secretPlaceholder: 'סוד API',
+    saveContinue: 'שמור והמשך',
+  },
+  auth: {
+    getTokens: 'קבל טוקנים',
+    e2eLogin: 'התחברות E2E',
   },
   ai: {
     title: 'AI Analyst',

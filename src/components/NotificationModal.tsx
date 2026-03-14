@@ -1,5 +1,7 @@
 import React from 'react';
 import {Modal, View, Text, StyleSheet, TouchableOpacity} from 'react-native';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 interface NotificationModalProps {
   visible: boolean;
@@ -13,24 +15,28 @@ const NotificationModal: React.FC<NotificationModalProps> = ({
   title,
   body,
   onClose,
-}) => (
-  <Modal
-    visible={visible}
-    transparent
-    animationType="fade"
-    onRequestClose={onClose}
-  >
-    <View style={styles.overlay}>
-      <View style={styles.container}>
-        <Text style={styles.title}>{title || 'Notification'}</Text>
-        {body ? <Text style={styles.body}>{body}</Text> : null}
-        <TouchableOpacity onPress={onClose} style={styles.button}>
-          <Text style={styles.buttonText}>Close</Text>
-        </TouchableOpacity>
+}) => {
+  const {language} = useAppLanguage();
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        <View style={styles.container}>
+          <Text style={styles.title}>{title || tr(language, 'systemModal.notificationTitleFallback')}</Text>
+          {body ? <Text style={styles.body}>{body}</Text> : null}
+          <TouchableOpacity onPress={onClose} style={styles.button}>
+            <Text style={styles.buttonText}>{tr(language, 'common.close')}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  </Modal>
-);
+    </Modal>
+  );
+};
 
 const styles = StyleSheet.create({
   overlay: {

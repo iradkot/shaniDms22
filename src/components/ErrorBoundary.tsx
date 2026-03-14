@@ -1,9 +1,19 @@
 import React from 'react';
 import { View, Text, Button, StyleSheet } from 'react-native';
+import {translations, Lang} from 'app/i18n/translations';
 
 interface State {
   hasError: boolean;
   error: Error | null;
+}
+
+function getLanguage(): Lang {
+  try {
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale || 'en';
+    return locale.toLowerCase().startsWith('he') ? 'he' : 'en';
+  } catch {
+    return 'en';
+  }
 }
 
 class ErrorBoundary extends React.Component<{}, State> {
@@ -22,12 +32,13 @@ class ErrorBoundary extends React.Component<{}, State> {
   };
 
   render() {
+    const lang = getLanguage();
     if (this.state.hasError) {
       return (
         <View style={styles.container}>
-          <Text style={styles.title}>Something went wrong.</Text>
+          <Text style={styles.title}>{translations[lang].errors.somethingWentWrong}</Text>
           <Text style={styles.message}>{this.state.error?.message}</Text>
-          <Button title="Try again" onPress={this.handleReset} />
+          <Button title={translations[lang].errors.tryAgain} onPress={this.handleReset} />
         </View>
       );
     }

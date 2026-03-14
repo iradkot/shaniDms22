@@ -10,11 +10,14 @@ import {getApp} from '@react-native-firebase/app';
 import {isE2E} from 'app/utils/e2e';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {hasAnyNightscoutProfile} from 'app/services/nightscoutProfiles';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
   const [userInfo, setUserInfo] = useState<GoogleSignInResult | null>(null);
   const [loading, setLoading] = useState(false);
   const googleSignIn = useMemo(() => new GoogleSignIn(), []);
+  const {language} = useAppLanguage();
 
   const goToPostLogin = async () => {
     const hasProfile = await hasAnyNightscoutProfile();
@@ -72,7 +75,7 @@ const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
       testID={E2E_TEST_IDS.login.screen}
       contentInsetAdjustmentBehavior="automatic">
       <View>
-        <Text onPress={googleSignIn.getTokens}>Get tokens</Text>
+        <Text onPress={googleSignIn.getTokens}>{tr(language, 'auth.getTokens')}</Text>
         <GoogleSigninButton
           testID={E2E_TEST_IDS.login.googleButton}
           style={{width: 192, height: 48}}
@@ -96,7 +99,7 @@ const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
               alignSelf: 'flex-start',
               opacity: loading ? 0.6 : 1,
             }}>
-            <Text>E2E Login</Text>
+            <Text>{tr(language, 'auth.e2eLogin')}</Text>
           </Pressable>
         )}
 

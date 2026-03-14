@@ -4,6 +4,8 @@ import {NavigationProp, useNavigation, useRoute} from '@react-navigation/native'
 import {theme} from 'app/style/theme';
 import {useNightscoutConfig} from 'app/contexts/NightscoutConfigContext';
 import {MAIN_TAB_NAVIGATOR} from 'app/constants/SCREEN_NAMES';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 const inputStyle = {
   borderWidth: 1,
@@ -25,6 +27,7 @@ const NightscoutSetupScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<any>>();
   const route = useRoute<any>();
   const {addProfile, updateProfile, profiles} = useNightscoutConfig();
+  const {language} = useAppLanguage();
 
   const profileId: string | undefined = route?.params?.profileId;
   const editingProfile = profileId ? profiles.find(p => p.id === profileId) : undefined;
@@ -60,7 +63,7 @@ const NightscoutSetupScreen: React.FC = () => {
         });
       }
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to save Nightscout settings.');
+      setError(e?.message ?? tr(language, 'nightscoutSetup.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -83,19 +86,22 @@ const NightscoutSetupScreen: React.FC = () => {
           marginBottom: theme.spacing.md,
         }}
       >
-        {editingProfile ? 'Edit Nightscout' : 'Connect Nightscout'}
+        {editingProfile
+          ? tr(language, 'nightscoutSetup.editTitle')
+          : tr(language, 'nightscoutSetup.connectTitle')}
       </Text>
 
       <Text style={{color: theme.textColor, opacity: 0.8, marginBottom: theme.spacing.lg}}>
-        Enter your Nightscout URL and API secret. The app accepts either the full secret (e.g.{' '}
-        jvA4cWn9c7zxgTyZ) or the SHA1 “minified” value (40 hex).
+        {tr(language, 'nightscoutSetup.intro', {example: 'jvA4cWn9c7zxgTyZ'})}
       </Text>
 
-      <Text style={{color: theme.textColor, marginBottom: theme.spacing.sm}}>Nightscout URL</Text>
+      <Text style={{color: theme.textColor, marginBottom: theme.spacing.sm}}>
+        {tr(language, 'nightscoutSetup.urlLabel')}
+      </Text>
       <TextInput
         value={urlInput}
         onChangeText={setUrlInput}
-        placeholder="https://your-nightscout-site.com"
+        placeholder={tr(language, 'nightscoutSetup.urlPlaceholder')}
         placeholderTextColor={theme.textColor}
         autoCapitalize="none"
         autoCorrect={false}
@@ -105,11 +111,17 @@ const NightscoutSetupScreen: React.FC = () => {
 
       <View style={{height: theme.spacing.lg}} />
 
-      <Text style={{color: theme.textColor, marginBottom: theme.spacing.sm}}>API secret / token</Text>
+      <Text style={{color: theme.textColor, marginBottom: theme.spacing.sm}}>
+        {tr(language, 'nightscoutSetup.secretLabel')}
+      </Text>
       <TextInput
         value={secretInput}
         onChangeText={setSecretInput}
-        placeholder={editingProfile ? 'Leave blank to keep current' : 'API secret'}
+        placeholder={
+          editingProfile
+            ? tr(language, 'nightscoutSetup.secretPlaceholderKeep')
+            : tr(language, 'nightscoutSetup.secretPlaceholder')
+        }
         placeholderTextColor={theme.textColor}
         autoCapitalize="none"
         autoCorrect={false}
@@ -140,7 +152,9 @@ const NightscoutSetupScreen: React.FC = () => {
         {saving ? (
           <ActivityIndicator color={theme.white} />
         ) : (
-          <Text style={{color: theme.white, fontWeight: '600'}}>Save & Continue</Text>
+          <Text style={{color: theme.white, fontWeight: '600'}}>
+            {tr(language, 'nightscoutSetup.saveContinue')}
+          </Text>
         )}
       </TouchableOpacity>
 
