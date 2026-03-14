@@ -44,6 +44,17 @@ import {t as tr} from 'app/i18n/translations';
 
 const HOME_RECOMMENDATION_STORAGE_KEY = 'home:todayRecommendation:v1';
 
+function normalizeRecommendationText(input: string): string {
+  if (!input) return '';
+  return input
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 const HomeContainer = styled.View`
   flex: 1;
   background-color: ${(props: {theme: ThemeType}) => props.theme.backgroundColor};
@@ -515,7 +526,7 @@ const Home: React.FC = () => {
         }
         const parsed = JSON.parse(raw) as {date?: string; text?: string; generatedAt?: number};
         if (parsed?.date === todayYmd && parsed?.text) {
-          setAiRecommendationBody(parsed.text);
+          setAiRecommendationBody(normalizeRecommendationText(parsed.text));
           setRecommendationGeneratedAt(
             typeof parsed.generatedAt === 'number' ? parsed.generatedAt : Date.now(),
           );
@@ -611,8 +622,8 @@ const Home: React.FC = () => {
             role: 'system',
             content:
               language === 'he'
-                ? 'אתה מאמן סוכרת פרקטי וזהיר. תן המלצה קצרה ומדויקת למצב הנוכחי (2-4 משפטים). ציין אם נראה שתזמון בולוס לא מדויק. אל תמליץ מינוני אינסולין מדויקים. אם הלופ נראה שולט בעלייה קלה, אמור במפורש שאין צורך כרגע בבולוס נוסף וצריך מעקב קרוב.'
-                : 'You are a practical, cautious diabetes coach. Give a short, specific recommendation for right now (2-4 sentences). Mention if bolus timing looks off. Do not give exact insulin dosing instructions. If Loop appears to control a mild rise, explicitly say no extra bolus for now and suggest close monitoring.',
+                ? 'אתה מאמן סוכרת פרקטי וזהיר. תן המלצה קצרה ומדויקת למצב הנוכחי (2-4 משפטים). ציין אם נראה שתזמון בולוס לא מדויק. אל תמליץ מינוני אינסולין מדויקים. אם הלופ נראה שולט בעלייה קלה, אמור במפורש שאין צורך כרגע בבולוס נוסף וצריך מעקב קרוב. כתוב טקסט רגיל בלבד, בלי Markdown.'
+                : 'You are a practical, cautious diabetes coach. Give a short, specific recommendation for right now (2-4 sentences). Mention if bolus timing looks off. Do not give exact insulin dosing instructions. If Loop appears to control a mild rise, explicitly say no extra bolus for now and suggest close monitoring. Return plain text only, no Markdown.',
           },
           {
             role: 'user',
@@ -639,7 +650,8 @@ const Home: React.FC = () => {
         ],
       });
 
-      const text = (response.content ?? '').trim();
+      const rawText = (response.content ?? '').trim();
+      const text = normalizeRecommendationText(rawText);
       const nowMs = Date.now();
       setAiRecommendationBody(text || null);
       setRecommendationGeneratedAt(nowMs);
