@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {RefreshControl, ScrollView, View, Text} from 'react-native';
+import {RefreshControl, ScrollView, View, Text, Pressable} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import styled, {useTheme} from 'styled-components/native';
@@ -38,6 +38,8 @@ import {format, subDays} from 'date-fns';
 import {DAILY_REVIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {useAiSettings} from 'app/contexts/AiSettingsContext';
+import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
 import {t as tr} from 'app/i18n/translations';
 
 const HomeContainer = styled.View`
@@ -115,6 +117,7 @@ const Home: React.FC = () => {
   const navigation = useNavigation();
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
+  const {settings: aiSettings} = useAiSettings();
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [tooltipModel, setTooltipModel] = useState<StackedChartsTooltipModel | null>(null);
@@ -381,6 +384,9 @@ const Home: React.FC = () => {
   }, [liveSnapshot, headerLatestBgSample]);
 
   const [showTodayRecommendation, setShowTodayRecommendation] = useState(true);
+  const [isRefreshingRecommendation, setIsRefreshingRecommendation] = useState(false);
+  const [aiRecommendationBody, setAiRecommendationBody] = useState<string | null>(null);
+  const [recommendationGeneratedAt, setRecommendationGeneratedAt] = useState<number>(Date.now());
 
   const todayRecommendation = useMemo(() => {
     if (!isShowingToday) return null;
@@ -492,6 +498,109 @@ const Home: React.FC = () => {
     liveSnapshot?.predictions,
   ]);
 
+  useEffect(() => {
+    setRecommendationGeneratedAt(Date.now());
+    setAiRecommendationBody(null);
+  }, [todayRecommendation?.title, todayRecommendation?.body, todayRecommendation?.details]);
+
+  const recommendationTimeLabel = useMemo(() => {
+    return new Date(recommendationGeneratedAt).toLocaleTimeString(
+      language === 'he' ? 'he-IL' : 'en-US',
+      {hour: '2-digit', minute: '2-digit'},
+    );
+  }, [language, recommendationGeneratedAt]);
+
+  const handleRefreshRecommendation = useCallback(async () => {
+    if (!todayRecommendation || isRefreshingRecommendation) return;
+    setIsRefreshingRecommendation(true);
+
+    try {
+      const apiKey = (aiSettings.apiKey ?? '').trim();
+      if (!aiSettings.enabled || !apiKey) {
+        setAiRecommendationBody(null);
+        setRecommendationGeneratedAt(Date.now());
+        return;
+      }
+
+      const latestBoluses = insulinData
+        .filter(e => e.type === 'bolus' && e.amount && e.timestamp)
+        .sort((a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime())
+        .slice(0, 4)
+        .map(e => ({
+          time: new Date(e.timestamp!).toISOString(),
+          units: Number(e.amount?.toFixed?.(2) ?? e.amount),
+        }));
+
+      const recentTempBasalUnits = insulinData
+        .filter(e => e.type === 'tempBasal' && e.amount && e.timestamp)
+        .filter(e => Date.now() - new Date(e.timestamp!).getTime() <= 2 * 60 * 60 * 1000)
+        .reduce((sum, e) => sum + (e.amount ?? 0), 0);
+
+      const provider = new OpenAIProvider({apiKey});
+      const model = (aiSettings.openAiModel ?? 'gpt-5.4').trim() || 'gpt-5.4';
+
+      const response = await provider.sendChat({
+        model,
+        temperature: 0.5,
+        maxOutputTokens: 220,
+        messages: [
+          {
+            role: 'system',
+            content:
+              language === 'he'
+                ? 'אתה מאמן סוכרת פרקטי וזהיר. תן המלצה קצרה ומדויקת למצב הנוכחי (2-4 משפטים). ציין אם נראה שתזמון בולוס לא מדויק. אל תמליץ מינוני אינסולין מדויקים. אם הלופ נראה שולט בעלייה קלה, אמור במפורש שאין צורך כרגע בבולוס נוסף וצריך מעקב קרוב.'
+                : 'You are a practical, cautious diabetes coach. Give a short, specific recommendation for right now (2-4 sentences). Mention if bolus timing looks off. Do not give exact insulin dosing instructions. If Loop appears to control a mild rise, explicitly say no extra bolus for now and suggest close monitoring.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              now: new Date().toISOString(),
+              currentBg: liveBgSample?.sgv ?? null,
+              trend: liveBgSample?.direction ?? null,
+              iobU: typeof liveBgSample?.iob === 'number' ? Number(liveBgSample.iob.toFixed(2)) : null,
+              cobG: typeof liveBgSample?.cob === 'number' ? Math.round(liveBgSample.cob) : null,
+              predictionsNext: (liveSnapshot?.predictions ?? []).map(p => p.sgv),
+              meal: lastMealSegment
+                ? {
+                    startedAt: new Date(lastMealSegment.startMs).toISOString(),
+                    carbsG: Math.round(lastMealSegment.totalCarbs || 0),
+                    bolusU: Number((lastMealSegment.totalBolus || 0).toFixed(2)),
+                    minutesSinceMeal: Math.round((Date.now() - lastMealSegment.startMs) / 60000),
+                  }
+                : null,
+              recentBoluses: latestBoluses,
+              tempBasalLast2hU: Number(recentTempBasalUnits.toFixed(2)),
+              heuristic: todayRecommendation,
+            }),
+          },
+        ],
+      });
+
+      const text = (response.content ?? '').trim();
+      setAiRecommendationBody(text || null);
+      setRecommendationGeneratedAt(Date.now());
+    } catch {
+      setAiRecommendationBody(null);
+      setRecommendationGeneratedAt(Date.now());
+    } finally {
+      setIsRefreshingRecommendation(false);
+    }
+  }, [
+    aiSettings.apiKey,
+    aiSettings.enabled,
+    aiSettings.openAiModel,
+    insulinData,
+    isRefreshingRecommendation,
+    language,
+    lastMealSegment,
+    liveBgSample?.cob,
+    liveBgSample?.direction,
+    liveBgSample?.iob,
+    liveBgSample?.sgv,
+    liveSnapshot?.predictions,
+    todayRecommendation,
+  ]);
+
   // ── InsulinStatsRow needs startOfDay / endOfDay ───────────────────────
   const startOfDay = useMemo(() => {
     const d = new Date(debouncedCurrentDate);
@@ -595,12 +704,26 @@ const Home: React.FC = () => {
             {showTodayRecommendation ? (
               <TodayRecommendationBody>
                 <Text style={{fontWeight: '700', color: theme.textColor}}>{todayRecommendation.title}</Text>
-                <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.82)}}>{todayRecommendation.body}</Text>
+                <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.82)}}>
+                  {aiRecommendationBody || todayRecommendation.body}
+                </Text>
                 {todayRecommendation.details ? (
                   <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.68), fontSize: 12}}>
                     {todayRecommendation.details}
                   </Text>
                 ) : null}
+                <View style={{marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                  <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.62)}}>
+                    {tr(language, 'home.recommendationUpdatedAt', {time: recommendationTimeLabel})}
+                  </Text>
+                  <Pressable onPress={handleRefreshRecommendation} disabled={isRefreshingRecommendation}>
+                    <Text style={{fontSize: 12, fontWeight: '700', color: theme.accentColor}}>
+                      {isRefreshingRecommendation
+                        ? tr(language, 'home.recommendationRefreshing')
+                        : tr(language, 'home.recommendationRefresh')}
+                    </Text>
+                  </Pressable>
+                </View>
               </TodayRecommendationBody>
             ) : null}
           </TodayRecommendationCard>

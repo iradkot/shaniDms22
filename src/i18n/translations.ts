@@ -125,7 +125,10 @@ const en = {
     todayRecoPostMealLoopBody: 'A mild rise is expected; no extra bolus now. Recheck in 20–30 minutes.',
     todayRecoStableTitle: 'You are on a stable track',
     todayRecoStableBody: 'Keep the current routine and do one glucose check before the next meal.',
-    todayRecoDetails: 'Now {{now}} | Next {{next}} | IOB {{iob}}u | COB {{cob}}g'
+    todayRecoDetails: 'Now {{now}} | Next {{next}} | IOB {{iob}}u | COB {{cob}}g',
+    recommendationRefresh: 'Refresh recommendation',
+    recommendationRefreshing: 'Refreshing…',
+    recommendationUpdatedAt: 'Updated at {{time}}'
   },
   trends: {
     noBgData: 'No BG data available for this period.',
@@ -637,7 +640,10 @@ const he: typeof en = {
     todayRecoPostMealLoopBody: 'עלייה קלה צפויה; כרגע בלי בולוס נוסף. לבצע בדיקה חוזרת בעוד 20–30 דקות.',
     todayRecoStableTitle: 'את/ה במסלול יציב',
     todayRecoStableBody: 'להמשיך בשגרה הנוכחית ולעשות בדיקת סוכר אחת לפני הארוחה הבאה.',
-    todayRecoDetails: 'עכשיו {{now}} | תחזית {{next}} | IOB {{iob}}u | COB {{cob}}g'
+    todayRecoDetails: 'עכשיו {{now}} | תחזית {{next}} | IOB {{iob}}u | COB {{cob}}g',
+    recommendationRefresh: 'רענן המלצה',
+    recommendationRefreshing: 'מרענן…',
+    recommendationUpdatedAt: 'עודכן ב־{{time}}'
   },
   trends: {
     noBgData: 'אין נתוני סוכר לתקופה הזו.',
