@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useState} from 'react';
 import firestore from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
 import {NotificationResponse} from 'app/types/notifications';
 import {docDTOConvert} from 'app/types/firestore';
 import {useGetUser} from 'app/hooks/useGetUser';
@@ -10,12 +11,13 @@ export const useGetNotifications = () => {
   const {userData} = useGetUser();
 
   const getNotificationsData = useCallback(async () => {
-    if (!userData?.id) {
+    const uid = userData?.id ?? auth().currentUser?.uid;
+    if (!uid) {
       setData([]);
       return;
     }
     setIsLoading(true);
-    const userRef = firestore().collection('users').doc(userData.id);
+    const userRef = firestore().collection('users').doc(uid);
     const snapshot = await firestore()
       .collection('notifications')
       .where('related_user', '==', userRef)

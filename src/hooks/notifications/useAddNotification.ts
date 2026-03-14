@@ -4,6 +4,7 @@
 
 import {useCallback} from 'react';
 import firestore, {FirebaseFirestoreTypes} from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
 import {NotificationRequest, NotificationStored} from 'src/types/notifications';
 import {useGetUser} from 'app/hooks/useGetUser';
 
@@ -17,11 +18,12 @@ export const useAddNotification = () => {
 
   const addNotification = useCallback(
     async (notification: NotificationRequest) => {
-      if (!userData?.id) {
+      const uid = userData?.id ?? auth().currentUser?.uid;
+      if (!uid) {
         throw new Error('Missing user context for notification create');
       }
 
-      const userRef = firestore().collection('users').doc(userData.id);
+      const userRef = firestore().collection('users').doc(uid);
       const payload: NotificationStored = {
         ...notification,
         range_start: toNumber(notification.range_start),

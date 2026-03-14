@@ -89,11 +89,11 @@ const NotificationForm = ({
   } = useForm<NotificationRequest>({
     defaultValues: {
       name: notification?.name || '',
-      enabled: notification?.enabled || false,
-      range_start: notification?.range_start || 0,
-      range_end: notification?.range_end || 0,
-      hour_from_in_minutes: notification?.hour_from_in_minutes || 0,
-      hour_to_in_minutes: notification?.hour_to_in_minutes || 0,
+      enabled: notification?.enabled ?? true,
+      range_start: notification?.range_start ?? 80,
+      range_end: notification?.range_end ?? 180,
+      hour_from_in_minutes: notification?.hour_from_in_minutes ?? 0,
+      hour_to_in_minutes: notification?.hour_to_in_minutes ?? 1439,
       trend: notification?.trend || 'Flat',
     },
   });
@@ -103,11 +103,11 @@ const NotificationForm = ({
 
   useEffect(() => {
     const onSubmitForm = async (data: NotificationRequest) => {
-      clearErrors('name');
+      clearErrors('range_end');
       clearErrors('hour_to_in_minutes');
 
       if (Number(data.range_start) >= Number(data.range_end)) {
-        setError('name', {
+        setError('range_end', {
           type: 'validate',
           message: tr(language, 'notificationForm.errRangeOrder'),
         });
@@ -148,7 +148,7 @@ const NotificationForm = ({
         name: 'range_start',
         label: tr(language, 'notificationForm.rangeStartLabel'),
         placeholder: tr(language, 'notificationForm.rangeStartPlaceholder'),
-        keyboardType: 'number-pad',
+        keyboardType: 'numeric',
         returnKeyType: 'next',
         onSubmitEditing: () => rangeEndRef.current?.focus(),
         rules: rules.range,
@@ -158,7 +158,7 @@ const NotificationForm = ({
         name: 'range_end',
         label: tr(language, 'notificationForm.rangeEndLabel'),
         placeholder: tr(language, 'notificationForm.rangeEndPlaceholder'),
-        keyboardType: 'number-pad',
+        keyboardType: 'numeric',
         returnKeyType: 'done',
         onSubmitEditing: () => rangeEndRef.current?.blur(),
         rules: rules.range,
@@ -201,14 +201,20 @@ const NotificationForm = ({
                 onSubmitEditing={input.onSubmitEditing}
                 onBlur={onBlur}
                 onChangeText={text => {
-                  if (input.keyboardType === 'number-pad') {
-                    const n = Number(text.replace(/[^0-9.]/g, ''));
-                    onChange(Number.isFinite(n) ? n : 0);
+                  if (input.keyboardType === 'numeric' || input.keyboardType === 'number-pad') {
+                    const clean = text.replace(/[^0-9]/g, '');
+                    if (clean === '') {
+                      onChange(undefined as any);
+                      return;
+                    }
+                    const n = Number(clean);
+                    onChange(Number.isFinite(n) ? n : undefined);
                     return;
                   }
                   onChange(text);
                 }}
-                value={String(value ?? '')}
+                value={value == null ? '' : String(value)}
+                style={{textAlign: language === 'he' ? 'right' : 'left'}}
               />
             )}
           />
