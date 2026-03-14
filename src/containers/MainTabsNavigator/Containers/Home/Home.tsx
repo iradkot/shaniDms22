@@ -388,15 +388,31 @@ const Home: React.FC = () => {
     const bg = liveBgSample?.sgv;
     const dir = liveBgSample?.direction;
     const iob = typeof liveBgSample?.iob === 'number' ? liveBgSample.iob : null;
+    const cob = typeof liveBgSample?.cob === 'number' ? liveBgSample.cob : null;
+    const nextValues = (liveSnapshot?.predictions ?? []).map(p => p.sgv).filter(v => Number.isFinite(v));
+    const nextPeak = nextValues.length ? Math.max(...nextValues) : null;
+    const projectedRise = typeof bg === 'number' && typeof nextPeak === 'number' ? nextPeak - bg : null;
+
     const now = new Date();
     const hour = now.getHours() + now.getMinutes() / 60;
     const lastMealMs = lastMealSegment?.startMs ?? null;
     const minsSinceMeal = lastMealMs ? Math.round((Date.now() - lastMealMs) / 60000) : null;
 
+    const details =
+      typeof bg === 'number'
+        ? tr(language, 'home.todayRecoDetails', {
+            now: bg,
+            next: nextValues.join('→') || '—',
+            iob: iob != null ? iob.toFixed(1) : '—',
+            cob: cob != null ? Math.round(cob) : '—',
+          })
+        : null;
+
     if (typeof bg === 'number' && bg < 75) {
       return {
         title: tr(language, 'home.todayRecoHypoTitle'),
         body: tr(language, 'home.todayRecoHypoBody'),
+        details,
       };
     }
 
@@ -404,6 +420,26 @@ const Home: React.FC = () => {
       return {
         title: tr(language, 'home.todayRecoWatchLowTitle'),
         body: tr(language, 'home.todayRecoWatchLowBody'),
+        details,
+      };
+    }
+
+    if (
+      minsSinceMeal != null &&
+      minsSinceMeal <= 150 &&
+      typeof bg === 'number' &&
+      bg >= 85 &&
+      bg <= 150 &&
+      iob != null &&
+      iob >= 1 &&
+      projectedRise != null &&
+      projectedRise >= 8 &&
+      projectedRise <= 45
+    ) {
+      return {
+        title: tr(language, 'home.todayRecoPostMealLoopTitle'),
+        body: tr(language, 'home.todayRecoPostMealLoopBody'),
+        details,
       };
     }
 
@@ -420,6 +456,7 @@ const Home: React.FC = () => {
       return {
         title: tr(language, 'home.todayRecoWalkTitle'),
         body: tr(language, 'home.todayRecoWalkBody'),
+        details,
       };
     }
 
@@ -427,6 +464,7 @@ const Home: React.FC = () => {
       return {
         title: tr(language, 'home.todayRecoHighTitle'),
         body: tr(language, 'home.todayRecoHighBody'),
+        details,
       };
     }
 
@@ -434,14 +472,25 @@ const Home: React.FC = () => {
       return {
         title: tr(language, 'home.todayRecoMealPrepTitle'),
         body: tr(language, 'home.todayRecoMealPrepBody'),
+        details,
       };
     }
 
     return {
       title: tr(language, 'home.todayRecoStableTitle'),
       body: tr(language, 'home.todayRecoStableBody'),
+      details,
     };
-  }, [isShowingToday, language, lastMealSegment?.startMs, liveBgSample?.direction, liveBgSample?.iob, liveBgSample?.sgv]);
+  }, [
+    isShowingToday,
+    language,
+    lastMealSegment?.startMs,
+    liveBgSample?.cob,
+    liveBgSample?.direction,
+    liveBgSample?.iob,
+    liveBgSample?.sgv,
+    liveSnapshot?.predictions,
+  ]);
 
   // ── InsulinStatsRow needs startOfDay / endOfDay ───────────────────────
   const startOfDay = useMemo(() => {
@@ -547,6 +596,11 @@ const Home: React.FC = () => {
               <TodayRecommendationBody>
                 <Text style={{fontWeight: '700', color: theme.textColor}}>{todayRecommendation.title}</Text>
                 <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.82)}}>{todayRecommendation.body}</Text>
+                {todayRecommendation.details ? (
+                  <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.68), fontSize: 12}}>
+                    {todayRecommendation.details}
+                  </Text>
+                ) : null}
               </TodayRecommendationBody>
             ) : null}
           </TodayRecommendationCard>

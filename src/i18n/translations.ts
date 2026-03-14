@@ -121,8 +121,11 @@ const en = {
     todayRecoHighBody: 'Check meal timing/correction plan and monitor closely over the next hour.',
     todayRecoMealPrepTitle: 'Meal prep reminder',
     todayRecoMealPrepBody: 'If lunch is soon, plan carbs and bolus timing now to avoid a sharp rise.',
+    todayRecoPostMealLoopTitle: 'Post-meal rise looks controlled by Loop',
+    todayRecoPostMealLoopBody: 'A mild rise is expected; no extra bolus now. Recheck in 20–30 minutes.',
     todayRecoStableTitle: 'You are on a stable track',
-    todayRecoStableBody: 'Keep the current routine and do one glucose check before the next meal.'
+    todayRecoStableBody: 'Keep the current routine and do one glucose check before the next meal.',
+    todayRecoDetails: 'Now {{now}} | Next {{next}} | IOB {{iob}}u | COB {{cob}}g'
   },
   trends: {
     noBgData: 'No BG data available for this period.',
@@ -630,8 +633,11 @@ const he: typeof en = {
     todayRecoHighBody: 'לבדוק תזמון ארוחה/תיקון ולעקוב מקרוב בשעה הקרובה.',
     todayRecoMealPrepTitle: 'תזכורת לקראת ארוחה',
     todayRecoMealPrepBody: 'אם ארוחת צהריים בקרוב, לתכנן פחמימות ותזמון בולוס עכשיו כדי למנוע קפיצה.',
+    todayRecoPostMealLoopTitle: 'עלייה אחרי ארוחה נראית בשליטה של הלופ',
+    todayRecoPostMealLoopBody: 'עלייה קלה צפויה; כרגע בלי בולוס נוסף. לבצע בדיקה חוזרת בעוד 20–30 דקות.',
     todayRecoStableTitle: 'את/ה במסלול יציב',
-    todayRecoStableBody: 'להמשיך בשגרה הנוכחית ולעשות בדיקת סוכר אחת לפני הארוחה הבאה.'
+    todayRecoStableBody: 'להמשיך בשגרה הנוכחית ולעשות בדיקת סוכר אחת לפני הארוחה הבאה.',
+    todayRecoDetails: 'עכשיו {{now}} | תחזית {{next}} | IOB {{iob}}u | COB {{cob}}g'
   },
   trends: {
     noBgData: 'אין נתוני סוכר לתקופה הזו.',
