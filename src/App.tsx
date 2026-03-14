@@ -74,7 +74,8 @@ import {
   ProactiveCareSettingsProvider,
   useProactiveCareSettings,
 } from 'app/contexts/ProactiveCareSettingsContext';
-import {AppLanguageProvider} from 'app/contexts/AppLanguageContext';
+import {AppLanguageProvider, useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {t as tr} from 'app/i18n/translations';
 
 // Suppress deprecation warnings from Firebase React Native v21 with Hermes
 LogBox.ignoreLogs([
@@ -131,7 +132,7 @@ function handleNotificationNavigation(initialNotification: {notification?: {data
   }
 }
 
-const App: () => React.ReactElement = () => {
+const AppInner: () => React.ReactElement = () => {
   console.log('App.tsx: Entering App component');
   const extendedTheme = {
     ...theme,
@@ -215,6 +216,7 @@ const App: () => React.ReactElement = () => {
   const {settings: proactiveSettings} = useProactiveCareSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
   const {settings: aiSettings} = useAiSettings();
+  const {language} = useAppLanguage();
 
   useHypoNowMvp({
     enabled: !isE2E && proactiveSettings.enabled && proactiveSettings.events.hypoNow,
@@ -278,8 +280,7 @@ const App: () => React.ReactElement = () => {
                           <GlucoseSettingsProvider>
                             <AiSettingsProvider>
                               <ProactiveCareSettingsProvider>
-                                <AppLanguageProvider>
-                            <NavigationContainer ref={rootNavigationRef}>
+                                <NavigationContainer ref={rootNavigationRef}>
                               <Stack.Navigator screenOptions={{headerShown: false}}>
                                 <Stack.Screen name="initScreen" component={AppInitScreen} />
                                 <Stack.Screen name={LOGIN_SCREEN} component={Login} />
@@ -343,7 +344,7 @@ const App: () => React.ReactElement = () => {
                               <Stack.Screen
                                 options={{
                                   headerShown: true,
-                                  headerTitle: 'Rank system',
+                                  headerTitle: tr(language, 'nav.rankSystem'),
                                   headerTitleStyle: {fontSize: 16, fontWeight: '700'},
                                 }}
                                 name={RANKS_INFO_SCREEN}
@@ -353,7 +354,7 @@ const App: () => React.ReactElement = () => {
                               <Stack.Screen
                                 options={{
                                   headerShown: true,
-                                  headerTitle: 'Hypo investigation',
+                                  headerTitle: tr(language, 'nav.hypoInvestigation'),
                                   headerTitleStyle: {fontSize: 16, fontWeight: '700'},
                                 }}
                                 name={HYPO_INVESTIGATION_SCREEN}
@@ -361,7 +362,6 @@ const App: () => React.ReactElement = () => {
                               />
                               </Stack.Navigator>
                             </NavigationContainer>
-                                </AppLanguageProvider>
                               </ProactiveCareSettingsProvider>
                             </AiSettingsProvider>
                           </GlucoseSettingsProvider>
@@ -386,6 +386,12 @@ const App: () => React.ReactElement = () => {
     </GestureHandlerRootView>
   );
 };
+
+const App: React.FC = () => (
+  <AppLanguageProvider>
+    <AppInner />
+  </AppLanguageProvider>
+);
 
 export default App;
 

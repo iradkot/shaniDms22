@@ -18,6 +18,8 @@ const en = {
     foodTracking: 'Food Tracking',
     sportTracking: 'Sport Tracking',
     notifications: 'Notifications',
+    rankSystem: 'Rank system',
+    hypoInvestigation: 'Hypo investigation',
   },
   home: {
     yesterdaySummary: 'Yesterday summary',
@@ -412,6 +414,8 @@ const he: typeof en = {
     foodTracking: 'מעקב אוכל',
     sportTracking: 'מעקב ספורט',
     notifications: 'התראות',
+    rankSystem: 'מערכת דירוג',
+    hypoInvestigation: 'חקירת היפו',
   },
   home: {
     yesterdaySummary: 'סיכום אתמול',
