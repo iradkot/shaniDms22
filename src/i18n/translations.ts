@@ -128,7 +128,8 @@ const en = {
     todayRecoDetails: 'Now {{now}} | Next {{next}} | IOB {{iob}}u | COB {{cob}}g',
     recommendationRefresh: 'Refresh recommendation',
     recommendationRefreshing: 'Refreshing…',
-    recommendationUpdatedAt: 'Updated at {{time}}'
+    recommendationUpdatedAt: 'Updated at {{time}}',
+    recommendationStartChat: 'Start chat about this'
   },
   trends: {
     noBgData: 'No BG data available for this period.',
@@ -643,7 +644,8 @@ const he: typeof en = {
     todayRecoDetails: 'עכשיו {{now}} | תחזית {{next}} | IOB {{iob}}u | COB {{cob}}g',
     recommendationRefresh: 'רענן המלצה',
     recommendationRefreshing: 'מרענן…',
-    recommendationUpdatedAt: 'עודכן ב־{{time}}'
+    recommendationUpdatedAt: 'עודכן ב־{{time}}',
+    recommendationStartChat: 'התחל שיחה על זה'
   },
   trends: {
     noBgData: 'אין נתוני סוכר לתקופה הזו.',

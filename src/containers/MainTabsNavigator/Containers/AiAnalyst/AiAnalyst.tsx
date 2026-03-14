@@ -1,5 +1,6 @@
-import React from 'react';
+import React, {useEffect, useRef} from 'react';
 import {Text} from 'react-native';
+import {useNavigation, useRoute} from '@react-navigation/native';
 import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
@@ -21,6 +22,19 @@ const AiAnalyst: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
   const engine = useAiAnalystEngine();
+  const route = useRoute<any>();
+  const navigation = useNavigation<any>();
+  const consumedContextRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const contextPrompt = route?.params?.homeRecommendationContext;
+    if (!contextPrompt || !engine.hasKey || engine.isBusy) return;
+    if (consumedContextRef.current === contextPrompt) return;
+
+    consumedContextRef.current = contextPrompt;
+    engine.startOpenChatWithContext(String(contextPrompt));
+    navigation.setParams?.({homeRecommendationContext: undefined});
+  }, [engine, navigation, route?.params?.homeRecommendationContext]);
 
   if (!engine.isEnabled) {
     return (

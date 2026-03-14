@@ -77,6 +77,7 @@ export interface AiAnalystEngine {
   clearHistory: () => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   startOpenChat: () => Promise<void>;
+  startOpenChatWithContext: (contextPrompt: string) => Promise<void>;
   startHypoDetective: () => Promise<void>;
   startUserBehavior: () => Promise<void>;
   startLoopSettingsAdvisor: () => Promise<void>;

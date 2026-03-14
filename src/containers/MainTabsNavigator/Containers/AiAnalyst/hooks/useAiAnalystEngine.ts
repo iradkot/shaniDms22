@@ -274,7 +274,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   // Mission starters
   // ====================================================================
 
-  const startOpenChat = useCallback(async () => {
+  const startOpenChatInternal = useCallback(async (contextPrompt?: string) => {
     if (!provider) return;
     const {runId, signal, conversationId: nextId} = initMission('Preparing context…', null);
 
@@ -292,11 +292,15 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
       setProgressText('Starting chat…');
 
+      const contextualSection = contextPrompt?.trim()
+        ? `\n\nContext from Home recommendation:\n${contextPrompt.trim()}\n\nStart by addressing this specific context before asking follow-up questions.`
+        : '';
+
       const userPrompt =
         `Mission: Open Chat\n\n` +
         `Start with a short, friendly greeting and one concise question asking what the user wants to focus on now.\n` +
         `You can answer broad and random diabetes questions, but ground recommendations in available data.\n\n` +
-        `Disclosure: ${DISCLOSURE_TEXT}\n\n` +
+        `Disclosure: ${DISCLOSURE_TEXT}${contextualSection}\n\n` +
         `Recent CGM snapshot (14d):\n${JSON.stringify(cgmResult.ok ? cgmResult.result : 'Data unavailable')}\n\n` +
         `Recent insulin summary (14d):\n${JSON.stringify(insulinResult.ok ? insulinResult.result : 'Data unavailable')}\n\n` +
         `Current profile settings:\n${JSON.stringify(profileResult.ok ? profileResult.result : 'Data unavailable')}`;
@@ -353,6 +357,14 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     finaliseMission,
     scrollToEnd,
   ]);
+
+  const startOpenChat = useCallback(async () => {
+    await startOpenChatInternal();
+  }, [startOpenChatInternal]);
+
+  const startOpenChatWithContext = useCallback(async (contextPrompt: string) => {
+    await startOpenChatInternal(contextPrompt);
+  }, [startOpenChatInternal]);
 
   const startHypoDetective = useCallback(async () => {
     if (!provider) return;
@@ -915,6 +927,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     clearHistory: clearAllHistory,
     deleteConversation,
     startOpenChat,
+    startOpenChatWithContext,
     startHypoDetective,
     startUserBehavior,
     startLoopSettingsAdvisor,

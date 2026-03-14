@@ -35,7 +35,7 @@ import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home
 import {useMealTags} from 'app/hooks/useMealTags';
 import TagMealSheet from 'app/components/MealTagging/TagMealSheet';
 import {format, subDays} from 'date-fns';
-import {DAILY_REVIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {AI_ANALYST_TAB_SCREEN, DAILY_REVIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
@@ -503,6 +503,42 @@ const Home: React.FC = () => {
     setAiRecommendationBody(null);
   }, [todayRecommendation?.title, todayRecommendation?.body, todayRecommendation?.details]);
 
+  const recommendationContextPrompt = useMemo(() => {
+    if (!todayRecommendation) return '';
+    const payload = {
+      generatedAt: new Date(recommendationGeneratedAt).toISOString(),
+      title: todayRecommendation.title,
+      recommendation: aiRecommendationBody || todayRecommendation.body,
+      details: todayRecommendation.details || null,
+      currentBg: liveBgSample?.sgv ?? null,
+      trend: liveBgSample?.direction ?? null,
+      iobU: typeof liveBgSample?.iob === 'number' ? Number(liveBgSample.iob.toFixed(2)) : null,
+      cobG: typeof liveBgSample?.cob === 'number' ? Math.round(liveBgSample.cob) : null,
+      predictionsNext: (liveSnapshot?.predictions ?? []).map(p => p.sgv),
+      lastMeal: lastMealSegment
+        ? {
+            startedAt: new Date(lastMealSegment.startMs).toISOString(),
+            carbsG: Math.round(lastMealSegment.totalCarbs || 0),
+            bolusU: Number((lastMealSegment.totalBolus || 0).toFixed(2)),
+            minutesSinceMeal: Math.round((Date.now() - lastMealSegment.startMs) / 60000),
+          }
+        : null,
+    };
+
+    return `${language === 'he' ? 'קונטקסט מהמלצה במסך הבית' : 'Context from Home recommendation'}:\n${JSON.stringify(payload)}`;
+  }, [
+    aiRecommendationBody,
+    language,
+    lastMealSegment,
+    liveBgSample?.cob,
+    liveBgSample?.direction,
+    liveBgSample?.iob,
+    liveBgSample?.sgv,
+    liveSnapshot?.predictions,
+    recommendationGeneratedAt,
+    todayRecommendation,
+  ]);
+
   const recommendationTimeLabel = useMemo(() => {
     return new Date(recommendationGeneratedAt).toLocaleTimeString(
       language === 'he' ? 'he-IL' : 'en-US',
@@ -724,6 +760,17 @@ const Home: React.FC = () => {
                     </Text>
                   </Pressable>
                 </View>
+                <Pressable
+                  style={{marginTop: 10}}
+                  onPress={() =>
+                    (navigation as any).navigate(AI_ANALYST_TAB_SCREEN, {
+                      homeRecommendationContext: recommendationContextPrompt,
+                    })
+                  }>
+                  <Text style={{fontSize: 13, fontWeight: '700', color: theme.accentColor}}>
+                    {tr(language, 'home.recommendationStartChat')}
+                  </Text>
+                </Pressable>
               </TodayRecommendationBody>
             ) : null}
           </TodayRecommendationCard>
