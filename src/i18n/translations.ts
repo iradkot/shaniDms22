@@ -106,8 +106,8 @@ const en = {
     tooltipBolus: 'Bolus',
     tooltipCarbs: 'Carbs',
     tooltipCloseEvents: 'Close events: {{text}}',
-    yesterdaySummaryReadyTitle: 'Yesterday summary is ready',
-    yesterdaySummaryReadyBody: 'Open it once to review yesterday insights.',
+    yesterdaySummaryReadyTitle: 'Come get your daily summary',
+    yesterdaySummaryReadyBody: 'Open the app and load yesterday analysis.',
     viewYesterdaySummary: 'Open yesterday summary',
     openDailySummary: 'Open daily summary',
     todayRecommendationTitle: 'Recommendation for right now',
@@ -513,8 +513,8 @@ const en = {
     whyLows: '🧠 Why: {{count}} low events yesterday',
     whyTirAvg: '🧠 Why: TIR {{tir}}% and avg {{avg}}',
     channelName: 'Daily briefs',
-    notifReadyTitle: 'Daily brief is ready',
-    notifReadyBody: 'Open Daily Review to see your updated summary.',
+    notifReadyTitle: 'Come get your daily summary',
+    notifReadyBody: 'Open the app to generate and view yesterday analysis.',
     llmSystem: 'Write one short daily diabetes action line. Practical, specific, max 14 words. Start with "🎯 Today:".'
   }
 };
@@ -625,8 +625,8 @@ const he: typeof en = {
     tooltipBolus: 'בולוס',
     tooltipCarbs: 'פחמימות',
     tooltipCloseEvents: 'אירועים קרובים: {{text}}',
-    yesterdaySummaryReadyTitle: 'סיכום אתמול מוכן',
-    yesterdaySummaryReadyBody: 'פתחו אותו פעם אחת כדי לעבור על התובנות של אתמול.',
+    yesterdaySummaryReadyTitle: 'בוא לקבל סיכום יומי',
+    yesterdaySummaryReadyBody: 'פתח את האפליקציה ונטען את ניתוח אתמול.',
     viewYesterdaySummary: 'פתח סיכום אתמול',
     openDailySummary: 'פתח סיכום יומי',
     todayRecommendationTitle: 'המלצה לרגע זה',
@@ -1032,8 +1032,8 @@ const he: typeof en = {
     whyLows: '🧠 למה: היו {{count}} ירידות אתמול',
     whyTirAvg: '🧠 למה: TIR {{tir}}% וממוצע {{avg}}',
     channelName: 'תדריכים יומיים',
-    notifReadyTitle: 'התדריך היומי מוכן',
-    notifReadyBody: 'פתחו את סיכום אתמול כדי לראות עדכון.',
+    notifReadyTitle: 'בוא לקבל סיכום יומי',
+    notifReadyBody: 'פתח את האפליקציה כדי לטעון ולהציג את ניתוח אתמול.',
     llmSystem: 'כתוב שורת פעולה יומית קצרה לסוכרת. פרקטי וספציפי, עד 14 מילים. להתחיל ב-"🎯 היום:".'
   }
 };

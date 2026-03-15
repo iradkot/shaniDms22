@@ -54,6 +54,8 @@ const DailyReviewScreen: React.FC = () => {
   const [refreshingAction, setRefreshingAction] = useState(false);
   const [yRows, setYRows] = useState<Row[]>([]);
   const [wRows, setWRows] = useState<Row[]>([]);
+  const [llmSummaryLine, setLlmSummaryLine] = useState<string | null>(null);
+  const [llmKeyLine, setLlmKeyLine] = useState<string | null>(null);
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
   const [whyLine, setWhyLine] = useState<string | null>(null);
   const [actionSource, setActionSource] = useState<'ai' | 'fallback'>('fallback');
@@ -82,10 +84,9 @@ const DailyReviewScreen: React.FC = () => {
   };
 
   const loadData = async () => {
-    const [y, w, latestBrief] = await Promise.all([
+    const [y, w] = await Promise.all([
       fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
-      getLatestDailyBrief(),
     ]);
     setYRows((y as any) ?? []);
     setWRows((w as any) ?? []);
@@ -98,12 +99,33 @@ const DailyReviewScreen: React.FC = () => {
       // ignore
     }
 
+    let latestBrief = await getLatestDailyBrief();
+    const expectedDate = format(yStart, 'yyyy-MM-dd');
+    const briefDate = latestBrief?.createdAt ? format(new Date(latestBrief.createdAt), 'yyyy-MM-dd') : null;
+
+    if (!latestBrief?.body || briefDate !== expectedDate) {
+      try {
+        await regenerateDailyBrief({
+          glucose: glucoseSettings,
+          ai: {enabled: aiSettings.enabled, apiKey: aiSettings.apiKey, model: aiSettings.openAiModel},
+          notify: false,
+        });
+        latestBrief = await getLatestDailyBrief();
+      } catch {
+        // Keep local computed fallback UI if generation fails.
+      }
+    }
+
     if (latestBrief?.body) {
       const lines = latestBrief.body.split('\n').map((s: string) => s.trim()).filter(Boolean);
+      setLlmSummaryLine(lines.find((l: string) => l.startsWith('📊')) || null);
+      setLlmKeyLine(lines.find((l: string) => l.startsWith('🔎')) || null);
       setLlmActionLine(lines.find((l: string) => l.startsWith('🎯')) || lines[2] || null);
       setWhyLine(lines.find((l: string) => l.startsWith('🧠')) || null);
       setActionSource(latestBrief.source === 'ai' ? 'ai' : 'fallback');
     } else {
+      setLlmSummaryLine(null);
+      setLlmKeyLine(null);
       setLlmActionLine(null);
       setWhyLine(null);
       setActionSource('fallback');
@@ -179,16 +201,16 @@ const DailyReviewScreen: React.FC = () => {
 
       <View style={card}>
         <Text style={{color: theme.textColor, textAlign}}>
-          {yRows.length ? tr(language, 'dailyReview.summaryLine', {tir: yTirPct, avg: yAvg}) : tr(language, 'dailyReview.noData')}
+          {llmSummaryLine || (yRows.length ? tr(language, 'dailyReview.summaryLine', {tir: yTirPct, avg: yAvg}) : tr(language, 'dailyReview.noData'))}
         </Text>
       </View>
 
       <View style={card}>
         <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{tr(language, 'dailyReview.key')}</Text>
         <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>
-          {yLows > yHighs
+          {llmKeyLine || (yLows > yHighs
             ? tr(language, 'dailyReview.lowsVsHighs', {lows: yLows, highs: yHighs})
-            : tr(language, 'dailyReview.highsVsLows', {lows: yLows, highs: yHighs})}
+            : tr(language, 'dailyReview.highsVsLows', {lows: yLows, highs: yHighs}))}
         </Text>
       </View>
 
