@@ -6,11 +6,11 @@ import DropShadow from 'react-native-drop-shadow';
 import styled, {useTheme} from 'styled-components/native';
 
 import {BgSample} from 'app/types/day_bgs.types';
-import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {Theme} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {calculateTimeInRangePercentages} from 'app/utils/glucose/timeInRange';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {t as tr} from 'app/i18n/translations';
 
 const Container = styled.View`
@@ -92,21 +92,25 @@ type TirBuckets = {
 };
 
 /**
- * Computes time-in-range buckets as percentages (0..100).
+ * Computes time-in-range buckets as percentages (0..100), aligned with
+ * user glucose settings.
  *
  * Buckets:
- * - severeLow: <= EXTREME_LOW
- * - low: (EXTREME_LOW, TARGET.min)
- * - target: [TARGET.min, TARGET.max]
- * - high: (TARGET.max, VERY_HIGH]
- * - severeHigh: > VERY_HIGH
+ * - severeLow: <= severeHypo
+ * - low: (severeHypo, hypo)
+ * - target: [hypo, hyper]
+ * - high: (hyper, severeHyper]
+ * - severeHigh: > severeHyper
  */
-export function calculateTirBuckets(bgData: BgSample[]): TirBuckets {
+export function calculateTirBuckets(
+  bgData: BgSample[],
+  thresholds: {severeHypo: number; hypo: number; hyper: number; severeHyper: number},
+): TirBuckets {
   const {percentages} = calculateTimeInRangePercentages(bgData ?? [], {
-    veryLowMax: cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number,
-    targetMin: cgmRange.TARGET.min,
-    targetMax: cgmRange.TARGET.max,
-    highMax: cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number,
+    veryLowMax: thresholds.severeHypo,
+    targetMin: thresholds.hypo,
+    targetMax: thresholds.hyper,
+    highMax: thresholds.severeHyper,
   });
 
   return {
@@ -133,6 +137,7 @@ type AnimationValues = {
 export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
   const theme = useTheme() as Theme;
   const {language} = useAppLanguage();
+  const {settings: glucoseSettings} = useGlucoseSettings();
 
   const animatedSevereLow = useRef(new Animated.Value(0)).current;
   const animatedLow = useRef(new Animated.Value(0)).current;
@@ -151,7 +156,22 @@ export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
   const {severeLowWidth, lowWidth, targetWidth, highWidth, severeHighWidth} =
     animationValues;
 
-  const buckets = useMemo(() => calculateTirBuckets(bgData), [bgData]);
+  const buckets = useMemo(
+    () =>
+      calculateTirBuckets(bgData, {
+        severeHypo: glucoseSettings.severeHypo,
+        hypo: glucoseSettings.hypo,
+        hyper: glucoseSettings.hyper,
+        severeHyper: glucoseSettings.severeHyper,
+      }),
+    [
+      bgData,
+      glucoseSettings.severeHypo,
+      glucoseSettings.hypo,
+      glucoseSettings.hyper,
+      glucoseSettings.severeHyper,
+    ],
+  );
 
   const legendLow = Math.round(buckets.severeLow + buckets.low);
   const legendTarget = Math.round(buckets.target);

@@ -4,6 +4,13 @@ import {calculateTrendsMetrics} from 'app/containers/MainTabsNavigator/Container
 import {BgSample} from 'app/types/day_bgs.types';
 
 describe('calculateTirBuckets', () => {
+  const thresholds = {
+    severeHypo: 55,
+    hypo: 70,
+    hyper: 140,
+    severeHyper: 200,
+  };
+
   it('splits samples into severe/normal low/target/high/severe high buckets', () => {
     const mk = (sgv: number, date: number): BgSample =>
       ({sgv, date} as unknown as BgSample);
@@ -21,7 +28,7 @@ describe('calculateTirBuckets', () => {
       mk(250, 10),
     ];
 
-    const res = calculateTirBuckets(bgData);
+    const res = calculateTirBuckets(bgData, thresholds);
 
     expect(Math.round(res.severeLow)).toBe(20);
     expect(Math.round(res.low)).toBe(30);
@@ -31,7 +38,7 @@ describe('calculateTirBuckets', () => {
   });
 
   it('handles empty and invalid samples safely', () => {
-    expect(calculateTirBuckets([])).toEqual({
+    expect(calculateTirBuckets([], thresholds)).toEqual({
       severeLow: 0,
       low: 0,
       target: 0,
@@ -44,7 +51,7 @@ describe('calculateTirBuckets', () => {
       {sgv: 100, date: 2},
     ] as unknown as BgSample[];
 
-    const res = calculateTirBuckets(bgData);
+    const res = calculateTirBuckets(bgData, thresholds);
     expect(Math.round(res.target)).toBe(100);
   });
 
