@@ -61,10 +61,10 @@ function computeNightTirPct(bgData: BgSample[]): number | null {
   if (!night.length) return null;
 
   return calculateTargetTimeInRangePct(night, {
-    veryLowMax: cgmRange[CGM_STATUS_CODES.VERY_LOW] as number,
+    veryLowMax: cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number,
     targetMin: cgmRange.TARGET.min,
-    targetMax: cgmRange.TARGET.max,
-    highMax: cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number,
+    targetMax: cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number,
+    highMax: cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] as number,
   });
 }
 

@@ -5,10 +5,10 @@ import {calculateTimeInRangePercentages} from 'app/utils/glucose/timeInRange';
 
 export const calculateTimeInRange = (bgSamples: BgSample[]): AGPTimeInRange => {
   const {percentages} = calculateTimeInRangePercentages(bgSamples ?? [], {
-    veryLowMax: cgmRange[CGM_STATUS_CODES.VERY_LOW] as number,
+    veryLowMax: cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number,
     targetMin: cgmRange.TARGET.min,
-    targetMax: cgmRange.TARGET.max,
-    highMax: cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number,
+    targetMax: cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number,
+    highMax: cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] as number,
   });
 
   return {

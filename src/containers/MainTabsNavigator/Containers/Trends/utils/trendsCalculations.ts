@@ -30,9 +30,9 @@ export function calculateTrendsMetrics(bgData: BgSample[]) {
 
   // Read thresholds dynamically (they can be user-configured in Settings).
   const LOW_THRESHOLD = cgmRange.TARGET.min;
-  const HIGH_THRESHOLD = cgmRange.TARGET.max;
-  const VERY_LOW_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_LOW] as number;
-  const VERY_HIGH_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
+  const HIGH_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
+  const VERY_LOW_THRESHOLD = cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number;
+  const VERY_HIGH_THRESHOLD = cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] as number;
   const SERIOUS_HYPO_THRESHOLD = cgmRange[CGM_STATUS_CODES.SERIOUS_LOW] as number;
   const SERIOUS_HYPER_THRESHOLD =
     cgmRange[CGM_STATUS_CODES.SERIOUS_HIGH] as number;
