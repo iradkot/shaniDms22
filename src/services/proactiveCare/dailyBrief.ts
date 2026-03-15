@@ -234,6 +234,9 @@ type LlmDailySections = {
   source: 'ai' | 'fallback';
 };
 
+const LLM_DAILY_TIMEOUT_MS = 20_000;
+const LLM_DAILY_MAX_ATTEMPTS = 2;
+
 function parseJsonObject(text: string): any | null {
   const trimmed = text.trim();
   try {
@@ -249,6 +252,25 @@ function parseJsonObject(text: string): any | null {
       }
     }
     return null;
+  }
+}
+
+function ensurePrefix(line: string, prefix: string): string {
+  const text = line.trim();
+  if (!text) return text;
+  return text.startsWith(prefix) ? text : `${prefix} ${text}`;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
   }
 }
 
@@ -271,64 +293,72 @@ async function maybeGenerateLlmSections(params: {
 
   if (!ai?.enabled || !apiKey) return fallback;
 
-  try {
-    const provider = new OpenAIProvider({apiKey});
-    const model = (ai?.model ?? 'gpt-5.4').trim() || 'gpt-5.4';
+  const provider = new OpenAIProvider({apiKey});
+  const model = (ai?.model ?? 'gpt-5.4').trim() || 'gpt-5.4';
 
-    const instruction =
-      lang === 'he'
-        ? 'החזר JSON בלבד עם השדות summaryLine,keyLine,actionLine,whyLine. כל שורה קצרה, פרקטית, ועם מספרים. summaryLine חייב להתחיל ב-📊, keyLine ב-🔎, actionLine ב-🎯, whyLine ב-🧠.'
-        : 'Return JSON only with keys: summaryLine,keyLine,actionLine,whyLine. Keep each line short, practical, and numeric. summaryLine must start with 📊, keyLine with 🔎, actionLine with 🎯, whyLine with 🧠.';
+  const instruction =
+    lang === 'he'
+      ? 'החזר JSON בלבד עם השדות summaryLine,keyLine,actionLine,whyLine. כל שורה קצרה, פרקטית, ועם מספרים. summaryLine חייב להתחיל ב-📊, keyLine ב-🔎, actionLine ב-🎯, whyLine ב-🧠.'
+      : 'Return JSON only with keys: summaryLine,keyLine,actionLine,whyLine. Keep each line short, practical, and numeric. summaryLine must start with 📊, keyLine with 🔎, actionLine with 🎯, whyLine with 🧠.';
 
-    const res = await provider.sendChat({
-      model,
-      messages: [
-        {role: 'system', content: instruction},
-        {
-          role: 'user',
-          content: `Context:\n${JSON.stringify({
-            yesterday: base.stats.yesterday,
-            week: base.stats.week,
-            deltas: {
-              tirDeltaVsWeek: base.stats.tirDeltaVsWeek,
-              avgDeltaVsWeek: base.stats.avgDeltaVsWeek,
+  for (let attempt = 1; attempt <= LLM_DAILY_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const res = await withTimeout(
+        provider.sendChat({
+          model,
+          messages: [
+            {role: 'system', content: instruction},
+            {
+              role: 'user',
+              content: `Context:\n${JSON.stringify({
+                yesterday: base.stats.yesterday,
+                week: base.stats.week,
+                deltas: {
+                  tirDeltaVsWeek: base.stats.tirDeltaVsWeek,
+                  avgDeltaVsWeek: base.stats.avgDeltaVsWeek,
+                },
+                nightLows: base.stats.nightLows,
+                fallback: {
+                  summaryLine: base.summaryLine,
+                  keyLine: base.keyLine,
+                  actionLine: base.actionLine,
+                  whyLine: base.whyLine,
+                },
+                userProfile: profile,
+                language: lang,
+              })}`,
             },
-            nightLows: base.stats.nightLows,
-            fallback: {
-              summaryLine: base.summaryLine,
-              keyLine: base.keyLine,
-              actionLine: base.actionLine,
-              whyLine: base.whyLine,
-            },
-            userProfile: profile,
-            language: lang,
-          })}`,
-        },
-      ],
-      temperature: 0.4,
-      maxOutputTokens: 260,
-    });
+          ],
+          temperature: attempt === 1 ? 0.4 : 0.2,
+          maxOutputTokens: 260,
+        }),
+        LLM_DAILY_TIMEOUT_MS,
+        'Daily brief LLM call',
+      );
 
-    const payload = parseJsonObject((res.content ?? '').trim());
-    if (!payload) return fallback;
+      const payload = parseJsonObject((res.content ?? '').trim());
+      if (!payload) continue;
 
-    const summaryLine = String(payload.summaryLine ?? '').trim();
-    const keyLine = String(payload.keyLine ?? '').trim();
-    const actionLine = String(payload.actionLine ?? '').trim();
-    const whyLine = String(payload.whyLine ?? '').trim();
+      const summaryLine = ensurePrefix(String(payload.summaryLine ?? '').trim(), '📊');
+      const keyLine = ensurePrefix(String(payload.keyLine ?? '').trim(), '🔎');
+      const actionLine = ensurePrefix(String(payload.actionLine ?? '').trim(), '🎯');
+      const whyLine = ensurePrefix(String(payload.whyLine ?? '').trim(), '🧠');
 
-    if (!summaryLine || !keyLine || !actionLine || !whyLine) return fallback;
+      if (!summaryLine || !keyLine || !actionLine || !whyLine) continue;
 
-    return {
-      summaryLine,
-      keyLine,
-      actionLine,
-      whyLine,
-      source: 'ai',
-    };
-  } catch {
-    return fallback;
+      return {
+        summaryLine,
+        keyLine,
+        actionLine,
+        whyLine,
+        source: 'ai',
+      };
+    } catch {
+      // Retry once on timeout/transient/parse errors.
+    }
   }
+
+  return fallback;
 }
 
 async function computeYesterdayBrief(glucose: GlucoseSettings, lang: Lang, ai?: DailyBriefAiOptions) {
