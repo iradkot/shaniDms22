@@ -114,12 +114,13 @@ const AGPSummary: React.FC<AGPSummaryProps> = ({
       label: 'Avg Glucose',
       value: formatGlucose(stats.averageGlucose),
       status:
-        stats.averageGlucose >= cgmRange.TARGET.min && stats.averageGlucose <= cgmRange.TARGET.max
+        stats.averageGlucose >= cgmRange.TARGET.min &&
+        stats.averageGlucose <= (cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number)
           ? 'good'
-          : stats.averageGlucose <= (cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number)
+          : stats.averageGlucose <= (cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] as number)
             ? 'fair'
             : 'poor',
-      target: `Target: ${cgmRange.TARGET.min}-${cgmRange.TARGET.max}`,
+      target: `Target: ${cgmRange.TARGET.min}-${cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number}`,
     },
     gmi: {
       label: 'GMI',
