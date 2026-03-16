@@ -55,6 +55,24 @@ function normalizeRecommendationText(input: string): string {
     .trim();
 }
 
+function summarizeBgWindow(samples: Array<{date: number; sgv: number}>, windowMinutes: number) {
+  const now = Date.now();
+  const fromMs = now - windowMinutes * 60 * 1000;
+  const rows = (samples ?? []).filter(s => s?.date >= fromMs && Number.isFinite(s?.sgv));
+  if (!rows.length) {
+    return {count: 0, avg: null as number | null, min: null as number | null, max: null as number | null, delta: null as number | null};
+  }
+
+  const sorted = [...rows].sort((a, b) => a.date - b.date);
+  const values = sorted.map(r => r.sgv);
+  const avg = Math.round(values.reduce((sum, v) => sum + v, 0) / values.length);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const delta = sorted[sorted.length - 1].sgv - sorted[0].sgv;
+
+  return {count: sorted.length, avg, min, max, delta};
+}
+
 const HomeContainer = styled.View`
   flex: 1;
   background-color: ${(props: {theme: ThemeType}) => props.theme.backgroundColor};
@@ -402,6 +420,12 @@ const Home: React.FC = () => {
   const [recommendationGeneratedAt, setRecommendationGeneratedAt] = useState<number>(Date.now());
   const [hasLoadedSavedRecommendation, setHasLoadedSavedRecommendation] = useState(false);
 
+  const recentBgContext = useMemo(() => {
+    const short = summarizeBgWindow(listBgData, 90);
+    const medium = summarizeBgWindow(listBgData, 240);
+    return {last90m: short, last4h: medium};
+  }, [listBgData]);
+
   const todayYmd = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
 
   const todayRecommendation = useMemo(() => {
@@ -555,6 +579,8 @@ const Home: React.FC = () => {
       iobU: typeof liveBgSample?.iob === 'number' ? Number(liveBgSample.iob.toFixed(2)) : null,
       cobG: typeof liveBgSample?.cob === 'number' ? Math.round(liveBgSample.cob) : null,
       predictionsNext: (liveSnapshot?.predictions ?? []).map(p => p.sgv),
+      recentBg: recentBgContext,
+      recommendationKind: 'general',
       lastMeal: lastMealSegment
         ? {
             startedAt: new Date(lastMealSegment.startMs).toISOString(),
@@ -575,6 +601,7 @@ const Home: React.FC = () => {
     liveBgSample?.iob,
     liveBgSample?.sgv,
     liveSnapshot?.predictions,
+    recentBgContext,
     recommendationGeneratedAt,
     todayRecommendation,
   ]);
@@ -622,8 +649,8 @@ const Home: React.FC = () => {
             role: 'system',
             content:
               language === 'he'
-                ? 'אתה מאמן סוכרת פרקטי וזהיר. תן המלצה קצרה ומדויקת למצב הנוכחי (2-4 משפטים). ציין אם נראה שתזמון בולוס לא מדויק. אל תמליץ מינוני אינסולין מדויקים. אם הלופ נראה שולט בעלייה קלה, אמור במפורש שאין צורך כרגע בבולוס נוסף וצריך מעקב קרוב. כתוב טקסט רגיל בלבד, בלי Markdown.'
-                : 'You are a practical, cautious diabetes coach. Give a short, specific recommendation for right now (2-4 sentences). Mention if bolus timing looks off. Do not give exact insulin dosing instructions. If Loop appears to control a mild rise, explicitly say no extra bolus for now and suggest close monitoring. Return plain text only, no Markdown.',
+                ? 'אתה מאמן סוכרת פרקטי וזהיר. תן המלצה כללית לרגע זה (2-4 משפטים): משפט 1 מה המצב עכשיו, משפט 2 מה השתנה לאחרונה (90 דקות/4 שעות), משפט 3 מה לעשות בשעה הקרובה. אל תתמקד בבולוס אלא אם הנתונים מצביעים שזה קריטי. אל תתן מינוני אינסולין מדויקים. אם המצב יציב, אמור להמשיך כרגיל עם מעקב. כתוב טקסט רגיל בלבד, בלי Markdown.'
+                : 'You are a practical, cautious diabetes coach. Give a general recommendation for right now (2-4 sentences): sentence 1 current state, sentence 2 what changed recently (last 90m/4h), sentence 3 what to do in the next hour. Do not focus on bolus unless data suggests it is truly important. Do not provide exact insulin dosing. If stable, explicitly say continue as-is with monitoring. Return plain text only, no Markdown.',
           },
           {
             role: 'user',
@@ -634,6 +661,8 @@ const Home: React.FC = () => {
               iobU: typeof liveBgSample?.iob === 'number' ? Number(liveBgSample.iob.toFixed(2)) : null,
               cobG: typeof liveBgSample?.cob === 'number' ? Math.round(liveBgSample.cob) : null,
               predictionsNext: (liveSnapshot?.predictions ?? []).map(p => p.sgv),
+              recentBg: recentBgContext,
+              recommendationKind: 'general',
               meal: lastMealSegment
                 ? {
                     startedAt: new Date(lastMealSegment.startMs).toISOString(),
@@ -679,6 +708,7 @@ const Home: React.FC = () => {
     liveBgSample?.iob,
     liveBgSample?.sgv,
     liveSnapshot?.predictions,
+    recentBgContext,
     todayRecommendation,
     todayYmd,
   ]);
