@@ -73,6 +73,30 @@ function summarizeBgWindow(samples: Array<{date: number; sgv: number}>, windowMi
   return {count: sorted.length, avg, min, max, delta};
 }
 
+function summarizeMealResponse(
+  meal: MealSegment,
+  bgSamples: Array<{date: number; sgv: number}>,
+) {
+  const start = meal.startMs;
+  const end = start + 4 * 60 * 60 * 1000;
+
+  const pre = [...bgSamples]
+    .filter(s => s.date <= start && s.date >= start - 45 * 60 * 1000)
+    .sort((a, b) => b.date - a.date)[0];
+  const postRows = bgSamples.filter(s => s.date >= start && s.date <= end);
+
+  if (!pre || !postRows.length) {
+    return {preMeal: pre?.sgv ?? null, peak: null as number | null, peakDelta: null as number | null};
+  }
+
+  const peak = Math.max(...postRows.map(s => s.sgv));
+  return {
+    preMeal: pre.sgv,
+    peak,
+    peakDelta: peak - pre.sgv,
+  };
+}
+
 const HomeContainer = styled.View`
   flex: 1;
   background-color: ${(props: {theme: ThemeType}) => props.theme.backgroundColor};
@@ -606,6 +630,49 @@ const Home: React.FC = () => {
     todayRecommendation,
   ]);
 
+  const mealRecommendationContextPrompt = useMemo(() => {
+    const recentMeals = taggedSegments
+      .slice(-6)
+      .map(m => ({
+        startedAt: new Date(m.startMs).toISOString(),
+        label: m.label,
+        carbsG: Math.round(m.totalCarbs || 0),
+        bolusU: Number((m.totalBolus || 0).toFixed(2)),
+        tags: m.tags,
+        response: summarizeMealResponse(m, listBgData),
+      }));
+
+    const instruction =
+      language === 'he'
+        ? 'בבקשה קודם בקש מהמשתמש תמונה או תיאור מדויק של הארוחה הקרובה. אל תיתן המלצה עד שיש תמונה/תיאור. אחרי שהמשתמש שולח, החזר המלצה לארוחה הקרובה עם: הערכת פחמימות, זמן השפעה משוער (1-5 שעות), השוואה לארוחות דומות אחרונות, ומה לעשות מול הלופ (מתי להמתין לתיקון אוטומטי ומתי לשקול פעולה). בלי מינוני אינסולין מדויקים.'
+        : 'First ask the user for a meal photo or a clear meal description. Do not give meal guidance until they provide one. After they provide it, return a near-meal recommendation including: carb estimate, expected impact window (1-5h), comparison to similar recent meals, and what to let Loop handle vs when to consider action. No exact insulin dosing.';
+
+    const payload = {
+      currentState: {
+        bg: liveBgSample?.sgv ?? null,
+        trend: liveBgSample?.direction ?? null,
+        iobU: typeof liveBgSample?.iob === 'number' ? Number(liveBgSample.iob.toFixed(2)) : null,
+        cobG: typeof liveBgSample?.cob === 'number' ? Math.round(liveBgSample.cob) : null,
+        predictionsNext: (liveSnapshot?.predictions ?? []).map(p => p.sgv),
+      },
+      recentBg: recentBgContext,
+      recentMeals,
+      mealRecommendationMode: true,
+    };
+
+    return `${instruction}\n\n${language === 'he' ? 'קונטקסט' : 'Context'}:\n${JSON.stringify(payload)}`;
+  }, [
+    language,
+    listBgData,
+    liveBgSample?.cob,
+    liveBgSample?.direction,
+    liveBgSample?.iob,
+    liveBgSample?.sgv,
+    liveSnapshot?.predictions,
+    recentBgContext,
+    taggedSegments,
+  ]);
+
   const recommendationTimeLabel = useMemo(() => {
     return new Date(recommendationGeneratedAt).toLocaleTimeString(
       language === 'he' ? 'he-IL' : 'en-US',
@@ -848,6 +915,18 @@ const Home: React.FC = () => {
                       }>
                       <Text style={{fontSize: 13, fontWeight: '700', color: theme.accentColor}}>
                         {tr(language, 'home.recommendationStartChat')}
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={{marginTop: 8}}
+                      onPress={() =>
+                        (navigation as any).navigate(AI_ANALYST_TAB_SCREEN, {
+                          homeRecommendationContext: mealRecommendationContextPrompt,
+                        })
+                      }>
+                      <Text style={{fontSize: 13, fontWeight: '700', color: theme.accentColor}}>
+                        {language === 'he' ? 'המלצה לארוחה' : 'Meal recommendation'}
                       </Text>
                     </Pressable>
                   </>
