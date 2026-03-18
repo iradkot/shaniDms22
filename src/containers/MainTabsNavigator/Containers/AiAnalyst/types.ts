@@ -82,6 +82,8 @@ export interface AiAnalystEngine {
   startUserBehavior: () => Promise<void>;
   startLoopSettingsAdvisor: () => Promise<void>;
   sendFollowUp: () => Promise<void>;
+  onAttachMealImage: () => Promise<void>;
+  onAssistantFeedback: (params: {content: string; helpful: boolean}) => Promise<void>;
   openEvidence: (request: EvidenceRequest) => void;
   backToMissionFromEvidence: () => void;
   cancelActiveRun: () => void;

@@ -1,5 +1,6 @@
 import {useCallback, useMemo, useRef, useState} from 'react';
 import {Alert, Keyboard, ScrollView, Share} from 'react-native';
+import {launchImageLibrary} from 'react-native-image-picker';
 import {useTheme} from 'styled-components/native';
 import {useNavigation} from '@react-navigation/native';
 
@@ -27,6 +28,7 @@ import {
   loadAiAnalystHistory,
   upsertAiAnalystConversationSnapshot,
 } from 'app/services/aiAnalyst/aiAnalystHistory';
+import {addMemoryEntry} from 'app/services/aiMemory/aiMemoryStore';
 
 import {ScreenState, AnalystMode, AiAnalystEngine, EvidenceRequest, MissionKey} from '../types';
 import {
@@ -871,6 +873,63 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     [refreshHistory],
   );
 
+  const onAttachMealImage = useCallback(async () => {
+    try {
+      const res = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 1,
+        quality: 0.8,
+      });
+
+      if (res.didCancel) return;
+      const asset = (res.assets ?? [])[0];
+      const uri = asset?.uri ?? '';
+      const fileName = asset?.fileName ?? null;
+      const fileSize = asset?.fileSize ?? null;
+
+      await addMemoryEntry({
+        type: 'episode',
+        tags: ['meal', 'photo_input', 'user_provided'],
+        textSummary: language === 'he' ? 'המשתמש צירף תמונת ארוחה לניתוח.' : 'User attached a meal photo for analysis.',
+        facts: {uri, fileName, fileSize},
+        source: 'user',
+        confidence: 0.9,
+        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+      });
+
+      setInput(
+        language === 'he'
+          ? `צירפתי תמונת ארוחה${fileName ? ` (${fileName})` : ''}. תתחיל בהערכת פחמימות וטווח השפעה (1-5 שעות), תשווה לארוחות דומות אחרונות, ותסביר מה לתת ללופ לנהל לפני תיקון.`
+          : `I attached a meal photo${fileName ? ` (${fileName})` : ''}. Start with carb estimate and expected impact window (1-5h), compare to similar recent meals, and explain what to let Loop handle before any correction.`,
+      );
+    } catch {
+      // no-op
+    }
+  }, [language]);
+
+  const onAssistantFeedback = useCallback(
+    async ({content, helpful}: {content: string; helpful: boolean}) => {
+      try {
+        await addMemoryEntry({
+          type: 'chat_summary',
+          tags: ['assistant_feedback', helpful ? 'helpful' : 'not_helpful'],
+          textSummary: content,
+          facts: {
+            mission: state.mode === 'mission' ? state.mission : 'unknown',
+            helpful,
+            at: new Date().toISOString(),
+          },
+          source: 'user',
+          confidence: 0.95,
+          expiresAt: Date.now() + 120 * 24 * 60 * 60 * 1000,
+        });
+      } catch {
+        // no-op
+      }
+    },
+    [state],
+  );
+
   // ====================================================================
   // Evidence navigation
   // ====================================================================
@@ -932,6 +991,8 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     startUserBehavior,
     startLoopSettingsAdvisor,
     sendFollowUp,
+    onAttachMealImage,
+    onAssistantFeedback,
     openEvidence,
     backToMissionFromEvidence,
     cancelActiveRun,

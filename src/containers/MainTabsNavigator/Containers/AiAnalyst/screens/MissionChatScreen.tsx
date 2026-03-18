@@ -51,6 +51,8 @@ export interface MissionChatScreenProps {
   onCancel: () => void;
   onBack: () => void;
   onExport: () => void;
+  onAttachMealImage: () => void;
+  onAssistantFeedback: (params: {content: string; helpful: boolean}) => void;
   onOpenEvidence: (request: EvidenceRequest) => void;
   scrollRef: RefObject<ScrollView | null>;
   markdown: MarkdownConfig;
@@ -72,6 +74,8 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
   onCancel,
   onBack,
   onExport,
+  onAttachMealImage,
+  onAssistantFeedback,
   onOpenEvidence,
   scrollRef,
   markdown,
@@ -148,15 +152,36 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                     <Markdown markdownit={markdown.instance} rules={markdown.rules} style={markdown.style}>
                       {visibleText}
                     </Markdown>
-                    <Pressable
-                      onPress={() => copyToClipboard(visibleText)}
-                      accessibilityRole="button"
-                      accessibilityLabel={tr(language, 'ai.copy')}
-                      style={{alignSelf: 'flex-end', marginTop: 6, flexDirection: 'row', alignItems: 'center'}}
-                    >
-                      <MaterialIcons name="content-copy" size={14} color={addOpacity(theme.textColor, 0.7)} />
-                      <Text style={{marginLeft: 4, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>{tr(language, 'ai.copy')}</Text>
-                    </Pressable>
+                    <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6}}>
+                      <Pressable
+                        onPress={() => copyToClipboard(visibleText)}
+                        accessibilityRole="button"
+                        accessibilityLabel={tr(language, 'ai.copy')}
+                        style={{flexDirection: 'row', alignItems: 'center'}}
+                      >
+                        <MaterialIcons name="content-copy" size={14} color={addOpacity(theme.textColor, 0.7)} />
+                        <Text style={{marginLeft: 4, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>{tr(language, 'ai.copy')}</Text>
+                      </Pressable>
+
+                      <View style={{flexDirection: 'row'}}>
+                        <Pressable
+                          onPress={() => onAssistantFeedback({content: visibleText, helpful: true})}
+                          style={{paddingHorizontal: 8, paddingVertical: 4}}
+                        >
+                          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.7)}}>
+                            {language === 'he' ? 'עזר 👍' : 'Helpful 👍'}
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => onAssistantFeedback({content: visibleText, helpful: false})}
+                          style={{paddingHorizontal: 8, paddingVertical: 4}}
+                        >
+                          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.7)}}>
+                            {language === 'he' ? 'לא עזר 👎' : 'Not helpful 👎'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
                   </>
                 ) : (
                   <MessageText selectable>{visibleText}</MessageText>
@@ -236,13 +261,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() =>
-                  setInput(
-                    language === 'he'
-                      ? 'אני מצרף תמונה של הארוחה. תן הערכת פחמימות, זמן השפעה משוער, והשוואה לארוחות דומות אחרונות.'
-                      : 'I am attaching a meal photo. Please estimate carbs, expected impact window, and compare to similar recent meals.',
-                  )
-                }
+                onPress={onAttachMealImage}
                 style={{
                   paddingVertical: 8,
                   paddingHorizontal: 12,
@@ -253,7 +272,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                 }}
               >
                 <Text style={{color: theme.textColor, fontWeight: '600'}}>
-                  {language === 'he' ? 'ניתוח לפי תמונה' : 'Analyze by photo'}
+                  {language === 'he' ? 'צרף תמונת ארוחה' : 'Attach meal photo'}
                 </Text>
               </Pressable>
             </View>

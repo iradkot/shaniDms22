@@ -117,6 +117,8 @@ const AiAnalyst: React.FC = () => {
         onCancel={engine.cancelActiveRun}
         onBack={engine.goBackToDashboard}
         onExport={engine.exportSession}
+        onAttachMealImage={engine.onAttachMealImage}
+        onAssistantFeedback={engine.onAssistantFeedback}
         onOpenEvidence={engine.openEvidence}
         scrollRef={engine.scrollRef}
         markdown={engine.markdown}
