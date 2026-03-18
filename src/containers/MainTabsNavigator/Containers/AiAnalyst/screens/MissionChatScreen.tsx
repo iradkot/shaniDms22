@@ -1,4 +1,4 @@
-import React, {RefObject} from 'react';
+import React, {RefObject, useMemo} from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -82,6 +82,24 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
 }) => {
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
+  const isHebrew = language === 'he';
+  const textAlign: 'left' | 'right' = isHebrew ? 'right' : 'left';
+  const writingDirection: 'ltr' | 'rtl' = isHebrew ? 'rtl' : 'ltr';
+
+  const markdownStyle = useMemo(
+    () => ({
+      ...markdown.style,
+      body: {...(markdown.style as any).body, textAlign, writingDirection, lineHeight: 22},
+      paragraph: {...(markdown.style as any).paragraph, textAlign, writingDirection, marginBottom: 6},
+      text: {...(markdown.style as any).text, textAlign, writingDirection},
+      bullet_list: {...(markdown.style as any).bullet_list, marginVertical: 4},
+      ordered_list: {...(markdown.style as any).ordered_list, marginVertical: 4},
+      list_item: {...(markdown.style as any).list_item, marginVertical: 2},
+      strong: {...(markdown.style as any).strong, textAlign, writingDirection},
+      em: {...(markdown.style as any).em, textAlign, writingDirection},
+    }),
+    [markdown.style, textAlign, writingDirection],
+  );
 
   const copyToClipboard = (text: string) => {
     Clipboard.setString(text || '');
@@ -149,21 +167,21 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
               <MessageBubble key={String(idx)} role={m.role === 'user' ? 'user' : 'assistant'}>
                 {m.role === 'assistant' ? (
                   <>
-                    <Markdown markdownit={markdown.instance} rules={markdown.rules} style={markdown.style}>
+                    <Markdown markdownit={markdown.instance} rules={markdown.rules} style={markdownStyle}>
                       {visibleText}
                     </Markdown>
-                    <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6}}>
+                    <View style={{flexDirection: isHebrew ? 'row-reverse' : 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6}}>
                       <Pressable
                         onPress={() => copyToClipboard(visibleText)}
                         accessibilityRole="button"
                         accessibilityLabel={tr(language, 'ai.copy')}
-                        style={{flexDirection: 'row', alignItems: 'center'}}
+                        style={{flexDirection: isHebrew ? 'row-reverse' : 'row', alignItems: 'center'}}
                       >
                         <MaterialIcons name="content-copy" size={14} color={addOpacity(theme.textColor, 0.7)} />
-                        <Text style={{marginLeft: 4, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>{tr(language, 'ai.copy')}</Text>
+                        <Text style={{marginLeft: isHebrew ? 0 : 4, marginRight: isHebrew ? 4 : 0, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>{tr(language, 'ai.copy')}</Text>
                       </Pressable>
 
-                      <View style={{flexDirection: 'row'}}>
+                      <View style={{flexDirection: isHebrew ? 'row-reverse' : 'row'}}>
                         <Pressable
                           onPress={() => onAssistantFeedback({content: visibleText, helpful: true})}
                           style={{paddingHorizontal: 8, paddingVertical: 4}}
@@ -184,7 +202,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                     </View>
                   </>
                 ) : (
-                  <MessageText selectable>{visibleText}</MessageText>
+                  <MessageText selectable style={{textAlign, writingDirection}}>{visibleText}</MessageText>
                 )}
 
                 {evidenceLinks.length > 0 ? (
@@ -241,10 +259,10 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
         {/* Quick actions (meal flow) */}
         {mission === 'openChat' ? (
           <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.sm}}>
-            <Text style={{color: addOpacity(theme.textColor, 0.7), marginBottom: 6}}>
+            <Text style={{color: addOpacity(theme.textColor, 0.7), marginBottom: 6, textAlign, writingDirection}}>
               {language === 'he' ? 'קיצורי דרך לארוחה:' : 'Meal shortcuts:'}
             </Text>
-            <View style={{flexDirection: 'row', gap: theme.spacing.sm}}>
+            <View style={{flexDirection: isHebrew ? 'row-reverse' : 'row', gap: theme.spacing.sm, flexWrap: 'wrap'}}>
               <Pressable
                 onPress={() => setInput(language === 'he' ? 'הנה תיאור הארוחה הקרובה: ' : 'Here is my upcoming meal description: ')}
                 style={{
@@ -256,7 +274,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                   backgroundColor: addOpacity(theme.accentColor, 0.08),
                 }}
               >
-                <Text style={{color: theme.textColor, fontWeight: '600'}}>
+                <Text style={{color: theme.textColor, fontWeight: '600', textAlign, writingDirection}}>
                   {language === 'he' ? 'כתוב תיאור ארוחה' : 'Describe meal'}
                 </Text>
               </Pressable>
@@ -271,7 +289,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                   backgroundColor: addOpacity(theme.accentColor, 0.08),
                 }}
               >
-                <Text style={{color: theme.textColor, fontWeight: '600'}}>
+                <Text style={{color: theme.textColor, fontWeight: '600', textAlign, writingDirection}}>
                   {language === 'he' ? 'צרף תמונת ארוחה' : 'Attach meal photo'}
                 </Text>
               </Pressable>
@@ -289,6 +307,8 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
             placeholder={tr(language, 'ai.askAnything')}
             placeholderTextColor={addOpacity(theme.textColor, 0.5)}
             editable
+            textAlign={textAlign}
+            style={{writingDirection}}
           />
           <SendButton
             testID={E2E_TEST_IDS.aiAnalyst.sendButton}

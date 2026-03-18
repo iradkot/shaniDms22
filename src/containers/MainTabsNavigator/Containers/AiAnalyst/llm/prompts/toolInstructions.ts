@@ -35,7 +35,9 @@ export const DEFAULT_TOOL_SYSTEM_PROMPT =
   `- Respond with ONLY a single-line JSON object: {"type":"tool_call","name":"getCgmSamples","args":{...}}\n` +
   `- After you receive a message starting with "Tool result (NAME):", respond with ONLY: {"type":"final","content":"..."}.\n` +
   `- If you don't need a tool, respond with {"type":"final","content":"..."}.\n` +
-  `- Content may include Markdown.\n\n` +
+  `- Content may include Markdown.\n` +
+  `- Keep final answers short by default: 2-5 short bullets, bottom-line first, include key numbers (BG/IOB/COB) when relevant.\n` +
+  `- Avoid long paragraphs unless the user explicitly asks for deep detail.\n\n` +
   `Asking the patient structured questions:\n` +
   `When you need more information from the patient, prefer using structured multiple-choice questions instead of open-ended ones. This makes it easier for the patient to respond.\n` +
   `Respond with: {"type":"ask_patient","question":"Your question here","options":[{"key":"a","label":"Option A"},{"key":"b","label":"Option B"},{"key":"c","label":"Option C"},{"key":"d","label":"Other (please describe)"}]}\n` +
@@ -82,7 +84,9 @@ export const LOOP_SETTINGS_TOOL_SYSTEM_PROMPT =
   `- Respond with ONLY a single-line JSON object: {"type":"tool_call","name":"getGlucosePatterns","args":{...}}\n` +
   `- After you receive a message starting with "Tool result (NAME):", either call another tool or respond with {"type":"final","content":"..."}.\n` +
   `- You may call up to 20 tools per conversation.\n` +
-  `- Content may include Markdown.\n\n` +
+  `- Content may include Markdown.\n` +
+  `- Keep final answers short by default: 3-6 concise bullets with concrete numbers and clear next step.\n` +
+  `- Avoid long paragraphs unless the user explicitly asks for a deep explanation.\n\n` +
   `Asking the patient structured questions:\n` +
   `When you need lifestyle / context information from the patient (not data that tools can provide), prefer structured multiple-choice questions.\n` +
   `Respond with: {"type":"ask_patient","question":"Your question here","options":[{"key":"a","label":"Option A"},{"key":"b","label":"Option B"},{"key":"c","label":"Option C"},{"key":"d","label":"Other (please describe)"}]}\n` +
