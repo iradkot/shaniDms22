@@ -41,6 +41,7 @@ import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
 import {t as tr} from 'app/i18n/translations';
+import {addMemoryEntry, buildCompactPatientMemory, upsertProfileSnapshot} from 'app/services/aiMemory/aiMemoryStore';
 
 const HOME_RECOMMENDATION_STORAGE_KEY = 'home:todayRecommendation:v1';
 
@@ -644,8 +645,8 @@ const Home: React.FC = () => {
 
     const instruction =
       language === 'he'
-        ? 'בבקשה קודם בקש מהמשתמש תמונה או תיאור מדויק של הארוחה הקרובה. אל תיתן המלצה עד שיש תמונה/תיאור. אחרי שהמשתמש שולח, החזר המלצה לארוחה הקרובה עם: הערכת פחמימות, זמן השפעה משוער (1-5 שעות), השוואה לארוחות דומות אחרונות, ומה לעשות מול הלופ (מתי להמתין לתיקון אוטומטי ומתי לשקול פעולה). בלי מינוני אינסולין מדויקים.'
-        : 'First ask the user for a meal photo or a clear meal description. Do not give meal guidance until they provide one. After they provide it, return a near-meal recommendation including: carb estimate, expected impact window (1-5h), comparison to similar recent meals, and what to let Loop handle vs when to consider action. No exact insulin dosing.';
+        ? 'בבקשה קודם בקש מהמשתמש תמונה או תיאור מדויק של הארוחה הקרובה. אל תיתן המלצה עד שיש תמונה/תיאור. אחרי שהמשתמש שולח, החזר המלצה לארוחה הקרובה עם: הערכת פחמימות, זמן השפעה משוער (1-5 שעות), השוואה לארוחות דומות אחרונות, ומה לעשות מול הלופ (מתי להמתין לתיקון אוטומטי ומתי לשקול פעולה). השתמש בכלי זיכרון (getPatientProfileSnapshot/searchMemory) אם צריך שליפה היסטורית רלוונטית. בלי מינוני אינסולין מדויקים.'
+        : 'First ask the user for a meal photo or a clear meal description. Do not give meal guidance until they provide one. After they provide it, return a near-meal recommendation including: carb estimate, expected impact window (1-5h), comparison to similar recent meals, and what to let Loop handle vs when to consider action. Use memory tools (getPatientProfileSnapshot/searchMemory) when relevant history is needed. No exact insulin dosing.';
 
     const payload = {
       currentState: {
@@ -704,6 +705,13 @@ const Home: React.FC = () => {
         .filter(e => Date.now() - new Date(e.timestamp!).getTime() <= 2 * 60 * 60 * 1000)
         .reduce((sum, e) => sum + (e.amount ?? 0), 0);
 
+      const patientMemory = await buildCompactPatientMemory();
+
+      await upsertProfileSnapshot({
+        communicationStyle: language === 'he' ? 'hebrew-concise-practical' : 'english-concise-practical',
+        notes: ['prefers concise practical recommendations', 'prefers context-aware guidance over generic bolus focus'],
+      });
+
       const provider = new OpenAIProvider({apiKey});
       const model = (aiSettings.openAiModel ?? 'gpt-5.4').trim() || 'gpt-5.4';
 
@@ -730,6 +738,7 @@ const Home: React.FC = () => {
               predictionsNext: (liveSnapshot?.predictions ?? []).map(p => p.sgv),
               recentBg: recentBgContext,
               recommendationKind: 'general',
+              patientMemory,
               meal: lastMealSegment
                 ? {
                     startedAt: new Date(lastMealSegment.startMs).toISOString(),
@@ -756,6 +765,22 @@ const Home: React.FC = () => {
           HOME_RECOMMENDATION_STORAGE_KEY,
           JSON.stringify({date: todayYmd, text, generatedAt: nowMs}),
         );
+
+        await addMemoryEntry({
+          type: 'chat_summary',
+          tags: ['home_recommendation', 'general_guidance', isShowingToday ? 'today' : 'history'],
+          textSummary: text,
+          facts: {
+            currentBg: liveBgSample?.sgv ?? null,
+            trend: liveBgSample?.direction ?? null,
+            iob: liveBgSample?.iob ?? null,
+            cob: liveBgSample?.cob ?? null,
+            recommendationKind: 'general',
+          },
+          source: 'ai',
+          confidence: 0.7,
+          expiresAt: Date.now() + 45 * 24 * 60 * 60 * 1000,
+        });
       }
     } catch {
       // keep last successful recommendation
@@ -768,6 +793,7 @@ const Home: React.FC = () => {
     aiSettings.openAiModel,
     insulinData,
     isRefreshingRecommendation,
+    isShowingToday,
     language,
     lastMealSegment,
     liveBgSample?.cob,

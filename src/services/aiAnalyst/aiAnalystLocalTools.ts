@@ -19,6 +19,7 @@ import {extractHypoEvents} from 'app/containers/MainTabsNavigator/Containers/Tre
 import {BgSample} from 'app/types/day_bgs.types';
 
 import {buildHypoDetectiveContext} from './hypoDetectiveContextBuilder';
+import {buildCompactPatientMemory, getMemoryByIds, searchMemory} from 'app/services/aiMemory/aiMemoryStore';
 
 // Loop Analysis imports
 import {
@@ -70,7 +71,14 @@ export type AiAnalystToolName =
   | 'get_profile_change_history'
   | 'get_current_profile_settings'
   | 'get_glucose_stats'
-  | 'get_monthly_glucose_summary';
+  | 'get_monthly_glucose_summary'
+  // Local memory tools
+  | 'searchMemory'
+  | 'getMemoryByIds'
+  | 'getPatientProfileSnapshot'
+  | 'search_memory'
+  | 'get_memory_by_ids'
+  | 'get_patient_profile_snapshot';
 
 // Normalize tool names: convert snake_case to camelCase
 function normalizeToolName(name: string): string {
@@ -90,6 +98,9 @@ function normalizeToolName(name: string): string {
     'get_cgm_data': 'getCgmData',
     'get_treatments': 'getTreatments',
     'get_pump_profile': 'getPumpProfile',
+    'search_memory': 'searchMemory',
+    'get_memory_by_ids': 'getMemoryByIds',
+    'get_patient_profile_snapshot': 'getPatientProfileSnapshot',
   };
   return snakeToCamelMap[name] || name;
 }
@@ -1486,6 +1497,27 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
             meals: mealResults.slice(0, 30),
           },
         };
+      }
+
+      case 'searchMemory': {
+        const query = String(args?.query ?? '').trim();
+        if (!query) return {ok: false, error: 'query is required'};
+        const limit = clampInt(args?.limit, 1, 20, 6);
+        const types = Array.isArray(args?.types) ? args.types : undefined;
+        const result = await searchMemory(query, {limit, types});
+        return {ok: true, result: {query, count: result.length, results: result}};
+      }
+
+      case 'getMemoryByIds': {
+        const ids = Array.isArray(args?.ids) ? args.ids.map((x: any) => String(x)) : [];
+        if (!ids.length) return {ok: false, error: 'ids[] is required'};
+        const result = await getMemoryByIds(ids);
+        return {ok: true, result: {count: result.length, results: result}};
+      }
+
+      case 'getPatientProfileSnapshot': {
+        const result = await buildCompactPatientMemory();
+        return {ok: true, result};
       }
 
       default:

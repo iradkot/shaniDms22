@@ -23,7 +23,10 @@ export const DEFAULT_TOOL_SYSTEM_PROMPT =
   `- getCurrentProfileSettings: {dateIso?: string}  → returns ISF, CR, targets, DIA, and basal schedules with snapshots at key times.\n` +
   `- getHypoDetectiveContext: {rangeDays: number (1-180), lowThresholdMgdl?: number (default 55), maxEvents?: number}\n` +
   `- getGlycemicEvents: {kind: "hypo"|"hyper", rangeDays: number (1-180), thresholdMgdl: number, maxEvents?: number}  → Note: totalCount in the response indicates the real total; events may be truncated.\n` +
-  `- getMealAbsorptionData: {daysBack: number (1-90), mealType?: "all"|"breakfast"|"lunch"|"dinner"|"snack"}  → Returns per-meal carb absorption: carbsEntered vs carbsAbsorbed, estimation accuracy (over/under/accurate), TIR score, and aggregated summary.\n\n` +
+  `- getMealAbsorptionData: {daysBack: number (1-90), mealType?: "all"|"breakfast"|"lunch"|"dinner"|"snack"}  → Returns per-meal carb absorption: carbsEntered vs carbsAbsorbed, estimation accuracy (over/under/accurate), TIR score, and aggregated summary.\n` +
+  `- getPatientProfileSnapshot: {}  → compact patient profile + relevant recent memories.\n` +
+  `- searchMemory: {query: string, limit?: number (1-20), types?: ["profile"|"episode"|"chat_summary"]}  → semantic memory search; returns IDs/snippets only.\n` +
+  `- getMemoryByIds: {ids: string[]}  → fetch full memory records by IDs after search.\n\n` +
   `Tool choice guidance:\n` +
   `- If the user asks about hypers/highs, do NOT call getHypoDetectiveContext. Use getGlycemicEvents(kind="hyper") or getCgmData.\n` +
   `- If the user asks about hypos/lows, use getGlycemicEvents(kind="hypo") or getHypoDetectiveContext.\n` +
@@ -69,6 +72,9 @@ export const LOOP_SETTINGS_TOOL_SYSTEM_PROMPT =
   `- getGlucoseStats: {startDate: ISO date string, endDate: ISO date string, timeOfDay?: "all"|"overnight"|"morning"|"afternoon"|"evening"}\n` +
   `- getMonthlyGlucoseSummary: {monthsBack: number (1-24), timeOfDay?: "all"|"overnight"|"morning"|"afternoon"|"evening"}\n` +
   `- getSettingsChangeHistory: {daysBack: number (1-180), changeType?: "all"|"carb_ratio"|"isf"|"targets"|"basal"|"dia"}\n` +
+  `- getPatientProfileSnapshot: {}\n` +
+  `- searchMemory: {query: string, limit?: number (1-20), types?: ["profile"|"episode"|"chat_summary"]}\n` +
+  `- getMemoryByIds: {ids: string[]}\n` +
   `- getProfileChangeHistory: {rangeDays: number (7-180), maxEvents?: number (1-50)}\n` +
   `- analyzeSettingsImpact: {changeDate: ISO string, windowDays: number (1-30)}\n\n` +
   `Naming note: snake_case aliases like get_settings_change_history are accepted, but prefer the camelCase names listed here when possible.\n\n` +
