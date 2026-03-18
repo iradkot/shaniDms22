@@ -1,6 +1,6 @@
 import React, {useMemo, useRef} from 'react';
 import {View} from 'react-native';
-import Svg, {G, Line} from 'react-native-svg';
+import Svg, {ClipPath, Defs, G, Line, Rect} from 'react-native-svg';
 import styled from 'styled-components/native';
 import XGridAndAxis from './components/XGridAndAxis';
 import YGridAndAxis from './components/YGridAndAxis';
@@ -203,88 +203,97 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}>
+          <Defs>
+            <ClipPath id="cgmPlotClip">
+              <Rect x={0} y={0} width={graphStyleContextValue.graphWidth} height={graphStyleContextValue.graphHeight} />
+            </ClipPath>
+          </Defs>
+
           <G
             x={graphStyleContextValue.margin?.left}
             y={graphStyleContextValue.margin?.top}>
             <XGridAndAxis xTickLabelFormatter={xTickLabelFormatter ?? undefined} />
             <YGridAndAxis highestBgThreshold={300} />
             {showDateLabels ? <GraphDateDisplay /> : null}
-            <CGMSamplesRenderer
-              focusedSampleDateString={closestBgSample?.dateString}
-            />
-            <FoodItemsRenderer
-              foodItems={foodItems}
-              focusedFoodItemIds={focusedFoodItemIds}
-            />
-            <BolusItemsRenderer
-              insulinData={insulinData}
-              focusedBolusTimestamps={focusedBolusTimestamps}
-            />
-            {shouldShowFocus && (
-              <>
-                <Line
-                  x1={focusX}
-                  y1="0"
-                  x2={focusX}
-                  y2={graphStyleContextValue.graphHeight}
-                  stroke={addOpacity(theme.textColor, 0.55)}
-                  strokeWidth={2}
-                  opacity={1}
-                />
-                {tooltipMode === 'internal' ? (
+
+            <G clipPath="url(#cgmPlotClip)">
+              <CGMSamplesRenderer
+                focusedSampleDateString={closestBgSample?.dateString}
+              />
+              <FoodItemsRenderer
+                foodItems={foodItems}
+                focusedFoodItemIds={focusedFoodItemIds}
+              />
+              <BolusItemsRenderer
+                insulinData={insulinData}
+                focusedBolusTimestamps={focusedBolusTimestamps}
+              />
+              {shouldShowFocus && (
+                <>
                   <Line
-                    x1="0"
-                    y1={yTouchPosition}
-                    x2={width}
-                    y2={yTouchPosition}
-                    stroke={theme.borderColor}
-                    strokeWidth={1}
-                    opacity={0.5}
+                    x1={focusX}
+                    y1="0"
+                    x2={focusX}
+                    y2={graphStyleContextValue.graphHeight}
+                    stroke={addOpacity(theme.textColor, 0.55)}
+                    strokeWidth={2}
+                    opacity={1}
                   />
-                ) : null}
+                  {tooltipMode === 'internal' ? (
+                    <Line
+                      x1="0"
+                      y1={yTouchPosition}
+                      x2={width}
+                      y2={yTouchPosition}
+                      stroke={theme.borderColor}
+                      strokeWidth={1}
+                      opacity={0.5}
+                    />
+                  ) : null}
 
-                {tooltipMode === 'internal' ? (
-                  <>
-                    {showCombinedMulti && (
-                      <CombinedBgMultiBolusTooltip
-                        x={xTouchPosition}
-                        y={yTouchPosition}
-                        bgSample={closestBgSample!}
-                        bolusEvents={tooltipBolusEvents}
-                        carbEvents={tooltipCarbEvents}
-                      />
-                    )}
+                  {tooltipMode === 'internal' ? (
+                    <>
+                      {showCombinedMulti && (
+                        <CombinedBgMultiBolusTooltip
+                          x={xTouchPosition}
+                          y={yTouchPosition}
+                          bgSample={closestBgSample!}
+                          bolusEvents={tooltipBolusEvents}
+                          carbEvents={tooltipCarbEvents}
+                        />
+                      )}
 
-                    {showBolusOnly && (
-                      <MultiBolusTooltip
-                        x={xTouchPosition}
-                        y={yTouchPosition}
-                        bolusEvents={tooltipBolusEvents}
-                        carbEvents={tooltipCarbEvents}
-                      />
-                    )}
+                      {showBolusOnly && (
+                        <MultiBolusTooltip
+                          x={xTouchPosition}
+                          y={yTouchPosition}
+                          bolusEvents={tooltipBolusEvents}
+                          carbEvents={tooltipCarbEvents}
+                        />
+                      )}
 
-                    {showCombined && (
-                      <CombinedBgBolusTooltip
-                        x={xTouchPosition}
-                        y={yTouchPosition}
-                        bgSample={closestBgSample!}
-                        bolusEvent={tooltipBolusEvents[0]}
-                        carbEvents={tooltipCarbEvents}
-                      />
-                    )}
+                      {showCombined && (
+                        <CombinedBgBolusTooltip
+                          x={xTouchPosition}
+                          y={yTouchPosition}
+                          bgSample={closestBgSample!}
+                          bolusEvent={tooltipBolusEvents[0]}
+                          carbEvents={tooltipCarbEvents}
+                        />
+                      )}
 
-                    {showBgOnly && (
-                      <SgvTooltip
-                        x={xTouchPosition}
-                        y={yTouchPosition}
-                        bgSample={closestBgSample!}
-                      />
-                    )}
-                  </>
-                ) : null}
-              </>
-            )}
+                      {showBgOnly && (
+                        <SgvTooltip
+                          x={xTouchPosition}
+                          y={yTouchPosition}
+                          bgSample={closestBgSample!}
+                        />
+                      )}
+                    </>
+                  ) : null}
+                </>
+              )}
+            </G>
           </G>
         </StyledSvg>
 
