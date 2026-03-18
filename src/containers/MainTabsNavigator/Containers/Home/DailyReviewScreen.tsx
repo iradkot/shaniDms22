@@ -22,6 +22,7 @@ import {t as tr} from 'app/i18n/translations';
 import TimeInRangeRow from './components/TimeInRangeRow';
 import {
   extractBasalProfileFromNightscoutProfileData,
+  mapNightscoutTreatmentsToCarbFoodItems,
   mapNightscoutTreatmentsToInsulinDataEntries,
 } from 'app/utils/nightscoutTreatments.utils';
 import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsulin';
@@ -43,6 +44,100 @@ function tierVisual(tier: string) {
   }
 }
 
+type MealBucket = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+type MealBucketScore = {
+  bucket: MealBucket;
+  score: number;
+  count: number;
+  avgRise: number;
+};
+
+function classifyMealBucket(ts: number): MealBucket {
+  const h = new Date(ts).getHours();
+  if (h >= 5 && h < 11) return 'breakfast';
+  if (h >= 11 && h < 16) return 'lunch';
+  if (h >= 16 && h < 22) return 'dinner';
+  return 'snack';
+}
+
+function nearestBgBefore(rows: Row[], ts: number, windowMin = 45): number | null {
+  const from = ts - windowMin * 60 * 1000;
+  const candidates = rows
+    .filter(r => {
+      const t = r?.dateString ? Date.parse(r.dateString) : NaN;
+      return Number.isFinite(t) && t >= from && t <= ts;
+    })
+    .sort((a, b) => Date.parse(b.dateString || '') - Date.parse(a.dateString || ''));
+  return candidates.length ? candidates[0].sgv : null;
+}
+
+function bgWindow(rows: Row[], fromTs: number, toTs: number): number[] {
+  return rows
+    .filter(r => {
+      const t = r?.dateString ? Date.parse(r.dateString) : NaN;
+      return Number.isFinite(t) && t >= fromTs && t <= toTs;
+    })
+    .map(r => r.sgv);
+}
+
+function computeMealBucketScores(params: {
+  bgRows: Row[];
+  carbEvents: Array<{timestamp: number; carbs: number}>;
+  hypo: number;
+  hyper: number;
+}): MealBucketScore[] {
+  const {bgRows, carbEvents, hypo, hyper} = params;
+  const base: Record<MealBucket, {scores: number[]; rises: number[]}> = {
+    breakfast: {scores: [], rises: []},
+    lunch: {scores: [], rises: []},
+    dinner: {scores: [], rises: []},
+    snack: {scores: [], rises: []},
+  };
+
+  for (const meal of carbEvents) {
+    const pre = nearestBgBefore(bgRows, meal.timestamp, 45);
+    const vals = bgWindow(bgRows, meal.timestamp, meal.timestamp + 4 * 60 * 60 * 1000);
+    if (!vals.length || pre == null) continue;
+
+    const peak = Math.max(...vals);
+    const rise = Math.max(0, peak - pre);
+    const inRange = vals.filter(v => v >= hypo && v <= hyper).length;
+    const tir = inRange / Math.max(1, vals.length);
+
+    const score = Math.round(Math.max(0, Math.min(100, 100 - rise * 0.45 + tir * 35)));
+    const bucket = classifyMealBucket(meal.timestamp);
+    base[bucket].scores.push(score);
+    base[bucket].rises.push(Math.round(rise));
+  }
+
+  const out = (Object.keys(base) as MealBucket[]).map(bucket => {
+    const scores = base[bucket].scores;
+    const rises = base[bucket].rises;
+    return {
+      bucket,
+      score: scores.length ? Math.round(scores.reduce((s, n) => s + n, 0) / scores.length) : 0,
+      count: scores.length,
+      avgRise: rises.length ? Math.round(rises.reduce((s, n) => s + n, 0) / rises.length) : 0,
+    };
+  });
+
+  return out.filter(x => x.count > 0);
+}
+
+function mealBucketLabel(language: string, bucket: MealBucket): string {
+  if (language === 'he') {
+    if (bucket === 'breakfast') return 'בוקר';
+    if (bucket === 'lunch') return 'צהריים';
+    if (bucket === 'dinner') return 'ערב';
+    return 'נשנוש';
+  }
+  if (bucket === 'breakfast') return 'Breakfast';
+  if (bucket === 'lunch') return 'Lunch';
+  if (bucket === 'dinner') return 'Dinner';
+  return 'Snack';
+}
+
 const DailyReviewScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation<any>();
@@ -54,6 +149,8 @@ const DailyReviewScreen: React.FC = () => {
   const [refreshingAction, setRefreshingAction] = useState(false);
   const [yRows, setYRows] = useState<Row[]>([]);
   const [wRows, setWRows] = useState<Row[]>([]);
+  const [mealScoresY, setMealScoresY] = useState<MealBucketScore[]>([]);
+  const [mealScoresPrev, setMealScoresPrev] = useState<MealBucketScore[]>([]);
   const [llmSummaryLine, setLlmSummaryLine] = useState<string | null>(null);
   const [llmKeyLine, setLlmKeyLine] = useState<string | null>(null);
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
@@ -84,12 +181,43 @@ const DailyReviewScreen: React.FC = () => {
   };
 
   const loadData = async () => {
-    const [y, w] = await Promise.all([
+    const [y, p, w, yTreatments, pTreatments] = await Promise.all([
       fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
+      fetchBgDataForDateRangeUncached(prevDayStart, yStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
+      fetchTreatmentsForDateRangeUncached(yStart, todayStart),
+      fetchTreatmentsForDateRangeUncached(prevDayStart, yStart),
     ]);
-    setYRows((y as any) ?? []);
+    const yList = ((y as any) ?? []) as Row[];
+    const pList = ((p as any) ?? []) as Row[];
+    setYRows(yList);
     setWRows((w as any) ?? []);
+
+    const yMeals = mapNightscoutTreatmentsToCarbFoodItems(yTreatments ?? []).map(m => ({
+      timestamp: Number(m.timestamp),
+      carbs: Number(m.carbs ?? 0),
+    }));
+    const pMeals = mapNightscoutTreatmentsToCarbFoodItems(pTreatments ?? []).map(m => ({
+      timestamp: Number(m.timestamp),
+      carbs: Number(m.carbs ?? 0),
+    }));
+
+    setMealScoresY(
+      computeMealBucketScores({
+        bgRows: yList,
+        carbEvents: yMeals,
+        hypo: glucoseSettings.hypo ?? 70,
+        hyper: glucoseSettings.hyper ?? 180,
+      }),
+    );
+    setMealScoresPrev(
+      computeMealBucketScores({
+        bgRows: pList,
+        carbEvents: pMeals,
+        hypo: glucoseSettings.hypo ?? 70,
+        hyper: glucoseSettings.hyper ?? 180,
+      }),
+    );
 
     // keep insulin calculation for parity with existing data flow
     try {
@@ -186,6 +314,20 @@ const DailyReviewScreen: React.FC = () => {
   const rank = useMemo(() => computeRank({tir: wTirPct || yTirPct, lows: wLows, highs: wHighs}), [wTirPct, yTirPct, wLows, wHighs]);
   const rv = tierVisual(rank.tier);
 
+  const mealComparisons = useMemo(() => {
+    const prevMap = new Map(mealScoresPrev.map(m => [m.bucket, m]));
+    return mealScoresY
+      .map(m => {
+        const prev = prevMap.get(m.bucket);
+        return {
+          ...m,
+          prevScore: prev?.score ?? null,
+          delta: prev ? m.score - prev.score : null,
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+  }, [mealScoresPrev, mealScoresY]);
+
   if (loading) {
     return <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}><ActivityIndicator /></View>;
   }
@@ -265,6 +407,50 @@ const DailyReviewScreen: React.FC = () => {
       <View style={card}>
         <Text style={{fontWeight: '700', color: theme.textColor, textAlign}}>{tr(language, 'dailyReview.range')}</Text>
         <View style={{marginTop: 6}}>{yRows.length ? <TimeInRangeRow bgData={yRows as any} /> : <Text style={{color: addOpacity(theme.textColor, 0.75), textAlign}}>{tr(language, 'dailyReview.noData')}</Text>}</View>
+      </View>
+
+      <View style={card}>
+        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>
+          {language === 'he' ? 'ציוני ארוחות יומיים' : 'Daily meal scores'}
+        </Text>
+        {mealComparisons.length ? (
+          <View style={{marginTop: 8, gap: 8}}>
+            {mealComparisons.map(item => {
+              const delta = item.delta ?? 0;
+              const improved = (item.delta ?? 0) > 0;
+              const same = item.delta == null || item.delta === 0;
+              const deltaColor = same ? addOpacity(theme.textColor, 0.6) : improved ? '#2e7d32' : '#c62828';
+              return (
+                <View key={item.bucket} style={{borderWidth: 1, borderColor: addOpacity(theme.borderColor || '#999', 0.5), borderRadius: 12, padding: 10}}>
+                  <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                    <Text style={{fontWeight: '700', color: theme.textColor}}>{mealBucketLabel(language, item.bucket)}</Text>
+                    <Text style={{fontWeight: '900', color: theme.accentColor}}>{item.score}/100</Text>
+                  </View>
+
+                  <View style={{marginTop: 7, height: 8, borderRadius: 99, backgroundColor: addOpacity(theme.textColor, 0.12)}}>
+                    <View style={{width: `${Math.max(0, Math.min(100, item.score))}%`, height: 8, borderRadius: 99, backgroundColor: item.score >= 75 ? '#2e7d32' : item.score >= 55 ? '#f9a825' : '#c62828'}} />
+                  </View>
+
+                  <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.72), fontSize: 12}}>
+                    {language === 'he' ? `עלייה ממוצעת אחרי ארוחה: ${item.avgRise} mg/dL` : `Avg post-meal rise: ${item.avgRise} mg/dL`}
+                  </Text>
+
+                  <Text style={{marginTop: 4, color: deltaColor, fontSize: 12, fontWeight: '700'}}>
+                    {item.prevScore == null
+                      ? language === 'he'
+                        ? 'אין ארוחה מקבילה אתמול להשוואה'
+                        : 'No matching meal yesterday for comparison'
+                      : language === 'he'
+                      ? `מול אתמול: ${delta > 0 ? '+' : ''}${delta} נק׳ (${item.prevScore} → ${item.score})`
+                      : `Vs yesterday: ${delta > 0 ? '+' : ''}${delta} pts (${item.prevScore} → ${item.score})`}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.75), textAlign}}>{tr(language, 'dailyReview.noData')}</Text>
+        )}
       </View>
 
       <View style={card}>
