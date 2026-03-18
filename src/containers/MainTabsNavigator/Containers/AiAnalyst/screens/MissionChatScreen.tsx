@@ -213,6 +213,53 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
           ) : null}
         </ScrollView>
 
+        {/* Quick actions (meal flow) */}
+        {mission === 'openChat' ? (
+          <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.sm}}>
+            <Text style={{color: addOpacity(theme.textColor, 0.7), marginBottom: 6}}>
+              {language === 'he' ? 'קיצורי דרך לארוחה:' : 'Meal shortcuts:'}
+            </Text>
+            <View style={{flexDirection: 'row', gap: theme.spacing.sm}}>
+              <Pressable
+                onPress={() => setInput(language === 'he' ? 'הנה תיאור הארוחה הקרובה: ' : 'Here is my upcoming meal description: ')}
+                style={{
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: addOpacity(theme.accentColor, 0.35),
+                  backgroundColor: addOpacity(theme.accentColor, 0.08),
+                }}
+              >
+                <Text style={{color: theme.textColor, fontWeight: '600'}}>
+                  {language === 'he' ? 'כתוב תיאור ארוחה' : 'Describe meal'}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  setInput(
+                    language === 'he'
+                      ? 'אני מצרף תמונה של הארוחה. תן הערכת פחמימות, זמן השפעה משוער, והשוואה לארוחות דומות אחרונות.'
+                      : 'I am attaching a meal photo. Please estimate carbs, expected impact window, and compare to similar recent meals.',
+                  )
+                }
+                style={{
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: addOpacity(theme.accentColor, 0.35),
+                  backgroundColor: addOpacity(theme.accentColor, 0.08),
+                }}
+              >
+                <Text style={{color: theme.textColor, fontWeight: '600'}}>
+                  {language === 'he' ? 'ניתוח לפי תמונה' : 'Analyze by photo'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
         {/* Input */}
         <InputRow>
           <ChatInput

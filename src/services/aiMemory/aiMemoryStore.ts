@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const MEMORY_KEY = 'aiMemory:v1:entries';
 const PROFILE_KEY = 'aiMemory:v1:profile';
+const MEMORY_EPISODE_KEYS = 'aiMemory:v1:episodeKeys';
 
 export type MemoryType = 'profile' | 'episode' | 'chat_summary';
 
@@ -174,4 +175,43 @@ export async function buildCompactPatientMemory() {
     profile,
     relevantRecentMemories: recentEpisodes,
   };
+}
+
+export async function getMemoryStats() {
+  const entries = await readEntries();
+  const byType = entries.reduce(
+    (acc, e) => {
+      acc[e.type] = (acc[e.type] ?? 0) + 1;
+      return acc;
+    },
+    {profile: 0, episode: 0, chat_summary: 0} as Record<MemoryType, number>,
+  );
+
+  return {
+    total: entries.length,
+    byType,
+    latestUpdatedAt: entries.length ? Math.max(...entries.map(e => e.updatedAt)) : null,
+  };
+}
+
+export async function clearAllMemory() {
+  await Promise.all([
+    AsyncStorage.removeItem(MEMORY_KEY),
+    AsyncStorage.removeItem(PROFILE_KEY),
+    AsyncStorage.removeItem(MEMORY_EPISODE_KEYS),
+  ]);
+}
+
+export async function markEpisodeKeyIfNew(key: string): Promise<boolean> {
+  if (!key) return false;
+  try {
+    const raw = await AsyncStorage.getItem(MEMORY_EPISODE_KEYS);
+    const prev = raw ? (JSON.parse(raw) as string[]) : [];
+    if (prev.includes(key)) return false;
+    const next = [key, ...prev].slice(0, 600);
+    await AsyncStorage.setItem(MEMORY_EPISODE_KEYS, JSON.stringify(next));
+    return true;
+  } catch {
+    return false;
+  }
 }

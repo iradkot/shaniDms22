@@ -41,7 +41,12 @@ import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
 import {t as tr} from 'app/i18n/translations';
-import {addMemoryEntry, buildCompactPatientMemory, upsertProfileSnapshot} from 'app/services/aiMemory/aiMemoryStore';
+import {
+  addMemoryEntry,
+  buildCompactPatientMemory,
+  markEpisodeKeyIfNew,
+  upsertProfileSnapshot,
+} from 'app/services/aiMemory/aiMemoryStore';
 
 const HOME_RECOMMENDATION_STORAGE_KEY = 'home:todayRecommendation:v1';
 
@@ -416,6 +421,45 @@ const Home: React.FC = () => {
   const lastMealSegment = useMemo(() => {
     return taggedSegments.length ? taggedSegments[taggedSegments.length - 1] : null;
   }, [taggedSegments]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const persistMealEpisodes = async () => {
+      const recentMeals = taggedSegments.slice(-8);
+      for (const meal of recentMeals) {
+        if (!mounted) return;
+        const key = `meal:${format(new Date(meal.startMs), 'yyyy-MM-dd')}:${meal.id}`;
+        const isNew = await markEpisodeKeyIfNew(key);
+        if (!isNew) continue;
+
+        const response = summarizeMealResponse(meal, listBgData);
+        await addMemoryEntry({
+          type: 'episode',
+          tags: ['meal', 'postprandial', ...(meal.tags ?? []).slice(0, 3)],
+          textSummary:
+            language === 'he'
+              ? `ארוחה ${meal.label} (${Math.round(meal.totalCarbs || 0)}g) עם תגובה אחרי ארוחה: פיק ${response.peak ?? '—'} ודלתא ${response.peakDelta ?? '—'}.`
+              : `Meal ${meal.label} (${Math.round(meal.totalCarbs || 0)}g) post-meal response: peak ${response.peak ?? '—'} and delta ${response.peakDelta ?? '—'}.`,
+          facts: {
+            mealId: meal.id,
+            startedAt: meal.startMs,
+            carbsG: Math.round(meal.totalCarbs || 0),
+            bolusU: Number((meal.totalBolus || 0).toFixed(2)),
+            response,
+          },
+          source: 'sensor',
+          confidence: 0.75,
+          expiresAt: Date.now() + 120 * 24 * 60 * 60 * 1000,
+        });
+      }
+    };
+
+    persistMealEpisodes();
+    return () => {
+      mounted = false;
+    };
+  }, [language, listBgData, taggedSegments]);
 
   const handleRefreshAll = useCallback(() => {
     getUpdatedBgData();

@@ -23,6 +23,7 @@ import {useNavigation} from '@react-navigation/native';
 import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {validateOpenAiApiKey} from 'app/services/llm/providers/openaiProvider';
 import {sendDailyBriefNow} from 'app/services/proactiveCare/dailyBrief';
+import {clearAllMemory, getMemoryStats} from 'app/services/aiMemory/aiMemoryStore';
 import {NightscoutSection} from './sections/NightscoutSection';
 import {iconContainerStyle, labelStyle, rowStyle, SectionHeader} from './settingsShared';
 import {t as tr} from 'app/i18n/translations';
@@ -46,6 +47,8 @@ const Settings: React.FC = () => {
   const [showAi, setShowAi] = useState(false);
   const [showProactiveCare, setShowProactiveCare] = useState(false);
   const [uiLoaded, setUiLoaded] = useState(false);
+  const [memoryStats, setMemoryStats] = useState<{total: number; byType: {profile: number; episode: number; chat_summary: number}; latestUpdatedAt: number | null} | null>(null);
+  const [memoryBusy, setMemoryBusy] = useState(false);
 
   const [aiApiKeyText, setAiApiKeyText] = useState('');
   const [aiModelText, setAiModelText] = useState('');
@@ -120,6 +123,15 @@ const Settings: React.FC = () => {
     setAiModelText('gpt-5.4');
   }, [aiLoaded, aiSettings.apiKey, aiSettings.openAiModel, openAiModelOptions]);
 
+  useEffect(() => {
+    refreshMemoryStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (showAi) refreshMemoryStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAi]);
 
   useEffect(() => {
     let isMounted = true;
@@ -285,6 +297,26 @@ const Settings: React.FC = () => {
       setDailyBriefStatus(tr(language, 'settings.briefSent'));
     } catch (e) {
       setDailyBriefStatus(tr(language, 'settings.briefSendFailed'));
+    }
+  };
+
+  const refreshMemoryStats = async () => {
+    try {
+      setMemoryBusy(true);
+      const stats = await getMemoryStats();
+      setMemoryStats(stats as any);
+    } finally {
+      setMemoryBusy(false);
+    }
+  };
+
+  const clearMemoryNow = async () => {
+    try {
+      setMemoryBusy(true);
+      await clearAllMemory();
+      setMemoryStats({total: 0, byType: {profile: 0, episode: 0, chat_summary: 0}, latestUpdatedAt: null});
+    } finally {
+      setMemoryBusy(false);
     }
   };
 
@@ -700,6 +732,52 @@ const Settings: React.FC = () => {
                 />
               </View>
             )}
+
+            <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
+              <Text style={{color: theme.textColor, fontSize: theme.typography.size.md, fontWeight: '700'}}>
+                {language === 'he' ? 'זיכרון AI' : 'AI Memory'}
+              </Text>
+              <Text style={{color: addOpacity(theme.textColor, 0.75), marginTop: 6}}>
+                {language === 'he'
+                  ? `סה"כ ${memoryStats?.total ?? 0} פריטים | פרופיל ${memoryStats?.byType?.profile ?? 0} | אירועים ${memoryStats?.byType?.episode ?? 0} | סיכומים ${memoryStats?.byType?.chat_summary ?? 0}`
+                  : `Total ${memoryStats?.total ?? 0} items | profile ${memoryStats?.byType?.profile ?? 0} | episodes ${memoryStats?.byType?.episode ?? 0} | summaries ${memoryStats?.byType?.chat_summary ?? 0}`}
+              </Text>
+              <View style={{flexDirection: 'row', marginTop: theme.spacing.sm}}>
+                <Pressable
+                  onPress={refreshMemoryStats}
+                  disabled={memoryBusy}
+                  style={({pressed}) => ({
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderRadius: theme.borderRadius,
+                    borderWidth: 1,
+                    borderColor: theme.borderColor,
+                    backgroundColor: pressed ? theme.borderColor : theme.white,
+                    marginRight: theme.spacing.sm,
+                  })}
+                >
+                  <Text style={{color: theme.textColor, fontWeight: '600'}}>
+                    {language === 'he' ? 'רענן סטטוס' : 'Refresh stats'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={clearMemoryNow}
+                  disabled={memoryBusy}
+                  style={({pressed}) => ({
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderRadius: theme.borderRadius,
+                    borderWidth: 1,
+                    borderColor: theme.belowRangeColor,
+                    backgroundColor: pressed ? addOpacity(theme.belowRangeColor, 0.2) : theme.white,
+                  })}
+                >
+                  <Text style={{color: theme.belowRangeColor, fontWeight: '700'}}>
+                    {language === 'he' ? 'נקה זיכרון' : 'Clear memory'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
           </>
         )}
       </View>
