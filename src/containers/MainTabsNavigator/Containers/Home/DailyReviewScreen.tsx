@@ -328,6 +328,17 @@ const DailyReviewScreen: React.FC = () => {
       .sort((a, b) => b.score - a.score);
   }, [mealScoresPrev, mealScoresY]);
 
+  const topImprovedMeal = useMemo(() => {
+    const withDelta = mealComparisons.filter(m => typeof m.delta === 'number');
+    if (!withDelta.length) return null;
+    return [...withDelta].sort((a, b) => (b.delta as number) - (a.delta as number))[0];
+  }, [mealComparisons]);
+
+  const needsAttentionMeal = useMemo(() => {
+    if (!mealComparisons.length) return null;
+    return [...mealComparisons].sort((a, b) => a.score - b.score)[0];
+  }, [mealComparisons]);
+
   if (loading) {
     return <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}><ActivityIndicator /></View>;
   }
@@ -413,6 +424,34 @@ const DailyReviewScreen: React.FC = () => {
         <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>
           {language === 'he' ? 'ציוני ארוחות יומיים' : 'Daily meal scores'}
         </Text>
+
+        {(topImprovedMeal || needsAttentionMeal) ? (
+          <View style={{marginTop: 8, gap: 8}}>
+            {topImprovedMeal ? (
+              <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity('#2e7d32', 0.35), backgroundColor: addOpacity('#2e7d32', 0.08)}}>
+                <Text style={{fontWeight: '800', color: '#2e7d32'}}>
+                  {language === 'he' ? '🚀 הארוחה שהכי השתפרה' : '🚀 Top improved meal'}
+                </Text>
+                <Text style={{marginTop: 4, color: theme.textColor}}>
+                  {mealBucketLabel(language, topImprovedMeal.bucket)} • {topImprovedMeal.prevScore ?? '—'} → {topImprovedMeal.score}
+                  {typeof topImprovedMeal.delta === 'number' ? ` (${topImprovedMeal.delta > 0 ? '+' : ''}${topImprovedMeal.delta})` : ''}
+                </Text>
+              </View>
+            ) : null}
+
+            {needsAttentionMeal ? (
+              <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity('#c62828', 0.35), backgroundColor: addOpacity('#c62828', 0.08)}}>
+                <Text style={{fontWeight: '800', color: '#c62828'}}>
+                  {language === 'he' ? '🎯 דורש פוקוס מחר' : '🎯 Needs attention next'}
+                </Text>
+                <Text style={{marginTop: 4, color: theme.textColor}}>
+                  {mealBucketLabel(language, needsAttentionMeal.bucket)} • {needsAttentionMeal.score}/100 • {language === 'he' ? `עלייה ממוצעת ${needsAttentionMeal.avgRise}` : `avg rise ${needsAttentionMeal.avgRise}`} mg/dL
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
         {mealComparisons.length ? (
           <View style={{marginTop: 8, gap: 8}}>
             {mealComparisons.map(item => {
