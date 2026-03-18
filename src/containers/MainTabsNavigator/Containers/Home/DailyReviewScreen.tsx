@@ -164,6 +164,7 @@ const DailyReviewScreen: React.FC = () => {
 
   const yLows = useMemo(() => yRows.filter(r => r.sgv < (glucoseSettings.hypo ?? 70)).length, [yRows, glucoseSettings.hypo]);
   const yHighs = useMemo(() => yRows.filter(r => r.sgv > (glucoseSettings.hyper ?? 180)).length, [yRows, glucoseSettings.hyper]);
+  const wAvg = useMemo(() => averageBg(wRows), [wRows]);
   const wTirPct = useMemo(() => {
     if (!wRows.length) return 0;
     const inRange = wRows.filter(r => r.sgv >= (glucoseSettings.hypo ?? 70) && r.sgv <= (glucoseSettings.hyper ?? 180)).length;
@@ -171,6 +172,16 @@ const DailyReviewScreen: React.FC = () => {
   }, [wRows, glucoseSettings.hypo, glucoseSettings.hyper]);
   const wLows = useMemo(() => wRows.filter(r => r.sgv < (glucoseSettings.hypo ?? 70)).length, [wRows, glucoseSettings.hypo]);
   const wHighs = useMemo(() => wRows.filter(r => r.sgv > (glucoseSettings.hyper ?? 180)).length, [wRows, glucoseSettings.hyper]);
+
+  const yLowPct = useMemo(() => (yRows.length ? Math.round((yLows / yRows.length) * 100) : 0), [yRows.length, yLows]);
+  const yHighPct = useMemo(() => (yRows.length ? Math.round((yHighs / yRows.length) * 100) : 0), [yRows.length, yHighs]);
+  const wLowPct = useMemo(() => (wRows.length ? Math.round((wLows / wRows.length) * 100) : 0), [wRows.length, wLows]);
+  const wHighPct = useMemo(() => (wRows.length ? Math.round((wHighs / wRows.length) * 100) : 0), [wRows.length, wHighs]);
+
+  const avgDelta = yAvg - wAvg;
+  const tirDelta = yTirPct - wTirPct;
+  const lowDelta = yLowPct - wLowPct;
+  const highDelta = yHighPct - wHighPct;
 
   const rank = useMemo(() => computeRank({tir: wTirPct || yTirPct, lows: wLows, highs: wHighs}), [wTirPct, yTirPct, wLows, wHighs]);
   const rv = tierVisual(rank.tier);
@@ -180,6 +191,21 @@ const DailyReviewScreen: React.FC = () => {
   }
 
   const card = {backgroundColor: theme.white, borderRadius: 14, padding: 12};
+  const targetMid = Math.round(((glucoseSettings.hypo ?? 70) + (glucoseSettings.hyper ?? 180)) / 2);
+  const avgDistance = Math.abs(yAvg - targetMid);
+  const avgScore = Math.max(0, Math.min(100, 100 - Math.round(avgDistance * 0.9)));
+
+  const metricChip = (label: string, delta: number, betterWhen: 'higher' | 'lower') => {
+    const improved = betterWhen === 'higher' ? delta > 0 : delta < 0;
+    const worse = betterWhen === 'higher' ? delta < 0 : delta > 0;
+    const color = improved ? '#2e7d32' : worse ? '#c62828' : '#757575';
+    const sign = delta > 0 ? '+' : '';
+    return (
+      <View key={label} style={{paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(color, 0.35), backgroundColor: addOpacity(color, 0.08)}}>
+        <Text style={{fontSize: 12, color, fontWeight: '700'}}>{label} {sign}{delta}{label.includes('%') ? '%' : ''}</Text>
+      </View>
+    );
+  };
 
   return (
     <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 10}}>
@@ -199,10 +225,32 @@ const DailyReviewScreen: React.FC = () => {
         </View>
       </Pressable>
 
-      <View style={card}>
-        <Text style={{color: theme.textColor, textAlign}}>
-          {llmSummaryLine || (yRows.length ? tr(language, 'dailyReview.summaryLine', {tir: yTirPct, avg: yAvg}) : tr(language, 'dailyReview.noData'))}
+      <View style={{...card, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.3), backgroundColor: addOpacity(theme.accentColor, 0.06)}}>
+        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+          <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{language === 'he' ? 'מדד היום' : 'Today score'}</Text>
+          <Text style={{fontWeight: '800', color: theme.accentColor}}>{avgScore}/100</Text>
+        </View>
+
+        <View style={{marginTop: 10, flexDirection: 'row', alignItems: 'baseline'}}>
+          <Text style={{fontSize: 30, fontWeight: '900', color: theme.textColor}}>{yAvg}</Text>
+          <Text style={{marginLeft: 6, color: addOpacity(theme.textColor, 0.65)}}>mg/dL</Text>
+        </View>
+        <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.72), textAlign}}>
+          {language === 'he'
+            ? `ממוצע שבועי: ${wAvg} | יעד יומי: ${targetMid}`
+            : `Weekly avg: ${wAvg} | daily target: ${targetMid}`}
         </Text>
+
+        <View style={{marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
+          {metricChip(language === 'he' ? 'Δממוצע' : 'ΔAvg', avgDelta, 'lower')}
+          {metricChip(language === 'he' ? 'ΔTIR%' : 'ΔTIR%', tirDelta, 'higher')}
+          {metricChip(language === 'he' ? 'Δנמוכים%' : 'ΔLows%', lowDelta, 'lower')}
+          {metricChip(language === 'he' ? 'Δגבוהים%' : 'ΔHighs%', highDelta, 'lower')}
+        </View>
+
+        {llmSummaryLine ? (
+          <Text style={{marginTop: 10, color: theme.textColor, textAlign}}>{llmSummaryLine}</Text>
+        ) : null}
       </View>
 
       <View style={card}>
