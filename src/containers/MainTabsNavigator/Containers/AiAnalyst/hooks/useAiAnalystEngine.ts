@@ -899,8 +899,8 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
       setInput(
         language === 'he'
-          ? `צירפתי תמונת ארוחה${fileName ? ` (${fileName})` : ''}. תתחיל בהערכת פחמימות וטווח השפעה (1-5 שעות), תשווה לארוחות דומות אחרונות, ותסביר מה לתת ללופ לנהל לפני תיקון.`
-          : `I attached a meal photo${fileName ? ` (${fileName})` : ''}. Start with carb estimate and expected impact window (1-5h), compare to similar recent meals, and explain what to let Loop handle before any correction.`,
+          ? `צירפתי תמונת ארוחה${fileName ? ` (${fileName})` : ''}. תתחיל בהערכת פחמימות וטווח השפעה (1-8 שעות, ויותר אם הדפוס מצביע על כך), תשווה לארוחות דומות אחרונות, ותסביר מה לתת ללופ לנהל לפני תיקון.`
+          : `I attached a meal photo${fileName ? ` (${fileName})` : ''}. Start with carb estimate and expected impact window (1-8h, and longer if pattern suggests), compare to similar recent meals, and explain what to let Loop handle before any correction.`,
       );
     } catch {
       // no-op

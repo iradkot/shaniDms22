@@ -689,8 +689,8 @@ const Home: React.FC = () => {
 
     const instruction =
       language === 'he'
-        ? 'בבקשה קודם בקש מהמשתמש תמונה או תיאור מדויק של הארוחה הקרובה. אל תיתן המלצה עד שיש תמונה/תיאור. אחרי שהמשתמש שולח, החזר המלצה לארוחה הקרובה עם: הערכת פחמימות, זמן השפעה משוער (1-5 שעות), השוואה לארוחות דומות אחרונות, ומה לעשות מול הלופ (מתי להמתין לתיקון אוטומטי ומתי לשקול פעולה). השתמש בכלי זיכרון (getPatientProfileSnapshot/searchMemory) אם צריך שליפה היסטורית רלוונטית. בלי מינוני אינסולין מדויקים.'
-        : 'First ask the user for a meal photo or a clear meal description. Do not give meal guidance until they provide one. After they provide it, return a near-meal recommendation including: carb estimate, expected impact window (1-5h), comparison to similar recent meals, and what to let Loop handle vs when to consider action. Use memory tools (getPatientProfileSnapshot/searchMemory) when relevant history is needed. No exact insulin dosing.';
+        ? 'בבקשה קודם בקש מהמשתמש תמונה או תיאור מדויק של הארוחה הקרובה. אל תיתן המלצה עד שיש תמונה/תיאור. אחרי שהמשתמש שולח, החזר המלצה לארוחה הקרובה עם: הערכת פחמימות, זמן השפעה משוער (1-8 שעות, ויותר אם הדפוס מצביע על כך), השוואה לארוחות דומות אחרונות, ומה לעשות מול הלופ (מתי להמתין לתיקון אוטומטי ומתי לשקול פעולה). השתמש בכלי זיכרון (getPatientProfileSnapshot/searchMemory) אם צריך שליפה היסטורית רלוונטית. בלי מינוני אינסולין מדויקים.'
+        : 'First ask the user for a meal photo or a clear meal description. Do not give meal guidance until they provide one. After they provide it, return a near-meal recommendation including: carb estimate, expected impact window (1-8h, and longer if pattern suggests), comparison to similar recent meals, and what to let Loop handle vs when to consider action. Use memory tools (getPatientProfileSnapshot/searchMemory) when relevant history is needed. No exact insulin dosing.';
 
     const payload = {
       currentState: {
