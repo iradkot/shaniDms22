@@ -20,6 +20,8 @@ import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {RANKS_INFO_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {t as tr} from 'app/i18n/translations';
 import TimeInRangeRow from './components/TimeInRangeRow';
+import {buildFullScreenStackedChartsParams, fetchStackedChartsDataForRange} from 'app/utils/stackedChartsData.utils';
+import {pushFullScreenStackedCharts} from 'app/utils/fullscreenNavigation.utils';
 import {
   extractBasalProfileFromNightscoutProfileData,
   mapNightscoutTreatmentsToCarbFoodItems,
@@ -51,6 +53,7 @@ type MealBucketScore = {
   score: number;
   count: number;
   avgRise: number;
+  representativeTs: number | null;
 };
 
 function classifyMealBucket(ts: number): MealBucket {
@@ -88,11 +91,11 @@ function computeMealBucketScores(params: {
   hyper: number;
 }): MealBucketScore[] {
   const {bgRows, carbEvents, hypo, hyper} = params;
-  const base: Record<MealBucket, {scores: number[]; rises: number[]}> = {
-    breakfast: {scores: [], rises: []},
-    lunch: {scores: [], rises: []},
-    dinner: {scores: [], rises: []},
-    snack: {scores: [], rises: []},
+  const base: Record<MealBucket, {scores: number[]; rises: number[]; times: number[]}> = {
+    breakfast: {scores: [], rises: [], times: []},
+    lunch: {scores: [], rises: [], times: []},
+    dinner: {scores: [], rises: [], times: []},
+    snack: {scores: [], rises: [], times: []},
   };
 
   for (const meal of carbEvents) {
@@ -109,16 +112,19 @@ function computeMealBucketScores(params: {
     const bucket = classifyMealBucket(meal.timestamp);
     base[bucket].scores.push(score);
     base[bucket].rises.push(Math.round(rise));
+    base[bucket].times.push(meal.timestamp);
   }
 
   const out = (Object.keys(base) as MealBucket[]).map(bucket => {
     const scores = base[bucket].scores;
     const rises = base[bucket].rises;
+    const times = base[bucket].times;
     return {
       bucket,
       score: scores.length ? Math.round(scores.reduce((s, n) => s + n, 0) / scores.length) : 0,
       count: scores.length,
       avgRise: rises.length ? Math.round(rises.reduce((s, n) => s + n, 0) / rises.length) : 0,
+      representativeTs: times.length ? Math.round(times.reduce((s, n) => s + n, 0) / times.length) : null,
     };
   });
 
@@ -156,6 +162,7 @@ const DailyReviewScreen: React.FC = () => {
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
   const [whyLine, setWhyLine] = useState<string | null>(null);
   const [actionSource, setActionSource] = useState<'ai' | 'fallback'>('fallback');
+  const [openingMealBucket, setOpeningMealBucket] = useState<MealBucket | null>(null);
 
   const textAlign: 'left' | 'right' = I18nManager.isRTL ? 'right' : 'left';
 
@@ -280,6 +287,39 @@ const DailyReviewScreen: React.FC = () => {
       await loadData();
     } finally {
       setRefreshingAction(false);
+    }
+  };
+
+  const openMealBucketChart = async (bucket: MealBucket, ts: number | null) => {
+    if (!ts) return;
+    try {
+      setOpeningMealBucket(bucket);
+      const data = await fetchStackedChartsDataForRange({
+        startMs: yStart.getTime(),
+        endMs: todayStart.getTime(),
+      });
+
+      const xDomainMs = {
+        startMs: ts - 90 * 60 * 1000,
+        endMs: ts + 5 * 60 * 60 * 1000,
+      };
+
+      const payload = buildFullScreenStackedChartsParams({
+        title:
+          language === 'he'
+            ? `ארוחת ${mealBucketLabel(language, bucket)} • ${format(new Date(ts), 'HH:mm')}`
+            : `${mealBucketLabel(language, bucket)} meal • ${format(new Date(ts), 'HH:mm')}`,
+        bgSamples: data.bgSamples,
+        foodItems: data.foodItems,
+        insulinData: data.insulinData,
+        basalProfileData: data.basalProfileData,
+        xDomainMs,
+        fallbackAnchorTimeMs: ts,
+      });
+
+      pushFullScreenStackedCharts({navigation, payload});
+    } finally {
+      setOpeningMealBucket(null);
     }
   };
 
@@ -460,11 +500,22 @@ const DailyReviewScreen: React.FC = () => {
               const same = item.delta == null || item.delta === 0;
               const deltaColor = same ? addOpacity(theme.textColor, 0.6) : improved ? '#2e7d32' : '#c62828';
               return (
-                <View key={item.bucket} style={{borderWidth: 1, borderColor: addOpacity(theme.borderColor || '#999', 0.5), borderRadius: 12, padding: 10}}>
+                <Pressable
+                  key={item.bucket}
+                  onPress={() => openMealBucketChart(item.bucket, item.representativeTs)}
+                  style={{borderWidth: 1, borderColor: addOpacity(theme.borderColor || '#999', 0.5), borderRadius: 12, padding: 10}}
+                >
                   <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
                     <Text style={{fontWeight: '700', color: theme.textColor}}>{mealBucketLabel(language, item.bucket)}</Text>
                     <Text style={{fontWeight: '900', color: theme.accentColor}}>{item.score}/100</Text>
                   </View>
+
+                  <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.68), fontSize: 12}}>
+                    {language === 'he'
+                      ? `שעת ארוחה משוערת: ${item.representativeTs ? format(new Date(item.representativeTs), 'HH:mm') : '—'}`
+                      : `Estimated meal time: ${item.representativeTs ? format(new Date(item.representativeTs), 'HH:mm') : '—'}`}
+                    {openingMealBucket === item.bucket ? ` • ${language === 'he' ? 'פותח גרף…' : 'Opening chart…'}` : ''}
+                  </Text>
 
                   <View style={{marginTop: 7, height: 8, borderRadius: 99, backgroundColor: addOpacity(theme.textColor, 0.12)}}>
                     <View style={{width: `${Math.max(0, Math.min(100, item.score))}%`, height: 8, borderRadius: 99, backgroundColor: item.score >= 75 ? '#2e7d32' : item.score >= 55 ? '#f9a825' : '#c62828'}} />
@@ -483,7 +534,7 @@ const DailyReviewScreen: React.FC = () => {
                       ? `מול אתמול: ${delta > 0 ? '+' : ''}${delta} נק׳ (${item.prevScore} → ${item.score})`
                       : `Vs yesterday: ${delta > 0 ? '+' : ''}${delta} pts (${item.prevScore} → ${item.score})`}
                   </Text>
-                </View>
+                </Pressable>
               );
             })}
           </View>
