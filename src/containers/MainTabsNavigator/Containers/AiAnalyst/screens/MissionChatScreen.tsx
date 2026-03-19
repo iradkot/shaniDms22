@@ -1,4 +1,5 @@
 import React, {RefObject, useMemo} from 'react';
+import {formatDistanceToNowStrict} from 'date-fns';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -103,6 +104,23 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
     [markdown.style, textAlign, writingDirection],
   );
 
+  const kpiTone = useMemo(() => {
+    const bg = compactKpi?.bgMgdl;
+    if (typeof bg !== 'number') return {color: addOpacity(theme.textColor, 0.8), border: addOpacity(theme.borderColor, 0.4), bg: addOpacity(theme.textColor, 0.05)};
+    if (bg < 70) return {color: '#c62828', border: addOpacity('#c62828', 0.35), bg: addOpacity('#c62828', 0.08)};
+    if (bg <= 180) return {color: '#2e7d32', border: addOpacity('#2e7d32', 0.35), bg: addOpacity('#2e7d32', 0.08)};
+    return {color: '#f9a825', border: addOpacity('#f9a825', 0.35), bg: addOpacity('#f9a825', 0.1)};
+  }, [compactKpi?.bgMgdl, theme.borderColor, theme.textColor]);
+
+  const kpiAge = useMemo(() => {
+    if (!compactKpi?.sampleTimeMs) return null;
+    try {
+      return formatDistanceToNowStrict(new Date(compactKpi.sampleTimeMs), {addSuffix: true});
+    } catch {
+      return null;
+    }
+  }, [compactKpi?.sampleTimeMs]);
+
   const copyToClipboard = (text: string) => {
     Clipboard.setString(text || '');
     if (Platform.OS === 'android') {
@@ -159,8 +177,8 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
               style={{
                 borderRadius: 12,
                 borderWidth: 1,
-                borderColor: addOpacity(theme.accentColor, 0.35),
-                backgroundColor: addOpacity(theme.accentColor, 0.08),
+                borderColor: kpiTone.border,
+                backgroundColor: kpiTone.bg,
                 paddingVertical: 8,
                 paddingHorizontal: 10,
                 flexDirection: isHebrew ? 'row-reverse' : 'row',
@@ -168,9 +186,16 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                 justifyContent: 'space-between',
               }}
             >
-              <Text style={{color: theme.textColor, fontWeight: '800'}}>
-                {isHebrew ? 'עכשיו' : 'Now'}: {compactKpi.bgMgdl ?? '—'} {compactKpi.trend ?? ''}
-              </Text>
+              <View>
+                <Text style={{color: kpiTone.color, fontWeight: '800'}}>
+                  {isHebrew ? 'עכשיו' : 'Now'}: {compactKpi.bgMgdl ?? '—'} {compactKpi.trend ?? ''}
+                </Text>
+                {kpiAge ? (
+                  <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 11, marginTop: 2}}>
+                    {isHebrew ? `עודכן ${kpiAge}` : `Updated ${kpiAge}`}
+                  </Text>
+                ) : null}
+              </View>
               <Text style={{color: addOpacity(theme.textColor, 0.8), fontSize: 12}}>
                 IOB {compactKpi.iobU ?? '—'}u • COB {compactKpi.cobG ?? '—'}g
               </Text>
