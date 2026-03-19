@@ -46,6 +46,14 @@ export interface MarkdownConfig {
 // Engine interface – everything the hook exposes to screen components
 // ---------------------------------------------------------------------------
 
+export type CompactKpi = {
+  bgMgdl: number | null;
+  trend: string | null;
+  iobU: number | null;
+  cobG: number | null;
+  sampleTimeMs: number | null;
+};
+
 export interface AiAnalystEngine {
   // Screen routing
   state: ScreenState;
@@ -60,6 +68,7 @@ export interface AiAnalystEngine {
   isBusy: boolean;
   progressText: string;
   errorText: string | null;
+  compactKpi: CompactKpi | null;
 
   // History
   historyItems: any[];

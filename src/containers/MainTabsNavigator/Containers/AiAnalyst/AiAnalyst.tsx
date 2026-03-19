@@ -111,6 +111,7 @@ const AiAnalyst: React.FC = () => {
         isBusy={engine.isBusy}
         progressText={engine.progressText}
         errorText={engine.errorText}
+        compactKpi={engine.compactKpi}
         input={engine.input}
         setInput={engine.setInput}
         onSend={engine.sendFollowUp}

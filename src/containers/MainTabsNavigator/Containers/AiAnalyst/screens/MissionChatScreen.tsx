@@ -21,7 +21,7 @@ import {LlmChatMessage} from 'app/services/llm/llmTypes';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 
-import {EvidenceRequest, MissionKey, MarkdownConfig} from '../types';
+import {CompactKpi, EvidenceRequest, MissionKey, MarkdownConfig} from '../types';
 import {extractEvidenceLinks, stripEvidenceTags} from '../helpers/evidenceLinks';
 import {DISCLOSURE_TEXT, SCROLL_DELAY_MS, getMissionTitle} from '../constants';
 import {
@@ -45,6 +45,7 @@ export interface MissionChatScreenProps {
   isBusy: boolean;
   progressText: string;
   errorText: string | null;
+  compactKpi: CompactKpi | null;
   input: string;
   setInput: (text: string) => void;
   onSend: () => void;
@@ -68,6 +69,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
   isBusy,
   progressText,
   errorText,
+  compactKpi,
   input,
   setInput,
   onSend,
@@ -150,6 +152,31 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
             </Pressable>
           </View>
         </View>
+
+        {compactKpi ? (
+          <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: 4}}>
+            <View
+              style={{
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: addOpacity(theme.accentColor, 0.35),
+                backgroundColor: addOpacity(theme.accentColor, 0.08),
+                paddingVertical: 8,
+                paddingHorizontal: 10,
+                flexDirection: isHebrew ? 'row-reverse' : 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Text style={{color: theme.textColor, fontWeight: '800'}}>
+                {isHebrew ? 'עכשיו' : 'Now'}: {compactKpi.bgMgdl ?? '—'} {compactKpi.trend ?? ''}
+              </Text>
+              <Text style={{color: addOpacity(theme.textColor, 0.8), fontSize: 12}}>
+                IOB {compactKpi.iobU ?? '—'}u • COB {compactKpi.cobG ?? '—'}g
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* Messages */}
         <ScrollView

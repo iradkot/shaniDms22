@@ -30,7 +30,7 @@ import {
 } from 'app/services/aiAnalyst/aiAnalystHistory';
 import {addMemoryEntry} from 'app/services/aiMemory/aiMemoryStore';
 
-import {ScreenState, AnalystMode, AiAnalystEngine, EvidenceRequest, MissionKey} from '../types';
+import {ScreenState, AnalystMode, AiAnalystEngine, EvidenceRequest, MissionKey, CompactKpi} from '../types';
 import {
   DISCLOSURE_TEXT,
   HYPO_DETECTIVE_RANGE_DAYS,
@@ -105,6 +105,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   const [isBusy, setIsBusy] = useState(false);
   const [progressText, setProgressText] = useState<string>('');
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [compactKpi, setCompactKpi] = useState<CompactKpi | null>(null);
 
   // ── Cancellation ────────────────────────────────────────────────────────
   const runSeqRef = useRef(0);
@@ -148,6 +149,30 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     try { return createLlmProvider(aiSettings); }
     catch { return null; }
   }, [aiSettings]);
+
+  const deriveCompactKpiFromCgmResult = useCallback((payload: any): CompactKpi | null => {
+    const samples = Array.isArray(payload?.samples) ? payload.samples : [];
+    const latest = samples.length ? samples[samples.length - 1] : null;
+    if (!latest) return null;
+
+    const prev = samples.length > 1 ? samples[samples.length - 2] : null;
+    const bg = typeof latest?.mgdl === 'number' ? Math.round(latest.mgdl) : null;
+    const prevBg = typeof prev?.mgdl === 'number' ? Math.round(prev.mgdl) : null;
+
+    let trend: string | null = null;
+    if (bg != null && prevBg != null) {
+      const d = bg - prevBg;
+      trend = d >= 12 ? '↑' : d <= -12 ? '↓' : '→';
+    }
+
+    return {
+      bgMgdl: bg,
+      trend,
+      iobU: typeof latest?.iobU === 'number' ? Number(latest.iobU.toFixed(2)) : null,
+      cobG: typeof latest?.cobG === 'number' ? Math.round(latest.cobG) : null,
+      sampleTimeMs: typeof latest?.tMs === 'number' ? latest.tMs : null,
+    };
+  }, []);
 
   // ====================================================================
   // Navigation & persistence helpers
@@ -290,6 +315,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       recordDataUsed('getCgmSamples', cgmResult);
       recordDataUsed('getInsulinSummary', insulinResult);
       recordDataUsed('getCurrentProfileSettings', profileResult);
+      setCompactKpi(cgmResult?.ok ? deriveCompactKpiFromCgmResult(cgmResult.result) : null);
       if (runSeqRef.current !== runId) return;
 
       setProgressText('Starting chat…');
@@ -358,6 +384,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     handleMissionError,
     finaliseMission,
     scrollToEnd,
+    deriveCompactKpiFromCgmResult,
   ]);
 
   const startOpenChat = useCallback(async () => {
@@ -443,6 +470,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         maxSamples: USER_BEHAVIOR_MAX_SAMPLES,
       });
       recordDataUsed('getCgmSamples', cgmResult);
+      setCompactKpi(cgmResult?.ok ? deriveCompactKpiFromCgmResult(cgmResult.result) : null);
       if (runSeqRef.current !== runId) return;
 
       setProgressText('Loading treatments…');
@@ -502,7 +530,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } finally {
       finaliseMission(runId);
     }
-  }, [provider, aiSettings.openAiModel, glucoseSettings, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd]);
+  }, [provider, aiSettings.openAiModel, glucoseSettings, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd, deriveCompactKpiFromCgmResult]);
 
   const startLoopSettingsAdvisor = useCallback(async () => {
     if (!provider) return;
@@ -780,6 +808,11 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     setInput('');
 
     try {
+      try {
+        const kpiRes = await runAiAnalystTool('getCgmSamples', {rangeDays: 1, maxSamples: 80, includeDeviceStatus: true});
+        if (kpiRes?.ok) setCompactKpi(deriveCompactKpiFromCgmResult(kpiRes.result));
+      } catch {}
+
       workingLlmMessages = await maybePreFetchGlycemicEvents(
         trimmed, workingLlmMessages, runId, recordDataUsed,
       );
@@ -837,7 +870,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     provider, input, llmMessages, aiSettings.openAiModel, analystMode,
     glucoseSettings, persistHistorySnapshot, recordDataUsed, beginRun,
     finaliseMission, scrollToEnd, maybePreFetchGlycemicEvents, handleFollowUpError,
-    buildContextWindow, maybeInjectEvidenceTag,
+    buildContextWindow, maybeInjectEvidenceTag, deriveCompactKpiFromCgmResult,
   ]);
 
   // ====================================================================
@@ -950,6 +983,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     Keyboard.dismiss();
     setUiMessages([]);
     setLlmMessages([]);
+    setCompactKpi(null);
     setState({mode: 'dashboard'});
   }, []);
 
@@ -969,6 +1003,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     isBusy,
     progressText,
     errorText,
+    compactKpi,
 
     historyItems,
     historyBusy,
