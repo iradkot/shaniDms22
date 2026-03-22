@@ -291,11 +291,11 @@ function buildMealInvestigations(params: {
           signals.push({
             score: 0.25,
             he: good
-              ? `הארוחה התחילה קרוב יותר ליעד (כ-${Math.round(tPreBg)} mg/dL), וזה תרם ליציבות טובה יותר.`
-              : `הארוחה התחילה רחוק יותר מהיעד (כ-${Math.round(tPreBg)} mg/dL), וזה כנראה הקשה על היציבות.`,
+              ? `לפני הארוחה היית קרוב יותר ליעד האישי האמצעי (${targetMid} mg/dL), עם פתיחה סביב ${Math.round(tPreBg)} mg/dL — וזה תרם ליציבות טובה יותר.`
+              : `לפני הארוחה היית רחוק יותר מהיעד האישי האמצעי (${targetMid} mg/dL), עם פתיחה סביב ${Math.round(tPreBg)} mg/dL — וזה כנראה הקשה על היציבות.`,
             en: good
-              ? `Meal started closer to target (~${Math.round(tPreBg)} mg/dL), contributing to better stability.`
-              : `Meal started farther from target (~${Math.round(tPreBg)} mg/dL), likely hurting stability.`,
+              ? `Pre-meal glucose was closer to your personal midpoint target (${targetMid} mg/dL), around ${Math.round(tPreBg)} mg/dL, contributing to better stability.`
+              : `Pre-meal glucose was farther from your personal midpoint target (${targetMid} mg/dL), around ${Math.round(tPreBg)} mg/dL, likely hurting stability.`,
           });
         }
       }
@@ -375,16 +375,13 @@ const DailyReviewScreen: React.FC = () => {
   };
 
   const loadData = useCallback(async () => {
-    const [y, p, w, yTreatments, pTreatments, wTreatments] = await Promise.all([
+    const [y, w, yTreatments, wTreatments] = await Promise.all([
       fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
-      fetchBgDataForDateRangeUncached(prevDayStart, yStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
       fetchTreatmentsForDateRangeUncached(yStart, todayStart),
-      fetchTreatmentsForDateRangeUncached(prevDayStart, yStart),
       fetchTreatmentsForDateRangeUncached(wStart, yStart),
     ]);
     const yList = ((y as any) ?? []) as Row[];
-    const pList = ((p as any) ?? []) as Row[];
     setYRows(yList);
     setWRows((w as any) ?? []);
 
@@ -392,7 +389,7 @@ const DailyReviewScreen: React.FC = () => {
       timestamp: Number(m.timestamp),
       carbs: Number(m.carbs ?? 0),
     }));
-    const pMeals = mapNightscoutTreatmentsToCarbFoodItems(pTreatments ?? []).map(m => ({
+    const wMeals = mapNightscoutTreatmentsToCarbFoodItems(wTreatments ?? []).map(m => ({
       timestamp: Number(m.timestamp),
       carbs: Number(m.carbs ?? 0),
     }));
@@ -407,8 +404,8 @@ const DailyReviewScreen: React.FC = () => {
     );
     setMealScoresPrev(
       computeMealBucketScores({
-        bgRows: pList,
-        carbEvents: pMeals,
+        bgRows: ((w as any) ?? []) as Row[],
+        carbEvents: wMeals,
         hypo: glucoseSettings.hypo ?? 70,
         hyper: glucoseSettings.hyper ?? 180,
       }),
@@ -612,8 +609,20 @@ const DailyReviewScreen: React.FC = () => {
           : inv.confidence === 'medium'
           ? 'medium confidence'
           : 'low confidence';
+      const confHint =
+        language === 'he'
+          ? inv.confidence === 'high'
+            ? 'יש מספיק דוגמאות דומות והסיגנל עקבי'
+            : inv.confidence === 'medium'
+            ? 'יש סיגנל חלקי, עדיין צריך עוד דוגמאות'
+            : 'מעט דוגמאות דומות או סיגנל חלש'
+          : inv.confidence === 'high'
+          ? 'enough similar examples and consistent signal'
+          : inv.confidence === 'medium'
+          ? 'partial signal; more examples needed'
+          : 'few similar examples or weak signal';
       const base = language === 'he' ? inv.textHe : inv.textEn;
-      return `${base} (${conf} • n=${inv.evidenceCount})`;
+      return `${base} (${conf} • n=${inv.evidenceCount} • ${confHint})`;
     }
 
     if (delta == null) {
@@ -726,6 +735,7 @@ const DailyReviewScreen: React.FC = () => {
                 </Text>
                 <Text style={{marginTop: 4, color: theme.textColor}}>
                   {mealBucketLabel(language, topImprovedMeal.bucket)} • {topImprovedMeal.prevScore ?? '—'} → {topImprovedMeal.score}
+                  {language === 'he' ? ' (מול ממוצע שבועי)' : ' (vs weekly baseline)'}
                   {typeof topImprovedMeal.delta === 'number' ? ` (${topImprovedMeal.delta > 0 ? '+' : ''}${topImprovedMeal.delta})` : ''}
                 </Text>
                 <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
@@ -738,7 +748,7 @@ const DailyReviewScreen: React.FC = () => {
                   {language === 'he' ? '📉 לא הייתה ארוחה שהשתפרה אתמול' : '📉 No meal improved yesterday'}
                 </Text>
                 <Text style={{marginTop: 4, color: theme.textColor}}>
-                  {language === 'he' ? 'הירידה הבולטת:' : 'Largest drop:'} {mealBucketLabel(language, topDeclinedMeal.bucket)} • {topDeclinedMeal.prevScore ?? '—'} → {topDeclinedMeal.score}
+                  {language === 'he' ? 'הירידה הבולטת מול שבוע אחרון:' : 'Largest drop vs recent week:'} {mealBucketLabel(language, topDeclinedMeal.bucket)} • {topDeclinedMeal.prevScore ?? '—'} → {topDeclinedMeal.score}
                   {typeof topDeclinedMeal.delta === 'number' ? ` (${topDeclinedMeal.delta})` : ''}
                 </Text>
                 <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
@@ -791,15 +801,20 @@ const DailyReviewScreen: React.FC = () => {
                   <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.72), fontSize: 12}}>
                     {language === 'he' ? `עלייה ממוצעת אחרי ארוחה: ${item.avgRise} mg/dL` : `Avg post-meal rise: ${item.avgRise} mg/dL`}
                   </Text>
+                  <Text style={{marginTop: 2, color: addOpacity(theme.textColor, 0.62), fontSize: 11}}>
+                    {language === 'he'
+                      ? 'הציון מחושב בעיקר משילוב של גובה הפיק אחרי הארוחה + זמן בטווח ב-4 שעות אחרי הארוחה.'
+                      : 'Score is mainly computed from post-meal peak height + time-in-range in the 4h after meal.'}
+                  </Text>
 
                   <Text style={{marginTop: 4, color: deltaColor, fontSize: 12, fontWeight: '700'}}>
                     {item.prevScore == null
                       ? language === 'he'
-                        ? 'אין ארוחה מקבילה אתמול להשוואה'
-                        : 'No matching meal yesterday for comparison'
+                        ? 'אין מספיק ארוחות דומות בשבוע האחרון להשוואה'
+                        : 'Not enough similar meals in the recent week for comparison'
                       : language === 'he'
-                      ? `מול אתמול: ${delta > 0 ? '+' : ''}${delta} נק׳ (${item.prevScore} → ${item.score})`
-                      : `Vs yesterday: ${delta > 0 ? '+' : ''}${delta} pts (${item.prevScore} → ${item.score})`}
+                      ? `מול ממוצע שבועי: ${delta > 0 ? '+' : ''}${delta} נק׳ (${item.prevScore} → ${item.score})`
+                      : `Vs weekly baseline: ${delta > 0 ? '+' : ''}${delta} pts (${item.prevScore} → ${item.score})`}
                   </Text>
 
                   <View style={{marginTop: 8, flexDirection: 'row', gap: 8}}>
