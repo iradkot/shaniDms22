@@ -10,7 +10,7 @@
 import React from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Svg, {Polyline} from 'react-native-svg';
+import Svg, {Line, Polyline} from 'react-native-svg';
 
 import type {ThemeType} from 'app/types/theme';
 import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useMealSegments';
@@ -36,17 +36,25 @@ function formatTime(ms: number): string {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
+function miniGraphScale(values: number[]) {
+  const h = 38;
+  const min = Math.min(...values, 60);
+  const max = Math.max(...values, 190);
+  const span = Math.max(1, max - min);
+  return {
+    h,
+    yFor: (v: number) => h - ((v - min) / span) * h,
+  };
+}
+
 function buildMiniGraphPoints(values: number[]): string {
   if (!values.length) return '';
   const w = 140;
-  const h = 38;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = Math.max(1, max - min);
+  const {yFor} = miniGraphScale(values);
   return values
     .map((v, i) => {
       const x = (i / Math.max(1, values.length - 1)) * w;
-      const y = h - ((v - min) / span) * h;
+      const y = yFor(v);
       return `${x},${y}`;
     })
     .join(' ');
@@ -78,6 +86,9 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
         (n): n is number => typeof n === 'number',
       );
   const miniGraphPoints = buildMiniGraphPoints(miniGraphValues);
+  const graphScale = miniGraphValues.length ? miniGraphScale(miniGraphValues) : null;
+  const lowLineY = graphScale ? graphScale.yFor(70) : null;
+  const highLineY = graphScale ? graphScale.yFor(180) : null;
 
   const lowPct = Math.max(0, Math.min(100, segment.postMealLowPct ?? 0));
   const inRangePct = Math.max(0, Math.min(100, segment.postMealTirPct ?? 0));
@@ -187,6 +198,12 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
       {miniGraphPoints ? (
         <MiniGraphWrap>
           <Svg width={140} height={38}>
+            {lowLineY != null ? (
+              <Line x1={0} y1={lowLineY} x2={140} y2={lowLineY} stroke={addOpacity(theme.belowRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
+            ) : null}
+            {highLineY != null ? (
+              <Line x1={0} y1={highLineY} x2={140} y2={highLineY} stroke={addOpacity(theme.aboveRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
+            ) : null}
             <Polyline points={miniGraphPoints} fill="none" stroke={theme.accentColor} strokeWidth={2} />
           </Svg>
         </MiniGraphWrap>
