@@ -713,9 +713,10 @@ const DailyReviewScreen: React.FC = () => {
                   {language === 'he' ? '🚀 הארוחה שהכי השתפרה' : '🚀 Top improved meal'}
                 </Text>
                 <Text style={{marginTop: 4, color: theme.textColor}}>
-                  {mealBucketLabel(language, topImprovedMeal.bucket)} • {topImprovedMeal.prevScore ?? '—'} → {topImprovedMeal.score}
+                  {mealBucketLabel(language, topImprovedMeal.bucket)}
+                  <Text style={{writingDirection: 'ltr'}}> • {topImprovedMeal.prevScore ?? '—'} → {topImprovedMeal.score}</Text>
                   {language === 'he' ? ' (מול ממוצע שבועי)' : ' (vs weekly baseline)'}
-                  {typeof topImprovedMeal.delta === 'number' ? ` (${topImprovedMeal.delta > 0 ? '+' : ''}${topImprovedMeal.delta})` : ''}
+                  {typeof topImprovedMeal.delta === 'number' ? <Text style={{writingDirection: 'ltr'}}>{` (${topImprovedMeal.delta > 0 ? '+' : ''}${topImprovedMeal.delta})`}</Text> : ''}
                 </Text>
                 <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
                   {explainMealDelta(topImprovedMeal.bucket, topImprovedMeal.delta)}
@@ -727,8 +728,9 @@ const DailyReviewScreen: React.FC = () => {
                   {language === 'he' ? '📉 לא הייתה ארוחה שהשתפרה אתמול' : '📉 No meal improved yesterday'}
                 </Text>
                 <Text style={{marginTop: 4, color: theme.textColor}}>
-                  {language === 'he' ? 'הירידה הבולטת מול שבוע אחרון:' : 'Largest drop vs recent week:'} {mealBucketLabel(language, topDeclinedMeal.bucket)} • {topDeclinedMeal.prevScore ?? '—'} → {topDeclinedMeal.score}
-                  {typeof topDeclinedMeal.delta === 'number' ? ` (${topDeclinedMeal.delta})` : ''}
+                  {language === 'he' ? 'הירידה הבולטת מול שבוע אחרון:' : 'Largest drop vs recent week:'} {mealBucketLabel(language, topDeclinedMeal.bucket)}
+                  <Text style={{writingDirection: 'ltr'}}> • {topDeclinedMeal.prevScore ?? '—'} → {topDeclinedMeal.score}</Text>
+                  {typeof topDeclinedMeal.delta === 'number' ? <Text style={{writingDirection: 'ltr'}}>{` (${topDeclinedMeal.delta})`}</Text> : ''}
                 </Text>
                 <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
                   {explainMealDelta(topDeclinedMeal.bucket, topDeclinedMeal.delta)}
@@ -782,8 +784,8 @@ const DailyReviewScreen: React.FC = () => {
                       <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.8)}}>
                         {language === 'he' ? '📈 פיק אחרי ארוחה' : '📈 Post-meal peak'}
                       </Text>
-                      <Text style={{fontSize: 12, fontWeight: '700', color: theme.textColor}}>
-                        {item.avgRise} mg/dL • {Math.max(0, Math.min(100, Math.round(100 - item.avgRise * 0.45)))}/100
+                      <Text style={{fontSize: 12, fontWeight: '700', color: theme.textColor, writingDirection: 'ltr'}}>
+                        {item.avgRise} mg/dL | {Math.max(0, Math.min(100, Math.round(100 - item.avgRise * 0.45)))}/100
                       </Text>
                     </View>
 
@@ -791,8 +793,8 @@ const DailyReviewScreen: React.FC = () => {
                       <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.8)}}>
                         {language === 'he' ? '🟢 TIR (4ש׳ אחרי ארוחה)' : '🟢 TIR (4h post meal)'}
                       </Text>
-                      <Text style={{fontSize: 12, fontWeight: '700', color: theme.textColor}}>
-                        {item.avgTirPct}% • +{Math.round((item.avgTirPct / 100) * 35)}
+                      <Text style={{fontSize: 12, fontWeight: '700', color: theme.textColor, writingDirection: 'ltr'}}>
+                        {item.avgTirPct}% | +{Math.round((item.avgTirPct / 100) * 35)}
                       </Text>
                     </View>
 
@@ -802,7 +804,7 @@ const DailyReviewScreen: React.FC = () => {
                       <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.8)}}>
                         {language === 'he' ? '🏁 ציון מסכם' : '🏁 Final score'}
                       </Text>
-                      <Text style={{fontSize: 12, fontWeight: '900', color: theme.accentColor}}>{item.score}/100</Text>
+                      <Text style={{fontSize: 12, fontWeight: '900', color: theme.accentColor, writingDirection: 'ltr'}}>{item.score}/100</Text>
                     </View>
                   </View>
 
@@ -812,8 +814,13 @@ const DailyReviewScreen: React.FC = () => {
                         ? 'אין מספיק ארוחות דומות בשבוע האחרון להשוואה'
                         : 'Not enough similar meals in the recent week for comparison'
                       : language === 'he'
-                      ? `מול ממוצע שבועי: ${delta > 0 ? '+' : ''}${delta} נק׳ (${item.prevScore} → ${item.score})`
-                      : `Vs weekly baseline: ${delta > 0 ? '+' : ''}${delta} pts (${item.prevScore} → ${item.score})`}
+                      ? 'מול ממוצע שבועי: '
+                      : 'Vs weekly baseline: '}
+                    {item.prevScore != null ? (
+                      <Text style={{writingDirection: 'ltr'}}>
+                        {`${delta > 0 ? '+' : ''}${delta} ${language === 'he' ? 'נק׳' : 'pts'} (${item.prevScore} → ${item.score})`}
+                      </Text>
+                    ) : null}
                   </Text>
 
                   <View style={{marginTop: 8, flexDirection: 'row', gap: 8}}>
