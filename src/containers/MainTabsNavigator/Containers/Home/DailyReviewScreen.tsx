@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, I18nManager, Pressable, ScrollView, Text, View} from 'react-native';
 import {format, subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
@@ -54,6 +54,15 @@ type MealBucketScore = {
   count: number;
   avgRise: number;
   representativeTs: number | null;
+};
+
+type MealBucketInsight = {
+  bucket: MealBucket;
+  count: number;
+  avgPreBolusMin: number | null;
+  avgUnitsPer10g: number | null;
+  avgPreBg: number | null;
+  avgRise: number;
 };
 
 function classifyMealBucket(ts: number): MealBucket {
@@ -131,6 +140,76 @@ function computeMealBucketScores(params: {
   return out.filter(x => x.count > 0);
 }
 
+function computeMealBucketInsights(params: {
+  bgRows: Row[];
+  treatments: any[];
+}): MealBucketInsight[] {
+  const {bgRows, treatments} = params;
+  const meals = mapNightscoutTreatmentsToCarbFoodItems(treatments ?? []).map(m => ({
+    timestamp: Number(m.timestamp),
+    carbs: Number(m.carbs ?? 0),
+  }));
+
+  const boluses = (treatments ?? [])
+    .filter(t => t?.insulin && ['Bolus', 'Meal Bolus', 'Correction Bolus', 'Combo Bolus'].includes(t?.eventType))
+    .map(t => ({
+      ts: Date.parse(t.created_at),
+      insulin: Number(t.insulin || t.amount || 0),
+    }))
+    .filter(x => Number.isFinite(x.ts) && Number.isFinite(x.insulin) && x.insulin > 0);
+
+  const base: Record<MealBucket, {preBolus: number[]; unitsPer10: number[]; preBg: number[]; rises: number[]}> = {
+    breakfast: {preBolus: [], unitsPer10: [], preBg: [], rises: []},
+    lunch: {preBolus: [], unitsPer10: [], preBg: [], rises: []},
+    dinner: {preBolus: [], unitsPer10: [], preBg: [], rises: []},
+    snack: {preBolus: [], unitsPer10: [], preBg: [], rises: []},
+  };
+
+  for (const meal of meals) {
+    const bucket = classifyMealBucket(meal.timestamp);
+    const pre = nearestBgBefore(bgRows, meal.timestamp, 45);
+    const vals = bgWindow(bgRows, meal.timestamp, meal.timestamp + 4 * 60 * 60 * 1000);
+    const peak = vals.length ? Math.max(...vals) : null;
+
+    if (pre != null) {
+      base[bucket].preBg.push(pre);
+      if (peak != null) {
+        base[bucket].rises.push(Math.max(0, Math.round(peak - pre)));
+      }
+    }
+
+    const mealBoluses = boluses.filter(b => b.ts >= meal.timestamp - 45 * 60 * 1000 && b.ts <= meal.timestamp + 30 * 60 * 1000);
+    if (mealBoluses.length) {
+      const before = mealBoluses
+        .filter(b => b.ts <= meal.timestamp)
+        .sort((a, b) => b.ts - a.ts)[0];
+      if (before) {
+        base[bucket].preBolus.push(Math.round((meal.timestamp - before.ts) / 60000));
+      }
+
+      const units = mealBoluses.reduce((s, b) => s + b.insulin, 0);
+      if (meal.carbs > 0) {
+        base[bucket].unitsPer10.push(Number(((units / meal.carbs) * 10).toFixed(2)));
+      }
+    }
+  }
+
+  return (Object.keys(base) as MealBucket[])
+    .map(bucket => {
+      const m = base[bucket];
+      const avg = (arr: number[]) => (arr.length ? Number((arr.reduce((s, n) => s + n, 0) / arr.length).toFixed(1)) : null);
+      return {
+        bucket,
+        count: Math.max(m.preBg.length, m.rises.length, m.preBolus.length, m.unitsPer10.length),
+        avgPreBolusMin: avg(m.preBolus),
+        avgUnitsPer10g: avg(m.unitsPer10),
+        avgPreBg: avg(m.preBg),
+        avgRise: avg(m.rises) ?? 0,
+      };
+    })
+    .filter(x => x.count > 0);
+}
+
 function mealBucketLabel(language: string, bucket: MealBucket): string {
   if (language === 'he') {
     if (bucket === 'breakfast') return 'בוקר';
@@ -157,6 +236,9 @@ const DailyReviewScreen: React.FC = () => {
   const [wRows, setWRows] = useState<Row[]>([]);
   const [mealScoresY, setMealScoresY] = useState<MealBucketScore[]>([]);
   const [mealScoresPrev, setMealScoresPrev] = useState<MealBucketScore[]>([]);
+  const [mealInsightsY, setMealInsightsY] = useState<MealBucketInsight[]>([]);
+  const [mealInsightsPrev, setMealInsightsPrev] = useState<MealBucketInsight[]>([]);
+  const [expandedMealWhy, setExpandedMealWhy] = useState<MealBucket | null>(null);
   const [llmSummaryLine, setLlmSummaryLine] = useState<string | null>(null);
   const [llmKeyLine, setLlmKeyLine] = useState<string | null>(null);
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
@@ -187,7 +269,7 @@ const DailyReviewScreen: React.FC = () => {
     return (totals.totalBasal || 0) + (totals.totalBolus || 0);
   };
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const [y, p, w, yTreatments, pTreatments] = await Promise.all([
       fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(prevDayStart, yStart, {throwOnError: false}),
@@ -225,6 +307,9 @@ const DailyReviewScreen: React.FC = () => {
         hyper: glucoseSettings.hyper ?? 180,
       }),
     );
+
+    setMealInsightsY(computeMealBucketInsights({bgRows: yList, treatments: yTreatments ?? []}));
+    setMealInsightsPrev(computeMealBucketInsights({bgRows: pList, treatments: pTreatments ?? []}));
 
     // keep insulin calculation for parity with existing data flow
     try {
@@ -265,7 +350,7 @@ const DailyReviewScreen: React.FC = () => {
       setWhyLine(null);
       setActionSource('fallback');
     }
-  };
+  }, [aiSettings.apiKey, aiSettings.enabled, aiSettings.openAiModel, glucoseSettings, prevDayStart, todayStart, wStart, yStart]);
 
   useEffect(() => {
     let mounted = true;
@@ -274,7 +359,7 @@ const DailyReviewScreen: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [loadData]);
 
   const handleRegenerate = async () => {
     try {
@@ -379,6 +464,68 @@ const DailyReviewScreen: React.FC = () => {
     return [...mealComparisons].sort((a, b) => a.score - b.score)[0];
   }, [mealComparisons]);
 
+  const mealInsightMap = useMemo(() => {
+    const current = new Map(mealInsightsY.map(m => [m.bucket, m]));
+    const prev = new Map(mealInsightsPrev.map(m => [m.bucket, m]));
+    return {current, prev};
+  }, [mealInsightsPrev, mealInsightsY]);
+
+  const explainMealDelta = (bucket: MealBucket, delta: number | null) => {
+    const cur = mealInsightMap.current.get(bucket);
+    const prev = mealInsightMap.prev.get(bucket);
+    if (!cur) return language === 'he' ? 'אין מספיק נתונים לארוחה הזו כדי להסביר את השינוי.' : 'Not enough meal data to explain this change yet.';
+    if (!prev || delta == null) return language === 'he' ? 'אין יום השוואה ישיר, אבל נמשיך לצבור נתונים כדי לזהות דפוס.' : 'No direct comparison day yet; we will keep learning the pattern.';
+
+    const reasons: string[] = [];
+    const riseDelta = cur.avgRise - prev.avgRise;
+
+    if (cur.avgPreBolusMin != null && prev.avgPreBolusMin != null) {
+      const preBolusDelta = cur.avgPreBolusMin - prev.avgPreBolusMin;
+      if (preBolusDelta >= 8 && riseDelta <= -8) {
+        reasons.push(
+          language === 'he'
+            ? `תזמון פרה-בולוס ארוך יותר בכ-${Math.round(preBolusDelta)} דק׳ כנראה עזר להקטין את הפיק.`
+            : `Longer pre-bolus by ~${Math.round(preBolusDelta)} min likely reduced the post-meal peak.`,
+        );
+      }
+    }
+
+    if (cur.avgUnitsPer10g != null && prev.avgUnitsPer10g != null) {
+      const ratioDelta = cur.avgUnitsPer10g - prev.avgUnitsPer10g;
+      if (ratioDelta >= 0.2 && riseDelta <= -8) {
+        reasons.push(
+          language === 'he'
+            ? `יחס אינסולין/פחמימה עלה (כ-${ratioDelta.toFixed(1)} יח׳ לכל 10 גר׳), וזה התאים טוב יותר לארוחה.`
+            : `Insulin-to-carb dose increased (~${ratioDelta.toFixed(1)} U per 10g), and matched this meal better.`,
+        );
+      }
+    }
+
+    if (cur.avgPreBg != null && prev.avgPreBg != null) {
+      const curDist = Math.abs(cur.avgPreBg - targetMid);
+      const prevDist = Math.abs(prev.avgPreBg - targetMid);
+      if (curDist + 8 < prevDist) {
+        reasons.push(
+          language === 'he'
+            ? `התחלת את הארוחה קרוב יותר ליעד הסוכר (${Math.round(cur.avgPreBg)}), וזה שיפר יציבות.`
+            : `Meal started closer to glucose target (${Math.round(cur.avgPreBg)}), which improved stability.`,
+        );
+      }
+    }
+
+    if (!reasons.length) {
+      return language === 'he'
+        ? delta > 0
+          ? 'יש שיפור ברור בתוצאה, אבל כרגע אין גורם יחיד מובהק. שווה להמשיך באותה שגרה ולעקוב.'
+          : 'יש ירידה בתוצאה, אבל בלי גורם יחיד מובהק. מומלץ לבדוק תזמון בולוס ויחס אינסולין/פחמימה.'
+        : delta > 0
+        ? 'Clear improvement, but no single dominant cause yet. Keep this routine and track another day.'
+        : 'Score dropped without one dominant cause. Re-check bolus timing and insulin/carb ratio.';
+    }
+
+    return reasons[0];
+  };
+
   if (loading) {
     return <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}><ActivityIndicator /></View>;
   }
@@ -476,6 +623,9 @@ const DailyReviewScreen: React.FC = () => {
                   {mealBucketLabel(language, topImprovedMeal.bucket)} • {topImprovedMeal.prevScore ?? '—'} → {topImprovedMeal.score}
                   {typeof topImprovedMeal.delta === 'number' ? ` (${topImprovedMeal.delta > 0 ? '+' : ''}${topImprovedMeal.delta})` : ''}
                 </Text>
+                <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
+                  {explainMealDelta(topImprovedMeal.bucket, topImprovedMeal.delta)}
+                </Text>
               </View>
             ) : null}
 
@@ -500,9 +650,8 @@ const DailyReviewScreen: React.FC = () => {
               const same = item.delta == null || item.delta === 0;
               const deltaColor = same ? addOpacity(theme.textColor, 0.6) : improved ? '#2e7d32' : '#c62828';
               return (
-                <Pressable
+                <View
                   key={item.bucket}
-                  onPress={() => openMealBucketChart(item.bucket, item.representativeTs)}
                   style={{borderWidth: 1, borderColor: addOpacity(theme.borderColor || '#999', 0.5), borderRadius: 12, padding: 10}}
                 >
                   <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
@@ -534,7 +683,33 @@ const DailyReviewScreen: React.FC = () => {
                       ? `מול אתמול: ${delta > 0 ? '+' : ''}${delta} נק׳ (${item.prevScore} → ${item.score})`
                       : `Vs yesterday: ${delta > 0 ? '+' : ''}${delta} pts (${item.prevScore} → ${item.score})`}
                   </Text>
-                </Pressable>
+
+                  <View style={{marginTop: 8, flexDirection: 'row', gap: 8}}>
+                    <Pressable
+                      onPress={() => openMealBucketChart(item.bucket, item.representativeTs)}
+                      style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.5)}}
+                    >
+                      <Text style={{color: theme.accentColor, fontWeight: '700', fontSize: 12}}>
+                        {language === 'he' ? 'פתח גרף' : 'Open chart'}
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => setExpandedMealWhy(prev => (prev === item.bucket ? null : item.bucket))}
+                      style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.35)}}
+                    >
+                      <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>
+                        {language === 'he' ? 'למה זה השתנה?' : 'Why did this change?'}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {expandedMealWhy === item.bucket ? (
+                    <View style={{marginTop: 8, padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.accentColor, 0.08), borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.2)}}>
+                      <Text style={{color: theme.textColor}}>{explainMealDelta(item.bucket, item.delta)}</Text>
+                    </View>
+                  ) : null}
+                </View>
               );
             })}
           </View>
