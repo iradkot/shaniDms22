@@ -18,6 +18,11 @@ export type GlucoseSettings = {
   nightStartHour: number;
   /** Local time window end hour (0..23). */
   nightEndHour: number;
+
+  /** Meal window starts (0..23). */
+  breakfastStartHour: number;
+  lunchStartHour: number;
+  dinnerStartHour: number;
 };
 
 type GlucoseSettingsContextValue = {
@@ -37,6 +42,10 @@ const DEFAULT_SETTINGS: GlucoseSettings = {
 
   nightStartHour: DEFAULT_NIGHT_WINDOW.startHour,
   nightEndHour: DEFAULT_NIGHT_WINDOW.endHour,
+
+  breakfastStartHour: 5,
+  lunchStartHour: 11,
+  dinnerStartHour: 16,
 };
 
 function toFiniteNumber(v: unknown): number | null {
@@ -67,9 +76,26 @@ function sanitize(partial: Partial<GlucoseSettings>): GlucoseSettings {
     23,
   );
 
+  const breakfastStartHour = clampInt(
+    toFiniteNumber(partial.breakfastStartHour) ?? DEFAULT_SETTINGS.breakfastStartHour,
+    0,
+    23,
+  );
+  const lunchStartHour = clampInt(
+    toFiniteNumber(partial.lunchStartHour) ?? DEFAULT_SETTINGS.lunchStartHour,
+    0,
+    23,
+  );
+  const dinnerStartHour = clampInt(
+    toFiniteNumber(partial.dinnerStartHour) ?? DEFAULT_SETTINGS.dinnerStartHour,
+    0,
+    23,
+  );
+
   // Basic ordering check; if invalid, fall back to defaults.
   const isOrdered = severeHypo < hypo && hypo < hyper && hyper < severeHyper;
-  if (!isOrdered) {
+  const areMealHoursOrdered = breakfastStartHour < lunchStartHour && lunchStartHour < dinnerStartHour;
+  if (!isOrdered || !areMealHoursOrdered) {
     return {
       ...DEFAULT_SETTINGS,
       nightStartHour,
@@ -84,6 +110,9 @@ function sanitize(partial: Partial<GlucoseSettings>): GlucoseSettings {
     severeHyper,
     nightStartHour,
     nightEndHour,
+    breakfastStartHour,
+    lunchStartHour,
+    dinnerStartHour,
   };
 }
 

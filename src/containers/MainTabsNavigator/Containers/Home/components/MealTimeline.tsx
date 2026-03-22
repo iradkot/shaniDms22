@@ -17,6 +17,7 @@ import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home
 import type {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {t as tr} from 'app/i18n/translations';
 
 // ── Props ───────────────────────────────────────────────────────────────
@@ -31,11 +32,17 @@ type Props = {
 
 type CoreMealBucket = 'breakfast' | 'lunch' | 'dinner';
 
-function classifyCoreMealBucket(startMs: number): CoreMealBucket | 'other' {
+function classifyCoreMealBucket(params: {
+  startMs: number;
+  breakfastStartHour: number;
+  lunchStartHour: number;
+  dinnerStartHour: number;
+}): CoreMealBucket | 'other' {
+  const {startMs, breakfastStartHour, lunchStartHour, dinnerStartHour} = params;
   const h = new Date(startMs).getHours();
-  if (h >= 5 && h < 11) return 'breakfast';
-  if (h >= 11 && h < 16) return 'lunch';
-  if (h >= 16 && h < 22) return 'dinner';
+  if (h >= breakfastStartHour && h < lunchStartHour) return 'breakfast';
+  if (h >= lunchStartHour && h < dinnerStartHour) return 'lunch';
+  if (h >= dinnerStartHour) return 'dinner';
   return 'other';
 }
 
@@ -54,6 +61,7 @@ function coreMealLabel(language: string, bucket: CoreMealBucket): string {
 
 const MealTimeline: React.FC<Props> = ({meals, isLoading, isToday, onTagPress}) => {
   const {language} = useAppLanguage();
+  const {settings: glucoseSettings} = useGlucoseSettings();
 
   const coreMeals = React.useMemo(() => {
     const sorted = [...meals].sort((a, b) => a.startMs - b.startMs);
@@ -65,14 +73,19 @@ const MealTimeline: React.FC<Props> = ({meals, isLoading, isToday, onTagPress}) 
     };
 
     for (const meal of sorted) {
-      const bucket = classifyCoreMealBucket(meal.startMs);
+      const bucket = classifyCoreMealBucket({
+        startMs: meal.startMs,
+        breakfastStartHour: glucoseSettings.breakfastStartHour,
+        lunchStartHour: glucoseSettings.lunchStartHour,
+        dinnerStartHour: glucoseSettings.dinnerStartHour,
+      });
       if (bucket === 'other') continue;
       // Keep the latest event inside each core meal bucket.
       byBucket[bucket] = meal;
     }
 
     return byBucket;
-  }, [meals]);
+  }, [glucoseSettings.breakfastStartHour, glucoseSettings.dinnerStartHour, glucoseSettings.lunchStartHour, meals]);
 
   const orderedBuckets: CoreMealBucket[] = ['breakfast', 'lunch', 'dinner'];
   const availableCount = orderedBuckets.filter(b => !!coreMeals[b]).length;

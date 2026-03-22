@@ -44,6 +44,7 @@ const Settings: React.FC = () => {
   const [showNightscout, setShowNightscout] = useState(false);
   const [showRanges, setShowRanges] = useState(false);
   const [showNightWindow, setShowNightWindow] = useState(false);
+  const [showMealWindows, setShowMealWindows] = useState(false);
   const [showAi, setShowAi] = useState(false);
   const [showProactiveCare, setShowProactiveCare] = useState(false);
   const [uiLoaded, setUiLoaded] = useState(false);
@@ -67,6 +68,9 @@ const Settings: React.FC = () => {
   const [severeHyperText, setSevereHyperText] = useState('');
   const [nightStartText, setNightStartText] = useState('');
   const [nightEndText, setNightEndText] = useState('');
+  const [breakfastStartText, setBreakfastStartText] = useState('');
+  const [lunchStartText, setLunchStartText] = useState('');
+  const [dinnerStartText, setDinnerStartText] = useState('');
   const [dailyBriefHourText, setDailyBriefHourText] = useState('08');
   const [dailyBriefMinuteText, setDailyBriefMinuteText] = useState('00');
   const [dailyBriefStatus, setDailyBriefStatus] = useState<string | null>(null);
@@ -92,6 +96,9 @@ const Settings: React.FC = () => {
     setSevereHyperText(String(glucoseSettings.severeHyper));
     setNightStartText(String(glucoseSettings.nightStartHour));
     setNightEndText(String(glucoseSettings.nightEndHour));
+    setBreakfastStartText(String(glucoseSettings.breakfastStartHour));
+    setLunchStartText(String(glucoseSettings.lunchStartHour));
+    setDinnerStartText(String(glucoseSettings.dinnerStartHour));
   }, [glucoseLoaded, glucoseSettings]);
 
   useEffect(() => {
@@ -151,6 +158,7 @@ const Settings: React.FC = () => {
           showNightscout: boolean;
           showRanges: boolean;
           showNightWindow: boolean;
+          showMealWindows: boolean;
           showAi: boolean;
           showProactiveCare: boolean;
         }>;
@@ -166,6 +174,9 @@ const Settings: React.FC = () => {
         }
         if (typeof parsed.showNightWindow === 'boolean') {
           setShowNightWindow(parsed.showNightWindow);
+        }
+        if (typeof parsed.showMealWindows === 'boolean') {
+          setShowMealWindows(parsed.showMealWindows);
         }
         if (typeof parsed.showAi === 'boolean') {
           setShowAi(parsed.showAi);
@@ -197,13 +208,14 @@ const Settings: React.FC = () => {
         showNightscout,
         showRanges,
         showNightWindow,
+        showMealWindows,
         showAi,
         showProactiveCare,
       }),
     ).catch(() => {
       // Best-effort persistence.
     });
-  }, [uiLoaded, showDisplayedTabs, showNightscout, showRanges, showNightWindow, showAi, showProactiveCare]);
+  }, [uiLoaded, showDisplayedTabs, showNightscout, showRanges, showNightWindow, showMealWindows, showAi, showProactiveCare]);
 
   const inputStyle = {
     borderWidth: 1,
@@ -266,6 +278,33 @@ const Settings: React.FC = () => {
     setRangeError(null);
     setGlucoseSetting('nightStartHour', start);
     setGlucoseSetting('nightEndHour', end);
+  };
+
+  const validateAndApplyMealWindows = () => {
+    const breakfast = parseIntStrict(breakfastStartText);
+    const lunch = parseIntStrict(lunchStartText);
+    const dinner = parseIntStrict(dinnerStartText);
+
+    if (breakfast === null || lunch === null || dinner === null) {
+      setRangeError(tr(language, 'settings.errMealHoursRequired'));
+      return;
+    }
+
+    const inRange = [breakfast, lunch, dinner].every(h => h >= 0 && h <= 23);
+    if (!inRange) {
+      setRangeError(tr(language, 'settings.errMealHoursRange'));
+      return;
+    }
+
+    if (!(breakfast < lunch && lunch < dinner)) {
+      setRangeError(tr(language, 'settings.errMealHoursOrder'));
+      return;
+    }
+
+    setRangeError(null);
+    setGlucoseSetting('breakfastStartHour', breakfast);
+    setGlucoseSetting('lunchStartHour', lunch);
+    setGlucoseSetting('dinnerStartHour', dinner);
   };
 
   const validateAndApplyDailyBriefTime = () => {
@@ -1086,6 +1125,58 @@ const Settings: React.FC = () => {
                 value={nightEndText}
                 onChangeText={setNightEndText}
                 onBlur={validateAndApplyNightWindow}
+                keyboardType="numeric"
+                style={inputStyle}
+              />
+            </View>
+          </>
+        )}
+
+        <SectionHeader
+          title={tr(language, 'settings.mealWindows')}
+          expanded={showMealWindows}
+          onToggle={() => setShowMealWindows(v => !v)}
+        />
+
+        {showMealWindows && (
+          <>
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="free-breakfast" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>{tr(language, 'settings.breakfastStart')}</Text>
+              <TextInput
+                value={breakfastStartText}
+                onChangeText={setBreakfastStartText}
+                onBlur={validateAndApplyMealWindows}
+                keyboardType="numeric"
+                style={inputStyle}
+              />
+            </View>
+
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="lunch-dining" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>{tr(language, 'settings.lunchStart')}</Text>
+              <TextInput
+                value={lunchStartText}
+                onChangeText={setLunchStartText}
+                onBlur={validateAndApplyMealWindows}
+                keyboardType="numeric"
+                style={inputStyle}
+              />
+            </View>
+
+            <View style={rowStyle}>
+              <View style={iconContainerStyle}>
+                <MaterialIcons name="dinner-dining" size={theme.typography.size.xl} color={theme.textColor} />
+              </View>
+              <Text style={labelStyle}>{tr(language, 'settings.dinnerStart')}</Text>
+              <TextInput
+                value={dinnerStartText}
+                onChangeText={setDinnerStartText}
+                onBlur={validateAndApplyMealWindows}
                 keyboardType="numeric"
                 style={inputStyle}
               />
