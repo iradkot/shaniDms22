@@ -27,6 +27,7 @@ import {clearAllMemory, getMemoryStats} from 'app/services/aiMemory/aiMemoryStor
 import {NightscoutSection} from './sections/NightscoutSection';
 import {iconContainerStyle, labelStyle, rowStyle, SectionHeader} from './settingsShared';
 import {t as tr} from 'app/i18n/translations';
+import {addOpacity} from 'app/style/styling.utils';
 
 const UI_STORAGE_KEY = 'settings.ui.v1';
 
