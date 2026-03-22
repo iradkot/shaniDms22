@@ -106,6 +106,21 @@ const MealTimeline: React.FC<Props> = ({meals, isLoading, isToday, onTagPress}) 
         <MealCount>{`${availableCount}/3`}</MealCount>
       </SectionHeader>
 
+      <TopSummaryRow>
+        {orderedBuckets.map(bucket => {
+          const meal = coreMeals[bucket];
+          const tir = meal?.postMealTirPct ?? null;
+          const miniScore = tir == null ? null : Math.max(0, Math.min(100, Math.round(tir - (meal?.postMealHighPct ?? 0) * 0.4)));
+          return (
+            <TopSummaryCard key={`summary-${bucket}`}>
+              <TopSummaryTitle>{coreMealLabel(language, bucket)}</TopSummaryTitle>
+              <TopSummaryValue>{miniScore == null ? '—' : `${miniScore}`}</TopSummaryValue>
+              <TopSummarySub>{tir == null ? (language === 'he' ? 'אין נתונים' : 'No data') : `TIR ${tir}%`}</TopSummarySub>
+            </TopSummaryCard>
+          );
+        })}
+      </TopSummaryRow>
+
       {orderedBuckets.map(bucket => {
         const meal = coreMeals[bucket];
         if (!meal) {
@@ -195,6 +210,38 @@ const MissingMealTitle = styled.Text<{theme: ThemeType}>`
 const MissingMealSub = styled.Text<{theme: ThemeType}>`
   font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs}px;
   margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
+  color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.55)};
+`;
+
+const TopSummaryRow = styled.View<{theme: ThemeType}>`
+  flex-direction: row;
+  gap: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
+  margin-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  margin-bottom: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+`;
+
+const TopSummaryCard = styled.View<{theme: ThemeType}>`
+  flex: 1;
+  border-radius: 10px;
+  border-width: 1px;
+  border-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.14)};
+  background-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.white, 0.95)};
+  padding: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
+`;
+
+const TopSummaryTitle = styled.Text<{theme: ThemeType}>`
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs - 1}px;
+  color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.65)};
+`;
+
+const TopSummaryValue = styled.Text<{theme: ThemeType}>`
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.md}px;
+  font-weight: 900;
+  color: ${(p: {theme: ThemeType}) => p.theme.textColor};
+`;
+
+const TopSummarySub = styled.Text<{theme: ThemeType}>`
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs - 1}px;
   color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.55)};
 `;
 

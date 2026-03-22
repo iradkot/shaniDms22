@@ -10,6 +10,7 @@
 import React from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Svg, {Polyline} from 'react-native-svg';
 
 import type {ThemeType} from 'app/types/theme';
 import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useMealSegments';
@@ -35,6 +36,22 @@ function formatTime(ms: number): string {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
+function buildMiniGraphPoints(values: number[]): string {
+  if (!values.length) return '';
+  const w = 120;
+  const h = 36;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(1, max - min);
+  return values
+    .map((v, i) => {
+      const x = (i / Math.max(1, values.length - 1)) * w;
+      const y = h - ((v - min) / span) * h;
+      return `${x},${y}`;
+    })
+    .join(' ');
+}
+
 // ── Component ───────────────────────────────────────────────────────────
 
 const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, onTagPress}) => {
@@ -54,6 +71,15 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
     segment.bgBefore != null && segment.bgPeak != null
       ? segment.bgPeak - segment.bgBefore
       : null;
+
+  const miniGraphValues = [segment.bgBefore, segment.bgPeak, segment.bgAfter].filter(
+    (n): n is number => typeof n === 'number',
+  );
+  const miniGraphPoints = buildMiniGraphPoints(miniGraphValues);
+
+  const lowPct = Math.max(0, Math.min(100, segment.postMealLowPct ?? 0));
+  const inRangePct = Math.max(0, Math.min(100, segment.postMealTirPct ?? 0));
+  const highPct = Math.max(0, Math.min(100, segment.postMealHighPct ?? 0));
 
   return (
     <CardWrap $isLatest={isLatest}>
@@ -156,15 +182,30 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
         </BgJourneyRow>
       ) : null}
 
+      {miniGraphPoints ? (
+        <MiniGraphWrap>
+          <Svg width={120} height={36}>
+            <Polyline points={miniGraphPoints} fill="none" stroke={theme.accentColor} strokeWidth={2.2} />
+          </Svg>
+        </MiniGraphWrap>
+      ) : null}
+
       {segment.postMealTirPct != null ? (
         <TirSection>
           <TirHeaderRow>
             <TirLabel>🟢 TIR (2h)</TirLabel>
             <TirValue>{segment.postMealTirPct}%</TirValue>
           </TirHeaderRow>
-          <TirTrack>
-            <TirFill $pct={segment.postMealTirPct} />
-          </TirTrack>
+          <TirStackTrack>
+            <TirLowFill $pct={lowPct} />
+            <TirInRangeFill $pct={inRangePct} />
+            <TirHighFill $pct={highPct} />
+          </TirStackTrack>
+          <TirLegendRow>
+            <TirLegendText>🔴 {lowPct}%</TirLegendText>
+            <TirLegendText>🟢 {inRangePct}%</TirLegendText>
+            <TirLegendText>🟠 {highPct}%</TirLegendText>
+          </TirLegendRow>
         </TirSection>
       ) : null}
 
@@ -302,19 +343,47 @@ const TirValue = styled.Text<{theme: ThemeType}>`
   color: ${(p: {theme: ThemeType}) => p.theme.textColor};
 `;
 
-const TirTrack = styled.View<{theme: ThemeType}>`
-  margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.xs - 1}px;
-  height: 8px;
-  border-radius: 999px;
-  overflow: hidden;
-  background-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.14)};
+const MiniGraphWrap = styled.View<{theme: ThemeType}>`
+  margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
+  align-items: flex-end;
 `;
 
-const TirFill = styled.View<{$pct: number; theme: ThemeType}>`
-  width: ${(p: {$pct: number}) => Math.max(0, Math.min(100, p.$pct))}%;
-  height: 8px;
+const TirStackTrack = styled.View<{theme: ThemeType}>`
+  margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.xs - 1}px;
+  height: 9px;
   border-radius: 999px;
+  overflow: hidden;
+  background-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.1)};
+  flex-direction: row;
+`;
+
+const TirLowFill = styled.View<{$pct: number; theme: ThemeType}>`
+  width: ${(p: {$pct: number}) => Math.max(0, Math.min(100, p.$pct))}%;
+  height: 9px;
+  background-color: ${(p: {theme: ThemeType}) => p.theme.belowRangeColor};
+`;
+
+const TirInRangeFill = styled.View<{$pct: number; theme: ThemeType}>`
+  width: ${(p: {$pct: number}) => Math.max(0, Math.min(100, p.$pct))}%;
+  height: 9px;
   background-color: ${(p: {theme: ThemeType}) => p.theme.inRangeColor};
+`;
+
+const TirHighFill = styled.View<{$pct: number; theme: ThemeType}>`
+  width: ${(p: {$pct: number}) => Math.max(0, Math.min(100, p.$pct))}%;
+  height: 9px;
+  background-color: ${(p: {theme: ThemeType}) => p.theme.aboveRangeColor};
+`;
+
+const TirLegendRow = styled.View`
+  flex-direction: row;
+  justify-content: space-between;
+  margin-top: 4px;
+`;
+
+const TirLegendText = styled.Text<{theme: ThemeType}>`
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs - 1}px;
+  color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.65)};
 `;
 
 const FoodRow = styled.View<{theme: ThemeType}>`
