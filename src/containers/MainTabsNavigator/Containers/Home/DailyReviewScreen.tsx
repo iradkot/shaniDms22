@@ -379,15 +379,16 @@ const DailyReviewScreen: React.FC = () => {
     if (!ts) return;
     try {
       setOpeningMealBucket(bucket);
-      const data = await fetchStackedChartsDataForRange({
-        startMs: yStart.getTime(),
-        endMs: todayStart.getTime(),
-      });
-
       const xDomainMs = {
-        startMs: ts - 90 * 60 * 1000,
-        endMs: ts + 5 * 60 * 60 * 1000,
+        // Focused meal window: cleaner fullscreen view.
+        startMs: ts - 45 * 60 * 1000,
+        endMs: ts + 3 * 60 * 60 * 1000,
       };
+
+      const data = await fetchStackedChartsDataForRange({
+        startMs: xDomainMs.startMs,
+        endMs: xDomainMs.endMs,
+      });
 
       const payload = buildFullScreenStackedChartsParams({
         title:

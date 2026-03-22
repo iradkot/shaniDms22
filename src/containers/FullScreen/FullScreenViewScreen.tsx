@@ -144,7 +144,7 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
       return typeof t === 'string' && t.trim() ? t : 'Charts';
     }
     return 'AGP Graph';
-  }, [mode]);
+  }, [mode, params]);
 
   const stackedXDomain = useMemo(() => {
     const xDomainMs = (params as any)?.xDomainMs as
@@ -262,6 +262,7 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
               xDomain={stackedXDomain}
               fallbackAnchorTimeMs={(params as any)?.fallbackAnchorTimeMs}
               showFullScreenButton={false}
+              chartMode="mixed"
               tooltipPlacement="inside"
               tooltipAlign={isDeviceLandscape ? 'auto' : 'left'}
               tooltipFullWidth={!isDeviceLandscape}
