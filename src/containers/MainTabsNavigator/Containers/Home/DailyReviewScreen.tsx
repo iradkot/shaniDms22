@@ -597,32 +597,7 @@ const DailyReviewScreen: React.FC = () => {
   const explainMealDelta = (bucket: MealBucket, delta: number | null) => {
     const inv = mealInvestigationMap.get(bucket);
     if (inv) {
-      const conf =
-        language === 'he'
-          ? inv.confidence === 'high'
-            ? 'ביטחון גבוה'
-            : inv.confidence === 'medium'
-            ? 'ביטחון בינוני'
-            : 'ביטחון נמוך'
-          : inv.confidence === 'high'
-          ? 'high confidence'
-          : inv.confidence === 'medium'
-          ? 'medium confidence'
-          : 'low confidence';
-      const confHint =
-        language === 'he'
-          ? inv.confidence === 'high'
-            ? 'יש מספיק דוגמאות דומות והסיגנל עקבי'
-            : inv.confidence === 'medium'
-            ? 'יש סיגנל חלקי, עדיין צריך עוד דוגמאות'
-            : 'מעט דוגמאות דומות או סיגנל חלש'
-          : inv.confidence === 'high'
-          ? 'enough similar examples and consistent signal'
-          : inv.confidence === 'medium'
-          ? 'partial signal; more examples needed'
-          : 'few similar examples or weak signal';
-      const base = language === 'he' ? inv.textHe : inv.textEn;
-      return `${base} (${conf} • n=${inv.evidenceCount} • ${confHint})`;
+      return language === 'he' ? inv.textHe : inv.textEn;
     }
 
     if (delta == null) {
