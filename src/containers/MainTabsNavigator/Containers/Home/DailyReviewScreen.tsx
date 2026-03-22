@@ -53,6 +53,7 @@ type MealBucketScore = {
   score: number;
   count: number;
   avgRise: number;
+  avgTirPct: number;
   representativeTs: number | null;
 };
 
@@ -111,11 +112,11 @@ function computeMealBucketScores(params: {
   hyper: number;
 }): MealBucketScore[] {
   const {bgRows, carbEvents, hypo, hyper} = params;
-  const base: Record<MealBucket, {scores: number[]; rises: number[]; times: number[]}> = {
-    breakfast: {scores: [], rises: [], times: []},
-    lunch: {scores: [], rises: [], times: []},
-    dinner: {scores: [], rises: [], times: []},
-    snack: {scores: [], rises: [], times: []},
+  const base: Record<MealBucket, {scores: number[]; rises: number[]; tirs: number[]; times: number[]}> = {
+    breakfast: {scores: [], rises: [], tirs: [], times: []},
+    lunch: {scores: [], rises: [], tirs: [], times: []},
+    dinner: {scores: [], rises: [], tirs: [], times: []},
+    snack: {scores: [], rises: [], tirs: [], times: []},
   };
 
   for (const meal of carbEvents) {
@@ -132,18 +133,21 @@ function computeMealBucketScores(params: {
     const bucket = classifyMealBucket(meal.timestamp);
     base[bucket].scores.push(score);
     base[bucket].rises.push(Math.round(rise));
+    base[bucket].tirs.push(Math.round(tir * 100));
     base[bucket].times.push(meal.timestamp);
   }
 
   const out = (Object.keys(base) as MealBucket[]).map(bucket => {
     const scores = base[bucket].scores;
     const rises = base[bucket].rises;
+    const tirs = base[bucket].tirs;
     const times = base[bucket].times;
     return {
       bucket,
       score: scores.length ? Math.round(scores.reduce((s, n) => s + n, 0) / scores.length) : 0,
       count: scores.length,
       avgRise: rises.length ? Math.round(rises.reduce((s, n) => s + n, 0) / rises.length) : 0,
+      avgTirPct: tirs.length ? Math.round(tirs.reduce((s, n) => s + n, 0) / tirs.length) : 0,
       representativeTs: times.length ? Math.round(times.reduce((s, n) => s + n, 0) / times.length) : null,
     };
   });
@@ -773,14 +777,34 @@ const DailyReviewScreen: React.FC = () => {
                     <View style={{width: `${Math.max(0, Math.min(100, item.score))}%`, height: 8, borderRadius: 99, backgroundColor: item.score >= 75 ? '#2e7d32' : item.score >= 55 ? '#f9a825' : '#c62828'}} />
                   </View>
 
-                  <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.72), fontSize: 12}}>
-                    {language === 'he' ? `עלייה ממוצעת אחרי ארוחה: ${item.avgRise} mg/dL` : `Avg post-meal rise: ${item.avgRise} mg/dL`}
-                  </Text>
-                  <Text style={{marginTop: 2, color: addOpacity(theme.textColor, 0.62), fontSize: 11}}>
-                    {language === 'he'
-                      ? 'הציון מחושב בעיקר משילוב של גובה הפיק אחרי הארוחה + זמן בטווח ב-4 שעות אחרי הארוחה.'
-                      : 'Score is mainly computed from post-meal peak height + time-in-range in the 4h after meal.'}
-                  </Text>
+                  <View style={{marginTop: 8, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.12), borderRadius: 10, padding: 8, gap: 4}}>
+                    <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+                      <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.8)}}>
+                        {language === 'he' ? '📈 פיק אחרי ארוחה' : '📈 Post-meal peak'}
+                      </Text>
+                      <Text style={{fontSize: 12, fontWeight: '700', color: theme.textColor}}>
+                        {item.avgRise} mg/dL • {Math.max(0, Math.min(100, Math.round(100 - item.avgRise * 0.45)))}/100
+                      </Text>
+                    </View>
+
+                    <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+                      <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.8)}}>
+                        {language === 'he' ? '🟢 TIR (4ש׳ אחרי ארוחה)' : '🟢 TIR (4h post meal)'}
+                      </Text>
+                      <Text style={{fontSize: 12, fontWeight: '700', color: theme.textColor}}>
+                        {item.avgTirPct}% • +{Math.round((item.avgTirPct / 100) * 35)}
+                      </Text>
+                    </View>
+
+                    <View style={{height: 1, backgroundColor: addOpacity(theme.textColor, 0.12), marginVertical: 2}} />
+
+                    <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+                      <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.8)}}>
+                        {language === 'he' ? '🏁 ציון מסכם' : '🏁 Final score'}
+                      </Text>
+                      <Text style={{fontSize: 12, fontWeight: '900', color: theme.accentColor}}>{item.score}/100</Text>
+                    </View>
+                  </View>
 
                   <Text style={{marginTop: 4, color: deltaColor, fontSize: 12, fontWeight: '700'}}>
                     {item.prevScore == null
