@@ -38,8 +38,8 @@ function formatTime(ms: number): string {
 
 function buildMiniGraphPoints(values: number[]): string {
   if (!values.length) return '';
-  const w = 120;
-  const h = 36;
+  const w = 140;
+  const h = 38;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = Math.max(1, max - min);
@@ -72,9 +72,11 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
       ? segment.bgPeak - segment.bgBefore
       : null;
 
-  const miniGraphValues = [segment.bgBefore, segment.bgPeak, segment.bgAfter].filter(
-    (n): n is number => typeof n === 'number',
-  );
+  const miniGraphValues = segment.postMealGraphPoints?.length
+    ? segment.postMealGraphPoints
+    : [segment.bgBefore, segment.bgPeak, segment.bgAfter].filter(
+        (n): n is number => typeof n === 'number',
+      );
   const miniGraphPoints = buildMiniGraphPoints(miniGraphValues);
 
   const lowPct = Math.max(0, Math.min(100, segment.postMealLowPct ?? 0));
@@ -184,8 +186,8 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
 
       {miniGraphPoints ? (
         <MiniGraphWrap>
-          <Svg width={120} height={36}>
-            <Polyline points={miniGraphPoints} fill="none" stroke={theme.accentColor} strokeWidth={2.2} />
+          <Svg width={140} height={38}>
+            <Polyline points={miniGraphPoints} fill="none" stroke={theme.accentColor} strokeWidth={2} />
           </Svg>
         </MiniGraphWrap>
       ) : null}

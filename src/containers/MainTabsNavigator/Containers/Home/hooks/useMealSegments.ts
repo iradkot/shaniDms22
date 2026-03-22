@@ -42,6 +42,8 @@ export interface MealSegment {
   postMealLowPct: number | null;
   /** % above range in post-meal 2h window */
   postMealHighPct: number | null;
+  /** Dense glucose samples in post-meal window for mini graph */
+  postMealGraphPoints: number[];
   /** Food item names (if any) */
   foodNames: string[];
   /** Grams of carbs absorbed (carbsEntered − COB at T+3h) */
@@ -184,6 +186,16 @@ function findPeakBg(bgData: BgSample[], startMs: number, endMs: number): BgSampl
   return peak;
 }
 
+function downsample(values: number[], maxPoints: number): number[] {
+  if (values.length <= maxPoints) return values;
+  const out: number[] = [];
+  const step = (values.length - 1) / (maxPoints - 1);
+  for (let i = 0; i < maxPoints; i++) {
+    out.push(values[Math.round(i * step)]);
+  }
+  return out;
+}
+
 // ── Hook ────────────────────────────────────────────────────────────────
 
 export function useMealSegments(params: {
@@ -231,6 +243,7 @@ export function useMealSegments(params: {
       const peakSample = findPeakBg(bgData, startMs, postMealEndMs);
       const bgAfterSample = findClosestBg(bgData, postMealEndMs, LOOKBACK_MS);
       const postMealSamples = bgData.filter(s => s.date >= startMs && s.date <= postMealEndMs);
+      const postMealGraphPoints = downsample(postMealSamples.map(s => s.sgv), 24);
       const postMealTirPct = postMealSamples.length
         ? Math.round(
             (postMealSamples.filter(s => s.sgv >= 70 && s.sgv <= 180).length / postMealSamples.length) *
@@ -266,6 +279,7 @@ export function useMealSegments(params: {
         postMealTirPct,
         postMealLowPct,
         postMealHighPct,
+        postMealGraphPoints,
         foodNames,
         absorbed: absorption.absorbed,
         absorptionPct: absorption.absorptionPct,
