@@ -234,6 +234,94 @@ type LlmDailySections = {
   source: 'ai' | 'fallback';
 };
 
+function signed(n: number): string {
+  return `${n >= 0 ? '+' : ''}${Math.round(n)}`;
+}
+
+function pct(count: number, total: number): number {
+  if (!total) return 0;
+  return Math.round((count / total) * 100);
+}
+
+function compactDeltaLine(params: {
+  lang: Lang;
+  labelHe: string;
+  labelEn: string;
+  value: string;
+  delta: number;
+  betterWhenLower?: boolean;
+  emoji?: string;
+}) {
+  const {lang, labelHe, labelEn, value, delta, betterWhenLower = false, emoji = '•'} = params;
+  const improved = betterWhenLower ? delta < 0 : delta > 0;
+  const worsened = betterWhenLower ? delta > 0 : delta < 0;
+  const trend = improved ? (lang === 'he' ? 'שיפור' : 'improved') : worsened ? (lang === 'he' ? 'החמרה' : 'worsened') : lang === 'he' ? 'ללא שינוי' : 'unchanged';
+  const deltaText = signed(delta);
+  return lang === 'he'
+    ? `${emoji} ${labelHe}: ${value} (${trend} ${deltaText})`
+    : `${emoji} ${labelEn}: ${value} (${trend} ${deltaText})`;
+}
+
+function buildCompactBody(params: {
+  lang: Lang;
+  base: Awaited<ReturnType<typeof buildFallbackBrief>>;
+  llm: LlmDailySections;
+}) {
+  const {lang, base, llm} = params;
+  const y = base.stats.yesterday;
+  const w = base.stats.week;
+
+  const yLowPct = pct(y.lows, y.count);
+  const yHighPct = pct(y.highs, y.count);
+  const wLowPct = pct(w.lows, w.count);
+  const wHighPct = pct(w.highs, w.count);
+
+  const lowDelta = yLowPct - wLowPct;
+  const highDelta = yHighPct - wHighPct;
+  const tirDelta = base.stats.tirDeltaVsWeek;
+  const avgDelta = base.stats.avgDeltaVsWeek;
+
+  return [
+    compactDeltaLine({
+      lang,
+      labelHe: 'ממוצע יומי',
+      labelEn: 'Daily avg',
+      value: `${y.avg} mg/dL`,
+      delta: avgDelta,
+      betterWhenLower: true,
+      emoji: '🟢',
+    }),
+    compactDeltaLine({
+      lang,
+      labelHe: 'TIR',
+      labelEn: 'TIR',
+      value: `${y.tir}%`,
+      delta: tirDelta,
+      emoji: '🎯',
+    }),
+    compactDeltaLine({
+      lang,
+      labelHe: 'נמוכים',
+      labelEn: 'Lows',
+      value: `${yLowPct}%`,
+      delta: lowDelta,
+      betterWhenLower: true,
+      emoji: '🟣',
+    }),
+    compactDeltaLine({
+      lang,
+      labelHe: 'גבוהים',
+      labelEn: 'Highs',
+      value: `${yHighPct}%`,
+      delta: highDelta,
+      betterWhenLower: true,
+      emoji: '🟠',
+    }),
+    llm.actionLine,
+    llm.whyLine,
+  ].join('\n');
+}
+
 const LLM_DAILY_TIMEOUT_MS = 20_000;
 const LLM_DAILY_MAX_ATTEMPTS = 2;
 
@@ -298,8 +386,8 @@ async function maybeGenerateLlmSections(params: {
 
   const instruction =
     lang === 'he'
-      ? 'החזר JSON בלבד עם השדות summaryLine,keyLine,actionLine,whyLine. כל שורה קצרה, פרקטית, ועם מספרים. summaryLine חייב להתחיל ב-📊, keyLine ב-🔎, actionLine ב-🎯, whyLine ב-🧠.'
-      : 'Return JSON only with keys: summaryLine,keyLine,actionLine,whyLine. Keep each line short, practical, and numeric. summaryLine must start with 📊, keyLine with 🔎, actionLine with 🎯, whyLine with 🧠.';
+      ? 'החזר JSON בלבד עם השדות summaryLine,keyLine,actionLine,whyLine. כל שורה חייבת להיות קצרה מאוד (עד ~55 תווים), שורה אחת בלבד, פרקטית ועם מספרים. summaryLine חייב להתחיל ב-📊, keyLine ב-🔎, actionLine ב-🎯, whyLine ב-🧠.'
+      : 'Return JSON only with keys: summaryLine,keyLine,actionLine,whyLine. Each line must be very short (about <=55 chars), one line only, practical and numeric. summaryLine must start with 📊, keyLine with 🔎, actionLine with 🎯, whyLine with 🧠.';
 
   for (let attempt = 1; attempt <= LLM_DAILY_MAX_ATTEMPTS; attempt += 1) {
     try {
@@ -384,7 +472,7 @@ async function computeYesterdayBrief(glucose: GlucoseSettings, lang: Lang, ai?: 
 
   return {
     title: base.title,
-    body: `${base.nightLine}\n${llm.summaryLine}\n${llm.keyLine}\n${llm.actionLine}\n${llm.whyLine}`,
+    body: buildCompactBody({lang, base, llm}),
     source: llm.source === 'ai' ? 'ai' : base.source,
   } as const;
 }
