@@ -152,10 +152,29 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
   const deriveCompactKpiFromCgmResult = useCallback((payload: any): CompactKpi | null => {
     const samples = Array.isArray(payload?.samples) ? payload.samples : [];
-    const latest = samples.length ? samples[samples.length - 1] : null;
+    if (!samples.length) return null;
+
+    const withTs = samples
+      .map((s: any) => {
+        const ts =
+          typeof s?.tMs === 'number'
+            ? s.tMs
+            : typeof s?.timestampMs === 'number'
+            ? s.timestampMs
+            : typeof s?.date === 'number'
+            ? s.date
+            : typeof s?.dateString === 'string'
+            ? Date.parse(s.dateString)
+            : NaN;
+        return {s, ts: Number.isFinite(ts) ? ts : NaN};
+      })
+      .filter((x: any) => Number.isFinite(x.ts))
+      .sort((a: any, b: any) => a.ts - b.ts);
+
+    const latest = withTs.length ? withTs[withTs.length - 1].s : null;
     if (!latest) return null;
 
-    const prev = samples.length > 1 ? samples[samples.length - 2] : null;
+    const prev = withTs.length > 1 ? withTs[withTs.length - 2].s : null;
     const bg = typeof latest?.mgdl === 'number' ? Math.round(latest.mgdl) : null;
     const prevBg = typeof prev?.mgdl === 'number' ? Math.round(prev.mgdl) : null;
 
@@ -165,12 +184,23 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       trend = d >= 12 ? '↑' : d <= -12 ? '↓' : '→';
     }
 
+    const sampleTimeMs =
+      typeof latest?.tMs === 'number'
+        ? latest.tMs
+        : typeof latest?.timestampMs === 'number'
+        ? latest.timestampMs
+        : typeof latest?.date === 'number'
+        ? latest.date
+        : typeof latest?.dateString === 'string'
+        ? Date.parse(latest.dateString)
+        : null;
+
     return {
       bgMgdl: bg,
       trend,
       iobU: typeof latest?.iobU === 'number' ? Number(latest.iobU.toFixed(2)) : null,
       cobG: typeof latest?.cobG === 'number' ? Math.round(latest.cobG) : null,
-      sampleTimeMs: typeof latest?.tMs === 'number' ? latest.tMs : null,
+      sampleTimeMs: Number.isFinite(sampleTimeMs as number) ? (sampleTimeMs as number) : null,
     };
   }, []);
 
@@ -962,6 +992,35 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     },
     [state],
   );
+
+  useEffect(() => {
+    if (state.mode !== 'mission') return;
+
+    let cancelled = false;
+
+    const refreshCompactKpi = async () => {
+      try {
+        const kpiRes = await runAiAnalystTool('getCgmSamples', {
+          rangeDays: 1,
+          maxSamples: 80,
+          includeDeviceStatus: true,
+        });
+        if (!cancelled && kpiRes?.ok) {
+          setCompactKpi(deriveCompactKpiFromCgmResult(kpiRes.result));
+        }
+      } catch {
+        // keep last known KPI silently
+      }
+    };
+
+    refreshCompactKpi();
+    const id = setInterval(refreshCompactKpi, 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [state.mode, deriveCompactKpiFromCgmResult]);
 
   // ====================================================================
   // Evidence navigation
