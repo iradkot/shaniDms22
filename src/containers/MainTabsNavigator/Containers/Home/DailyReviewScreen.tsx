@@ -455,14 +455,20 @@ const DailyReviewScreen: React.FC = () => {
   }, [mealScoresPrev, mealScoresY]);
 
   const topImprovedMeal = useMemo(() => {
-    const withDelta = mealComparisons.filter(m => typeof m.delta === 'number');
-    if (!withDelta.length) return null;
-    return [...withDelta].sort((a, b) => (b.delta as number) - (a.delta as number))[0];
+    const improvedOnly = mealComparisons.filter(m => typeof m.delta === 'number' && (m.delta as number) > 0);
+    if (!improvedOnly.length) return null;
+    return [...improvedOnly].sort((a, b) => (b.delta as number) - (a.delta as number))[0];
   }, [mealComparisons]);
 
   const needsAttentionMeal = useMemo(() => {
     if (!mealComparisons.length) return null;
     return [...mealComparisons].sort((a, b) => a.score - b.score)[0];
+  }, [mealComparisons]);
+
+  const topDeclinedMeal = useMemo(() => {
+    const declinedOnly = mealComparisons.filter(m => typeof m.delta === 'number' && (m.delta as number) < 0);
+    if (!declinedOnly.length) return null;
+    return [...declinedOnly].sort((a, b) => (a.delta as number) - (b.delta as number))[0];
   }, [mealComparisons]);
 
   const mealInsightMap = useMemo(() => {
@@ -626,6 +632,19 @@ const DailyReviewScreen: React.FC = () => {
                 </Text>
                 <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
                   {explainMealDelta(topImprovedMeal.bucket, topImprovedMeal.delta)}
+                </Text>
+              </View>
+            ) : topDeclinedMeal ? (
+              <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity('#c62828', 0.35), backgroundColor: addOpacity('#c62828', 0.08)}}>
+                <Text style={{fontWeight: '800', color: '#c62828'}}>
+                  {language === 'he' ? '📉 לא הייתה ארוחה שהשתפרה אתמול' : '📉 No meal improved yesterday'}
+                </Text>
+                <Text style={{marginTop: 4, color: theme.textColor}}>
+                  {language === 'he' ? 'הירידה הבולטת:' : 'Largest drop:'} {mealBucketLabel(language, topDeclinedMeal.bucket)} • {topDeclinedMeal.prevScore ?? '—'} → {topDeclinedMeal.score}
+                  {typeof topDeclinedMeal.delta === 'number' ? ` (${topDeclinedMeal.delta})` : ''}
+                </Text>
+                <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
+                  {explainMealDelta(topDeclinedMeal.bucket, topDeclinedMeal.delta)}
                 </Text>
               </View>
             ) : null}
