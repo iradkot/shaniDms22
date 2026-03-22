@@ -10,7 +10,7 @@
 import React from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Svg, {Line, Polyline} from 'react-native-svg';
+import Svg, {Circle, Line, Polyline} from 'react-native-svg';
 
 import type {ThemeType} from 'app/types/theme';
 import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useMealSegments';
@@ -93,6 +93,12 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
   const lowPct = Math.max(0, Math.min(100, segment.postMealLowPct ?? 0));
   const inRangePct = Math.max(0, Math.min(100, segment.postMealTirPct ?? 0));
   const highPct = Math.max(0, Math.min(100, segment.postMealHighPct ?? 0));
+
+  const graphWidth = 140;
+  const graphWindowMs = 2 * 60 * 60 * 1000;
+  const bolusMarkerXs = (segment.bolusTimesMs ?? [])
+    .map(ts => ((ts - segment.startMs) / graphWindowMs) * graphWidth)
+    .filter(x => Number.isFinite(x) && x >= 0 && x <= graphWidth);
 
   return (
     <CardWrap $isLatest={isLatest}>
@@ -197,15 +203,19 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
 
       {miniGraphPoints ? (
         <MiniGraphWrap>
-          <Svg width={140} height={38}>
+          <Svg width={graphWidth} height={38}>
             {lowLineY != null ? (
-              <Line x1={0} y1={lowLineY} x2={140} y2={lowLineY} stroke={addOpacity(theme.belowRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
+              <Line x1={0} y1={lowLineY} x2={graphWidth} y2={lowLineY} stroke={addOpacity(theme.belowRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
             ) : null}
             {highLineY != null ? (
-              <Line x1={0} y1={highLineY} x2={140} y2={highLineY} stroke={addOpacity(theme.aboveRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
+              <Line x1={0} y1={highLineY} x2={graphWidth} y2={highLineY} stroke={addOpacity(theme.aboveRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
             ) : null}
             <Polyline points={miniGraphPoints} fill="none" stroke={theme.accentColor} strokeWidth={2} />
+            {bolusMarkerXs.map((x, idx) => (
+              <Circle key={`bolus-${idx}`} cx={x} cy={34} r={2.7} fill={theme.colors.insulin} />
+            ))}
           </Svg>
+          {bolusMarkerXs.length ? <MiniGraphHint>💉 bolus</MiniGraphHint> : null}
         </MiniGraphWrap>
       ) : null}
 
@@ -365,6 +375,12 @@ const TirValue = styled.Text<{theme: ThemeType}>`
 const MiniGraphWrap = styled.View<{theme: ThemeType}>`
   margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
   align-items: flex-end;
+`;
+
+const MiniGraphHint = styled.Text<{theme: ThemeType}>`
+  margin-top: 1px;
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs - 2}px;
+  color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.5)};
 `;
 
 const TirStackTrack = styled.View<{theme: ThemeType}>`

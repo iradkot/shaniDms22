@@ -28,6 +28,8 @@ export interface MealSegment {
   totalBolus: number;
   /** Number of bolus entries in the segment */
   bolusCount: number;
+  /** Bolus event timestamps that belong to this meal segment */
+  bolusTimesMs: number[];
   /** BG at or just before the meal start */
   bgBefore: number | null;
   /** Peak BG in the 2h window after the meal */
@@ -230,6 +232,7 @@ export function useMealSegments(params: {
       const totalCarbs = cluster.reduce((sum, e) => sum + e.carbs, 0);
       const totalBolus = cluster.reduce((sum, e) => sum + e.bolus, 0);
       const bolusCount = cluster.filter(e => e.bolus > 0).length;
+      const bolusTimesMs = cluster.filter(e => e.bolus > 0).map(e => e.timestampMs);
       const foodNames = cluster
         .map(e => e.foodName)
         .filter((n): n is string => !!n);
@@ -270,6 +273,7 @@ export function useMealSegments(params: {
         totalCarbs,
         totalBolus,
         bolusCount,
+        bolusTimesMs,
         bgBefore: bgBeforeSample?.sgv ?? null,
         bgPeak: peakSample?.sgv ?? null,
         bgAfter: bgAfterSample?.sgv ?? null,
