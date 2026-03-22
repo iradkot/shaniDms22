@@ -29,16 +29,55 @@ type Props = {
   onTagPress?: (segment: MealSegment) => void;
 };
 
+type CoreMealBucket = 'breakfast' | 'lunch' | 'dinner';
+
+function classifyCoreMealBucket(startMs: number): CoreMealBucket | 'other' {
+  const h = new Date(startMs).getHours();
+  if (h >= 5 && h < 11) return 'breakfast';
+  if (h >= 11 && h < 16) return 'lunch';
+  if (h >= 16 && h < 22) return 'dinner';
+  return 'other';
+}
+
+function coreMealLabel(language: string, bucket: CoreMealBucket): string {
+  if (language === 'he') {
+    if (bucket === 'breakfast') return 'בוקר';
+    if (bucket === 'lunch') return 'צהריים';
+    return 'ערב';
+  }
+  if (bucket === 'breakfast') return 'Breakfast';
+  if (bucket === 'lunch') return 'Lunch';
+  return 'Dinner';
+}
+
 // ── Component ───────────────────────────────────────────────────────────
 
 const MealTimeline: React.FC<Props> = ({meals, isLoading, isToday, onTagPress}) => {
   const {language} = useAppLanguage();
-  const reversedMeals = React.useMemo(
-    () => [...meals].reverse(), // latest first
-    [meals],
-  );
 
-  if (reversedMeals.length === 0 && !isLoading) {
+  const coreMeals = React.useMemo(() => {
+    const sorted = [...meals].sort((a, b) => a.startMs - b.startMs);
+
+    const byBucket: Record<CoreMealBucket, MealSegment | null> = {
+      breakfast: null,
+      lunch: null,
+      dinner: null,
+    };
+
+    for (const meal of sorted) {
+      const bucket = classifyCoreMealBucket(meal.startMs);
+      if (bucket === 'other') continue;
+      // Keep the latest event inside each core meal bucket.
+      byBucket[bucket] = meal;
+    }
+
+    return byBucket;
+  }, [meals]);
+
+  const orderedBuckets: CoreMealBucket[] = ['breakfast', 'lunch', 'dinner'];
+  const availableCount = orderedBuckets.filter(b => !!coreMeals[b]).length;
+
+  if (availableCount === 0 && !isLoading) {
     return (
       <EmptyContainer>
         <EmptyTitle>{tr(language, 'home.noMealsTitle')}</EmptyTitle>
@@ -51,11 +90,31 @@ const MealTimeline: React.FC<Props> = ({meals, isLoading, isToday, onTagPress}) 
     <>
       <SectionHeader>
         <SectionTitle>{isToday ? tr(language, 'home.mealsToday') : tr(language, 'home.meals')}</SectionTitle>
-        <MealCount>{reversedMeals.length}</MealCount>
+        <MealCount>{`${availableCount}/3`}</MealCount>
       </SectionHeader>
-      {reversedMeals.map((meal, index) => (
-        <MealTimelineCard key={meal.id} segment={meal} isLatest={index === 0} onTagPress={onTagPress} />
-      ))}
+
+      {orderedBuckets.map(bucket => {
+        const meal = coreMeals[bucket];
+        if (!meal) {
+          return (
+            <MissingMealCard key={bucket}>
+              <MissingMealTitle>{coreMealLabel(language, bucket)}</MissingMealTitle>
+              <MissingMealSub>
+                {language === 'he' ? 'אין ארוחה מזוהה בטווח הזה היום' : 'No detected meal in this time range today'}
+              </MissingMealSub>
+            </MissingMealCard>
+          );
+        }
+
+        return (
+          <MealTimelineCard
+            key={meal.id}
+            segment={meal}
+            isLatest={false}
+            onTagPress={onTagPress}
+          />
+        );
+      })}
     </>
   );
 };
@@ -101,6 +160,28 @@ const EmptySub = styled.Text<{theme: ThemeType}>`
   color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.35)};
   margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
   text-align: center;
+`;
+
+const MissingMealCard = styled.View<{theme: ThemeType}>`
+  margin-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  margin-bottom: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+  border-radius: 12px;
+  border-width: 1px;
+  border-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.15)};
+  background-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.white, 0.9)};
+  padding: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+`;
+
+const MissingMealTitle = styled.Text<{theme: ThemeType}>`
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.sm}px;
+  font-weight: 800;
+  color: ${(p: {theme: ThemeType}) => p.theme.textColor};
+`;
+
+const MissingMealSub = styled.Text<{theme: ThemeType}>`
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs}px;
+  margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
+  color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.55)};
 `;
 
 export default React.memo(MealTimeline);
