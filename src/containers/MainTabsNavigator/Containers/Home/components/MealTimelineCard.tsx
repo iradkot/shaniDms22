@@ -21,6 +21,7 @@ import TagChip from 'app/components/MealTagging/TagChip';
 type Props = {
   segment: MealSegment;
   isLatest: boolean;
+  titleOverride?: string;
   /** Called when the user taps the tag button. */
   onTagPress?: (segment: MealSegment) => void;
 };
@@ -36,7 +37,7 @@ function formatTime(ms: number): string {
 
 // ── Component ───────────────────────────────────────────────────────────
 
-const MealTimelineCard: React.FC<Props> = ({segment, isLatest, onTagPress}) => {
+const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, onTagPress}) => {
   const theme = useTheme() as ThemeType;
 
   const bgBeforeColor = segment.bgBefore != null
@@ -58,7 +59,7 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, onTagPress}) => {
     <CardWrap $isLatest={isLatest}>
       {/* Header row: label + time + tag button */}
       <HeaderRow>
-        <LabelText>{segment.label}</LabelText>
+        <LabelText>{titleOverride || segment.label}</LabelText>
         <HeaderRightRow>
           {onTagPress ? (
             <TagBtn
@@ -153,6 +154,18 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, onTagPress}) => {
             {segment.bgAfter ?? '—'}
           </BgJourneyValue>
         </BgJourneyRow>
+      ) : null}
+
+      {segment.postMealTirPct != null ? (
+        <TirSection>
+          <TirHeaderRow>
+            <TirLabel>🟢 TIR (2h)</TirLabel>
+            <TirValue>{segment.postMealTirPct}%</TirValue>
+          </TirHeaderRow>
+          <TirTrack>
+            <TirFill $pct={segment.postMealTirPct} />
+          </TirTrack>
+        </TirSection>
       ) : null}
 
       {/* Food names */}
@@ -266,6 +279,42 @@ const BgArrowText = styled.Text<{theme: ThemeType}>`
   font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs}px;
   color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.3)};
   margin-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.sm - 2}px;
+`;
+
+const TirSection = styled.View<{theme: ThemeType}>`
+  margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.sm - 2}px;
+`;
+
+const TirHeaderRow = styled.View`
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const TirLabel = styled.Text<{theme: ThemeType}>`
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs}px;
+  color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.65)};
+`;
+
+const TirValue = styled.Text<{theme: ThemeType}>`
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs}px;
+  font-weight: 800;
+  color: ${(p: {theme: ThemeType}) => p.theme.textColor};
+`;
+
+const TirTrack = styled.View<{theme: ThemeType}>`
+  margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.xs - 1}px;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.textColor, 0.14)};
+`;
+
+const TirFill = styled.View<{$pct: number; theme: ThemeType}>`
+  width: ${(p: {$pct: number}) => Math.max(0, Math.min(100, p.$pct))}%;
+  height: 8px;
+  border-radius: 999px;
+  background-color: ${(p: {theme: ThemeType}) => p.theme.inRangeColor};
 `;
 
 const FoodRow = styled.View<{theme: ThemeType}>`

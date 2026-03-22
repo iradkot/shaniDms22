@@ -36,6 +36,8 @@ export interface MealSegment {
   bgAfter: number | null;
   /** Minutes from meal start to peak BG */
   timeToPeakMin: number | null;
+  /** Time in range percent in the post-meal 2h window */
+  postMealTirPct: number | null;
   /** Food item names (if any) */
   foodNames: string[];
   /** Grams of carbs absorbed (carbsEntered − COB at T+3h) */
@@ -224,6 +226,13 @@ export function useMealSegments(params: {
       const postMealEndMs = startMs + POST_MEAL_WINDOW_MS;
       const peakSample = findPeakBg(bgData, startMs, postMealEndMs);
       const bgAfterSample = findClosestBg(bgData, postMealEndMs, LOOKBACK_MS);
+      const postMealSamples = bgData.filter(s => s.date >= startMs && s.date <= postMealEndMs);
+      const postMealTirPct = postMealSamples.length
+        ? Math.round(
+            (postMealSamples.filter(s => s.sgv >= 70 && s.sgv <= 180).length / postMealSamples.length) *
+              100,
+          )
+        : null;
 
       // Carb absorption (uses enriched BG samples with COB from device status)
       const absorption = totalCarbs > 0
@@ -244,6 +253,7 @@ export function useMealSegments(params: {
         timeToPeakMin: peakSample && bgBeforeSample
           ? Math.round((peakSample.date - startMs) / 60_000)
           : null,
+        postMealTirPct,
         foodNames,
         absorbed: absorption.absorbed,
         absorptionPct: absorption.absorptionPct,

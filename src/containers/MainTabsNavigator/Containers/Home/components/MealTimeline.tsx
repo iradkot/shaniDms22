@@ -123,6 +123,7 @@ const MealTimeline: React.FC<Props> = ({meals, isLoading, isToday, onTagPress}) 
           <MealTimelineCard
             key={meal.id}
             segment={meal}
+            titleOverride={coreMealLabel(language, bucket)}
             isLatest={false}
             onTagPress={onTagPress}
           />
