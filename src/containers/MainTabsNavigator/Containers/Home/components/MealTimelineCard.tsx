@@ -47,13 +47,12 @@ function miniGraphScale(values: number[]) {
   };
 }
 
-function buildMiniGraphPoints(values: number[]): string {
-  if (!values.length) return '';
-  const w = 140;
+function buildMiniGraphPoints(values: number[], width: number): string {
+  if (!values.length || width <= 0) return '';
   const {yFor} = miniGraphScale(values);
   return values
     .map((v, i) => {
-      const x = (i / Math.max(1, values.length - 1)) * w;
+      const x = (i / Math.max(1, values.length - 1)) * width;
       const y = yFor(v);
       return `${x},${y}`;
     })
@@ -85,7 +84,8 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
     : [segment.bgBefore, segment.bgPeak, segment.bgAfter].filter(
         (n): n is number => typeof n === 'number',
       );
-  const miniGraphPoints = buildMiniGraphPoints(miniGraphValues);
+  const [graphWidth, setGraphWidth] = React.useState(0);
+  const miniGraphPoints = buildMiniGraphPoints(miniGraphValues, graphWidth);
   const graphScale = miniGraphValues.length ? miniGraphScale(miniGraphValues) : null;
   const lowLineY = graphScale ? graphScale.yFor(70) : null;
   const highLineY = graphScale ? graphScale.yFor(180) : null;
@@ -94,7 +94,6 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
   const inRangePct = Math.max(0, Math.min(100, segment.postMealTirPct ?? 0));
   const highPct = Math.max(0, Math.min(100, segment.postMealHighPct ?? 0));
 
-  const graphWidth = 140;
   const graphWindowMs = 2 * 60 * 60 * 1000;
   const bolusMarkerXs = (segment.bolusTimesMs ?? [])
     .map(ts => ((ts - segment.startMs) / graphWindowMs) * graphWidth)
@@ -185,7 +184,7 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
 
       {/* BG journey: before → peak → after */}
       {segment.bgBefore != null || segment.bgPeak != null || segment.bgAfter != null ? (
-        <BgJourneyRow>
+        <BgJourneyRow style={{direction: 'ltr'}}>
           <BgJourneyLabel>BG</BgJourneyLabel>
           <BgJourneyValue style={{color: bgBeforeColor}}>
             {segment.bgBefore ?? '—'}
@@ -201,23 +200,30 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
         </BgJourneyRow>
       ) : null}
 
-      {miniGraphPoints ? (
-        <MiniGraphWrap>
-          <Svg width={graphWidth} height={38}>
-            {lowLineY != null ? (
-              <Line x1={0} y1={lowLineY} x2={graphWidth} y2={lowLineY} stroke={addOpacity(theme.belowRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
-            ) : null}
-            {highLineY != null ? (
-              <Line x1={0} y1={highLineY} x2={graphWidth} y2={highLineY} stroke={addOpacity(theme.aboveRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
-            ) : null}
-            <Polyline points={miniGraphPoints} fill="none" stroke={theme.accentColor} strokeWidth={2} />
-            {bolusMarkerXs.map((x, idx) => (
-              <Circle key={`bolus-${idx}`} cx={x} cy={34} r={2.7} fill={theme.colors.insulin} />
-            ))}
-          </Svg>
-          {bolusMarkerXs.length ? <MiniGraphHint>💉 bolus</MiniGraphHint> : null}
-        </MiniGraphWrap>
-      ) : null}
+      <MiniGraphWrap
+        onLayout={e => {
+          const w = Math.max(0, Math.floor(e.nativeEvent.layout.width));
+          if (w !== graphWidth) setGraphWidth(w);
+        }}
+      >
+        {miniGraphPoints ? (
+          <>
+            <Svg width={graphWidth} height={38}>
+              {lowLineY != null ? (
+                <Line x1={0} y1={lowLineY} x2={graphWidth} y2={lowLineY} stroke={addOpacity(theme.belowRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
+              ) : null}
+              {highLineY != null ? (
+                <Line x1={0} y1={highLineY} x2={graphWidth} y2={highLineY} stroke={addOpacity(theme.aboveRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
+              ) : null}
+              <Polyline points={miniGraphPoints} fill="none" stroke={theme.accentColor} strokeWidth={2} />
+              {bolusMarkerXs.map((x, idx) => (
+                <Circle key={`bolus-${idx}`} cx={x} cy={34} r={2.7} fill={theme.colors.insulin} />
+              ))}
+            </Svg>
+            {bolusMarkerXs.length ? <MiniGraphHint>💉 bolus</MiniGraphHint> : null}
+          </>
+        ) : null}
+      </MiniGraphWrap>
 
       {segment.postMealTirPct != null ? (
         <TirSection>
@@ -343,6 +349,7 @@ const BgJourneyLabel = styled.Text<{theme: ThemeType}>`
 const BgJourneyValue = styled.Text<{theme: ThemeType}>`
   font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.sm}px;
   font-weight: 800;
+  writing-direction: ltr;
 `;
 
 const BgArrowText = styled.Text<{theme: ThemeType}>`
@@ -373,8 +380,9 @@ const TirValue = styled.Text<{theme: ThemeType}>`
 `;
 
 const MiniGraphWrap = styled.View<{theme: ThemeType}>`
+  width: 100%;
   margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
-  align-items: flex-end;
+  align-items: stretch;
 `;
 
 const MiniGraphHint = styled.Text<{theme: ThemeType}>`
