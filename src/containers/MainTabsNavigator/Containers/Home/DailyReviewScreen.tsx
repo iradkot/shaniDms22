@@ -56,13 +56,24 @@ type MealBucketScore = {
   representativeTs: number | null;
 };
 
-type MealBucketInsight = {
+type MealEpisode = {
   bucket: MealBucket;
-  count: number;
-  avgPreBolusMin: number | null;
-  avgUnitsPer10g: number | null;
-  avgPreBg: number | null;
-  avgRise: number;
+  ts: number;
+  carbs: number;
+  hour: number;
+  preBg: number | null;
+  rise: number | null;
+  preBolusMin: number | null;
+  unitsPer10g: number | null;
+  score: number | null;
+};
+
+type MealInvestigation = {
+  bucket: MealBucket;
+  confidence: 'low' | 'medium' | 'high';
+  evidenceCount: number;
+  textHe: string;
+  textEn: string;
 };
 
 function classifyMealBucket(ts: number): MealBucket {
@@ -140,74 +151,169 @@ function computeMealBucketScores(params: {
   return out.filter(x => x.count > 0);
 }
 
-function computeMealBucketInsights(params: {
+function buildMealEpisodes(params: {
   bgRows: Row[];
   treatments: any[];
-}): MealBucketInsight[] {
-  const {bgRows, treatments} = params;
+  hypo: number;
+  hyper: number;
+}): MealEpisode[] {
+  const {bgRows, treatments, hypo, hyper} = params;
   const meals = mapNightscoutTreatmentsToCarbFoodItems(treatments ?? []).map(m => ({
-    timestamp: Number(m.timestamp),
+    ts: Number(m.timestamp),
     carbs: Number(m.carbs ?? 0),
   }));
 
   const boluses = (treatments ?? [])
     .filter(t => t?.insulin && ['Bolus', 'Meal Bolus', 'Correction Bolus', 'Combo Bolus'].includes(t?.eventType))
-    .map(t => ({
-      ts: Date.parse(t.created_at),
-      insulin: Number(t.insulin || t.amount || 0),
-    }))
+    .map(t => ({ts: Date.parse(t.created_at), insulin: Number(t.insulin || t.amount || 0)}))
     .filter(x => Number.isFinite(x.ts) && Number.isFinite(x.insulin) && x.insulin > 0);
 
-  const base: Record<MealBucket, {preBolus: number[]; unitsPer10: number[]; preBg: number[]; rises: number[]}> = {
-    breakfast: {preBolus: [], unitsPer10: [], preBg: [], rises: []},
-    lunch: {preBolus: [], unitsPer10: [], preBg: [], rises: []},
-    dinner: {preBolus: [], unitsPer10: [], preBg: [], rises: []},
-    snack: {preBolus: [], unitsPer10: [], preBg: [], rises: []},
-  };
+  return meals
+    .map(meal => {
+      const preBg = nearestBgBefore(bgRows, meal.ts, 45);
+      const vals = bgWindow(bgRows, meal.ts, meal.ts + 4 * 60 * 60 * 1000);
+      const peak = vals.length ? Math.max(...vals) : null;
+      const rise = preBg != null && peak != null ? Math.max(0, Math.round(peak - preBg)) : null;
+      const inRange = vals.filter(v => v >= hypo && v <= hyper).length;
+      const tir = vals.length ? inRange / vals.length : null;
+      const score = rise != null && tir != null ? Math.round(Math.max(0, Math.min(100, 100 - rise * 0.45 + tir * 35))) : null;
 
-  for (const meal of meals) {
-    const bucket = classifyMealBucket(meal.timestamp);
-    const pre = nearestBgBefore(bgRows, meal.timestamp, 45);
-    const vals = bgWindow(bgRows, meal.timestamp, meal.timestamp + 4 * 60 * 60 * 1000);
-    const peak = vals.length ? Math.max(...vals) : null;
+      const nearbyBoluses = boluses.filter(b => b.ts >= meal.ts - 45 * 60 * 1000 && b.ts <= meal.ts + 30 * 60 * 1000);
+      const before = nearbyBoluses.filter(b => b.ts <= meal.ts).sort((a, b) => b.ts - a.ts)[0];
+      const units = nearbyBoluses.reduce((s, b) => s + b.insulin, 0);
 
-    if (pre != null) {
-      base[bucket].preBg.push(pre);
-      if (peak != null) {
-        base[bucket].rises.push(Math.max(0, Math.round(peak - pre)));
-      }
-    }
+      return {
+        bucket: classifyMealBucket(meal.ts),
+        ts: meal.ts,
+        carbs: meal.carbs,
+        hour: new Date(meal.ts).getHours(),
+        preBg,
+        rise,
+        preBolusMin: before ? Math.round((meal.ts - before.ts) / 60000) : null,
+        unitsPer10g: meal.carbs > 0 && units > 0 ? Number(((units / meal.carbs) * 10).toFixed(2)) : null,
+        score,
+      } as MealEpisode;
+    })
+    .filter(e => Number.isFinite(e.ts));
+}
 
-    const mealBoluses = boluses.filter(b => b.ts >= meal.timestamp - 45 * 60 * 1000 && b.ts <= meal.timestamp + 30 * 60 * 1000);
-    if (mealBoluses.length) {
-      const before = mealBoluses
-        .filter(b => b.ts <= meal.timestamp)
-        .sort((a, b) => b.ts - a.ts)[0];
-      if (before) {
-        base[bucket].preBolus.push(Math.round((meal.timestamp - before.ts) / 60000));
-      }
+function avgNullable(list: Array<number | null>) {
+  const vals = list.filter((n): n is number => typeof n === 'number' && Number.isFinite(n));
+  if (!vals.length) return null;
+  return vals.reduce((s, n) => s + n, 0) / vals.length;
+}
 
-      const units = mealBoluses.reduce((s, b) => s + b.insulin, 0);
-      if (meal.carbs > 0) {
-        base[bucket].unitsPer10.push(Number(((units / meal.carbs) * 10).toFixed(2)));
-      }
-    }
-  }
+function buildMealInvestigations(params: {
+  todayEpisodes: MealEpisode[];
+  baselineEpisodes: MealEpisode[];
+  targetMid: number;
+}): MealInvestigation[] {
+  const {todayEpisodes, baselineEpisodes, targetMid} = params;
+  const buckets: MealBucket[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
-  return (Object.keys(base) as MealBucket[])
+  return buckets
     .map(bucket => {
-      const m = base[bucket];
-      const avg = (arr: number[]) => (arr.length ? Number((arr.reduce((s, n) => s + n, 0) / arr.length).toFixed(1)) : null);
+      const today = todayEpisodes.filter(e => e.bucket === bucket);
+      if (!today.length) return null;
+
+      const matchedBaseline = baselineEpisodes.filter(b =>
+        b.bucket === bucket &&
+        today.some(t => {
+          const carbRatio = t.carbs > 0 && b.carbs > 0 ? Math.min(t.carbs, b.carbs) / Math.max(t.carbs, b.carbs) : 0;
+          const hourDelta = Math.abs(t.hour - b.hour);
+          return carbRatio >= 0.7 && hourDelta <= 2;
+        }),
+      );
+
+      const baseSet = matchedBaseline.length ? matchedBaseline : baselineEpisodes.filter(e => e.bucket === bucket);
+      if (!baseSet.length) {
+        return {
+          bucket,
+          confidence: 'low',
+          evidenceCount: 0,
+          textHe: 'לא נמצאו מספיק ארוחות דומות להשוואה אמינה.',
+          textEn: 'Not enough similar meals for a reliable comparison yet.',
+        } satisfies MealInvestigation;
+      }
+
+      const tRise = avgNullable(today.map(e => e.rise));
+      const bRise = avgNullable(baseSet.map(e => e.rise));
+      const tPreBolus = avgNullable(today.map(e => e.preBolusMin));
+      const bPreBolus = avgNullable(baseSet.map(e => e.preBolusMin));
+      const tRatio = avgNullable(today.map(e => e.unitsPer10g));
+      const bRatio = avgNullable(baseSet.map(e => e.unitsPer10g));
+      const tPreBg = avgNullable(today.map(e => e.preBg));
+      const bPreBg = avgNullable(baseSet.map(e => e.preBg));
+
+      const riseDelta = (tRise ?? 0) - (bRise ?? 0);
+      const preBolusDelta = (tPreBolus ?? 0) - (bPreBolus ?? 0);
+      const ratioDelta = (tRatio ?? 0) - (bRatio ?? 0);
+      const targetDistDelta = Math.abs((tPreBg ?? targetMid) - targetMid) - Math.abs((bPreBg ?? targetMid) - targetMid);
+
+      const signals: Array<{score: number; he: string; en: string}> = [];
+
+      if (tPreBolus != null && bPreBolus != null && Math.abs(preBolusDelta) >= 7) {
+        const good = preBolusDelta > 0 && riseDelta <= -8;
+        const bad = preBolusDelta < 0 && riseDelta >= 8;
+        if (good || bad) {
+          signals.push({
+            score: 0.34,
+            he: good
+              ? `בארוחות דומות פרה-בולוס היה ארוך יותר בכ-${Math.round(preBolusDelta)} דק׳, ונרשמה ירידת פיק של ${Math.round(Math.abs(riseDelta))} mg/dL.`
+              : `בארוחות דומות פרה-בולוס התקצר בכ-${Math.round(Math.abs(preBolusDelta))} דק׳, ובמקביל הפיק עלה בכ-${Math.round(Math.abs(riseDelta))} mg/dL.`,
+            en: good
+              ? `Across similar meals, pre-bolus was longer by ~${Math.round(preBolusDelta)} min and peak fell by ${Math.round(Math.abs(riseDelta))} mg/dL.`
+              : `Across similar meals, pre-bolus was shorter by ~${Math.round(Math.abs(preBolusDelta))} min and peak rose by ${Math.round(Math.abs(riseDelta))} mg/dL.`,
+          });
+        }
+      }
+
+      if (tRatio != null && bRatio != null && Math.abs(ratioDelta) >= 0.18) {
+        const good = ratioDelta > 0 && riseDelta <= -8;
+        const bad = ratioDelta < 0 && riseDelta >= 8;
+        if (good || bad) {
+          signals.push({
+            score: 0.33,
+            he: good
+              ? `יחס אינסולין/פחמימה היה גבוה יותר בכ-${ratioDelta.toFixed(1)} יח׳ ל-10 גר׳, והתגובה אחרי הארוחה השתפרה.`
+              : `יחס אינסולין/פחמימה היה נמוך יותר בכ-${Math.abs(ratioDelta).toFixed(1)} יח׳ ל-10 גר׳, ונראה שזה החליש את הכיסוי.` ,
+            en: good
+              ? `Insulin/carb ratio was higher by ${ratioDelta.toFixed(1)} U per 10g, with better post-meal control.`
+              : `Insulin/carb ratio was lower by ${Math.abs(ratioDelta).toFixed(1)} U per 10g, likely weakening meal coverage.`,
+          });
+        }
+      }
+
+      if (tPreBg != null && bPreBg != null && Math.abs(targetDistDelta) >= 8) {
+        const good = targetDistDelta < 0 && riseDelta <= -4;
+        const bad = targetDistDelta > 0 && riseDelta >= 4;
+        if (good || bad) {
+          signals.push({
+            score: 0.25,
+            he: good
+              ? `הארוחה התחילה קרוב יותר ליעד (כ-${Math.round(tPreBg)} mg/dL), וזה תרם ליציבות טובה יותר.`
+              : `הארוחה התחילה רחוק יותר מהיעד (כ-${Math.round(tPreBg)} mg/dL), וזה כנראה הקשה על היציבות.`,
+            en: good
+              ? `Meal started closer to target (~${Math.round(tPreBg)} mg/dL), contributing to better stability.`
+              : `Meal started farther from target (~${Math.round(tPreBg)} mg/dL), likely hurting stability.`,
+          });
+        }
+      }
+
+      const evidenceCount = Math.min(today.length, baseSet.length);
+      const score = Math.min(0.95, signals.reduce((s, x) => s + x.score, 0) + Math.min(0.25, evidenceCount * 0.03));
+      const confidence: MealInvestigation['confidence'] = score >= 0.7 ? 'high' : score >= 0.45 ? 'medium' : 'low';
+      const top = signals.sort((a, b) => b.score - a.score)[0];
+
       return {
         bucket,
-        count: Math.max(m.preBg.length, m.rises.length, m.preBolus.length, m.unitsPer10.length),
-        avgPreBolusMin: avg(m.preBolus),
-        avgUnitsPer10g: avg(m.unitsPer10),
-        avgPreBg: avg(m.preBg),
-        avgRise: avg(m.rises) ?? 0,
-      };
+        confidence,
+        evidenceCount,
+        textHe: top?.he ?? 'נמצאה מגמה בארוחות דומות, אבל כרגע אין גורם יחיד מובהק עם ביטחון גבוה.',
+        textEn: top?.en ?? 'A trend exists across similar meals, but no single dominant cause has high confidence yet.',
+      } satisfies MealInvestigation;
     })
-    .filter(x => x.count > 0);
+    .filter(Boolean) as MealInvestigation[];
 }
 
 function mealBucketLabel(language: string, bucket: MealBucket): string {
@@ -236,8 +342,7 @@ const DailyReviewScreen: React.FC = () => {
   const [wRows, setWRows] = useState<Row[]>([]);
   const [mealScoresY, setMealScoresY] = useState<MealBucketScore[]>([]);
   const [mealScoresPrev, setMealScoresPrev] = useState<MealBucketScore[]>([]);
-  const [mealInsightsY, setMealInsightsY] = useState<MealBucketInsight[]>([]);
-  const [mealInsightsPrev, setMealInsightsPrev] = useState<MealBucketInsight[]>([]);
+  const [mealInvestigations, setMealInvestigations] = useState<MealInvestigation[]>([]);
   const [expandedMealWhy, setExpandedMealWhy] = useState<MealBucket | null>(null);
   const [llmSummaryLine, setLlmSummaryLine] = useState<string | null>(null);
   const [llmKeyLine, setLlmKeyLine] = useState<string | null>(null);
@@ -270,12 +375,13 @@ const DailyReviewScreen: React.FC = () => {
   };
 
   const loadData = useCallback(async () => {
-    const [y, p, w, yTreatments, pTreatments] = await Promise.all([
+    const [y, p, w, yTreatments, pTreatments, wTreatments] = await Promise.all([
       fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(prevDayStart, yStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
       fetchTreatmentsForDateRangeUncached(yStart, todayStart),
       fetchTreatmentsForDateRangeUncached(prevDayStart, yStart),
+      fetchTreatmentsForDateRangeUncached(wStart, yStart),
     ]);
     const yList = ((y as any) ?? []) as Row[];
     const pList = ((p as any) ?? []) as Row[];
@@ -308,8 +414,26 @@ const DailyReviewScreen: React.FC = () => {
       }),
     );
 
-    setMealInsightsY(computeMealBucketInsights({bgRows: yList, treatments: yTreatments ?? []}));
-    setMealInsightsPrev(computeMealBucketInsights({bgRows: pList, treatments: pTreatments ?? []}));
+    const todayEpisodes = buildMealEpisodes({
+      bgRows: yList,
+      treatments: (yTreatments as any[]) ?? [],
+      hypo: glucoseSettings.hypo ?? 70,
+      hyper: glucoseSettings.hyper ?? 180,
+    });
+    const baselineEpisodes = buildMealEpisodes({
+      bgRows: ((w as any) ?? []) as Row[],
+      treatments: (wTreatments as any[]) ?? [],
+      hypo: glucoseSettings.hypo ?? 70,
+      hyper: glucoseSettings.hyper ?? 180,
+    });
+
+    setMealInvestigations(
+      buildMealInvestigations({
+        todayEpisodes,
+        baselineEpisodes,
+        targetMid: Math.round(((glucoseSettings.hypo ?? 70) + (glucoseSettings.hyper ?? 180)) / 2),
+      }),
+    );
 
     // keep insulin calculation for parity with existing data flow
     try {
@@ -471,66 +595,40 @@ const DailyReviewScreen: React.FC = () => {
     return [...declinedOnly].sort((a, b) => (a.delta as number) - (b.delta as number))[0];
   }, [mealComparisons]);
 
-  const mealInsightMap = useMemo(() => {
-    const current = new Map(mealInsightsY.map(m => [m.bucket, m]));
-    const prev = new Map(mealInsightsPrev.map(m => [m.bucket, m]));
-    return {current, prev};
-  }, [mealInsightsPrev, mealInsightsY]);
+  const mealInvestigationMap = useMemo(() => new Map(mealInvestigations.map(m => [m.bucket, m])), [mealInvestigations]);
 
   const explainMealDelta = (bucket: MealBucket, delta: number | null) => {
-    const cur = mealInsightMap.current.get(bucket);
-    const prev = mealInsightMap.prev.get(bucket);
-    if (!cur) return language === 'he' ? 'אין מספיק נתונים לארוחה הזו כדי להסביר את השינוי.' : 'Not enough meal data to explain this change yet.';
-    if (!prev || delta == null) return language === 'he' ? 'אין יום השוואה ישיר, אבל נמשיך לצבור נתונים כדי לזהות דפוס.' : 'No direct comparison day yet; we will keep learning the pattern.';
-
-    const reasons: string[] = [];
-    const riseDelta = cur.avgRise - prev.avgRise;
-
-    if (cur.avgPreBolusMin != null && prev.avgPreBolusMin != null) {
-      const preBolusDelta = cur.avgPreBolusMin - prev.avgPreBolusMin;
-      if (preBolusDelta >= 8 && riseDelta <= -8) {
-        reasons.push(
-          language === 'he'
-            ? `תזמון פרה-בולוס ארוך יותר בכ-${Math.round(preBolusDelta)} דק׳ כנראה עזר להקטין את הפיק.`
-            : `Longer pre-bolus by ~${Math.round(preBolusDelta)} min likely reduced the post-meal peak.`,
-        );
-      }
+    const inv = mealInvestigationMap.get(bucket);
+    if (inv) {
+      const conf =
+        language === 'he'
+          ? inv.confidence === 'high'
+            ? 'ביטחון גבוה'
+            : inv.confidence === 'medium'
+            ? 'ביטחון בינוני'
+            : 'ביטחון נמוך'
+          : inv.confidence === 'high'
+          ? 'high confidence'
+          : inv.confidence === 'medium'
+          ? 'medium confidence'
+          : 'low confidence';
+      const base = language === 'he' ? inv.textHe : inv.textEn;
+      return `${base} (${conf} • n=${inv.evidenceCount})`;
     }
 
-    if (cur.avgUnitsPer10g != null && prev.avgUnitsPer10g != null) {
-      const ratioDelta = cur.avgUnitsPer10g - prev.avgUnitsPer10g;
-      if (ratioDelta >= 0.2 && riseDelta <= -8) {
-        reasons.push(
-          language === 'he'
-            ? `יחס אינסולין/פחמימה עלה (כ-${ratioDelta.toFixed(1)} יח׳ לכל 10 גר׳), וזה התאים טוב יותר לארוחה.`
-            : `Insulin-to-carb dose increased (~${ratioDelta.toFixed(1)} U per 10g), and matched this meal better.`,
-        );
-      }
-    }
-
-    if (cur.avgPreBg != null && prev.avgPreBg != null) {
-      const curDist = Math.abs(cur.avgPreBg - targetMid);
-      const prevDist = Math.abs(prev.avgPreBg - targetMid);
-      if (curDist + 8 < prevDist) {
-        reasons.push(
-          language === 'he'
-            ? `התחלת את הארוחה קרוב יותר ליעד הסוכר (${Math.round(cur.avgPreBg)}), וזה שיפר יציבות.`
-            : `Meal started closer to glucose target (${Math.round(cur.avgPreBg)}), which improved stability.`,
-        );
-      }
-    }
-
-    if (!reasons.length) {
+    if (delta == null) {
       return language === 'he'
-        ? delta > 0
-          ? 'יש שיפור ברור בתוצאה, אבל כרגע אין גורם יחיד מובהק. שווה להמשיך באותה שגרה ולעקוב.'
-          : 'יש ירידה בתוצאה, אבל בלי גורם יחיד מובהק. מומלץ לבדוק תזמון בולוס ויחס אינסולין/פחמימה.'
-        : delta > 0
-        ? 'Clear improvement, but no single dominant cause yet. Keep this routine and track another day.'
-        : 'Score dropped without one dominant cause. Re-check bolus timing and insulin/carb ratio.';
+        ? 'אין מספיק נתונים לחקירה אמינה של השינוי בארוחה הזו.'
+        : 'Not enough data to run a reliable investigation for this meal yet.';
     }
 
-    return reasons[0];
+    return language === 'he'
+      ? delta > 0
+        ? 'יש שיפור בתוצאה, אבל החקירה לא מצאה גורם יחיד עם ביטחון גבוה.'
+        : 'יש ירידה בתוצאה, אבל החקירה לא מצאה גורם יחיד עם ביטחון גבוה.'
+      : delta > 0
+      ? 'Meal improved, but investigation did not find one dominant high-confidence cause.'
+      : 'Meal declined, but investigation did not find one dominant high-confidence cause.';
   };
 
   if (loading) {
