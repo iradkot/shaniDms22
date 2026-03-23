@@ -57,6 +57,8 @@ type MealBucketScore = {
   count: number;
   avgRise: number;
   avgTirPct: number;
+  avgLowPct: number;
+  avgHighPct: number;
   representativeTs: number | null;
 };
 
@@ -66,6 +68,8 @@ type MealEpisode = {
   carbs: number;
   hour: number;
   preBg: number | null;
+  peakBg: number | null;
+  lowBg: number | null;
   rise: number | null;
   preBolusMin: number | null;
   unitsPer10g: number | null;
@@ -115,11 +119,11 @@ function computeMealBucketScores(params: {
   hyper: number;
 }): MealBucketScore[] {
   const {bgRows, carbEvents, hypo, hyper} = params;
-  const base: Record<MealBucket, {scores: number[]; rises: number[]; tirs: number[]; times: number[]}> = {
-    breakfast: {scores: [], rises: [], tirs: [], times: []},
-    lunch: {scores: [], rises: [], tirs: [], times: []},
-    dinner: {scores: [], rises: [], tirs: [], times: []},
-    snack: {scores: [], rises: [], tirs: [], times: []},
+  const base: Record<MealBucket, {scores: number[]; rises: number[]; tirs: number[]; lows: number[]; highs: number[]; times: number[]}> = {
+    breakfast: {scores: [], rises: [], tirs: [], lows: [], highs: [], times: []},
+    lunch: {scores: [], rises: [], tirs: [], lows: [], highs: [], times: []},
+    dinner: {scores: [], rises: [], tirs: [], lows: [], highs: [], times: []},
+    snack: {scores: [], rises: [], tirs: [], lows: [], highs: [], times: []},
   };
 
   for (const meal of carbEvents) {
@@ -130,6 +134,8 @@ function computeMealBucketScores(params: {
     const peak = Math.max(...vals);
     const rise = Math.max(0, peak - pre);
     const inRange = vals.filter(v => v >= hypo && v <= hyper).length;
+    const lowCount = vals.filter(v => v < hypo).length;
+    const highCount = vals.filter(v => v > hyper).length;
     const tir = inRange / Math.max(1, vals.length);
 
     const score = Math.round(Math.max(0, Math.min(100, 100 - rise * 0.45 + tir * 35)));
@@ -137,6 +143,8 @@ function computeMealBucketScores(params: {
     base[bucket].scores.push(score);
     base[bucket].rises.push(Math.round(rise));
     base[bucket].tirs.push(Math.round(tir * 100));
+    base[bucket].lows.push(Math.round((lowCount / Math.max(1, vals.length)) * 100));
+    base[bucket].highs.push(Math.round((highCount / Math.max(1, vals.length)) * 100));
     base[bucket].times.push(meal.timestamp);
   }
 
@@ -144,6 +152,8 @@ function computeMealBucketScores(params: {
     const scores = base[bucket].scores;
     const rises = base[bucket].rises;
     const tirs = base[bucket].tirs;
+    const lows = base[bucket].lows;
+    const highs = base[bucket].highs;
     const times = base[bucket].times;
     return {
       bucket,
@@ -151,6 +161,8 @@ function computeMealBucketScores(params: {
       count: scores.length,
       avgRise: rises.length ? Math.round(rises.reduce((s, n) => s + n, 0) / rises.length) : 0,
       avgTirPct: tirs.length ? Math.round(tirs.reduce((s, n) => s + n, 0) / tirs.length) : 0,
+      avgLowPct: lows.length ? Math.round(lows.reduce((s, n) => s + n, 0) / lows.length) : 0,
+      avgHighPct: highs.length ? Math.round(highs.reduce((s, n) => s + n, 0) / highs.length) : 0,
       representativeTs: times.length ? Math.round(times.reduce((s, n) => s + n, 0) / times.length) : null,
     };
   });
@@ -180,6 +192,7 @@ function buildMealEpisodes(params: {
       const preBg = nearestBgBefore(bgRows, meal.ts, 45);
       const vals = bgWindow(bgRows, meal.ts, meal.ts + 4 * 60 * 60 * 1000);
       const peak = vals.length ? Math.max(...vals) : null;
+      const low = vals.length ? Math.min(...vals) : null;
       const rise = preBg != null && peak != null ? Math.max(0, Math.round(peak - preBg)) : null;
       const inRange = vals.filter(v => v >= hypo && v <= hyper).length;
       const tir = vals.length ? inRange / vals.length : null;
@@ -195,6 +208,8 @@ function buildMealEpisodes(params: {
         carbs: meal.carbs,
         hour: new Date(meal.ts).getHours(),
         preBg,
+        peakBg: peak != null ? Math.round(peak) : null,
+        lowBg: low != null ? Math.round(low) : null,
         rise,
         preBolusMin: before ? Math.round((meal.ts - before.ts) / 60000) : null,
         unitsPer10g: meal.carbs > 0 && units > 0 ? Number(((units / meal.carbs) * 10).toFixed(2)) : null,
@@ -350,6 +365,7 @@ const DailyReviewScreen: React.FC = () => {
   const [mealScoresY, setMealScoresY] = useState<MealBucketScore[]>([]);
   const [mealScoresPrev, setMealScoresPrev] = useState<MealBucketScore[]>([]);
   const [mealInvestigations, setMealInvestigations] = useState<MealInvestigation[]>([]);
+  const [todayEpisodes, setTodayEpisodes] = useState<MealEpisode[]>([]);
   const [expandedMealWhy, setExpandedMealWhy] = useState<MealBucket | null>(null);
   const [expandedMealCard, setExpandedMealCard] = useState<MealBucket | null>(null);
   const [focusModalBucket, setFocusModalBucket] = useState<MealBucket | null>(null);
@@ -422,12 +438,13 @@ const DailyReviewScreen: React.FC = () => {
       }),
     );
 
-    const todayEpisodes = buildMealEpisodes({
+    const todayEpisodesList = buildMealEpisodes({
       bgRows: yList,
       treatments: (yTreatments as any[]) ?? [],
       hypo: glucoseSettings.hypo ?? 70,
       hyper: glucoseSettings.hyper ?? 180,
     });
+    setTodayEpisodes(todayEpisodesList);
     const baselineEpisodes = buildMealEpisodes({
       bgRows: ((w as any) ?? []) as Row[],
       treatments: (wTreatments as any[]) ?? [],
@@ -437,7 +454,7 @@ const DailyReviewScreen: React.FC = () => {
 
     setMealInvestigations(
       buildMealInvestigations({
-        todayEpisodes,
+        todayEpisodes: todayEpisodesList,
         baselineEpisodes,
         targetMid: Math.round(((glucoseSettings.hypo ?? 70) + (glucoseSettings.hyper ?? 180)) / 2),
       }),
@@ -829,10 +846,18 @@ const DailyReviewScreen: React.FC = () => {
               const same = item.delta == null || item.delta === 0;
               const deltaColor = same ? addOpacity(theme.textColor, 0.6) : improved ? '#2e7d32' : '#c62828';
               const isExpanded = expandedMealCard === item.bucket;
-              const peakHigh = item.avgRise;
-              const peakLow = Math.max(0, Math.round((100 - item.avgTirPct) * 0.8));
-              const absorptionRate = Number((item.avgRise / 60).toFixed(1));
-              const absorptionLabel = absorptionRate >= 2 ? (language === 'he' ? 'ספיגה מהירה ⚡' : 'Fast absorption ⚡') : absorptionRate <= 0.8 ? (language === 'he' ? 'עלייה מושהית 🐢' : 'Delayed rise 🐢') : (language === 'he' ? 'ספיגה בינונית' : 'Moderate absorption');
+              const bucketEpisodes = todayEpisodes.filter(e => e.bucket === item.bucket);
+              const peakHigh = bucketEpisodes.length
+                ? Math.round(bucketEpisodes.reduce((s, e) => s + (e.peakBg ?? 0), 0) / bucketEpisodes.length)
+                : null;
+              const peakLow = bucketEpisodes.length
+                ? Math.round(bucketEpisodes.reduce((s, e) => s + (e.lowBg ?? 0), 0) / bucketEpisodes.length)
+                : null;
+              const absorptionLabel = item.avgRise >= 90
+                ? (language === 'he' ? 'עלייה מהירה אחרי ארוחה ⚡' : 'Fast post-meal rise ⚡')
+                : item.avgRise <= 45
+                ? (language === 'he' ? 'תגובה רגועה יותר ✅' : 'Steadier response ✅')
+                : (language === 'he' ? 'תגובה בינונית 📊' : 'Moderate response 📊');
               return (
                 <Pressable
                   key={item.bucket}
@@ -849,25 +874,27 @@ const DailyReviewScreen: React.FC = () => {
                     </View>
                   </View>
 
-                  <View style={{marginTop: 8, height: 10, borderRadius: 99, backgroundColor: addOpacity(theme.textColor, 0.1), overflow: 'hidden', flexDirection: 'row'}}>
+                  <View style={{marginTop: 8, height: 10, borderRadius: 99, backgroundColor: addOpacity(theme.textColor, 0.08), overflow: 'hidden', flexDirection: 'row'}}>
+                    <View style={{width: `${Math.max(0, Math.min(100, item.avgLowPct))}%`, height: 10, backgroundColor: '#c62828'}} />
                     <View style={{width: `${Math.max(0, Math.min(100, item.avgTirPct))}%`, height: 10, backgroundColor: '#2e7d32', alignItems: 'center', justifyContent: 'center'}}>
                       {item.avgTirPct > 15 ? <Text style={{fontSize: 10, fontWeight: '800', color: '#fff'}}>{item.avgTirPct}%</Text> : null}
                     </View>
-                    <View style={{width: `${Math.max(0, 100 - Math.max(0, Math.min(100, item.avgTirPct)))}%`, height: 10, backgroundColor: '#f9a825'}} />
+                    <View style={{width: `${Math.max(0, Math.min(100, item.avgHighPct))}%`, height: 10, backgroundColor: '#f9a825'}} />
                   </View>
+
+                  <Text style={{marginTop: 4, fontSize: 11, color: addOpacity(theme.textColor, 0.62), writingDirection: 'ltr'}}>{`${item.avgLowPct}% 🔴  ${item.avgTirPct}% 🟢  ${item.avgHighPct}% 🟠`}</Text>
 
                   {!isExpanded ? null : (
                     <View style={{marginTop: 10, gap: 8}}>
                       <View style={{padding: 8, borderRadius: 10, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.12)}}>
                         <Text style={{color: theme.textColor, fontWeight: '700'}}>{language === 'he' ? 'שיאי סוכר' : 'Glucose peaks'}</Text>
-                        <Text style={{marginTop: 4, color: '#c62828', writingDirection: 'ltr'}}>{language === 'he' ? 'Peak High (3h): ' : 'Peak High (3h): '}{peakHigh} mg/dL</Text>
-                        <Text style={{marginTop: 2, color: '#1565c0', writingDirection: 'ltr'}}>{language === 'he' ? 'Peak Low (4h): ' : 'Peak Low (4h): '}{peakLow} mg/dL</Text>
+                        <Text style={{marginTop: 4, color: '#c62828', writingDirection: 'ltr'}}>{language === 'he' ? 'שיא גבוה (3ש): ' : 'Peak High (3h): '}{peakHigh ?? '—'} mg/dL</Text>
+                        <Text style={{marginTop: 2, color: '#1565c0', writingDirection: 'ltr'}}>{language === 'he' ? 'שיא נמוך (4ש): ' : 'Peak Low (4h): '}{peakLow ?? '—'} mg/dL</Text>
                       </View>
 
                       <View style={{padding: 8, borderRadius: 10, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.12)}}>
-                        <Text style={{color: theme.textColor, fontWeight: '700'}}>{language === 'he' ? 'דינמיקת ספיגה' : 'Absorption dynamics'}</Text>
+                        <Text style={{color: theme.textColor, fontWeight: '700'}}>{language === 'he' ? 'איך הגוף הגיב לארוחה' : 'How your body responded'}</Text>
                         <Text style={{marginTop: 4, color: theme.textColor}}>{absorptionLabel}</Text>
-                        <Text style={{marginTop: 2, color: addOpacity(theme.textColor, 0.78), writingDirection: 'ltr'}}>{`${absorptionRate >= 0 ? '+' : ''}${absorptionRate} mg/dL/min`}</Text>
                       </View>
 
                       <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
