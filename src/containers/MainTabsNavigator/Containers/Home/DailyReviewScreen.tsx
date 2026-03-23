@@ -12,7 +12,12 @@ import {
 } from 'app/api/apiRequests';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
-import {getLatestDailyBrief, regenerateDailyBrief} from 'app/services/proactiveCare/dailyBrief';
+import {
+  getLatestDailyBrief,
+  regenerateDailyBrief,
+  buildDailyBriefSystemInstruction,
+  getDailyBriefLanguageGuardrails,
+} from 'app/services/proactiveCare/dailyBrief';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
@@ -691,6 +696,34 @@ const DailyReviewScreen: React.FC = () => {
   const exportDailyReviewDebugPackage = async () => {
     try {
       const ts = new Date().toISOString();
+      const llmRequestContext = {
+        yesterday: {
+          tir: yTirPct,
+          avg: yAvg,
+          lows: yLows,
+          highs: yHighs,
+        },
+        week: {
+          tir: wTirPct,
+          avg: wAvg,
+          lows: wLows,
+          highs: wHighs,
+        },
+        deltas: {
+          tirDeltaVsWeek: yTirPct - wTirPct,
+          avgDeltaVsWeek: yAvg - wAvg,
+        },
+        nightLows,
+        fallback: {
+          summaryLine: llmSummaryLine,
+          keyLine: llmKeyLine,
+          actionLine: llmActionLine,
+          whyLine,
+        },
+        userProfile: null,
+        language,
+      };
+
       const bundle = {
         package: 'daily-review-debug',
         createdAt: ts,
@@ -705,7 +738,25 @@ const DailyReviewScreen: React.FC = () => {
               language,
             },
           },
-          '01-input-data': {
+          '01-agent-instructions': {
+            'system-instruction.txt': buildDailyBriefSystemInstruction(language as 'he' | 'en'),
+            'language-guardrails.json': getDailyBriefLanguageGuardrails(),
+            'llm-request-context.json': llmRequestContext,
+            'llm-message-contract.json': {
+              messages: [
+                {role: 'system', source: 'dailyBrief.ts::buildDailyBriefSystemInstruction(lang)'},
+                {role: 'user', source: 'dailyBrief.ts::Context payload', payload: llmRequestContext},
+              ],
+              expectedResponseKeys: [
+                'empathic_opening',
+                'clinical_validation',
+                'tiny_habit_recommendation',
+                'encouraging_closing',
+              ],
+              fallbackResponseKeys: ['summaryLine', 'keyLine', 'actionLine', 'whyLine'],
+            },
+          },
+          '02-input-data': {
             'glucose-metrics.json': {
               yAvg,
               yTirPct,
@@ -716,7 +767,7 @@ const DailyReviewScreen: React.FC = () => {
             'meal-comparisons.json': mealComparisons,
             'today-episodes.json': todayEpisodes,
           },
-          '02-ai-output': {
+          '03-ai-output': {
             'daily-brief-lines.json': {
               summary: llmSummaryLine,
               key: llmKeyLine,
@@ -725,7 +776,7 @@ const DailyReviewScreen: React.FC = () => {
               source: actionSource,
             },
           },
-          '03-rendered-state': {
+          '04-rendered-state': {
             'ui-state.json': {
               topImprovedMeal,
               topDeclinedMeal,

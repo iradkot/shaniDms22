@@ -387,6 +387,20 @@ function sanitizeEmpathicLanguage(line: string): string {
   return out;
 }
 
+export function buildDailyBriefSystemInstruction(lang: Lang): string {
+  return lang === 'he'
+    ? '???? JSON ????. ???? ?? ????? empathic_opening,clinical_validation,tiny_habit_recommendation,encouraging_closing. ??????? ???? summaryLine,keyLine,actionLine,whyLine. ?? ???? ???? ??????. ???? ?????? ??????: ?????, ?????/??????, ??????, ???? ????. ???? ????? ?????? ?????, ?????? ??? ????, ?????? ????? ???? ??? ????.'
+    : 'Return JSON only. Prefer keys empathic_opening,clinical_validation,tiny_habit_recommendation,encouraging_closing. Alternatively summaryLine,keyLine,actionLine,whyLine is allowed. Keep lines short and gentle. Never use blame/fear wording. Always start with positive reinforcement, include non-judgmental validation, and suggest exactly one tiny action.';
+}
+
+export function getDailyBriefLanguageGuardrails() {
+  return {
+    bannedHebrew: BANNED_HE_WORDS.map(([rx, replacement]) => ({pattern: rx.source, replacement})),
+    requiredStructure: ['empathic_opening','clinical_validation','tiny_habit_recommendation','encouraging_closing'],
+    fallbackStructure: ['summaryLine','keyLine','actionLine','whyLine'],
+  } as const;
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -422,10 +436,7 @@ async function maybeGenerateLlmSections(params: {
   const provider = new OpenAIProvider({apiKey});
   const model = (ai?.model ?? 'gpt-5.4').trim() || 'gpt-5.4';
 
-  const instruction =
-    lang === 'he'
-      ? 'החזר JSON בלבד. העדף את השדות empathic_opening,clinical_validation,tiny_habit_recommendation,encouraging_closing. לחלופין מותר summaryLine,keyLine,actionLine,whyLine. כל שורה קצרה ועדינה. אסור להשתמש במילים: החמרה, מסוכן/מסכנים, כישלון, חוסר ציות. חובה לפתוח בחיזוק חיובי, להסביר ללא אשמה, ולהציע פעולה קטנה אחת בלבד.'
-      : 'Return JSON only. Prefer keys empathic_opening,clinical_validation,tiny_habit_recommendation,encouraging_closing. Alternatively summaryLine,keyLine,actionLine,whyLine is allowed. Keep lines short and gentle. Never use blame/fear wording. Always start with positive reinforcement, include non-judgmental validation, and suggest exactly one tiny action.';
+  const instruction = buildDailyBriefSystemInstruction(lang);
 
   for (let attempt = 1; attempt <= LLM_DAILY_MAX_ATTEMPTS; attempt += 1) {
     try {
@@ -597,4 +608,5 @@ export async function syncDailyBriefNotifications(params: {
     },
   );
 }
+
 
