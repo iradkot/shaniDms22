@@ -317,8 +317,8 @@ function buildCompactBody(params: {
       betterWhenLower: true,
       emoji: '🟠',
     }),
-    llm.actionLine,
-    llm.whyLine,
+    sanitizeEmpathicLanguage(llm.actionLine),
+    sanitizeEmpathicLanguage(llm.whyLine),
   ].join('\n');
 }
 
@@ -347,6 +347,25 @@ function ensurePrefix(line: string, prefix: string): string {
   const text = line.trim();
   if (!text) return text;
   return text.startsWith(prefix) ? text : `${prefix} ${text}`;
+}
+
+const BANNED_HE_WORDS: Array<[RegExp, string]> = [
+  [/החמרה/g, 'ירידה לעומת השבוע'],
+  [/מסוכנ(?:ים|ת|ות)?/g, 'דורש תשומת לב'],
+  [/כישלון/g, 'אתגר'],
+  [/חוסר ציות/g, 'קושי בהתמדה'],
+  [/שליטה גרועה/g, 'איזון מאתגר'],
+  [/אתה חייב/g, 'אפשר לנסות'],
+  [/את צריכה/g, 'אפשר לנסות'],
+  [/אתה צריך/g, 'אפשר לנסות'],
+];
+
+function sanitizeEmpathicLanguage(line: string): string {
+  let out = line;
+  for (const [rx, replacement] of BANNED_HE_WORDS) {
+    out = out.replace(rx, replacement);
+  }
+  return out;
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -386,8 +405,8 @@ async function maybeGenerateLlmSections(params: {
 
   const instruction =
     lang === 'he'
-      ? 'החזר JSON בלבד עם השדות summaryLine,keyLine,actionLine,whyLine. כל שורה חייבת להיות קצרה מאוד (עד ~55 תווים), שורה אחת בלבד, פרקטית ועם מספרים. summaryLine חייב להתחיל ב-📊, keyLine ב-🔎, actionLine ב-🎯, whyLine ב-🧠.'
-      : 'Return JSON only with keys: summaryLine,keyLine,actionLine,whyLine. Each line must be very short (about <=55 chars), one line only, practical and numeric. summaryLine must start with 📊, keyLine with 🔎, actionLine with 🎯, whyLine with 🧠.';
+      ? 'החזר JSON בלבד. העדף את השדות empathic_opening,clinical_validation,tiny_habit_recommendation,encouraging_closing. לחלופין מותר summaryLine,keyLine,actionLine,whyLine. כל שורה קצרה ועדינה. אסור להשתמש במילים: החמרה, מסוכן/מסכנים, כישלון, חוסר ציות. חובה לפתוח בחיזוק חיובי, להסביר ללא אשמה, ולהציע פעולה קטנה אחת בלבד.'
+      : 'Return JSON only. Prefer keys empathic_opening,clinical_validation,tiny_habit_recommendation,encouraging_closing. Alternatively summaryLine,keyLine,actionLine,whyLine is allowed. Keep lines short and gentle. Never use blame/fear wording. Always start with positive reinforcement, include non-judgmental validation, and suggest exactly one tiny action.';
 
   for (let attempt = 1; attempt <= LLM_DAILY_MAX_ATTEMPTS; attempt += 1) {
     try {
@@ -427,10 +446,15 @@ async function maybeGenerateLlmSections(params: {
       const payload = parseJsonObject((res.content ?? '').trim());
       if (!payload) continue;
 
-      const summaryLine = ensurePrefix(String(payload.summaryLine ?? '').trim(), '📊');
-      const keyLine = ensurePrefix(String(payload.keyLine ?? '').trim(), '🔎');
-      const actionLine = ensurePrefix(String(payload.actionLine ?? '').trim(), '🎯');
-      const whyLine = ensurePrefix(String(payload.whyLine ?? '').trim(), '🧠');
+      const summaryRaw = String(payload.empathic_opening ?? payload.summaryLine ?? '').trim();
+      const keyRaw = String(payload.clinical_validation ?? payload.keyLine ?? '').trim();
+      const actionRaw = String(payload.tiny_habit_recommendation ?? payload.actionLine ?? '').trim();
+      const whyRaw = String(payload.encouraging_closing ?? payload.whyLine ?? '').trim();
+
+      const summaryLine = ensurePrefix(sanitizeEmpathicLanguage(summaryRaw), '📊');
+      const keyLine = ensurePrefix(sanitizeEmpathicLanguage(keyRaw), '🔎');
+      const actionLine = ensurePrefix(sanitizeEmpathicLanguage(actionRaw), '🎯');
+      const whyLine = ensurePrefix(sanitizeEmpathicLanguage(whyRaw), '🧠');
 
       if (!summaryLine || !keyLine || !actionLine || !whyLine) continue;
 
