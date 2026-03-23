@@ -780,11 +780,14 @@ const DailyReviewScreen: React.FC = () => {
                 <Text style={{fontWeight: '800', color: '#2e7d32'}}>
                   {language === 'he' ? '🚀 הארוחה שהכי השתפרה' : '🚀 Top improved meal'}
                 </Text>
-                <Text style={{marginTop: 4, color: theme.textColor}}>
-                  {mealBucketLabel(language, topImprovedMeal.bucket)} •
-                  <Text style={{writingDirection: 'ltr'}}> {topImprovedMeal.score} ({Math.abs(topImprovedMeal.delta ?? 0)}+ 📈)</Text>
-                  {language === 'he' ? ' מול ממוצע שבועי' : ' vs weekly baseline'}
-                </Text>
+                <View style={{marginTop: 4, flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap'}}>
+                  <Text style={{color: theme.textColor}}>{mealBucketLabel(language, topImprovedMeal.bucket)}</Text>
+                  <Text style={{color: theme.textColor, writingDirection: 'ltr'}}>{topImprovedMeal.score}</Text>
+                  <View style={{flexDirection: 'row'}}>
+                    <Text style={{color: '#2e7d32', writingDirection: 'ltr'}}>{`(${Math.abs(topImprovedMeal.delta ?? 0)}+ 📈)`}</Text>
+                  </View>
+                  <Text style={{color: addOpacity(theme.textColor, 0.75)}}>{language === 'he' ? 'מול ממוצע שבועי' : 'vs weekly baseline'}</Text>
+                </View>
                 <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
                   {explainMealDelta(topImprovedMeal.bucket, topImprovedMeal.delta)}
                 </Text>
@@ -794,10 +797,11 @@ const DailyReviewScreen: React.FC = () => {
                 <Text style={{fontWeight: '800', color: '#c62828'}}>
                   {language === 'he' ? '📉 לא הייתה ארוחה שהשתפרה אתמול' : '📉 No meal improved yesterday'}
                 </Text>
-                <Text style={{marginTop: 4, color: theme.textColor}}>
-                  {language === 'he' ? 'הירידה הבולטת מול שבוע אחרון:' : 'Largest drop vs recent week:'} {mealBucketLabel(language, topDeclinedMeal.bucket)} •
-                  <Text style={{writingDirection: 'ltr'}}> {topDeclinedMeal.score} ({Math.abs(topDeclinedMeal.delta ?? 0)}- 📉)</Text>
-                </Text>
+                <View style={{marginTop: 4, flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap'}}>
+                  <Text style={{color: theme.textColor}}>{language === 'he' ? 'הירידה הבולטת מול שבוע אחרון:' : 'Largest drop vs recent week:'}</Text>
+                  <Text style={{color: theme.textColor}}>{mealBucketLabel(language, topDeclinedMeal.bucket)}</Text>
+                  <Text style={{color: '#c62828', writingDirection: 'ltr'}}>{`${topDeclinedMeal.score} (${Math.abs(topDeclinedMeal.delta ?? 0)}- 📉)`}</Text>
+                </View>
                 <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
                   {explainMealDelta(topDeclinedMeal.bucket, topDeclinedMeal.delta)}
                 </Text>
@@ -833,19 +837,23 @@ const DailyReviewScreen: React.FC = () => {
                 <Pressable
                   key={item.bucket}
                   onPress={() => toggleMealCard(item.bucket)}
-                  style={{borderWidth: 1, borderColor: addOpacity(theme.borderColor || '#999', 0.5), borderRadius: 12, padding: 10}}
+                  style={{borderWidth: 1, borderColor: addOpacity(theme.borderColor || '#999', 0.45), borderRadius: 14, padding: 11, backgroundColor: addOpacity(theme.white, 0.92)}}
                 >
                   <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
                     <Text style={{fontWeight: '700', color: theme.textColor}}>
                       {mealBucketLabel(language, item.bucket)} - {item.representativeTs ? format(new Date(item.representativeTs), 'HH:mm') : '—'}
                     </Text>
-                    <ScoreBadge score={item.score} />
+                    <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                      <ScoreBadge score={item.score} />
+                      <MaterialIcons name={isExpanded ? 'expand-less' : 'expand-more'} size={20} color={addOpacity(theme.textColor, 0.7)} />
+                    </View>
                   </View>
 
-                  <View style={{marginTop: 8, height: 9, borderRadius: 99, backgroundColor: addOpacity(theme.textColor, 0.12), overflow: 'hidden'}}>
-                    <View style={{width: `${Math.max(0, Math.min(100, item.avgTirPct))}%`, height: 9, borderRadius: 99, backgroundColor: '#2e7d32', alignItems: 'center', justifyContent: 'center'}}>
+                  <View style={{marginTop: 8, height: 10, borderRadius: 99, backgroundColor: addOpacity(theme.textColor, 0.1), overflow: 'hidden', flexDirection: 'row'}}>
+                    <View style={{width: `${Math.max(0, Math.min(100, item.avgTirPct))}%`, height: 10, backgroundColor: '#2e7d32', alignItems: 'center', justifyContent: 'center'}}>
                       {item.avgTirPct > 15 ? <Text style={{fontSize: 10, fontWeight: '800', color: '#fff'}}>{item.avgTirPct}%</Text> : null}
                     </View>
+                    <View style={{width: `${Math.max(0, 100 - Math.max(0, Math.min(100, item.avgTirPct)))}%`, height: 10, backgroundColor: '#f9a825'}} />
                   </View>
 
                   {!isExpanded ? null : (
@@ -866,15 +874,17 @@ const DailyReviewScreen: React.FC = () => {
                         <Text style={{color: deltaColor, fontSize: 12, fontWeight: '700'}}>
                           <Text style={{writingDirection: 'ltr'}}>{`${item.score} (${Math.abs(delta)}${delta >= 0 ? '+' : '-'} ${delta >= 0 ? '📈' : '📉'})`}</Text>
                         </Text>
-                        <Pressable
-                          onPress={() => {
-                            setFocusModalBucket(item.bucket);
-                            setFocusNote('');
-                          }}
-                          style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: addOpacity('#c62828', 0.12)}}
-                        >
-                          <Text style={{color: '#c62828', fontWeight: '800', fontSize: 12}}>{language === 'he' ? 'תכנן מחדש למחר' : 'Plan for tomorrow'}</Text>
-                        </Pressable>
+                        {item.score <= 55 ? (
+                          <Pressable
+                            onPress={() => {
+                              setFocusModalBucket(item.bucket);
+                              setFocusNote('');
+                            }}
+                            style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: addOpacity('#c62828', 0.12)}}
+                          >
+                            <Text style={{color: '#c62828', fontWeight: '800', fontSize: 12}}>{language === 'he' ? 'תכנן מחדש למחר' : 'Plan for tomorrow'}</Text>
+                          </Pressable>
+                        ) : <View />}
                       </View>
 
                       <View style={{flexDirection: 'row', gap: 8}}>
