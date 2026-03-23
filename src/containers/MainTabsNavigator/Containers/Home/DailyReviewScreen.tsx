@@ -788,9 +788,40 @@ const DailyReviewScreen: React.FC = () => {
         },
       };
 
+      const fullMessage = JSON.stringify(bundle, null, 2);
+      const safeMessage =
+        fullMessage.length > 180_000
+          ? JSON.stringify(
+              {
+                ...bundle,
+                truncated: true,
+                note:
+                  language === 'he'
+                    ? 'החבילה קוצרה כי קובץ השיתוף היה גדול מדי.'
+                    : 'Package was truncated because share payload was too large.',
+                folders: {
+                  ...bundle.folders,
+                  '02-input-data': {
+                    ...bundle.folders['02-input-data'],
+                    'today-episodes.json': {
+                      total: Array.isArray(todayEpisodes) ? todayEpisodes.length : 0,
+                      sample: Array.isArray(todayEpisodes) ? todayEpisodes.slice(0, 25) : [],
+                    },
+                    'meal-comparisons.json': {
+                      total: Array.isArray(mealComparisons) ? mealComparisons.length : 0,
+                      sample: Array.isArray(mealComparisons) ? mealComparisons.slice(0, 25) : [],
+                    },
+                  },
+                },
+              },
+              null,
+              2,
+            )
+          : fullMessage;
+
       await Share.share({
         title: language === 'he' ? 'ייצוא דיבאג סיכום יומי' : 'Export daily review debug',
-        message: JSON.stringify(bundle, null, 2),
+        message: safeMessage,
       });
     } catch (e) {
       Alert.alert(language === 'he' ? 'שגיאה' : 'Error', language === 'he' ? 'ייצוא הדיבאג נכשל' : 'Debug export failed');
@@ -805,6 +836,16 @@ const DailyReviewScreen: React.FC = () => {
   const targetMid = Math.round(((glucoseSettings.hypo ?? 70) + (glucoseSettings.hyper ?? 180)) / 2);
   const avgDistance = Math.abs(yAvg - targetMid);
   const avgScore = Math.max(0, Math.min(100, 100 - Math.round(avgDistance * 0.9)));
+
+  const nightLows = yRows.filter(r => {
+    const ts = r?.dateString ? Date.parse(r.dateString) : NaN;
+    if (!Number.isFinite(ts)) return false;
+    const h = new Date(ts).getHours();
+    const start = glucoseSettings.nightStartHour;
+    const end = glucoseSettings.nightEndHour;
+    const inNight = start <= end ? h >= start && h < end : h >= start || h < end;
+    return inNight && (r.sgv ?? 0) < (glucoseSettings.hypo ?? 70);
+  }).length;
 
   const metricChip = (label: string, delta: number, betterWhen: 'higher' | 'lower') => {
     const improved = betterWhen === 'higher' ? delta > 0 : delta < 0;
