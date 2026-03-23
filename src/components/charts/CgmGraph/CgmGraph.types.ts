@@ -19,12 +19,17 @@ export type CGMGraphExternalTooltipPayload = {
   anchorTimeMs: number;
 };
 
+export type CgmGraphVariant = 'default' | 'compactMeal';
+
 export interface CgmGraphProps {
   bgSamples: BgSample[];
   foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
   insulinData?: InsulinDataEntry[];
   width: number;
   height: number;
+
+  /** Optional visual/interaction preset for common use-cases. */
+  variant?: CgmGraphVariant;
 
   /** Optional margin override so stacked charts can share exact x-axis alignment. */
   margin?: ChartMargin;

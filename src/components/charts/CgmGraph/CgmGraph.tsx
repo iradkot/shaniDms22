@@ -48,6 +48,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   xDomain,
   margin,
   xTickLabelFormatter,
+  variant = 'default',
   showDateLabels = true,
   showYLabels = true,
   yTicksAmount = 6,
@@ -65,6 +66,11 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   }
 
   const containerRef = useRef<View>(null);
+
+  const resolvedShowYLabels = variant === 'compactMeal' ? false : showYLabels;
+  const resolvedYTicksAmount = variant === 'compactMeal' ? 4 : yTicksAmount;
+  const resolvedInteractive = variant === 'compactMeal' ? false : interactive;
+
   const [graphStyleContextValue, setGraphStyleContextValue] =
     useGraphStyleContext(width, height, bgSamples, xDomain, margin);
   const touchContext = useTouchContext();
@@ -193,16 +199,16 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
       : xTouchPosition;
 
   const shouldShowFocus =
-    interactive && isTouchActive && (tooltipMode === 'external' || closestBgSample || tooltipBolusEvents.length > 0);
+    resolvedInteractive && isTouchActive && (tooltipMode === 'external' || closestBgSample || tooltipBolusEvents.length > 0);
 
   return (
     <GraphStyleContext.Provider value={graphStyleProviderValue}>
       <GraphContainer ref={containerRef} style={{width, height}} testID={testID}>
         <StyledSvg
-          onTouchStart={interactive ? handleTouchStartWithTooltip : undefined}
-          onTouchMove={interactive ? handleTouchMoveWithTooltip : undefined}
-          onTouchEnd={interactive ? handleTouchEndWithTooltip : undefined}
-          onTouchCancel={interactive ? handleTouchEndWithTooltip : undefined}
+          onTouchStart={resolvedInteractive ? handleTouchStartWithTooltip : undefined}
+          onTouchMove={resolvedInteractive ? handleTouchMoveWithTooltip : undefined}
+          onTouchEnd={resolvedInteractive ? handleTouchEndWithTooltip : undefined}
+          onTouchCancel={resolvedInteractive ? handleTouchEndWithTooltip : undefined}
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}>
@@ -216,7 +222,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
             x={graphStyleContextValue.margin?.left}
             y={graphStyleContextValue.margin?.top}>
             <XGridAndAxis xTickLabelFormatter={xTickLabelFormatter ?? undefined} />
-            <YGridAndAxis highestBgThreshold={300} ticksAmount={yTicksAmount} showLabels={showYLabels} />
+            <YGridAndAxis highestBgThreshold={300} ticksAmount={resolvedYTicksAmount} showLabels={resolvedShowYLabels} />
             {showDateLabels ? <GraphDateDisplay /> : null}
 
             <G clipPath="url(#cgmPlotClip)">
