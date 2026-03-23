@@ -46,6 +46,10 @@ export interface MealSegment {
   postMealHighPct: number | null;
   /** Dense glucose samples in post-meal window for mini graph */
   postMealGraphPoints: number[];
+  /** Raw BG samples in post-meal window (for full CGM chart renderer) */
+  postMealBgSamples: BgSample[];
+  /** Bolus events in post-meal window (for chart markers) */
+  postMealBolusData: InsulinDataEntry[];
   /** Food item names (if any) */
   foodNames: string[];
   /** Grams of carbs absorbed (carbsEntered − COB at T+3h) */
@@ -247,6 +251,13 @@ export function useMealSegments(params: {
       const bgAfterSample = findClosestBg(bgData, postMealEndMs, LOOKBACK_MS);
       const postMealSamples = bgData.filter(s => s.date >= startMs && s.date <= postMealEndMs);
       const postMealGraphPoints = downsample(postMealSamples.map(s => s.sgv), 24);
+      const postMealBolusData: InsulinDataEntry[] = cluster
+        .filter(e => e.bolus > 0 && e.timestampMs >= startMs && e.timestampMs <= postMealEndMs)
+        .map(e => ({
+          type: 'bolus' as const,
+          amount: e.bolus,
+          timestamp: new Date(e.timestampMs).toISOString(),
+        }));
       const postMealTirPct = postMealSamples.length
         ? Math.round(
             (postMealSamples.filter(s => s.sgv >= 70 && s.sgv <= 180).length / postMealSamples.length) *
@@ -284,6 +295,8 @@ export function useMealSegments(params: {
         postMealLowPct,
         postMealHighPct,
         postMealGraphPoints,
+        postMealBgSamples: postMealSamples,
+        postMealBolusData,
         foodNames,
         absorbed: absorption.absorbed,
         absorptionPct: absorption.absorptionPct,

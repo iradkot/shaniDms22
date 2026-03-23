@@ -10,7 +10,7 @@
 import React from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Svg, {Circle, Line, Polyline} from 'react-native-svg';
+import CgmGraph from 'app/components/charts/CgmGraph/CgmGraph';
 
 import type {ThemeType} from 'app/types/theme';
 import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useMealSegments';
@@ -36,28 +36,7 @@ function formatTime(ms: number): string {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
-function miniGraphScale(values: number[]) {
-  const h = 38;
-  const min = Math.min(...values, 60);
-  const max = Math.max(...values, 190);
-  const span = Math.max(1, max - min);
-  return {
-    h,
-    yFor: (v: number) => h - ((v - min) / span) * h,
-  };
-}
-
-function buildMiniGraphPoints(values: number[], width: number): string {
-  if (!values.length || width <= 0) return '';
-  const {yFor} = miniGraphScale(values);
-  return values
-    .map((v, i) => {
-      const x = (i / Math.max(1, values.length - 1)) * width;
-      const y = yFor(v);
-      return `${x},${y}`;
-    })
-    .join(' ');
-}
+// Uses shared CgmGraph renderer for meal mini-chart.
 
 // ── Component ───────────────────────────────────────────────────────────
 
@@ -79,25 +58,12 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
       ? segment.bgPeak - segment.bgBefore
       : null;
 
-  const miniGraphValues = segment.postMealGraphPoints?.length
-    ? segment.postMealGraphPoints
-    : [segment.bgBefore, segment.bgPeak, segment.bgAfter].filter(
-        (n): n is number => typeof n === 'number',
-      );
   const [graphWidth, setGraphWidth] = React.useState(0);
-  const miniGraphPoints = buildMiniGraphPoints(miniGraphValues, graphWidth);
-  const graphScale = miniGraphValues.length ? miniGraphScale(miniGraphValues) : null;
-  const lowLineY = graphScale ? graphScale.yFor(70) : null;
-  const highLineY = graphScale ? graphScale.yFor(180) : null;
+  const graphWindowMs = 2 * 60 * 60 * 1000;
 
   const lowPct = Math.max(0, Math.min(100, segment.postMealLowPct ?? 0));
   const inRangePct = Math.max(0, Math.min(100, segment.postMealTirPct ?? 0));
   const highPct = Math.max(0, Math.min(100, segment.postMealHighPct ?? 0));
-
-  const graphWindowMs = 2 * 60 * 60 * 1000;
-  const bolusMarkerXs = (segment.bolusTimesMs ?? [])
-    .map(ts => ((ts - segment.startMs) / graphWindowMs) * graphWidth)
-    .filter(x => Number.isFinite(x) && x >= 0 && x <= graphWidth);
 
   return (
     <CardWrap $isLatest={isLatest}>
@@ -206,21 +172,19 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
           if (w !== graphWidth) setGraphWidth(w);
         }}
       >
-        {miniGraphPoints ? (
+        {graphWidth > 0 && segment.postMealBgSamples.length ? (
           <>
-            <Svg width={graphWidth} height={38}>
-              {lowLineY != null ? (
-                <Line x1={0} y1={lowLineY} x2={graphWidth} y2={lowLineY} stroke={addOpacity(theme.belowRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
-              ) : null}
-              {highLineY != null ? (
-                <Line x1={0} y1={highLineY} x2={graphWidth} y2={highLineY} stroke={addOpacity(theme.aboveRangeColor, 0.45)} strokeDasharray="3,3" strokeWidth={1} />
-              ) : null}
-              <Polyline points={miniGraphPoints} fill="none" stroke={theme.accentColor} strokeWidth={2} />
-              {bolusMarkerXs.map((x, idx) => (
-                <Circle key={`bolus-${idx}`} cx={x} cy={34} r={2.7} fill={theme.colors.insulin} />
-              ))}
-            </Svg>
-            {bolusMarkerXs.length ? <MiniGraphHint>💉 bolus</MiniGraphHint> : null}
+            <CgmGraph
+              bgSamples={segment.postMealBgSamples}
+              foodItems={null}
+              insulinData={segment.postMealBolusData}
+              width={graphWidth}
+              height={84}
+              showDateLabels={false}
+              showFullScreenButton={false}
+              xDomain={[new Date(segment.startMs), new Date(segment.startMs + graphWindowMs)]}
+            />
+            {segment.postMealBolusData.length ? <MiniGraphHint>💉 bolus</MiniGraphHint> : null}
           </>
         ) : null}
       </MiniGraphWrap>
