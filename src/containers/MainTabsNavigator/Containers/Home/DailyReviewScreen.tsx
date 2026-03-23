@@ -13,11 +13,9 @@ import {
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {getLatestDailyBrief, regenerateDailyBrief} from 'app/services/proactiveCare/dailyBrief';
-import {computeRank} from 'app/services/proactiveCare/streakRank';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
-import {RANKS_INFO_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {t as tr} from 'app/i18n/translations';
 import TimeInRangeRow from './components/TimeInRangeRow';
 import {buildFullScreenStackedChartsParams, fetchStackedChartsDataForRange} from 'app/utils/stackedChartsData.utils';
@@ -37,16 +35,6 @@ type Row = {sgv: number; dateString?: string};
 function averageBg(rows: Row[]) {
   if (!rows.length) return 0;
   return Math.round(rows.reduce((s, r) => s + r.sgv, 0) / rows.length);
-}
-
-function tierVisual(tier: string) {
-  switch (tier) {
-    case 'Diamond': return {emoji: '💎', color: '#4fc3f7'};
-    case 'Platinum': return {emoji: '🛡️', color: '#81d4fa'};
-    case 'Gold': return {emoji: '🏆', color: '#fbc02d'};
-    case 'Silver': return {emoji: '🥈', color: '#b0bec5'};
-    default: return {emoji: '🥉', color: '#b87333'};
-  }
 }
 
 type MealBucket = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -585,10 +573,6 @@ const DailyReviewScreen: React.FC = () => {
   const tirDelta = yTirPct - wTirPct;
   const lowDelta = yLowPct - wLowPct;
   const highDelta = yHighPct - wHighPct;
-
-  const rank = useMemo(() => computeRank({tir: wTirPct || yTirPct, lows: wLows, highs: wHighs}), [wTirPct, yTirPct, wLows, wHighs]);
-  const rv = tierVisual(rank.tier);
-
   const mealComparisons = useMemo(() => {
     const prevMap = new Map(mealScoresPrev.map(m => [m.bucket, m]));
     return mealScoresY
@@ -794,12 +778,12 @@ const DailyReviewScreen: React.FC = () => {
         <View style={{width: 24}} />
       </View>
 
-      <Pressable onPress={() => navigation.navigate(RANKS_INFO_SCREEN, {tier: rank.tier, score: rank.score, nextTier: rank.nextTier, progressToNextPct: rank.progressToNextPct, breakdown: rank.breakdown, weeklyMetrics: {tir: wTirPct, lows: wLows, highs: wHighs}})} style={{...card, backgroundColor: addOpacity(rv.color, 0.14), borderWidth: 1, borderColor: addOpacity(rv.color, 0.6)}}>
-        <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-          <Text style={{fontWeight: '800', color: theme.textColor}}>{rv.emoji} {rank.tier}</Text>
-          <Text style={{fontWeight: '700', color: addOpacity(theme.textColor, 0.7)}}>{tr(language, 'dailyReview.score')} {rank.score}</Text>
-        </View>
-      </Pressable>
+      <View style={{...card, backgroundColor: addOpacity(theme.accentColor, 0.08), borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.28)}}>
+        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{language === 'he' ? 'בוקר טוב 🌤️' : 'Good morning 🌤️'}</Text>
+        <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.78), textAlign}}>
+          {language === 'he' ? 'הגוף שלך עבד קשה אתמול. הנה סיכום ברור ועדין כדי לעזור ליום רגוע יותר.' : 'Your body worked hard yesterday. Here is a calm, clear summary to support today.'}
+        </Text>
+      </View>
 
       <View style={{...card, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.3), backgroundColor: addOpacity(theme.accentColor, 0.06)}}>
         <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
@@ -1052,3 +1036,4 @@ const DailyReviewScreen: React.FC = () => {
 };
 
 export default DailyReviewScreen;
+
