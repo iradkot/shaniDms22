@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, I18nManager, Pressable, ScrollView, Text, View} from 'react-native';
+import {ActivityIndicator, I18nManager, LayoutAnimation, Modal, Platform, Pressable, ScrollView, Text, TextInput, UIManager, View} from 'react-native';
 import {format, subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -28,6 +28,9 @@ import {
   mapNightscoutTreatmentsToInsulinDataEntries,
 } from 'app/utils/nightscoutTreatments.utils';
 import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsulin';
+import {addMemoryEntry} from 'app/services/aiMemory/aiMemoryStore';
+import notifee, {TriggerType} from '@notifee/react-native';
+import ScoreBadge from 'app/components/common-ui/ScoreBadge/ScoreBadge';
 
 type Row = {sgv: number; dateString?: string};
 
@@ -348,12 +351,16 @@ const DailyReviewScreen: React.FC = () => {
   const [mealScoresPrev, setMealScoresPrev] = useState<MealBucketScore[]>([]);
   const [mealInvestigations, setMealInvestigations] = useState<MealInvestigation[]>([]);
   const [expandedMealWhy, setExpandedMealWhy] = useState<MealBucket | null>(null);
+  const [expandedMealCard, setExpandedMealCard] = useState<MealBucket | null>(null);
+  const [focusModalBucket, setFocusModalBucket] = useState<MealBucket | null>(null);
+  const [focusReminderTime, setFocusReminderTime] = useState('21:00');
+  const [focusNote, setFocusNote] = useState('');
   const [llmSummaryLine, setLlmSummaryLine] = useState<string | null>(null);
   const [llmKeyLine, setLlmKeyLine] = useState<string | null>(null);
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
   const [whyLine, setWhyLine] = useState<string | null>(null);
   const [actionSource, setActionSource] = useState<'ai' | 'fallback'>('fallback');
-  const [openingMealBucket, setOpeningMealBucket] = useState<MealBucket | null>(null);
+  const [_openingMealBucket, setOpeningMealBucket] = useState<MealBucket | null>(null);
 
   const textAlign: 'left' | 'right' = I18nManager.isRTL ? 'right' : 'left';
 
@@ -619,6 +626,67 @@ const DailyReviewScreen: React.FC = () => {
       : 'Meal declined, but investigation did not find one dominant high-confidence cause.';
   };
 
+  useEffect(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
+
+  const toggleMealCard = (bucket: MealBucket) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedMealCard(prev => (prev === bucket ? null : bucket));
+  };
+
+  const parseReminderToTs = (hhmm: string) => {
+    const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const h = Number(m[1]);
+    const min = Number(m[2]);
+    if (!Number.isFinite(h) || !Number.isFinite(min) || h < 0 || h > 23 || min < 0 || min > 59) return null;
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(h, min, 0, 0);
+    return d.getTime();
+  };
+
+  const saveFocusPlan = async () => {
+    if (!focusModalBucket) return;
+    const item = mealComparisons.find(m => m.bucket === focusModalBucket);
+    const reminderTs = parseReminderToTs(focusReminderTime);
+
+    const memo = `ביום ${format(yStart, 'yyyy-MM-dd')}, ארוחת ${mealBucketLabel('he', focusModalBucket)} גרמה ל-Peak High של ${item?.avgRise ?? '-'} mg/dL. המשתמש הסיק: ${focusNote || 'ללא הערה'}. להשתמש בתובנה זו עבור ארוחות דומות.`;
+
+    await addMemoryEntry({
+      type: 'episode',
+      tags: ['daily_review', 'plan_tomorrow', String(focusModalBucket)],
+      textSummary: memo,
+      facts: {
+        bucket: focusModalBucket,
+        score: item?.score ?? null,
+        avgRise: item?.avgRise ?? null,
+        note: focusNote,
+        reminderTime: focusReminderTime,
+      },
+      source: 'user',
+      confidence: 0.9,
+      expiresAt: Date.now() + 180 * 24 * 60 * 60 * 1000,
+    });
+
+    if (reminderTs) {
+      await notifee.createTriggerNotification(
+        {
+          title: language === 'he' ? 'תזכורת: תכנון ארוחה' : 'Meal plan reminder',
+          body: focusNote || (language === 'he' ? 'בדוק את תובנת האתמול לפני הארוחה.' : 'Review yesterday insight before meal.'),
+          android: {channelId: 'hypo-alerts', smallIcon: 'ic_launcher'},
+        },
+        {type: TriggerType.TIMESTAMP, timestamp: reminderTs, alarmManager: false},
+      );
+    }
+
+    setFocusModalBucket(null);
+    setFocusNote('');
+  };
+
   if (loading) {
     return <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}><ActivityIndicator /></View>;
   }
@@ -713,10 +781,9 @@ const DailyReviewScreen: React.FC = () => {
                   {language === 'he' ? '🚀 הארוחה שהכי השתפרה' : '🚀 Top improved meal'}
                 </Text>
                 <Text style={{marginTop: 4, color: theme.textColor}}>
-                  {mealBucketLabel(language, topImprovedMeal.bucket)}
-                  <Text style={{writingDirection: 'ltr'}}> • {topImprovedMeal.prevScore ?? '—'} → {topImprovedMeal.score}</Text>
-                  {language === 'he' ? ' (מול ממוצע שבועי)' : ' (vs weekly baseline)'}
-                  {typeof topImprovedMeal.delta === 'number' ? <Text style={{writingDirection: 'ltr'}}>{` (${topImprovedMeal.delta > 0 ? '+' : ''}${topImprovedMeal.delta})`}</Text> : ''}
+                  {mealBucketLabel(language, topImprovedMeal.bucket)} •
+                  <Text style={{writingDirection: 'ltr'}}> {topImprovedMeal.score} ({Math.abs(topImprovedMeal.delta ?? 0)}+ 📈)</Text>
+                  {language === 'he' ? ' מול ממוצע שבועי' : ' vs weekly baseline'}
                 </Text>
                 <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
                   {explainMealDelta(topImprovedMeal.bucket, topImprovedMeal.delta)}
@@ -728,9 +795,8 @@ const DailyReviewScreen: React.FC = () => {
                   {language === 'he' ? '📉 לא הייתה ארוחה שהשתפרה אתמול' : '📉 No meal improved yesterday'}
                 </Text>
                 <Text style={{marginTop: 4, color: theme.textColor}}>
-                  {language === 'he' ? 'הירידה הבולטת מול שבוע אחרון:' : 'Largest drop vs recent week:'} {mealBucketLabel(language, topDeclinedMeal.bucket)}
-                  <Text style={{writingDirection: 'ltr'}}> • {topDeclinedMeal.prevScore ?? '—'} → {topDeclinedMeal.score}</Text>
-                  {typeof topDeclinedMeal.delta === 'number' ? <Text style={{writingDirection: 'ltr'}}>{` (${topDeclinedMeal.delta})`}</Text> : ''}
+                  {language === 'he' ? 'הירידה הבולטת מול שבוע אחרון:' : 'Largest drop vs recent week:'} {mealBucketLabel(language, topDeclinedMeal.bucket)} •
+                  <Text style={{writingDirection: 'ltr'}}> {topDeclinedMeal.score} ({Math.abs(topDeclinedMeal.delta ?? 0)}- 📉)</Text>
                 </Text>
                 <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
                   {explainMealDelta(topDeclinedMeal.bucket, topDeclinedMeal.delta)}
@@ -758,97 +824,87 @@ const DailyReviewScreen: React.FC = () => {
               const improved = (item.delta ?? 0) > 0;
               const same = item.delta == null || item.delta === 0;
               const deltaColor = same ? addOpacity(theme.textColor, 0.6) : improved ? '#2e7d32' : '#c62828';
+              const isExpanded = expandedMealCard === item.bucket;
+              const peakHigh = item.avgRise;
+              const peakLow = Math.max(0, Math.round((100 - item.avgTirPct) * 0.8));
+              const absorptionRate = Number((item.avgRise / 60).toFixed(1));
+              const absorptionLabel = absorptionRate >= 2 ? (language === 'he' ? 'ספיגה מהירה ⚡' : 'Fast absorption ⚡') : absorptionRate <= 0.8 ? (language === 'he' ? 'עלייה מושהית 🐢' : 'Delayed rise 🐢') : (language === 'he' ? 'ספיגה בינונית' : 'Moderate absorption');
               return (
-                <View
+                <Pressable
                   key={item.bucket}
+                  onPress={() => toggleMealCard(item.bucket)}
                   style={{borderWidth: 1, borderColor: addOpacity(theme.borderColor || '#999', 0.5), borderRadius: 12, padding: 10}}
                 >
                   <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <Text style={{fontWeight: '700', color: theme.textColor}}>{mealBucketLabel(language, item.bucket)}</Text>
-                    <Text style={{fontWeight: '900', color: theme.accentColor}}>{item.score}/100</Text>
+                    <Text style={{fontWeight: '700', color: theme.textColor}}>
+                      {mealBucketLabel(language, item.bucket)} - {item.representativeTs ? format(new Date(item.representativeTs), 'HH:mm') : '—'}
+                    </Text>
+                    <ScoreBadge score={item.score} />
                   </View>
 
-                  <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.68), fontSize: 12}}>
-                    {language === 'he'
-                      ? `שעת ארוחה משוערת: ${item.representativeTs ? format(new Date(item.representativeTs), 'HH:mm') : '—'}`
-                      : `Estimated meal time: ${item.representativeTs ? format(new Date(item.representativeTs), 'HH:mm') : '—'}`}
-                    {openingMealBucket === item.bucket ? ` • ${language === 'he' ? 'פותח גרף…' : 'Opening chart…'}` : ''}
-                  </Text>
-
-                  <View style={{marginTop: 7, height: 8, borderRadius: 99, backgroundColor: addOpacity(theme.textColor, 0.12)}}>
-                    <View style={{width: `${Math.max(0, Math.min(100, item.score))}%`, height: 8, borderRadius: 99, backgroundColor: item.score >= 75 ? '#2e7d32' : item.score >= 55 ? '#f9a825' : '#c62828'}} />
-                  </View>
-
-                  <View style={{marginTop: 8, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.12), borderRadius: 10, padding: 8, gap: 4}}>
-                    <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-                      <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.8)}}>
-                        {language === 'he' ? '📈 פיק אחרי ארוחה' : '📈 Post-meal peak'}
-                      </Text>
-                      <Text style={{fontSize: 12, fontWeight: '700', color: theme.textColor, writingDirection: 'ltr'}}>
-                        {item.avgRise} mg/dL | {Math.max(0, Math.min(100, Math.round(100 - item.avgRise * 0.45)))}/100
-                      </Text>
-                    </View>
-
-                    <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-                      <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.8)}}>
-                        {language === 'he' ? '🟢 TIR (4ש׳ אחרי ארוחה)' : '🟢 TIR (4h post meal)'}
-                      </Text>
-                      <Text style={{fontSize: 12, fontWeight: '700', color: theme.textColor, writingDirection: 'ltr'}}>
-                        {item.avgTirPct}% | +{Math.round((item.avgTirPct / 100) * 35)}
-                      </Text>
-                    </View>
-
-                    <View style={{height: 1, backgroundColor: addOpacity(theme.textColor, 0.12), marginVertical: 2}} />
-
-                    <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-                      <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.8)}}>
-                        {language === 'he' ? '🏁 ציון מסכם' : '🏁 Final score'}
-                      </Text>
-                      <Text style={{fontSize: 12, fontWeight: '900', color: theme.accentColor, writingDirection: 'ltr'}}>{item.score}/100</Text>
+                  <View style={{marginTop: 8, height: 9, borderRadius: 99, backgroundColor: addOpacity(theme.textColor, 0.12), overflow: 'hidden'}}>
+                    <View style={{width: `${Math.max(0, Math.min(100, item.avgTirPct))}%`, height: 9, borderRadius: 99, backgroundColor: '#2e7d32', alignItems: 'center', justifyContent: 'center'}}>
+                      {item.avgTirPct > 15 ? <Text style={{fontSize: 10, fontWeight: '800', color: '#fff'}}>{item.avgTirPct}%</Text> : null}
                     </View>
                   </View>
 
-                  <Text style={{marginTop: 4, color: deltaColor, fontSize: 12, fontWeight: '700'}}>
-                    {item.prevScore == null
-                      ? language === 'he'
-                        ? 'אין מספיק ארוחות דומות בשבוע האחרון להשוואה'
-                        : 'Not enough similar meals in the recent week for comparison'
-                      : language === 'he'
-                      ? 'מול ממוצע שבועי: '
-                      : 'Vs weekly baseline: '}
-                    {item.prevScore != null ? (
-                      <Text style={{writingDirection: 'ltr'}}>
-                        {`${delta > 0 ? '+' : ''}${delta} ${language === 'he' ? 'נק׳' : 'pts'} (${item.prevScore} → ${item.score})`}
-                      </Text>
-                    ) : null}
-                  </Text>
+                  {!isExpanded ? null : (
+                    <View style={{marginTop: 10, gap: 8}}>
+                      <View style={{padding: 8, borderRadius: 10, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.12)}}>
+                        <Text style={{color: theme.textColor, fontWeight: '700'}}>{language === 'he' ? 'שיאי סוכר' : 'Glucose peaks'}</Text>
+                        <Text style={{marginTop: 4, color: '#c62828', writingDirection: 'ltr'}}>{language === 'he' ? 'Peak High (3h): ' : 'Peak High (3h): '}{peakHigh} mg/dL</Text>
+                        <Text style={{marginTop: 2, color: '#1565c0', writingDirection: 'ltr'}}>{language === 'he' ? 'Peak Low (4h): ' : 'Peak Low (4h): '}{peakLow} mg/dL</Text>
+                      </View>
 
-                  <View style={{marginTop: 8, flexDirection: 'row', gap: 8}}>
-                    <Pressable
-                      onPress={() => openMealBucketChart(item.bucket, item.representativeTs)}
-                      style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.5)}}
-                    >
-                      <Text style={{color: theme.accentColor, fontWeight: '700', fontSize: 12}}>
-                        {language === 'he' ? 'פתח גרף' : 'Open chart'}
-                      </Text>
-                    </Pressable>
+                      <View style={{padding: 8, borderRadius: 10, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.12)}}>
+                        <Text style={{color: theme.textColor, fontWeight: '700'}}>{language === 'he' ? 'דינמיקת ספיגה' : 'Absorption dynamics'}</Text>
+                        <Text style={{marginTop: 4, color: theme.textColor}}>{absorptionLabel}</Text>
+                        <Text style={{marginTop: 2, color: addOpacity(theme.textColor, 0.78), writingDirection: 'ltr'}}>{`${absorptionRate >= 0 ? '+' : ''}${absorptionRate} mg/dL/min`}</Text>
+                      </View>
 
-                    <Pressable
-                      onPress={() => setExpandedMealWhy(prev => (prev === item.bucket ? null : item.bucket))}
-                      style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.35)}}
-                    >
-                      <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>
-                        {language === 'he' ? 'למה זה השתנה?' : 'Why did this change?'}
-                      </Text>
-                    </Pressable>
-                  </View>
+                      <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                        <Text style={{color: deltaColor, fontSize: 12, fontWeight: '700'}}>
+                          <Text style={{writingDirection: 'ltr'}}>{`${item.score} (${Math.abs(delta)}${delta >= 0 ? '+' : '-'} ${delta >= 0 ? '📈' : '📉'})`}</Text>
+                        </Text>
+                        <Pressable
+                          onPress={() => {
+                            setFocusModalBucket(item.bucket);
+                            setFocusNote('');
+                          }}
+                          style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: addOpacity('#c62828', 0.12)}}
+                        >
+                          <Text style={{color: '#c62828', fontWeight: '800', fontSize: 12}}>{language === 'he' ? 'תכנן מחדש למחר' : 'Plan for tomorrow'}</Text>
+                        </Pressable>
+                      </View>
 
-                  {expandedMealWhy === item.bucket ? (
-                    <View style={{marginTop: 8, padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.accentColor, 0.08), borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.2)}}>
-                      <Text style={{color: theme.textColor}}>{explainMealDelta(item.bucket, item.delta)}</Text>
+                      <View style={{flexDirection: 'row', gap: 8}}>
+                        <Pressable
+                          onPress={() => openMealBucketChart(item.bucket, item.representativeTs)}
+                          style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.5)}}
+                        >
+                          <Text style={{color: theme.accentColor, fontWeight: '700', fontSize: 12}}>
+                            {language === 'he' ? 'פתח גרף' : 'Open chart'}
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => setExpandedMealWhy(prev => (prev === item.bucket ? null : item.bucket))}
+                          style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.35)}}
+                        >
+                          <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>
+                            {language === 'he' ? 'למה זה השתנה?' : 'Why did this change?'}
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      {expandedMealWhy === item.bucket ? (
+                        <View style={{marginTop: 4, padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.accentColor, 0.08), borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.2)}}>
+                          <Text style={{color: theme.textColor}}>{explainMealDelta(item.bucket, item.delta)}</Text>
+                        </View>
+                      ) : null}
                     </View>
-                  ) : null}
-                </View>
+                  )}
+                </Pressable>
               );
             })}
           </View>
@@ -869,6 +925,26 @@ const DailyReviewScreen: React.FC = () => {
           <Text style={{fontWeight: '700', color: theme.textColor}}>{refreshingAction ? tr(language, 'dailyReview.refreshing') : tr(language, 'dailyReview.refresh')}</Text>
         </Pressable>
       )}
+
+      <Modal visible={!!focusModalBucket} transparent animationType="fade" onRequestClose={() => setFocusModalBucket(null)}>
+        <View style={{flex: 1, backgroundColor: addOpacity('#000', 0.35), justifyContent: 'center', padding: 18}}>
+          <View style={{backgroundColor: theme.white, borderRadius: 14, padding: 14}}>
+            <Text style={{fontWeight: '900', color: theme.textColor}}>{language === 'he' ? 'תכנן מחדש למחר' : 'Plan for tomorrow'}</Text>
+            <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.72)}}>{language === 'he' ? 'שעת תזכורת (HH:MM)' : 'Reminder time (HH:MM)'}</Text>
+            <TextInput value={focusReminderTime} onChangeText={setFocusReminderTime} style={{marginTop: 6, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.2), borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, color: theme.textColor}} />
+            <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.72)}}>{language === 'he' ? 'תובנה אישית' : 'Personal note'}</Text>
+            <TextInput value={focusNote} onChangeText={setFocusNote} multiline style={{marginTop: 6, minHeight: 72, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.2), borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, color: theme.textColor, textAlignVertical: 'top'}} />
+            <View style={{marginTop: 12, flexDirection: 'row', justifyContent: 'flex-end', gap: 8}}>
+              <Pressable onPress={() => setFocusModalBucket(null)} style={{paddingVertical: 8, paddingHorizontal: 10}}>
+                <Text style={{color: addOpacity(theme.textColor, 0.75)}}>{language === 'he' ? 'ביטול' : 'Cancel'}</Text>
+              </Pressable>
+              <Pressable onPress={saveFocusPlan} style={{paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: addOpacity(theme.accentColor, 0.18)}}>
+                <Text style={{color: theme.accentColor, fontWeight: '800'}}>{language === 'he' ? 'שמור' : 'Save'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
