@@ -179,8 +179,12 @@ const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, on
               foodItems={null}
               insulinData={segment.postMealBolusData}
               width={graphWidth}
-              height={84}
+              height={80}
               showDateLabels={false}
+              showYLabels={false}
+              yTicksAmount={4}
+              interactive={false}
+              tooltipMode="external"
               showFullScreenButton={false}
               xDomain={[new Date(segment.startMs), new Date(segment.startMs + graphWindowMs)]}
             />

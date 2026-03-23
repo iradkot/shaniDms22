@@ -46,6 +46,15 @@ export interface CgmGraphProps {
   /** Whether to show the date labels row at the top of the plot. Defaults to true. */
   showDateLabels?: boolean;
 
+  /** Whether to show Y-axis numeric labels. Defaults to true. */
+  showYLabels?: boolean;
+
+  /** Number of horizontal grid bands/ticks on Y-axis. Defaults to 6. */
+  yTicksAmount?: number;
+
+  /** Disable chart touch interactions and tooltip/focus behavior. */
+  interactive?: boolean;
+
   /**
    * Optional E2E selector.
    *

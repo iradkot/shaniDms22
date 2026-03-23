@@ -49,6 +49,9 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   margin,
   xTickLabelFormatter,
   showDateLabels = true,
+  showYLabels = true,
+  yTicksAmount = 6,
+  interactive = true,
   testID,
   showFullScreenButton = true,
   tooltipMode = 'internal',
@@ -190,16 +193,16 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
       : xTouchPosition;
 
   const shouldShowFocus =
-    isTouchActive && (tooltipMode === 'external' || closestBgSample || tooltipBolusEvents.length > 0);
+    interactive && isTouchActive && (tooltipMode === 'external' || closestBgSample || tooltipBolusEvents.length > 0);
 
   return (
     <GraphStyleContext.Provider value={graphStyleProviderValue}>
       <GraphContainer ref={containerRef} style={{width, height}} testID={testID}>
         <StyledSvg
-          onTouchStart={handleTouchStartWithTooltip}
-          onTouchMove={handleTouchMoveWithTooltip}
-          onTouchEnd={handleTouchEndWithTooltip}
-          onTouchCancel={handleTouchEndWithTooltip}
+          onTouchStart={interactive ? handleTouchStartWithTooltip : undefined}
+          onTouchMove={interactive ? handleTouchMoveWithTooltip : undefined}
+          onTouchEnd={interactive ? handleTouchEndWithTooltip : undefined}
+          onTouchCancel={interactive ? handleTouchEndWithTooltip : undefined}
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}>
@@ -213,7 +216,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
             x={graphStyleContextValue.margin?.left}
             y={graphStyleContextValue.margin?.top}>
             <XGridAndAxis xTickLabelFormatter={xTickLabelFormatter ?? undefined} />
-            <YGridAndAxis highestBgThreshold={300} />
+            <YGridAndAxis highestBgThreshold={300} ticksAmount={yTicksAmount} showLabels={showYLabels} />
             {showDateLabels ? <GraphDateDisplay /> : null}
 
             <G clipPath="url(#cgmPlotClip)">

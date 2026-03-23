@@ -6,13 +6,16 @@ import {ThemeType} from 'app/types/theme';
 
 interface Props {
   highestBgThreshold: number;
+  ticksAmount?: number;
+  showLabels?: boolean;
 }
 const YGridAndAxis = ({
   highestBgThreshold, // max y value
+  ticksAmount = 6,
+  showLabels = true,
 }: Props) => {
   const [{ graphWidth, graphHeight }] = useContext(GraphStyleContext);
   const theme = useTheme() as ThemeType;
-  const ticksAmount = 6;
   const ticks = Array.from({ length: ticksAmount }, (_, i) => i);
   const GridLine = ({ y }: { y: number }) => (
     <Line
@@ -50,7 +53,7 @@ const YGridAndAxis = ({
         return (
           <G key={index}>
             <GridLine y={(graphHeight / ticksAmount) * tick} />
-            <GridLabel y={(graphHeight / ticksAmount) * tick} index={index} />
+            {showLabels ? <GridLabel y={(graphHeight / ticksAmount) * tick} index={index} /> : null}
           </G>
         );
       })}
