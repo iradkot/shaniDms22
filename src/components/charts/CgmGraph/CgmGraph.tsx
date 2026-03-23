@@ -67,9 +67,12 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
 
   const containerRef = useRef<View>(null);
 
-  const resolvedShowYLabels = variant === 'compactMeal' ? false : showYLabels;
-  const resolvedYTicksAmount = variant === 'compactMeal' ? 4 : yTicksAmount;
-  const resolvedInteractive = variant === 'compactMeal' ? false : interactive;
+  const isCompactMealVariant =
+    variant === 'compactMeal' || variant === 'compactMealLight' || variant === 'compactMealDark';
+
+  const resolvedShowYLabels = isCompactMealVariant ? false : showYLabels;
+  const resolvedYTicksAmount = isCompactMealVariant ? 4 : yTicksAmount;
+  const resolvedInteractive = isCompactMealVariant ? false : interactive;
 
   const [graphStyleContextValue, setGraphStyleContextValue] =
     useGraphStyleContext(width, height, bgSamples, xDomain, margin);

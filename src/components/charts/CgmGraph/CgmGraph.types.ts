@@ -19,7 +19,7 @@ export type CGMGraphExternalTooltipPayload = {
   anchorTimeMs: number;
 };
 
-export type CgmGraphVariant = 'default' | 'compactMeal';
+export type CgmGraphVariant = 'default' | 'compactMeal' | 'compactMealLight' | 'compactMealDark';
 
 export interface CgmGraphProps {
   bgSamples: BgSample[];
