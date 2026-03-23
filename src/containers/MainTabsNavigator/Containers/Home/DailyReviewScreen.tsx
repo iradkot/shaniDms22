@@ -819,12 +819,57 @@ const DailyReviewScreen: React.FC = () => {
             )
           : fullMessage;
 
-      await Share.share({
-        title: language === 'he' ? 'ייצוא דיבאג סיכום יומי' : 'Export daily review debug',
-        message: safeMessage,
-      });
-    } catch (e) {
-      Alert.alert(language === 'he' ? 'שגיאה' : 'Error', language === 'he' ? 'ייצוא הדיבאג נכשל' : 'Debug export failed');
+      try {
+        await Share.share({
+          title: language === 'he' ? 'ייצוא דיבאג סיכום יומי' : 'Export daily review debug',
+          message: safeMessage,
+        });
+        return;
+      } catch (shareErr) {
+        const minimal = JSON.stringify(
+          {
+            package: 'daily-review-debug-minimal',
+            createdAt: ts,
+            day: format(yStart, 'yyyy-MM-dd'),
+            manifest: {
+              appScreen: 'DailyReviewScreen',
+              model: aiSettings.openAiModel,
+              language,
+            },
+            instruction: buildDailyBriefSystemInstruction(language as 'he' | 'en'),
+            guardrails: getDailyBriefLanguageGuardrails(),
+            output: {
+              summary: llmSummaryLine,
+              key: llmKeyLine,
+              action: llmActionLine,
+              why: whyLine,
+              source: actionSource,
+            },
+          },
+          null,
+          2,
+        );
+
+        await Share.share({
+          title: language === 'he' ? 'ייצוא דיבאג (גרסה מינימלית)' : 'Debug export (minimal)',
+          message: minimal,
+        });
+
+        Alert.alert(
+          language === 'he' ? 'שים לב' : 'Notice',
+          language === 'he'
+            ? 'הייצוא המלא נכשל, נשלחה גרסה מינימלית לדיבאג.'
+            : 'Full export failed, shared minimal debug package instead.',
+        );
+        return;
+      }
+    } catch (e: any) {
+      Alert.alert(
+        language === 'he' ? 'שגיאה' : 'Error',
+        language === 'he'
+          ? `ייצוא הדיבאג נכשל: ${String(e?.message ?? e)}`
+          : `Debug export failed: ${String(e?.message ?? e)}`,
+      );
     }
   };
 
