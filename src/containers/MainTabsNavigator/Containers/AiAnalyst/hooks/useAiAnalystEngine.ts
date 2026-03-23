@@ -1,4 +1,4 @@
-import {useCallback, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Alert, Keyboard, ScrollView, Share} from 'react-native';
 import {launchImageLibrary} from 'react-native-image-picker';
 import {useTheme} from 'styled-components/native';
@@ -29,6 +29,7 @@ import {
   upsertAiAnalystConversationSnapshot,
 } from 'app/services/aiAnalyst/aiAnalystHistory';
 import {addMemoryEntry} from 'app/services/aiMemory/aiMemoryStore';
+import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
 
 import {ScreenState, AnalystMode, AiAnalystEngine, EvidenceRequest, MissionKey, CompactKpi} from '../types';
 import {
@@ -97,6 +98,10 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     setTimeout(() => setState({mode: 'locked'}), 0);
   }
 
+  const {snapshot: liveSnapshot} = useLatestNightscoutSnapshot({
+    pollingEnabled: state.mode === 'mission',
+  });
+
   // ── Chat state ──────────────────────────────────────────────────────────
   const [uiMessages, setUiMessages] = useState<LlmChatMessage[]>([]);
   const [llmMessages, setLlmMessages] = useState<LlmChatMessage[]>([]);
@@ -150,6 +155,14 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     catch { return null; }
   }, [aiSettings]);
 
+  const trendArrowFromDirection = useCallback((direction: unknown): string | null => {
+    const d = typeof direction === 'string' ? direction : '';
+    if (['DoubleUp', 'SingleUp', 'FortyFiveUp'].includes(d)) return '↑';
+    if (['DoubleDown', 'SingleDown', 'FortyFiveDown'].includes(d)) return '↓';
+    if (d === 'Flat') return '→';
+    return null;
+  }, []);
+
   const deriveCompactKpiFromCgmResult = useCallback((payload: any): CompactKpi | null => {
     const samples = Array.isArray(payload?.samples) ? payload.samples : [];
     if (!samples.length) return null;
@@ -178,7 +191,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     const bg = typeof latest?.mgdl === 'number' ? Math.round(latest.mgdl) : null;
     const prevBg = typeof prev?.mgdl === 'number' ? Math.round(prev.mgdl) : null;
 
-    let trend: string | null = null;
+    let trend: string | null = trendArrowFromDirection(latest?.direction);
     if (bg != null && prevBg != null) {
       const d = bg - prevBg;
       trend = d >= 12 ? '↑' : d <= -12 ? '↓' : '→';
@@ -202,7 +215,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       cobG: typeof latest?.cobG === 'number' ? Math.round(latest.cobG) : null,
       sampleTimeMs: Number.isFinite(sampleTimeMs as number) ? (sampleTimeMs as number) : null,
     };
-  }, []);
+  }, [trendArrowFromDirection]);
 
   // ====================================================================
   // Navigation & persistence helpers
@@ -996,31 +1009,17 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   useEffect(() => {
     if (state.mode !== 'mission') return;
 
-    let cancelled = false;
+    const bg = liveSnapshot?.enrichedBg ?? null;
+    if (!bg) return;
 
-    const refreshCompactKpi = async () => {
-      try {
-        const kpiRes = await runAiAnalystTool('getCgmSamples', {
-          rangeDays: 1,
-          maxSamples: 80,
-          includeDeviceStatus: true,
-        });
-        if (!cancelled && kpiRes?.ok) {
-          setCompactKpi(deriveCompactKpiFromCgmResult(kpiRes.result));
-        }
-      } catch {
-        // keep last known KPI silently
-      }
-    };
-
-    refreshCompactKpi();
-    const id = setInterval(refreshCompactKpi, 60 * 1000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [state.mode, deriveCompactKpiFromCgmResult]);
+    setCompactKpi({
+      bgMgdl: typeof bg.sgv === 'number' ? Math.round(bg.sgv) : null,
+      trend: trendArrowFromDirection(bg.direction),
+      iobU: typeof bg.iob === 'number' ? Number(bg.iob.toFixed(2)) : null,
+      cobG: typeof bg.cob === 'number' ? Math.round(bg.cob) : null,
+      sampleTimeMs: typeof bg.date === 'number' ? bg.date : null,
+    });
+  }, [liveSnapshot?.enrichedBg, state.mode, trendArrowFromDirection]);
 
   // ====================================================================
   // Evidence navigation
