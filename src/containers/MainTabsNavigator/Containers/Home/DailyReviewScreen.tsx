@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, I18nManager, LayoutAnimation, Modal, Platform, Pressable, ScrollView, Text, TextInput, UIManager, View} from 'react-native';
+import {ActivityIndicator, Alert, I18nManager, LayoutAnimation, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, UIManager, View} from 'react-native';
 import {format, subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -704,6 +704,64 @@ const DailyReviewScreen: React.FC = () => {
     setFocusNote('');
   };
 
+  const exportDailyReviewDebugPackage = async () => {
+    try {
+      const ts = new Date().toISOString();
+      const bundle = {
+        package: 'daily-review-debug',
+        createdAt: ts,
+        day: format(yStart, 'yyyy-MM-dd'),
+        folders: {
+          '00-manifest': {
+            'manifest.json': {
+              appScreen: 'DailyReviewScreen',
+              actionSource,
+              aiEnabled: aiSettings.enabled,
+              model: aiSettings.openAiModel,
+              language,
+            },
+          },
+          '01-input-data': {
+            'glucose-metrics.json': {
+              yAvg,
+              yTirPct,
+              yLows,
+              yHighs,
+              week: {wAvg, wTirPct, wLows, wHighs},
+            },
+            'meal-comparisons.json': mealComparisons,
+            'today-episodes.json': todayEpisodes,
+          },
+          '02-ai-output': {
+            'daily-brief-lines.json': {
+              summary: llmSummaryLine,
+              key: llmKeyLine,
+              action: llmActionLine,
+              why: whyLine,
+              source: actionSource,
+            },
+          },
+          '03-rendered-state': {
+            'ui-state.json': {
+              topImprovedMeal,
+              topDeclinedMeal,
+              needsAttentionMeal,
+              expandedMealCard,
+              expandedMealWhy,
+            },
+          },
+        },
+      };
+
+      await Share.share({
+        title: language === 'he' ? 'ייצוא דיבאג סיכום יומי' : 'Export daily review debug',
+        message: JSON.stringify(bundle, null, 2),
+      });
+    } catch (e) {
+      Alert.alert(language === 'he' ? 'שגיאה' : 'Error', language === 'he' ? 'ייצוא הדיבאג נכשל' : 'Debug export failed');
+    }
+  };
+
   if (loading) {
     return <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}><ActivityIndicator /></View>;
   }
@@ -956,6 +1014,13 @@ const DailyReviewScreen: React.FC = () => {
         {whyLine ? <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75), textAlign}}>{whyLine}</Text> : null}
         <Text style={{marginTop: 4, fontSize: 12, color: addOpacity(theme.textColor, 0.6), textAlign}}>{actionSource === 'ai' ? tr(language, 'dailyReview.sourceAi') : tr(language, 'dailyReview.sourceAuto')}</Text>
       </View>
+
+      <Pressable onPress={exportDailyReviewDebugPackage} style={{...card, alignItems: 'center', borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.35)}}>
+        <Text style={{fontWeight: '700', color: theme.accentColor}}>{language === 'he' ? 'הורד לוגי דיבאג של ניתוח יומי' : 'Download daily analysis debug logs'}</Text>
+        <Text style={{marginTop: 4, fontSize: 12, color: addOpacity(theme.textColor, 0.65), textAlign: 'center'}}>
+          {language === 'he' ? 'כולל קלט, פלט AI, חישובים ומצב UI בקובץ JSON מסודר בתיקיות לוגיות.' : 'Includes input, AI output, scoring and UI state in a structured JSON package.'}
+        </Text>
+      </Pressable>
 
       {!!(aiSettings.enabled && (aiSettings.apiKey || '').trim()) && (
         <Pressable onPress={handleRegenerate} disabled={refreshingAction} style={{...card, alignItems: 'center'}}>
