@@ -852,14 +852,14 @@ const DailyReviewScreen: React.FC = () => {
                 </Text>
               </View>
             ) : topDeclinedMeal ? (
-              <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity('#c62828', 0.35), backgroundColor: addOpacity('#c62828', 0.08)}}>
-                <Text style={{fontWeight: '800', color: '#c62828'}}>
-                  {language === 'he' ? '📉 לא הייתה ארוחה שהשתפרה אתמול' : '📉 No meal improved yesterday'}
+              <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity('#f9a825', 0.35), backgroundColor: addOpacity('#f9a825', 0.08)}}>
+                <Text style={{fontWeight: '800', color: '#8d6e63'}}>
+                  {language === 'he' ? '🧩 לא זוהתה קפיצה חיובית בולטת אתמול' : '🧩 No clear positive jump was detected yesterday'}
                 </Text>
                 <View style={{marginTop: 4, flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap'}}>
                   <Text style={{color: theme.textColor}}>{language === 'he' ? 'הירידה הבולטת מול שבוע אחרון:' : 'Largest drop vs recent week:'}</Text>
                   <Text style={{color: theme.textColor}}>{mealBucketLabel(language, topDeclinedMeal.bucket)}</Text>
-                  <Text style={{color: '#c62828', writingDirection: 'ltr'}}>{`${topDeclinedMeal.score} (${Math.abs(topDeclinedMeal.delta ?? 0)}- 📉)`}</Text>
+                  <Text style={{color: '#8d6e63', writingDirection: 'ltr'}}>{`${topDeclinedMeal.score} (${Math.abs(topDeclinedMeal.delta ?? 0)}- 📉)`}</Text>
                 </View>
                 <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
                   {explainMealDelta(topDeclinedMeal.bucket, topDeclinedMeal.delta)}
@@ -868,9 +868,9 @@ const DailyReviewScreen: React.FC = () => {
             ) : null}
 
             {needsAttentionMeal ? (
-              <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity('#c62828', 0.35), backgroundColor: addOpacity('#c62828', 0.08)}}>
-                <Text style={{fontWeight: '800', color: '#c62828'}}>
-                  {language === 'he' ? '🎯 דורש פוקוס מחר' : '🎯 Needs attention next'}
+              <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity('#f9a825', 0.35), backgroundColor: addOpacity('#f9a825', 0.08)}}>
+                <Text style={{fontWeight: '800', color: '#8d6e63'}}>
+                  {language === 'he' ? '🎯 נקודה עדינה לשיפור מחר' : '🎯 Gentle focus point for tomorrow'}
                 </Text>
                 <Text style={{marginTop: 4, color: theme.textColor}}>
                   {mealBucketLabel(language, needsAttentionMeal.bucket)} • {needsAttentionMeal.score}/100 • {language === 'he' ? `עלייה ממוצעת ${needsAttentionMeal.avgRise}` : `avg rise ${needsAttentionMeal.avgRise}`} mg/dL

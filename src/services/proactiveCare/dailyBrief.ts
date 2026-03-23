@@ -192,21 +192,40 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
   const nightLine = nightLows > 0 ? tr(lang, 'brief.nightLows', {count: nightLows}) : tr(lang, 'brief.nightStable');
   const summaryLine = `${tr(lang, 'brief.yesterdayTir', {tir: yStats.tir, tier: rank.tier})} | ${lang === 'he' ? `Δשבוע TIR ${tirDeltaVsWeek >= 0 ? '+' : ''}${tirDeltaVsWeek}% | Δממוצע ${avgDeltaVsWeek >= 0 ? '+' : ''}${avgDeltaVsWeek}` : `Δ7d TIR ${tirDeltaVsWeek >= 0 ? '+' : ''}${tirDeltaVsWeek}% | ΔAvg ${avgDeltaVsWeek >= 0 ? '+' : ''}${avgDeltaVsWeek}`}`;
 
-  const moreUps = yStats.upMoves > yStats.downMoves;
   const keyLine =
-    yStats.highs > yStats.lows
+    lang === 'he'
+      ? `🔎 מה עבד: נשמר TIR של ${yStats.tir}% — זו עבודה טובה ביום מורכב.`
+      : `🔎 What worked: you kept ${yStats.tir}% TIR — solid work on a demanding day.`;
+
+  let actionLine =
+    lang === 'he'
+      ? '🎯 פעולה קטנה להיום: בחר פעולה אחת פשוטה לפני השינה והכן אותה מראש.'
+      : '🎯 One tiny step for today: pick one simple bedtime action and prepare it in advance.';
+
+  if (nightLows > 0 || yStats.lows >= 2) {
+    actionLine =
+      lang === 'he'
+        ? '🎯 פעולה קטנה להיום: כשאתה מתארגן לשינה, שים ליד המיטה 15 גרם פחמימה מדודה מראש.'
+        : '🎯 Tiny step: when getting ready for bed, place a pre-measured 15g carb by your bedside.';
+  } else if (yStats.highs > yStats.inRange * 0.25) {
+    actionLine =
+      lang === 'he'
+        ? '🎯 פעולה קטנה להיום: לפני הארוחה המאתגרת הבאה, עצור לדקה לתכנון קצר (מתי וכמה).' 
+        : '🎯 Tiny step: before your next challenging meal, pause for one minute to plan timing and dose.';
+  }
+
+  const whyLine =
+    nightLows > 0
       ? lang === 'he'
-        ? `🔎 מה בלט: היו יותר גבוהים מנמוכים (${yStats.highs} מול ${yStats.lows}), ו${moreUps ? 'יותר עליות' : 'יותר ירידות'} (${yStats.upMoves} מול ${yStats.downMoves}).`
-        : `🔎 What stands out: highs were more frequent than lows (${yStats.highs} vs ${yStats.lows}), with ${moreUps ? 'more rises' : 'more drops'} (${yStats.upMoves} vs ${yStats.downMoves}).`
+        ? `🧠 היו ${nightLows} ירידות לילה — זה מתיש, וזו תגובה טבעית של הגוף. אנחנו מתקדמים בצעדים קטנים.`
+        : `🧠 There were ${nightLows} night lows — that is exhausting, and your body response is natural. We move in small steps.`
+      : yStats.lows > 0
+      ? lang === 'he'
+        ? `🧠 היו ${yStats.lows} אירועי נמוך. זה מאתגר, ולא אומר שנכשלת — רק שצריך התאמה עדינה.`
+        : `🧠 There were ${yStats.lows} low events. This is challenging and not a personal failure — just a signal for small adjustment.`
       : lang === 'he'
-      ? `🔎 מה בלט: היו יותר נמוכים מגבוהים (${yStats.lows} מול ${yStats.highs}), ו${moreUps ? 'יותר עליות' : 'יותר ירידות'} (${yStats.upMoves} מול ${yStats.downMoves}).`
-      : `🔎 What stands out: lows were more frequent than highs (${yStats.lows} vs ${yStats.highs}), with ${moreUps ? 'more rises' : 'more drops'} (${yStats.upMoves} vs ${yStats.downMoves}).`;
-
-  let actionLine = tr(lang, 'brief.actionKeep');
-  if (nightLows > 0 || yStats.lows >= 2) actionLine = tr(lang, 'brief.actionAvoid');
-  else if (yStats.highs > yStats.inRange * 0.25) actionLine = tr(lang, 'brief.actionBolus');
-
-  const whyLine = nightLows > 0 ? tr(lang, 'brief.whyNight', {count: nightLows}) : yStats.lows > 0 ? tr(lang, 'brief.whyLows', {count: yStats.lows}) : tr(lang, 'brief.whyTirAvg', {tir: yStats.tir, avg: yStats.avg});
+      ? `🧠 הגוף שמר על יציבות יחסית. נמשיך באותה גישה רגועה.`
+      : `🧠 Your body stayed relatively steady. We’ll continue with the same calm approach.`;
 
   return {
     title: tr(lang, 'brief.title'),
