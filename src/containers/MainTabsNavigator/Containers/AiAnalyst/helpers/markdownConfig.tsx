@@ -17,30 +17,12 @@ export function createMarkdownItInstance() {
 // ---------------------------------------------------------------------------
 
 export function createSelectableMarkdownRules(): Record<string, any> {
+  // Keep overrides minimal. Deeply nested custom text wrappers can cause
+  // layout issues on Android RTL (overlapping lines in long messages).
   return {
     text: (node: any, _children: any, _parent: any, styles: any, inheritedStyles: any = {}) => (
       <Text key={node.key} selectable style={[inheritedStyles, styles.text]}>
         {node.content}
-      </Text>
-    ),
-    textgroup: (node: any, children: any, _parent: any, styles: any) => (
-      <Text key={node.key} selectable style={styles.textgroup}>
-        {children}
-      </Text>
-    ),
-    strong: (node: any, children: any, _parent: any, styles: any) => (
-      <Text key={node.key} selectable style={styles.strong}>
-        {children}
-      </Text>
-    ),
-    em: (node: any, children: any, _parent: any, styles: any) => (
-      <Text key={node.key} selectable style={styles.em}>
-        {children}
-      </Text>
-    ),
-    s: (node: any, children: any, _parent: any, styles: any) => (
-      <Text key={node.key} selectable style={styles.s}>
-        {children}
       </Text>
     ),
     code_inline: (
@@ -88,26 +70,6 @@ export function createSelectableMarkdownRules(): Record<string, any> {
         </Text>
       );
     },
-    inline: (node: any, children: any, _parent: any, styles: any) => (
-      <Text key={node.key} selectable style={styles.inline}>
-        {children}
-      </Text>
-    ),
-    span: (node: any, children: any, _parent: any, styles: any) => (
-      <Text key={node.key} selectable style={styles.span}>
-        {children}
-      </Text>
-    ),
-    hardbreak: (node: any, _children: any, _parent: any, styles: any) => (
-      <Text key={node.key} selectable style={styles.hardbreak}>
-        {'\n'}
-      </Text>
-    ),
-    softbreak: (node: any, _children: any, _parent: any, styles: any) => (
-      <Text key={node.key} selectable style={styles.softbreak}>
-        {'\n'}
-      </Text>
-    ),
   };
 }
 
@@ -120,14 +82,18 @@ export function createMarkdownStyle(theme: ThemeType) {
     body: {
       color: theme.textColor,
       fontSize: theme.typography.size.md,
+      lineHeight: 24,
     },
     paragraph: {
       marginTop: 0,
       marginBottom: 8,
+      lineHeight: 24,
     },
     text: {
       color: theme.textColor,
       fontSize: theme.typography.size.md,
+      lineHeight: 24,
+      includeFontPadding: true,
     },
     code_inline: {
       backgroundColor: addOpacity(theme.textColor, 0.06),

@@ -92,14 +92,14 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
   const markdownStyle = useMemo(
     () => ({
       ...markdown.style,
-      body: {...(markdown.style as any).body, textAlign, writingDirection, lineHeight: 22},
-      paragraph: {...(markdown.style as any).paragraph, textAlign, writingDirection, marginBottom: 6},
-      text: {...(markdown.style as any).text, textAlign, writingDirection},
+      body: {...(markdown.style as any).body, textAlign, writingDirection, lineHeight: 24},
+      paragraph: {...(markdown.style as any).paragraph, textAlign, writingDirection, marginBottom: 8, lineHeight: 24},
+      text: {...(markdown.style as any).text, textAlign, writingDirection, lineHeight: 24},
       bullet_list: {...(markdown.style as any).bullet_list, marginVertical: 4},
       ordered_list: {...(markdown.style as any).ordered_list, marginVertical: 4},
-      list_item: {...(markdown.style as any).list_item, marginVertical: 2},
-      strong: {...(markdown.style as any).strong, textAlign, writingDirection},
-      em: {...(markdown.style as any).em, textAlign, writingDirection},
+      list_item: {...(markdown.style as any).list_item, marginVertical: 2, lineHeight: 24},
+      strong: {...(markdown.style as any).strong, textAlign, writingDirection, lineHeight: 24},
+      em: {...(markdown.style as any).em, textAlign, writingDirection, lineHeight: 24},
     }),
     [markdown.style, textAlign, writingDirection],
   );
