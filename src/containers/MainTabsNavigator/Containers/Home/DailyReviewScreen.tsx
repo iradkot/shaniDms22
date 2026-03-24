@@ -889,6 +889,7 @@ const DailyReviewScreen: React.FC = () => {
   const targetMid = Math.round(((glucoseSettings.hypo ?? 70) + (glucoseSettings.hyper ?? 180)) / 2);
   const avgDistance = Math.abs(yAvg - targetMid);
   const avgScore = Math.max(0, Math.min(100, 100 - Math.round(avgDistance * 0.9)));
+  const isHighDailyScore = avgScore >= 95;
 
   const nightLows = yRows.filter(r => {
     const ts = r?.dateString ? Date.parse(r.dateString) : NaN;
@@ -937,6 +938,15 @@ const DailyReviewScreen: React.FC = () => {
           <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{language === 'he' ? 'מדד היום' : 'Today score'}</Text>
           <Text style={{fontWeight: '800', color: theme.accentColor}}>{avgScore}/100</Text>
         </View>
+
+        {isHighDailyScore ? (
+          <View style={{marginTop: 8, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.inRangeColor, 0.35), backgroundColor: addOpacity(theme.inRangeColor, 0.12)}}>
+            <MaterialIcons name="check-circle" size={18} color={theme.inRangeColor} />
+            <Text style={{fontWeight: '800', color: theme.inRangeColor}}>
+              {language === 'he' ? 'מעולה! עבודה עקבית שממש משתלמת 👏' : 'Excellent! Your consistency is paying off 👏'}
+            </Text>
+          </View>
+        ) : null}
 
         <View style={{marginTop: 10, flexDirection: 'row', alignItems: 'baseline'}}>
           <Text style={{fontSize: 30, fontWeight: '900', color: theme.textColor}}>{yAvg}</Text>
