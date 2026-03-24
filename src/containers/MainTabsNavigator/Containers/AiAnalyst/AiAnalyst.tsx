@@ -83,6 +83,7 @@ const AiAnalyst: React.FC = () => {
         onBack={() => engine.setState({mode: 'dashboard'})}
         onClearHistory={engine.clearHistory}
         onOpenDetail={id => engine.setState({mode: 'historyDetail', id})}
+        onContinue={engine.resumeConversation}
       />
     );
   }

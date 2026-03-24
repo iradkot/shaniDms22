@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import React from 'react';
 import {ActivityIndicator, Pressable, ScrollView, Text, View} from 'react-native';
 import {useTheme} from 'styled-components/native';
@@ -30,6 +31,7 @@ export interface HistoryScreenProps {
   onBack: () => void;
   onClearHistory: () => void;
   onOpenDetail: (id: string) => void;
+  onContinue: (id: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -42,6 +44,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
   onBack,
   onClearHistory,
   onOpenDetail,
+  onContinue,
 }) => {
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
@@ -92,6 +95,16 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
               </View>
               <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
             </CardRow>
+            <View style={{marginTop: 8, alignItems: 'flex-start'}}>
+              <Pressable
+                onPress={() => onContinue(item.id)}
+                accessibilityRole="button"
+                accessibilityLabel={tr(language, 'ai.continueConversation')}
+                style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.35), backgroundColor: addOpacity(theme.accentColor, 0.08)}}
+              >
+                <Text style={{color: theme.accentColor, fontWeight: '700', fontSize: 12}}>{tr(language, 'ai.continueConversation')}</Text>
+              </Pressable>
+            </View>
           </Card>
         ))}
       </ScrollView>
