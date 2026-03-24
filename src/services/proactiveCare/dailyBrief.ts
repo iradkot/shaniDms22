@@ -111,6 +111,9 @@ type HolisticSignals = {
   correctionBolusCount: number;
   mealsWithResponsibleCorrectionCount: number;
   followUpChecksAfterHighCount: number;
+  medianPreBolusMin: number | null;
+  suggestedPreBolusMin: number;
+  challengingMealBucket: 'breakfast' | 'lunch' | 'dinner' | 'snack' | null;
 };
 
 type DailyProfile = {
@@ -145,6 +148,14 @@ function calcStats(list: any[], hypo: number, hyper: number): PeriodStats {
   return {tir, avg, lows, highs, inRange, count: list.length, upMoves, downMoves};
 }
 
+function classifyMealBucket(ts: number): 'breakfast' | 'lunch' | 'dinner' | 'snack' {
+  const h = new Date(ts).getHours();
+  if (h >= 5 && h < 11) return 'breakfast';
+  if (h >= 11 && h < 16) return 'lunch';
+  if (h >= 16 && h < 22) return 'dinner';
+  return 'snack';
+}
+
 function computeHolisticSignals(params: {
   yList: any[];
   yTreatments: any[];
@@ -169,9 +180,13 @@ function computeHolisticSignals(params: {
     return false;
   }).length;
 
-  const meals = (yTreatments ?? []).filter(t => Number(t?.carbs ?? 0) > 0).map(t => ({
-    ts: Date.parse(String(t?.created_at ?? '')),
-  })).filter(m => Number.isFinite(m.ts));
+  const meals = (yTreatments ?? [])
+    .filter(t => Number(t?.carbs ?? 0) > 0)
+    .map(t => ({
+      ts: Date.parse(String(t?.created_at ?? '')),
+      carbs: Number(t?.carbs ?? 0),
+    }))
+    .filter(m => Number.isFinite(m.ts));
 
   const boluses = (yTreatments ?? [])
     .filter(t => Number(t?.insulin ?? 0) > 0)
@@ -222,6 +237,57 @@ function computeHolisticSignals(params: {
     if (checks >= 3) followUpChecksAfterHighCount += 1;
   }
 
+  const preBolusMinutes: number[] = [];
+  const riseByBucket: Record<'breakfast' | 'lunch' | 'dinner' | 'snack', number[]> = {
+    breakfast: [],
+    lunch: [],
+    dinner: [],
+    snack: [],
+  };
+
+  for (const meal of meals) {
+    const beforeBoluses = boluses
+      .filter(b => b.ts <= meal.ts && b.ts >= meal.ts - 45 * 60 * 1000)
+      .sort((a, b) => b.ts - a.ts);
+    if (beforeBoluses.length > 0) {
+      preBolusMinutes.push(Math.max(0, Math.round((meal.ts - beforeBoluses[0].ts) / 60000)));
+    }
+
+    const preCandidates = yList.filter((r: any) => {
+      const t = Number(r?.date ?? 0);
+      return Number.isFinite(t) && t <= meal.ts && t >= meal.ts - 45 * 60 * 1000;
+    });
+    const preBg = preCandidates.length ? Number(preCandidates[preCandidates.length - 1]?.sgv ?? NaN) : NaN;
+
+    const postVals = yList
+      .filter((r: any) => {
+        const t = Number(r?.date ?? 0);
+        return Number.isFinite(t) && t >= meal.ts && t <= meal.ts + 3 * 60 * 60 * 1000;
+      })
+      .map((r: any) => Number(r?.sgv ?? NaN))
+      .filter((n: number) => Number.isFinite(n));
+
+    if (Number.isFinite(preBg) && postVals.length) {
+      const rise = Math.max(0, Math.round(Math.max(...postVals) - preBg));
+      riseByBucket[classifyMealBucket(meal.ts)].push(rise);
+    }
+  }
+
+  const sortedPreBolus = [...preBolusMinutes].sort((a, b) => a - b);
+  const medianPreBolusMin = sortedPreBolus.length
+    ? sortedPreBolus[Math.floor(sortedPreBolus.length / 2)]
+    : null;
+  const suggestedPreBolusMin = 10;
+
+  const challengingMealBucket = (Object.keys(riseByBucket) as Array<'breakfast' | 'lunch' | 'dinner' | 'snack'>)
+    .map(bucket => ({
+      bucket,
+      avgRise: riseByBucket[bucket].length
+        ? riseByBucket[bucket].reduce((s, n) => s + n, 0) / riseByBucket[bucket].length
+        : -1,
+    }))
+    .sort((a, b) => b.avgRise - a.avgRise)[0];
+
   return {
     reboundEpisodes,
     severeLowEvents,
@@ -230,7 +296,24 @@ function computeHolisticSignals(params: {
     correctionBolusCount,
     mealsWithResponsibleCorrectionCount,
     followUpChecksAfterHighCount,
+    medianPreBolusMin,
+    suggestedPreBolusMin,
+    challengingMealBucket: challengingMealBucket?.avgRise > 0 ? challengingMealBucket.bucket : null,
   };
+}
+
+function mealBucketLabelForBrief(lang: Lang, bucket: 'breakfast' | 'lunch' | 'dinner' | 'snack' | null): string {
+  if (!bucket) return lang === 'he' ? 'הארוחה המאתגרת' : 'the challenging meal';
+  if (lang === 'he') {
+    if (bucket === 'breakfast') return 'ארוחת הבוקר';
+    if (bucket === 'lunch') return 'ארוחת הצהריים';
+    if (bucket === 'dinner') return 'ארוחת הערב';
+    return 'ארוחת ביניים';
+  }
+  if (bucket === 'breakfast') return 'breakfast';
+  if (bucket === 'lunch') return 'lunch';
+  if (bucket === 'dinner') return 'dinner';
+  return 'snack';
 }
 
 async function readDailyProfile(): Promise<DailyProfile | null> {
@@ -270,7 +353,7 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
       actionLine: tr(lang, 'brief.actionCollect'),
       whyLine: tr(lang, 'brief.whyTirAvg', {tir: 0, avg: 0}),
       source: 'fallback' as const,
-      stats: {yesterday: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, week: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, nightLows: 0, tirDeltaVsWeek: 0, avgDeltaVsWeek: 0, holisticSignals: {reboundEpisodes: 0, severeLowEvents: 0, preBolusMissingMeals: 0, preBolusCoveragePct: 0, correctionBolusCount: 0, mealsWithResponsibleCorrectionCount: 0, followUpChecksAfterHighCount: 0}, sleepScore: 0},
+      stats: {yesterday: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, week: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, nightLows: 0, tirDeltaVsWeek: 0, avgDeltaVsWeek: 0, holisticSignals: {reboundEpisodes: 0, severeLowEvents: 0, preBolusMissingMeals: 0, preBolusCoveragePct: 0, correctionBolusCount: 0, mealsWithResponsibleCorrectionCount: 0, followUpChecksAfterHighCount: 0, medianPreBolusMin: null, suggestedPreBolusMin: 10, challengingMealBucket: null}, sleepScore: 0},
     };
   }
 
@@ -324,10 +407,12 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
         ? '🎯 פעולה קטנה להיום: כשאתה מתארגן לשינה, שים ליד המיטה 15 גרם פחמימה מדודה מראש.'
         : '🎯 Tiny step: when getting ready for bed, place a pre-measured 15g carb by your bedside.';
   } else if (yStats.highs > yStats.inRange * 0.25) {
+    const mealLabel = mealBucketLabelForBrief(lang, holisticSignals.challengingMealBucket);
+    const targetMin = holisticSignals.suggestedPreBolusMin;
     actionLine =
       lang === 'he'
-        ? '🎯 פעולה קטנה להיום: לפני הארוחה המאתגרת הבאה, עצור לדקה לתכנון קצר (מתי וכמה).' 
-        : '🎯 Tiny step: before your next challenging meal, pause for one minute to plan timing and dose.';
+        ? `🎯 פעולה קטנה להיום: כדי לרכך את התנודה ב-${mealLabel}, נסה בפעם הבאה להזריק כ-${targetMin} דקות לפני הארוחה.`
+        : `🎯 Tiny step: to soften the swing around ${mealLabel}, try dosing about ${targetMin} minutes before the meal next time.`;
   }
 
   const whyLine =
@@ -591,6 +676,14 @@ function ensureEffortFirstOpening(
   return `${effortPraisePrefix({lang, signals, gender})} ${cleaned}`.trim();
 }
 
+function ensureTacticalTinyHabit(actionLine: string, fallbackActionLine: string): string {
+  const line = actionLine.trim();
+  const hasNumber = /\d/.test(line);
+  const hasTimingWord = /דק|דקות|minutes|min|לפני|before/i.test(line);
+  if (hasNumber && hasTimingWord) return line;
+  return fallbackActionLine.trim();
+}
+
 export function buildDailyBriefSystemInstruction(lang: Lang): string {
   const core = [
     'Return JSON only.',
@@ -606,6 +699,8 @@ export function buildDailyBriefSystemInstruction(lang: Lang): string {
     'Praise must be evidence-based and concrete (mention the actual action), not exaggerated or generic.',
     'Analyze sequence links: if low BG is followed by high BG within ~3h, frame it as likely rebound physiology (not personal failure).',
     'Use preBolus signals: when preBolus coverage is low/missing, recommend one tiny habit (example: 5 minutes pre-bolus cue) instead of complex recalculation.',
+    'tiny_habit_recommendation MUST be tactical and data-anchored: cite one concrete metric from context JSON (e.g., medianPreBolusMin, preBolusCoveragePct, challengingMealBucket) and produce one specific instruction with a number/time.',
+    'Example style: "To soften the lunch swing, try dosing about 10 minutes before the meal next time."',
     'Keep language soft, non-judgmental, and practical. Suggest exactly one micro-habit action.',
   ].join(' ');
 
@@ -683,6 +778,13 @@ async function maybeGenerateLlmSections(params: {
                   topImprovedMealDelta: base.stats.tirDeltaVsWeek,
                   weeklyImprovementAnchor: base.stats.tirDeltaVsWeek > 0 ? `TIR +${base.stats.tirDeltaVsWeek}%` : `TIR ${base.stats.tirDeltaVsWeek}%`,
                 },
+                tacticalHabitSeed: {
+                  metric: 'preBolus',
+                  medianPreBolusMin: (base.stats as any).holisticSignals?.medianPreBolusMin,
+                  suggestedPreBolusMin: (base.stats as any).holisticSignals?.suggestedPreBolusMin,
+                  preBolusCoveragePct: (base.stats as any).holisticSignals?.preBolusCoveragePct,
+                  challengingMealBucket: (base.stats as any).holisticSignals?.challengingMealBucket,
+                },
                 fallback: {
                   summaryLine: base.summaryLine,
                   keyLine: base.keyLine,
@@ -719,7 +821,11 @@ async function maybeGenerateLlmSections(params: {
         '📊',
       );
       const keyLine = ensurePrefix(sanitizeEmpathicLanguage(keyRaw || base.keyLine), '🔎');
-      const actionLine = ensurePrefix(sanitizeEmpathicLanguage(actionRaw || base.actionLine), '🎯');
+      const tacticalAction = ensureTacticalTinyHabit(
+        sanitizeEmpathicLanguage(actionRaw || ''),
+        sanitizeEmpathicLanguage(base.actionLine),
+      );
+      const actionLine = ensurePrefix(tacticalAction, '🎯');
       const whyLine = ensurePrefix(sanitizeEmpathicLanguage(whyRaw || base.whyLine), '🧠');
 
       if (!summaryLine || !keyLine || !actionLine || !whyLine) continue;
