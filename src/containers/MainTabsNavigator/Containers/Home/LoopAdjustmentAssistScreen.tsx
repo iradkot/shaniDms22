@@ -8,7 +8,7 @@ import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
-import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
+import {createLlmProvider} from 'app/services/llm/llmClient';
 import {
   fetchBgDataForDateRangeUncached,
   fetchTreatmentsForDateRangeUncached,
@@ -264,12 +264,15 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         'Never provide dangerous/aggressive changes. Keep it small and reversible.',
       ].join(' ');
 
-      const apiKey = (aiSettings.openAiApiKey ?? '').trim();
+      const apiKey = (aiSettings.apiKey ?? '').trim();
+      if (!aiSettings.enabled) {
+        throw new Error(language === 'he' ? 'AI כבוי בהגדרות. יש להפעיל אותו בהגדרות AI.' : 'AI is disabled in settings. Please enable it in AI settings.');
+      }
       if (!apiKey) {
         throw new Error(language === 'he' ? 'חסר OpenAI API key בהגדרות AI' : 'Missing OpenAI API key in AI settings');
       }
 
-      const provider = new OpenAIProvider({apiKey});
+      const provider = createLlmProvider(aiSettings);
       const model = (aiSettings.openAiModel ?? 'gpt-5.4').trim() || 'gpt-5.4';
 
       const res = await provider.sendChat({
