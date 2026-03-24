@@ -361,6 +361,7 @@ const DailyReviewScreen: React.FC = () => {
   const [todayEpisodes, setTodayEpisodes] = useState<MealEpisode[]>([]);
   const [expandedMealWhy, setExpandedMealWhy] = useState<MealBucket | null>(null);
   const [expandedMealCard, setExpandedMealCard] = useState<MealBucket | null>(null);
+  const [showImprovementPoints, setShowImprovementPoints] = useState(false);
   const [focusModalBucket, setFocusModalBucket] = useState<MealBucket | null>(null);
   const [focusReminderTime, setFocusReminderTime] = useState('21:00');
   const [focusNote, setFocusNote] = useState('');
@@ -973,53 +974,80 @@ const DailyReviewScreen: React.FC = () => {
           {language === 'he' ? 'ציוני ארוחות יומיים' : 'Daily meal scores'}
         </Text>
 
-        {(topImprovedMeal || needsAttentionMeal) ? (
-          <View style={{marginTop: 8, gap: 8}}>
-            {topImprovedMeal ? (
-              <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity('#2e7d32', 0.35), backgroundColor: addOpacity('#2e7d32', 0.08)}}>
-                <Text style={{fontWeight: '800', color: '#2e7d32'}}>
-                  {language === 'he' ? '🚀 הארוחה שהכי השתפרה' : '🚀 Top improved meal'}
-                </Text>
-                <View style={{marginTop: 4, flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap'}}>
-                  <Text style={{color: theme.textColor}}>{mealBucketLabel(language, topImprovedMeal.bucket)}</Text>
-                  <Text style={{color: theme.textColor, writingDirection: 'ltr'}}>{topImprovedMeal.score}</Text>
-                  <View style={{flexDirection: 'row'}}>
-                    <Text style={{color: '#2e7d32', writingDirection: 'ltr'}}>{`(${Math.abs(topImprovedMeal.delta ?? 0)}+ 📈)`}</Text>
-                  </View>
-                  <Text style={{color: addOpacity(theme.textColor, 0.75)}}>{language === 'he' ? 'מול ממוצע שבועי' : 'vs weekly baseline'}</Text>
-                </View>
-                <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
-                  {explainMealDelta(topImprovedMeal.bucket, topImprovedMeal.delta)}
-                </Text>
+        <View style={{marginTop: 8, gap: 8}}>
+          {topImprovedMeal ? (
+            <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.35), backgroundColor: addOpacity(theme.accentColor, 0.08)}}>
+              <Text style={{fontWeight: '800', color: theme.accentColor}}>
+                {language === 'he' ? '✅ מה עבד טוב אתמול' : '✅ What worked well yesterday'}
+              </Text>
+              <View style={{marginTop: 4, flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap'}}>
+                <Text style={{color: theme.textColor}}>{mealBucketLabel(language, topImprovedMeal.bucket)}</Text>
+                <Text style={{color: theme.textColor, writingDirection: 'ltr'}}>{topImprovedMeal.score}/100</Text>
+                <Text style={{color: addOpacity(theme.textColor, 0.75)}}>{language === 'he' ? 'מול ממוצע שבועי' : 'vs weekly baseline'}</Text>
               </View>
-            ) : topDeclinedMeal ? (
-              <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity('#f9a825', 0.35), backgroundColor: addOpacity('#f9a825', 0.08)}}>
-                <Text style={{fontWeight: '800', color: '#8d6e63'}}>
-                  {language === 'he' ? '🧩 לא זוהתה קפיצה חיובית בולטת אתמול' : '🧩 No clear positive jump was detected yesterday'}
-                </Text>
-                <View style={{marginTop: 4, flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap'}}>
-                  <Text style={{color: theme.textColor}}>{language === 'he' ? 'הירידה הבולטת מול שבוע אחרון:' : 'Largest drop vs recent week:'}</Text>
-                  <Text style={{color: theme.textColor}}>{mealBucketLabel(language, topDeclinedMeal.bucket)}</Text>
-                  <Text style={{color: '#8d6e63', writingDirection: 'ltr'}}>{`${topDeclinedMeal.score} (${Math.abs(topDeclinedMeal.delta ?? 0)}- 📉)`}</Text>
-                </View>
-                <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
-                  {explainMealDelta(topDeclinedMeal.bucket, topDeclinedMeal.delta)}
-                </Text>
-              </View>
-            ) : null}
+              <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
+                {explainMealDelta(topImprovedMeal.bucket, topImprovedMeal.delta)}
+              </Text>
+            </View>
+          ) : (
+            <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.2), backgroundColor: addOpacity(theme.accentColor, 0.06)}}>
+              <Text style={{fontWeight: '700', color: theme.textColor}}>
+                {language === 'he'
+                  ? 'שמנו דגש על מה שכן עבד. נקודות לשיפור זמינות למטה כשמתאים לך.'
+                  : 'We focused on what worked. Improvement points are available below when you choose.'}
+              </Text>
+            </View>
+          )}
 
-            {needsAttentionMeal ? (
-              <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity('#f9a825', 0.35), backgroundColor: addOpacity('#f9a825', 0.08)}}>
-                <Text style={{fontWeight: '800', color: '#8d6e63'}}>
-                  {language === 'he' ? '🎯 נקודה עדינה לשיפור מחר' : '🎯 Gentle focus point for tomorrow'}
+          {(needsAttentionMeal || topDeclinedMeal) ? (
+            <View>
+              <Pressable
+                onPress={() => setShowImprovementPoints(prev => !prev)}
+                style={{paddingVertical: 8, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.25), alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6}}
+              >
+                <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>
+                  {language === 'he' ? 'נקודות לשיפור (כשמתאים לך)' : 'Improvement points (when you feel ready)'}
                 </Text>
-                <Text style={{marginTop: 4, color: theme.textColor}}>
-                  {mealBucketLabel(language, needsAttentionMeal.bucket)} • {needsAttentionMeal.score}/100 • {language === 'he' ? `עלייה ממוצעת ${needsAttentionMeal.avgRise}` : `avg rise ${needsAttentionMeal.avgRise}`} mg/dL
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
+                <MaterialIcons name={showImprovementPoints ? 'expand-less' : 'expand-more'} size={16} color={addOpacity(theme.textColor, 0.8)} />
+              </Pressable>
+
+              {!showImprovementPoints ? null : (
+                <View style={{marginTop: 8, gap: 8}}>
+                  {needsAttentionMeal ? (
+                    <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity(theme.borderColor || '#999', 0.45), backgroundColor: addOpacity(theme.white, 0.92)}}>
+                      <Text style={{fontWeight: '800', color: theme.textColor}}>
+                        {language === 'he' ? '🎯 כיוון עדין לשיפור בפעם הבאה' : '🎯 Gentle direction for next time'}
+                      </Text>
+                      <Text style={{marginTop: 4, color: theme.textColor}}>
+                        {mealBucketLabel(language, needsAttentionMeal.bucket)} • {needsAttentionMeal.score}/100
+                      </Text>
+                      <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.74)}}>
+                        {language === 'he'
+                          ? `כשתרצה, אפשר לבדוק לעומק גם נתונים מדויקים יותר (כולל עלייה ממוצעת של ${needsAttentionMeal.avgRise} mg/dL).`
+                          : `When you choose, you can review more detailed metrics too (including avg rise of ${needsAttentionMeal.avgRise} mg/dL).`}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {topDeclinedMeal ? (
+                    <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity(theme.borderColor || '#999', 0.45), backgroundColor: addOpacity(theme.white, 0.92)}}>
+                      <Text style={{fontWeight: '800', color: theme.textColor}}>
+                        {language === 'he' ? '🧩 נקודה ששווה לדייק' : '🧩 A point worth refining'}
+                      </Text>
+                      <View style={{marginTop: 4, flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap'}}>
+                        <Text style={{color: theme.textColor}}>{mealBucketLabel(language, topDeclinedMeal.bucket)}</Text>
+                        <Text style={{color: addOpacity(theme.textColor, 0.8), writingDirection: 'ltr'}}>{`${topDeclinedMeal.score}/100`}</Text>
+                      </View>
+                      <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
+                        {explainMealDelta(topDeclinedMeal.bucket, topDeclinedMeal.delta)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+            </View>
+          ) : null}
+        </View>
 
         {mealComparisons.length ? (
           <View style={{marginTop: 8, gap: 8}}>
@@ -1057,18 +1085,17 @@ const DailyReviewScreen: React.FC = () => {
                     </View>
                   </View>
 
-                  <View style={{marginTop: 8, height: 10, borderRadius: 99, backgroundColor: addOpacity(theme.textColor, 0.08), overflow: 'hidden', flexDirection: 'row'}}>
-                    <View style={{width: `${Math.max(0, Math.min(100, item.avgLowPct))}%`, height: 10, backgroundColor: '#c62828'}} />
-                    <View style={{width: `${Math.max(0, Math.min(100, item.avgTirPct))}%`, height: 10, backgroundColor: '#2e7d32', alignItems: 'center', justifyContent: 'center'}}>
-                      {item.avgTirPct > 15 ? <Text style={{fontSize: 10, fontWeight: '800', color: '#fff'}}>{item.avgTirPct}%</Text> : null}
-                    </View>
-                    <View style={{width: `${Math.max(0, Math.min(100, item.avgHighPct))}%`, height: 10, backgroundColor: '#f9a825'}} />
-                  </View>
-
-                  <Text style={{marginTop: 4, fontSize: 11, color: addOpacity(theme.textColor, 0.62), writingDirection: 'ltr'}}>{`${item.avgLowPct}% 🔴  ${item.avgTirPct}% 🟢  ${item.avgHighPct}% 🟠`}</Text>
-
                   {!isExpanded ? null : (
                     <View style={{marginTop: 10, gap: 8}}>
+                      <View style={{height: 10, borderRadius: 99, backgroundColor: addOpacity(theme.textColor, 0.08), overflow: 'hidden', flexDirection: 'row'}}>
+                        <View style={{width: `${Math.max(0, Math.min(100, item.avgLowPct))}%`, height: 10, backgroundColor: theme.belowRangeColor}} />
+                        <View style={{width: `${Math.max(0, Math.min(100, item.avgTirPct))}%`, height: 10, backgroundColor: theme.inRangeColor, alignItems: 'center', justifyContent: 'center'}}>
+                          {item.avgTirPct > 15 ? <Text style={{fontSize: 10, fontWeight: '800', color: '#fff'}}>{item.avgTirPct}%</Text> : null}
+                        </View>
+                        <View style={{width: `${Math.max(0, Math.min(100, item.avgHighPct))}%`, height: 10, backgroundColor: theme.aboveRangeColor}} />
+                      </View>
+
+                      <Text style={{fontSize: 11, color: addOpacity(theme.textColor, 0.62), writingDirection: 'ltr'}}>{`${item.avgLowPct}% • ${item.avgTirPct}% • ${item.avgHighPct}%`}</Text>
                       <View style={{padding: 8, borderRadius: 10, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.12)}}>
                         <Text style={{color: theme.textColor, fontWeight: '700'}}>{language === 'he' ? 'שיאי סוכר' : 'Glucose peaks'}</Text>
                         <Text style={{marginTop: 4, color: '#c62828', writingDirection: 'ltr'}}>{language === 'he' ? 'שיא גבוה (3ש): ' : 'Peak High (3h): '}{peakHigh ?? '—'} mg/dL</Text>
