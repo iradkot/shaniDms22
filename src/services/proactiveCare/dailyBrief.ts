@@ -40,8 +40,13 @@ function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+function getLastCompletedWindow(now: Date, anchorHour: number) {
+  const end = new Date(now);
+  end.setHours(anchorHour, 0, 0, 0);
+  if (now.getTime() < end.getTime()) end.setDate(end.getDate() - 1);
+  const start = new Date(end);
+  start.setDate(start.getDate() - 1);
+  return {start, end};
 }
 
 function nextScheduledTime(now: Date, hour: number, minute: number): Date {
@@ -201,16 +206,14 @@ async function writeDailyProfile(profile: DailyProfile) {
 
 async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
   const now = new Date();
-  const todayStart = startOfDay(now);
-  const yesterdayStart = new Date(todayStart);
-  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-  const weekStart = new Date(todayStart);
-  weekStart.setDate(weekStart.getDate() - 8);
+  const {start: windowStart, end: windowEnd} = getLastCompletedWindow(now, 6);
+  const weekStart = new Date(windowStart);
+  weekStart.setDate(weekStart.getDate() - 7);
 
   const [yRows, wRows, yTreatments] = await Promise.all([
-    fetchBgDataForDateRangeUncached(yesterdayStart, todayStart, {throwOnError: false}),
-    fetchBgDataForDateRangeUncached(weekStart, yesterdayStart, {throwOnError: false}),
-    fetchTreatmentsForDateRangeUncached(yesterdayStart, todayStart),
+    fetchBgDataForDateRangeUncached(windowStart, windowEnd, {throwOnError: false}),
+    fetchBgDataForDateRangeUncached(weekStart, windowStart, {throwOnError: false}),
+    fetchTreatmentsForDateRangeUncached(windowStart, windowEnd),
   ]);
 
   const yList = ((yRows as any[]) ?? []).sort((a, b) => Number(a?.date ?? 0) - Number(b?.date ?? 0));
@@ -225,7 +228,7 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
       actionLine: tr(lang, 'brief.actionCollect'),
       whyLine: tr(lang, 'brief.whyTirAvg', {tir: 0, avg: 0}),
       source: 'fallback' as const,
-      stats: {yesterday: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, week: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, nightLows: 0, tirDeltaVsWeek: 0, avgDeltaVsWeek: 0, holisticSignals: {reboundEpisodes: 0, severeLowEvents: 0, preBolusMissingMeals: 0, preBolusCoveragePct: 0}},
+      stats: {yesterday: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, week: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, nightLows: 0, tirDeltaVsWeek: 0, avgDeltaVsWeek: 0, holisticSignals: {reboundEpisodes: 0, severeLowEvents: 0, preBolusMissingMeals: 0, preBolusCoveragePct: 0}, sleepScore: 0},
     };
   }
 
@@ -291,6 +294,14 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
       ? `🧠 הגוף שמר על יציבות יחסית. נמשיך באותה גישה רגועה.`
       : `🧠 Your body stayed relatively steady. We’ll continue with the same calm approach.`;
 
+  const sleepScore = Math.max(
+    0,
+    Math.min(
+      100,
+      100 - nightLows * 12 - holisticSignals.severeLowEvents * 18 - holisticSignals.reboundEpisodes * 8,
+    ),
+  );
+
   return {
     title: tr(lang, 'brief.title'),
     nightLine,
@@ -306,6 +317,7 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
       tirDeltaVsWeek,
       avgDeltaVsWeek,
       holisticSignals,
+      sleepScore,
     },
   };
 }
@@ -339,7 +351,7 @@ function compactDeltaLine(params: {
   const {lang, labelHe, labelEn, value, delta, betterWhenLower = false, emoji = '•'} = params;
   const improved = betterWhenLower ? delta < 0 : delta > 0;
   const worsened = betterWhenLower ? delta > 0 : delta < 0;
-  const trend = improved ? (lang === 'he' ? 'שיפור' : 'improved') : worsened ? (lang === 'he' ? 'החמרה' : 'worsened') : lang === 'he' ? 'ללא שינוי' : 'unchanged';
+  const trend = improved ? (lang === 'he' ? 'שיפור' : 'improved') : worsened ? (lang === 'he' ? 'ירידה' : 'declined') : lang === 'he' ? 'ללא שינוי' : 'unchanged';
   const deltaText = signed(delta);
   return lang === 'he'
     ? `${emoji} ${labelHe}: ${value} (${trend} ${deltaText})`
@@ -383,6 +395,7 @@ function buildCompactBody(params: {
       delta: tirDelta,
       emoji: '🎯',
     }),
+    `${lang === 'he' ? '😴 ציון שינה' : '😴 Sleep score'}: ${(base.stats as any).sleepScore ?? 0}/100`,
     compactDeltaLine({
       lang,
       labelHe: 'נמוכים',

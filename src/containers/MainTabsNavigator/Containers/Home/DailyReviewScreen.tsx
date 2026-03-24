@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Alert, I18nManager, LayoutAnimation, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, UIManager, View} from 'react-native';
-import {format, subDays} from 'date-fns';
+import {addDays, format, subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useNavigation} from '@react-navigation/native';
@@ -375,15 +375,17 @@ const DailyReviewScreen: React.FC = () => {
 
   const todayStart = useMemo(() => {
     const n = new Date();
-    return new Date(n.getFullYear(), n.getMonth(), n.getDate(), 0, 0, 0, 0);
+    const end = new Date(n.getFullYear(), n.getMonth(), n.getDate(), 6, 0, 0, 0);
+    if (n.getTime() < end.getTime()) end.setDate(end.getDate() - 1);
+    return end;
   }, []);
   const yStart = useMemo(() => subDays(todayStart, 1), [todayStart]);
   const prevDayStart = useMemo(() => subDays(yStart, 1), [yStart]);
-  const wStart = useMemo(() => subDays(todayStart, 8), [todayStart]);
+  const wStart = useMemo(() => subDays(yStart, 7), [yStart]);
 
   const getDayInsulinTotal = async (dayStart: Date): Promise<number> => {
-    const s = new Date(dayStart); s.setHours(0, 0, 0, 0);
-    const e = new Date(dayStart); e.setHours(23, 59, 59, 999);
+    const s = new Date(dayStart);
+    const e = addDays(new Date(dayStart), 1);
     const [treatments, profileData] = await Promise.all([
       fetchTreatmentsForDateRangeUncached(s, e),
       getUserProfileFromNightscout(s.toISOString()),
@@ -910,7 +912,9 @@ const DailyReviewScreen: React.FC = () => {
         <Pressable onPress={() => navigation.goBack()} style={{padding: 4}}><MaterialIcons name="arrow-back" size={24} color={theme.textColor} /></Pressable>
         <View>
           <Text style={{fontSize: 24, fontWeight: '800', color: theme.textColor, textAlign}}>{tr(language, 'dailyReview.title')}</Text>
-          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65), textAlign}}>{tr(language, 'common.date')}: {format(yStart, 'd/M')}</Text>
+          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.65), textAlign}}>
+            {tr(language, 'common.date')}: {format(yStart, 'd/M HH:mm')} → {format(todayStart, 'd/M HH:mm')}
+          </Text>
         </View>
         <View style={{width: 24}} />
       </View>
