@@ -635,6 +635,11 @@ const DailyReviewScreen: React.FC = () => {
       : 'Meal declined, but investigation did not find one dominant high-confidence cause.';
   };
 
+  const perfectMealPraise =
+    language === 'he'
+      ? 'מדהים! 100/100 — ניהול מצוין. מגיע לך להרגיש סיפוק וגאווה 👏'
+      : 'Amazing! 100/100 — excellent management. You should feel proud 👏';
+
   useEffect(() => {
     if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
       UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -987,11 +992,7 @@ const DailyReviewScreen: React.FC = () => {
               </View>
               <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
                 {topImprovedMeal.score >= 100
-                  ? (
-                    language === 'he'
-                      ? 'מדהים! זו ארוחה מצוינת עם ביצוע מושלם — מגיע לך לגמרי להרגיש סיפוק וגאווה 👏'
-                      : 'Amazing! This was an excellent meal with a perfect execution — you should feel proud 👏'
-                  )
+                  ? perfectMealPraise
                   : explainMealDelta(topImprovedMeal.bucket, topImprovedMeal.delta)}
               </Text>
             </View>
@@ -1063,6 +1064,7 @@ const DailyReviewScreen: React.FC = () => {
               const same = item.delta == null || item.delta === 0;
               const deltaColor = same ? addOpacity(theme.textColor, 0.6) : improved ? '#2e7d32' : '#c62828';
               const isExpanded = expandedMealCard === item.bucket;
+              const isPerfectScore = item.score >= 100;
               const bucketEpisodes = todayEpisodes.filter(e => e.bucket === item.bucket);
               const peakHigh = bucketEpisodes.length
                 ? Math.round(bucketEpisodes.reduce((s, e) => s + (e.peakBg ?? 0), 0) / bucketEpisodes.length)
@@ -1115,7 +1117,11 @@ const DailyReviewScreen: React.FC = () => {
 
                       <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
                         <Text style={{color: deltaColor, fontSize: 12, fontWeight: '700'}}>
-                          <Text style={{writingDirection: 'ltr'}}>{`${item.score} (${Math.abs(delta)}${delta >= 0 ? '+' : '-'} ${delta >= 0 ? '📈' : '📉'})`}</Text>
+                          <Text style={{writingDirection: 'ltr'}}>
+                            {isPerfectScore
+                              ? `${item.score}/100 👏`
+                              : `${item.score} (${Math.abs(delta)}${delta >= 0 ? '+' : '-'} ${delta >= 0 ? '📈' : '📉'})`}
+                          </Text>
                         </Text>
                         {item.score <= 55 ? (
                           <Pressable
@@ -1140,17 +1146,23 @@ const DailyReviewScreen: React.FC = () => {
                           </Text>
                         </Pressable>
 
-                        <Pressable
-                          onPress={() => setExpandedMealWhy(prev => (prev === item.bucket ? null : item.bucket))}
-                          style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.35)}}
-                        >
-                          <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>
-                            {language === 'he' ? 'למה זה השתנה?' : 'Why did this change?'}
-                          </Text>
-                        </Pressable>
+                        {!isPerfectScore ? (
+                          <Pressable
+                            onPress={() => setExpandedMealWhy(prev => (prev === item.bucket ? null : item.bucket))}
+                            style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.35)}}
+                          >
+                            <Text style={{color: theme.textColor, fontWeight: '700', fontSize: 12}}>
+                              {language === 'he' ? 'למה זה השתנה?' : 'Why did this change?'}
+                            </Text>
+                          </Pressable>
+                        ) : null}
                       </View>
 
-                      {expandedMealWhy === item.bucket ? (
+                      {isPerfectScore ? (
+                        <View style={{marginTop: 4, padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.accentColor, 0.08), borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.2)}}>
+                          <Text style={{color: theme.textColor}}>{perfectMealPraise}</Text>
+                        </View>
+                      ) : expandedMealWhy === item.bucket ? (
                         <View style={{marginTop: 4, padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.accentColor, 0.08), borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.2)}}>
                           <Text style={{color: theme.textColor}}>{explainMealDelta(item.bucket, item.delta)}</Text>
                         </View>
