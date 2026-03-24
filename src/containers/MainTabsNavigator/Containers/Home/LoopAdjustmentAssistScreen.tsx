@@ -10,6 +10,7 @@ import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {createLlmProvider} from 'app/services/llm/llmClient';
 import {sendJsonWithAdaptiveContext} from 'app/services/llm/robustJson';
+import {collectPagedTextFromLlm} from 'app/services/llm/pagingProtocol';
 import {
   fetchBgDataForDateRangeUncached,
   fetchTreatmentsForDateRangeUncached,
@@ -150,37 +151,6 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
 
     return Math.max(0, Math.min(1, s));
   }, [exerciseDetails, pumpDetails, pumpSetOk, specialExercise, stressDetails, stressOrSick, trend?.confidence]);
-
-  const recommendation = useMemo(() => {
-    if (!trend?.detected) {
-      return language === 'he'
-        ? 'כרגע אין דפוס יציב מספיק לשינוי הגדרות לופ. עדיף להמשיך מעקב עוד כמה ימים.'
-        : 'There is no stable enough pattern yet for Loop settings changes. Keep tracking for a few more days.';
-    }
-
-    if (score < 0.55) {
-      return language === 'he'
-        ? 'יש יותר מדי גורמי רעש (סטרס/מחלה/פעילות/סט). עדיף לדחות שינוי הגדרות ולעקוב שוב בעוד 2-3 ימים.'
-        : 'There are too many confounders (stress/sickness/activity/set issue). Better postpone settings changes and reassess in 2-3 days.';
-    }
-
-    if (trend?.trendType === 'morning_high') {
-      return language === 'he'
-        ? 'נראה חוסר אינסולין עקבי בבוקר. אפשר לשקול התאמה עדינה של יעד/רגישות בחלון הבוקר בלבד, ואז לבדוק 3-5 ימים.'
-        : 'A consistent morning insulin gap appears likely. Consider a gentle morning-only target/sensitivity adjustment, then monitor 3-5 days.';
-    }
-
-    if (trend?.trendType === 'overnight_low') {
-      return language === 'he'
-        ? 'נראה עודף אינסולין יחסי בלילה. אפשר לשקול התאמה עדינה בחלון הלילה בלבד, עם ניטור צמוד 3-5 ימים.'
-        : 'Relative overnight insulin excess appears likely. Consider a gentle overnight-only adjustment with close 3-5 day monitoring.';
-    }
-
-    return language === 'he'
-      ? 'נראה דפוס קבוע אחרי ארוחת צהריים. אפשר לשקול התאמת תזמון/הגדרה סביב חלון הצהריים בלבד, ואז לנטר 3-5 ימים.'
-      : 'A recurring post-lunch pattern appears likely. Consider a lunch-window-only timing/setting adjustment and monitor 3-5 days.';
-  }, [language, score, trend]);
-
   const disclaimer = language === 'he'
     ? 'גילוי נאות: זו תובנה אוטומטית תומכת החלטה בלבד, לא ייעוץ רפואי. לפני שינוי בהגדרות טיפול, מומלץ לעבור על ההמלצה עם הצוות הרפואי המטפל.'
     : 'Disclaimer: this is an automated decision-support insight, not medical advice. Before changing therapy settings, review with your treating clinical team.';
@@ -267,6 +237,17 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         getUserProfileFromNightscout(new Date().toISOString()).catch(() => null),
       ]);
 
+      const bgCount = Array.isArray(bgRows) ? bgRows.length : 0;
+      const txCount = Array.isArray(treatments) ? treatments.length : 0;
+      const dsCount = Array.isArray(deviceStatusRows) ? deviceStatusRows.length : 0;
+      if (bgCount < 72 || txCount < 3 || dsCount < 24) {
+        throw new Error(
+          language === 'he'
+            ? 'אין מספיק נתונים איכותיים ליצירת המלצת לופ בטוחה. נסה שוב בעוד זמן קצר לאחר סנכרון נוסף.'
+            : 'Insufficient high-quality data for a safe Loop settings recommendation. Please retry after more sync data is available.',
+        );
+      }
+
       const {contextForAi} = buildLoopAssistAiContext({
         language,
         trend,
@@ -276,16 +257,6 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         deviceStatusRows: deviceStatusRows as any[],
         profile,
       });
-
-      const compactContextForAi = {
-        ...contextForAi,
-        samples: {
-          bgFirst80: (contextForAi as any)?.samples?.bgFirst80?.slice?.(0, 20) ?? [],
-          treatmentsFirst80: (contextForAi as any)?.samples?.treatmentsFirst80?.slice?.(0, 20) ?? [],
-          deviceStatusFirst80: (contextForAi as any)?.samples?.deviceStatusFirst80?.slice?.(0, 20) ?? [],
-        },
-        profile: null,
-      };
 
       const systemInstruction = buildLoopAssistSystemInstruction(language);
 
@@ -300,12 +271,48 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       const provider = createLlmProvider(aiSettings);
       const model = (aiSettings.openAiModel ?? 'gpt-5.4').trim() || 'gpt-5.4';
 
-      const ultraCompactContextForAi = {
-        ...compactContextForAi,
-        samples: {
-          bgFirst80: (compactContextForAi as any)?.samples?.bgFirst80?.slice?.(0, 8) ?? [],
-          treatmentsFirst80: (compactContextForAi as any)?.samples?.treatmentsFirst80?.slice?.(0, 8) ?? [],
-          deviceStatusFirst80: (compactContextForAi as any)?.samples?.deviceStatusFirst80?.slice?.(0, 8) ?? [],
+      const analysisInstruction = [
+        'Create a comprehensive clinical reasoning memo from the payload.',
+        'Cover evidence weighing, confounders, contradiction checks, and safety risks.',
+        'Include why alternatives were rejected.',
+        'Do not output final patient recommendation here; this is internal analysis memo only.',
+      ].join(' ');
+
+      const analysisPaged = await collectPagedTextFromLlm({
+        provider,
+        model,
+        baseSystemInstruction: analysisInstruction,
+        payload: contextForAi,
+        maxPages: 6,
+        maxOutputTokensPerPage: 1200,
+        maxAttemptsPerPage: 3,
+        pageCharTarget: 1500,
+        temperature: 0.2,
+      });
+
+      if (analysisPaged.truncated) {
+        throw new Error(
+          language === 'he'
+            ? 'הניתוח הקליני הפנימי נקטע לפני סיום. לא נציג המלצה חלקית.'
+            : 'Internal clinical analysis was truncated before completion. No partial recommendation will be shown.',
+        );
+      }
+
+      const finalDecisionPayload = {
+        context: contextForAi,
+        internal_analysis_memo: analysisPaged.text,
+        output_contract: {
+          keys: [
+            'setting_focus',
+            'time_window',
+            'current_value',
+            'suggested_value',
+            'practical_instruction',
+            'rationale',
+            'confidence_pct',
+            'safety_note',
+          ],
+          keep_patient_text_clear_and_concise: true,
         },
       };
 
@@ -316,15 +323,14 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         temperature: 0.2,
         parse: raw => parseJsonObject(raw) as LoopAiRecommendation | null,
         contexts: [
-          {name: 'full', payload: contextForAi, maxOutputTokens: 900},
-          {name: 'compact', payload: compactContextForAi, maxOutputTokens: 1200},
-          {name: 'ultra-compact', payload: ultraCompactContextForAi, maxOutputTokens: 1400},
+          {name: 'full-final-pass', payload: finalDecisionPayload, maxOutputTokens: 1000},
+          {name: 'full-final-pass-retry', payload: finalDecisionPayload, maxOutputTokens: 1400},
         ],
       });
 
       const rawResponse = adaptive.raw;
       const parsed = adaptive.parsed;
-      const usedCompactContext = adaptive.usedContextName !== 'full';
+      const usedCompactContext = false;
 
       let normalized = parsed;
       const needsHebrewNormalization =
@@ -351,11 +357,6 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
 
       setAiRecommendation(normalized);
       setSubmitted(true);
-      const contextByName: Record<string, unknown> = {
-        full: contextForAi,
-        compact: compactContextForAi,
-        'ultra-compact': ultraCompactContextForAi,
-      };
       setDebugLog({
         createdAt: new Date().toISOString(),
         appScreen: 'LoopAdjustmentAssistScreen',
@@ -365,7 +366,13 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         usedCompactContext,
         usedContextName: adaptive.usedContextName,
         adaptiveTraces: adaptive.traces,
-        contextSent: contextByName[adaptive.usedContextName] ?? contextForAi,
+        pagingAnalysis: {
+          pagesUsed: analysisPaged.pagesUsed,
+          truncated: analysisPaged.truncated,
+          traces: analysisPaged.traces,
+          analysisChars: analysisPaged.text.length,
+        },
+        contextSent: finalDecisionPayload,
         aiRawResponse: rawResponse,
         aiParsedResponse: normalized,
       });
@@ -499,7 +506,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
               {language === 'he' ? 'מה הגוף שלך עובר' : 'What your body is going through'}
             </Text>
             <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.86)}}>
-              {aiRecommendation?.rationale || recommendation}
+              {aiRecommendation?.rationale}
             </Text>
           </View>
 
@@ -509,7 +516,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
             </Text>
 
             <Text style={{marginTop: 6, color: theme.textColor}}>
-              {aiRecommendation?.practical_instruction || recommendation}
+              {aiRecommendation?.practical_instruction}
             </Text>
 
             {aiRecommendation ? (
