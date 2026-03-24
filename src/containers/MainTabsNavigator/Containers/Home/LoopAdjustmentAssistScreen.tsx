@@ -37,10 +37,10 @@ const OptionRow: React.FC<OptionRowProps> = ({
 
     <View style={{marginTop: 8, flexDirection: 'row', gap: 8}}>
       <Pressable onPress={() => onChange('yes')} style={{paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: value === 'yes' ? theme.accentColor : addOpacity(theme.textColor, 0.2), backgroundColor: value === 'yes' ? addOpacity(theme.accentColor, 0.12) : 'transparent'}}>
-        <Text style={{color: theme.textColor}}>{language === 'he' ? 'כן' : 'Yes'}</Text>
+        <Text style={{color: value === 'yes' ? theme.accentColor : theme.textColor, fontWeight: value === 'yes' ? '800' : '500'}}>{language === 'he' ? 'כן' : 'Yes'}</Text>
       </Pressable>
       <Pressable onPress={() => onChange('no')} style={{paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: value === 'no' ? theme.accentColor : addOpacity(theme.textColor, 0.2), backgroundColor: value === 'no' ? addOpacity(theme.accentColor, 0.12) : 'transparent'}}>
-        <Text style={{color: theme.textColor}}>{language === 'he' ? 'לא' : 'No'}</Text>
+        <Text style={{color: value === 'no' ? theme.accentColor : theme.textColor, fontWeight: value === 'no' ? '800' : '500'}}>{language === 'he' ? 'לא' : 'No'}</Text>
       </Pressable>
 
       <Pressable onPress={onToggleExpanded} style={{paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.25), backgroundColor: expanded ? addOpacity(theme.textColor, 0.08) : 'transparent'}}>
@@ -84,8 +84,12 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
   const [submitted, setSubmitted] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  const hasAtLeastOneAnswer = stressOrSick !== null || specialExercise !== null || pumpSetOk !== null;
-  const allCoreAnswersProvided = stressOrSick !== null && specialExercise !== null && pumpSetOk !== null;
+  const stressAnswered = stressOrSick !== null || stressDetails.trim().length > 0;
+  const exerciseAnswered = specialExercise !== null || exerciseDetails.trim().length > 0;
+  const pumpAnswered = pumpSetOk !== null || pumpDetails.trim().length > 0;
+
+  const hasAtLeastOneAnswer = stressAnswered || exerciseAnswered || pumpAnswered || generalDetails.trim().length > 0;
+  const allCoreAnswersProvided = stressAnswered && exerciseAnswered && pumpAnswered;
 
   const contextPayload = useMemo(
     () => ({
@@ -245,8 +249,8 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       {submitAttempted && !allCoreAnswersProvided ? (
         <Text style={{color: '#8d6e63', fontSize: 12}}>
           {language === 'he'
-            ? 'כדי לקבל המלצה, צריך להשלים תשובה בכל 3 השאלות.'
-            : 'To get a recommendation, please answer all 3 core questions.'}
+            ? 'כדי לקבל המלצה, צריך להשלים מענה בכל 3 השאלות (כן/לא או פירוט בהרחבה).'
+            : 'To get a recommendation, complete all 3 core questions (Yes/No or expanded details).'}
         </Text>
       ) : null}
 
