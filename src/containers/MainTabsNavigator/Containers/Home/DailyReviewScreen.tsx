@@ -913,10 +913,6 @@ const DailyReviewScreen: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}><ActivityIndicator /></View>;
-  }
-
   const card = {backgroundColor: theme.white, borderRadius: 14, padding: 12};
   const targetMid = Math.round(((glucoseSettings.hypo ?? 70) + (glucoseSettings.hyper ?? 180)) / 2);
   const avgDistance = Math.abs(yAvg - targetMid);
@@ -948,6 +944,10 @@ const DailyReviewScreen: React.FC = () => {
       }),
     ]).start();
   }, [isHighDailyScore, successChipAnim]);
+
+  if (loading) {
+    return <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}><ActivityIndicator /></View>;
+  }
 
   const nightLows = yRows.filter(r => {
     const ts = r?.dateString ? Date.parse(r.dateString) : NaN;
