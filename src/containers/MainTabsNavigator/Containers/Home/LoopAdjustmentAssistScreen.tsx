@@ -109,6 +109,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
   const [submitted, setSubmitted] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationStage, setGenerationStage] = useState<string | null>(null);
   const [aiRecommendation, setAiRecommendation] = useState<LoopAiRecommendation | null>(null);
   const [debugLog, setDebugLog] = useState<any | null>(null);
 
@@ -219,6 +220,17 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
     setSubmitted(false);
     setAiRecommendation(null);
     setIsGenerating(true);
+    setGenerationStage(language === 'he' ? 'מתחיל חישוב...' : 'Starting analysis...');
+
+    const runLog: any = {
+      createdAt: new Date().toISOString(),
+      appScreen: 'LoopAdjustmentAssistScreen',
+      stages: [] as Array<{at: string; stage: string}>,
+    };
+    const markStage = (stage: string) => {
+      setGenerationStage(stage);
+      runLog.stages.push({at: new Date().toISOString(), stage});
+    };
 
     try {
       const end = new Date();
@@ -230,6 +242,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       requestedBackgroundData.push('fetchDeviceStatusForDateRangeUncached(7d)');
       requestedBackgroundData.push('getUserProfileFromNightscout(today)');
 
+      markStage(language === 'he' ? 'מושך נתוני רקע מהשרת...' : 'Fetching background data...');
       const [bgRows, treatments, deviceStatusRows, profile] = await Promise.all([
         fetchBgDataForDateRangeUncached(start, end, {throwOnError: false}),
         fetchTreatmentsForDateRangeUncached(start, end),
@@ -248,6 +261,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         );
       }
 
+      markStage(language === 'he' ? 'בונה קונטקסט קליני ל-AI...' : 'Building clinical AI context...');
       const {contextForAi} = buildLoopAssistAiContext({
         language,
         trend,
@@ -278,6 +292,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         'Do not output final patient recommendation here; this is internal analysis memo only.',
       ].join(' ');
 
+      markStage(language === 'he' ? 'מבצע ניתוח קליני עמוק (בכמה חלקים)...' : 'Running deep clinical analysis (paged)...');
       const analysisPaged = await collectPagedTextFromLlm({
         provider,
         model,
@@ -316,6 +331,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         },
       };
 
+      markStage(language === 'he' ? 'מפיק החלטה סופית מדויקת...' : 'Producing final decision...');
       const adaptive = await sendJsonWithAdaptiveContext<LoopAiRecommendation>({
         provider,
         model,
@@ -337,29 +353,30 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         language === 'he' && /[A-Za-z]{3,}/.test(String(parsed?.practical_instruction ?? ''));
 
       if (needsHebrewNormalization) {
+        markStage(language === 'he' ? 'מיישר שפה לעברית...' : 'Normalizing output language...');
         const translateInstruction = buildLoopAssistTranslationInstruction();
 
-        const trRes = await provider.sendChat({
+        const trAdaptive = await sendJsonWithAdaptiveContext<LoopAiRecommendation>({
+          provider,
           model,
-          messages: [
-            {role: 'system', content: translateInstruction},
-            {role: 'user', content: JSON.stringify(parsed)},
-          ],
+          systemInstruction: translateInstruction,
           temperature: 0,
-          maxOutputTokens: 420,
+          parse: raw => parseJsonObject(raw) as LoopAiRecommendation | null,
+          contexts: [
+            {name: 'translate-pass', payload: parsed, maxOutputTokens: 500},
+            {name: 'translate-pass-retry', payload: parsed, maxOutputTokens: 900},
+          ],
         });
 
-        const translated = parseJsonObject(String(trRes?.content ?? '').trim()) as LoopAiRecommendation | null;
-        if (translated) {
-          normalized = translated;
-        }
+        normalized = trAdaptive.parsed;
+        runLog.translationAdaptiveTraces = trAdaptive.traces;
       }
 
       setAiRecommendation(normalized);
       setSubmitted(true);
+      markStage(language === 'he' ? 'ההמלצה מוכנה ✅' : 'Recommendation ready ✅');
       setDebugLog({
-        createdAt: new Date().toISOString(),
-        appScreen: 'LoopAdjustmentAssistScreen',
+        ...runLog,
         model,
         requestedBackgroundData,
         systemInstruction,
@@ -378,9 +395,16 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       });
     } catch (e: any) {
       setSubmitted(false);
-      Alert.alert(language === 'he' ? 'שגיאה' : 'Error', String(e?.message ?? e));
+      const errMsg = String(e?.message ?? e);
+      setDebugLog({
+        ...runLog,
+        failed: true,
+        errorMessage: errMsg,
+      });
+      Alert.alert(language === 'he' ? 'שגיאה' : 'Error', errMsg);
     } finally {
       setIsGenerating(false);
+      setGenerationStage(null);
     }
   };
 
@@ -484,7 +508,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
           <ActivityIndicator size="small" color={theme.accentColor} />
           <Text style={{color: addOpacity(theme.textColor, 0.75)}}>
-            {language === 'he' ? 'מחשב המלצה בעזרת AI ומושך נתונים נוספים...' : 'Computing AI recommendation and fetching additional data...'}
+            {generationStage || (language === 'he' ? 'מחשב המלצה בעזרת AI ומושך נתונים נוספים...' : 'Computing AI recommendation and fetching additional data...')}
           </Text>
         </View>
       ) : null}
@@ -495,6 +519,14 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
             ? 'כדי לקבל המלצה, צריך להשלים מענה בכל 3 השאלות (כן/לא או פירוט בהרחבה).'
             : 'To get a recommendation, complete all 3 core questions (Yes/No or expanded details).'}
         </Text>
+      ) : null}
+
+      {!isGenerating && !submitted && debugLog?.failed ? (
+        <Pressable onPress={exportDebugLog} style={{alignSelf: 'flex-start'}}>
+          <Text style={{color: theme.accentColor, fontWeight: '700'}}>
+            {language === 'he' ? 'הורד לוג שגיאה מלא' : 'Download full error log'}
+          </Text>
+        </Pressable>
       ) : null}
 
       {submitted ? (
