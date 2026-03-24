@@ -207,7 +207,8 @@ function computeHolisticSignals(params: {
 
   const correctionBoluses = boluses.filter(b => {
     const type = b.eventType.toLowerCase();
-    return type.includes('correction') || type.includes('bolus');
+    // Keep this strict to avoid over-crediting effort from routine meal boluses.
+    return type.includes('correction');
   });
   const correctionBolusCount = correctionBoluses.length;
 
@@ -282,6 +283,7 @@ function computeHolisticSignals(params: {
   const challengingMealBucket = (Object.keys(riseByBucket) as Array<'breakfast' | 'lunch' | 'dinner' | 'snack'>)
     .map(bucket => ({
       bucket,
+      count: riseByBucket[bucket].length,
       avgRise: riseByBucket[bucket].length
         ? riseByBucket[bucket].reduce((s, n) => s + n, 0) / riseByBucket[bucket].length
         : -1,
@@ -298,7 +300,10 @@ function computeHolisticSignals(params: {
     followUpChecksAfterHighCount,
     medianPreBolusMin,
     suggestedPreBolusMin,
-    challengingMealBucket: challengingMealBucket?.avgRise > 0 ? challengingMealBucket.bucket : null,
+    challengingMealBucket:
+      challengingMealBucket && challengingMealBucket.count >= 2 && challengingMealBucket.avgRise >= 25
+        ? challengingMealBucket.bucket
+        : null,
   };
 }
 
@@ -605,11 +610,14 @@ function sanitizeEmpathicLanguage(line: string): string {
 }
 
 function hasEffortSignals(signals: HolisticSignals): boolean {
-  return (
-    (signals.correctionBolusCount ?? 0) > 0 ||
-    (signals.mealsWithResponsibleCorrectionCount ?? 0) > 0 ||
-    (signals.followUpChecksAfterHighCount ?? 0) > 0
-  );
+  const correctedMeals = signals.mealsWithResponsibleCorrectionCount ?? 0;
+  const corrections = signals.correctionBolusCount ?? 0;
+  const followUps = signals.followUpChecksAfterHighCount ?? 0;
+
+  // Evidence threshold: either a directly observed responsible correction after meal,
+  // or at least one correction + one follow-up checking pattern.
+  if (correctedMeals > 0) return true;
+  return corrections > 0 && followUps > 0;
 }
 
 function effortPraisePrefix(params: {
