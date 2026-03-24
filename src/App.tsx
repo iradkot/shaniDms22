@@ -372,6 +372,7 @@ const AppInner: () => React.ReactElement = () => {
                                 name={HYPO_INVESTIGATION_SCREEN}
                                 component={HypoInvestigationScreen}
                               />
+
                               </Stack.Navigator>
                             </NavigationContainer>
                               </ProactiveCareSettingsProvider>
