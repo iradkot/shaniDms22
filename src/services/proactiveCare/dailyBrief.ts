@@ -609,6 +609,49 @@ function sanitizeEmpathicLanguage(line: string): string {
   return out;
 }
 
+function removeCgmAutoPraise(line: string, lang: Lang): string {
+  const text = line.trim();
+  if (!text) return text;
+
+  // Avoid praising automatic CGM readings as if they were manual effort.
+  const he = text
+    .replace(/כל הכבוד[^.\n]*בדיקות[^.\n]*\.?/gi, '')
+    .replace(/מעולה[^.\n]*בדיקות[^.\n]*\.?/gi, '')
+    .trim();
+  const en = text
+    .replace(/great job[^.\n]*check(s|ing)?[^.\n]*\.?/gi, '')
+    .replace(/well done[^.\n]*check(s|ing)?[^.\n]*\.?/gi, '')
+    .trim();
+
+  return lang === 'he' ? he || text : en || text;
+}
+
+function softenTechnicalRatioLanguage(line: string, lang: Lang): string {
+  const t = line.trim();
+  if (!t) return t;
+
+  if (lang === 'he') {
+    return t
+      .replace(/יחס\s*אינסולין\s*\/\s*פחמימה[^.\n]*[+-]?\d+(\.\d+)?[^.\n]*/gi, 'נראה שהארוחה דרשה קצת יותר אינסולין מהמוגדר')
+      .replace(/(?:CR|ISF)[^.\n]*[+-]?\d+(\.\d+)?[^.\n]*/gi, 'נראה שיש פער קטן בהגדרה שדורש כיוונון עדין');
+  }
+
+  return t
+    .replace(/insulin\s*to\s*carb\s*ratio[^.\n]*[+-]?\d+(\.\d+)?[^.\n]*/gi, 'it looks like this meal needed a bit more insulin than currently configured')
+    .replace(/(?:CR|ISF)[^.\n]*[+-]?\d+(\.\d+)?[^.\n]*/gi, 'there seems to be a small setting mismatch worth a gentle adjustment');
+}
+
+function suppressRawTrendCountLanguage(line: string, lang: Lang, fallbackLine: string): string {
+  const t = line.trim();
+  const mentionsRawCounts =
+    /\b\d+\s*(?:rises|rise|falls|fall|ups|downs)\b/i.test(t) ||
+    /\b(?:upMoves|downMoves)\b/i.test(t) ||
+    /\b\d+\s*(?:עליות|ירידות)\b/i.test(t);
+
+  if (!mentionsRawCounts) return t;
+  return lang === 'he' ? fallbackLine : fallbackLine;
+}
+
 function hasEffortSignals(signals: HolisticSignals): boolean {
   const correctedMeals = signals.mealsWithResponsibleCorrectionCount ?? 0;
   const corrections = signals.correctionBolusCount ?? 0;
@@ -632,13 +675,10 @@ function effortPraisePrefix(params: {
     const evidenceBits: string[] = [];
 
     if ((signals.mealsWithResponsibleCorrectionCount ?? 0) > 0) {
-      evidenceBits.push('ביצעת תיקון אחרי ארוחה מאתגרת');
-    }
-    if ((signals.followUpChecksAfterHighCount ?? 0) > 0) {
-      evidenceBits.push('והמשכת מעקב עם בדיקות חוזרות אחרי עלייה');
+      evidenceBits.push('ביצעת תיקון אינסולין אחרי ארוחה מאתגרת');
     }
     if (evidenceBits.length === 0 && (signals.correctionBolusCount ?? 0) > 0) {
-      evidenceBits.push('ביצעת תיקון כשצריך');
+      evidenceBits.push('ביצעת תיקון אינסולין כשצריך');
     }
 
     const evidence = evidenceBits.join(' ');
@@ -649,13 +689,10 @@ function effortPraisePrefix(params: {
 
   const evidenceBitsEn: string[] = [];
   if ((signals.mealsWithResponsibleCorrectionCount ?? 0) > 0) {
-    evidenceBitsEn.push('you corrected after a challenging meal');
-  }
-  if ((signals.followUpChecksAfterHighCount ?? 0) > 0) {
-    evidenceBitsEn.push('and followed up with repeated checks after a rise');
+    evidenceBitsEn.push('you gave a correction bolus after a challenging meal');
   }
   if (evidenceBitsEn.length === 0 && (signals.correctionBolusCount ?? 0) > 0) {
-    evidenceBitsEn.push('you made a correction when needed');
+    evidenceBitsEn.push('you gave a correction bolus when needed');
   }
 
   const evidence = evidenceBitsEn.join(' ');
@@ -695,18 +732,17 @@ function ensureTacticalTinyHabit(actionLine: string, fallbackActionLine: string)
 export function buildDailyBriefSystemInstruction(lang: Lang): string {
   const core = [
     'Return JSON only.',
-    'Return EXACTLY this 4-step psychological schema with these keys: empathic_opening, clinical_validation, tiny_habit_recommendation, encouraging_closing.',
-    'Do not omit keys. Do not add narrative outside JSON.',
-    'Fallback keys allowed only for compatibility: summaryLine, keyLine, actionLine, whyLine.',
-    'Step intent: empathic_opening=affirm effort with empathy, clinical_validation=normalize physiology and remove blame, tiny_habit_recommendation=one tiny actionable habit, encouraging_closing=brief hopeful close.',
+    'Return EXACTLY this 4-step schema with these REQUIRED keys: empathic_opening, clinical_validation, tiny_habit_recommendation, encouraging_closing.',
+    'Do not omit keys. Do not add extra keys. Do not add narrative outside JSON.',
+    'Step intent: empathic_opening=affirm concrete effort with empathy, clinical_validation=normalize physiology and remove blame, tiny_habit_recommendation=one tiny actionable habit, encouraging_closing=brief hopeful close.',
     'Persona: empathetic diabetes coach for people living with type 1 diabetes.',
     'Use motivational interviewing tone (affirmation + reflection + one tiny next step).',
     'Never use blame/fear words (failure, dangerous, non-compliant, worsening).',
-    'Do not punish success: if a meal improved, start by highlighting that concrete improvement.',
-    'If effort signals exist (follow-up checks and/or correction insulin), the opening MUST start with explicit praise for responsibility before discussing high glucose.',
-    'Praise must be evidence-based and concrete (mention the actual action), not exaggerated or generic.',
+    'Patient uses CGM (automatic sensor readings). NEVER praise them for doing glucose checks/measurements.',
+    'When praising effort, praise ONLY active self-management actions such as correction insulin given responsibly.',
+    'Never report raw rise/fall counts or up/down event counts (e.g., "30 rises, 27 falls"). Focus on TIR and stability.',
+    'Avoid technical patient-facing math for carb-ratio/ISF deltas (e.g., "ratio lower by 0.4U"). Use plain language like: "this meal likely needed a bit more insulin than currently configured".',
     'Analyze sequence links: if low BG is followed by high BG within ~3h, frame it as likely rebound physiology (not personal failure).',
-    'Use preBolus signals: when preBolus coverage is low/missing, recommend one tiny habit (example: 5 minutes pre-bolus cue) instead of complex recalculation.',
     'tiny_habit_recommendation MUST be tactical and data-anchored: cite one concrete metric from context JSON (e.g., medianPreBolusMin, preBolusCoveragePct, challengingMealBucket) and produce one specific instruction with a number/time.',
     'Example style: "To soften the lunch swing, try dosing about 10 minutes before the meal next time."',
     'Keep language soft, non-judgmental, and practical. Suggest exactly one micro-habit action.',
@@ -723,7 +759,7 @@ export function getDailyBriefLanguageGuardrails() {
   return {
     bannedHebrew: BANNED_HE_WORDS.map(([rx, replacement]) => ({pattern: rx.source, replacement})),
     requiredStructure: ['empathic_opening','clinical_validation','tiny_habit_recommendation','encouraging_closing'],
-    fallbackStructure: ['summaryLine','keyLine','actionLine','whyLine'],
+    prohibitedPatterns: ['raw rise/fall counts', 'manual glucose-check praise', 'technical CR/ISF delta math'],
   } as const;
 }
 
@@ -764,6 +800,23 @@ async function maybeGenerateLlmSections(params: {
 
   const instruction = buildDailyBriefSystemInstruction(lang);
 
+  const llmYesterday = {
+    tir: base.stats.yesterday.tir,
+    avg: base.stats.yesterday.avg,
+    lows: base.stats.yesterday.lows,
+    highs: base.stats.yesterday.highs,
+    inRange: base.stats.yesterday.inRange,
+    count: base.stats.yesterday.count,
+  };
+  const llmWeek = {
+    tir: base.stats.week.tir,
+    avg: base.stats.week.avg,
+    lows: base.stats.week.lows,
+    highs: base.stats.week.highs,
+    inRange: base.stats.week.inRange,
+    count: base.stats.week.count,
+  };
+
   for (let attempt = 1; attempt <= LLM_DAILY_MAX_ATTEMPTS; attempt += 1) {
     try {
       const res = await withTimeout(
@@ -774,8 +827,8 @@ async function maybeGenerateLlmSections(params: {
             {
               role: 'user',
               content: `Context:\n${JSON.stringify({
-                yesterday: base.stats.yesterday,
-                week: base.stats.week,
+                yesterday: llmYesterday,
+                week: llmWeek,
                 deltas: {
                   tirDeltaVsWeek: base.stats.tirDeltaVsWeek,
                   avgDeltaVsWeek: base.stats.avgDeltaVsWeek,
@@ -814,27 +867,44 @@ async function maybeGenerateLlmSections(params: {
       const payload = parseJsonObject((res.content ?? '').trim());
       if (!payload) continue;
 
-      const summaryRaw = String(payload.empathic_opening ?? payload.summaryLine ?? '').trim();
-      const keyRaw = String(payload.clinical_validation ?? payload.keyLine ?? '').trim();
-      const actionRaw = String(payload.tiny_habit_recommendation ?? payload.actionLine ?? '').trim();
-      const whyRaw = String(payload.encouraging_closing ?? payload.whyLine ?? '').trim();
+      const summaryRaw = String(payload.empathic_opening ?? '').trim();
+      const keyRaw = String(payload.clinical_validation ?? '').trim();
+      const actionRaw = String(payload.tiny_habit_recommendation ?? '').trim();
+      const whyRaw = String(payload.encouraging_closing ?? '').trim();
+
+      // Strict schema enforcement: if any required key is missing/empty, retry.
+      if (!summaryRaw || !keyRaw || !actionRaw || !whyRaw) continue;
 
       const summaryLine = ensurePrefix(
         ensureEffortFirstOpening(
-          sanitizeEmpathicLanguage(summaryRaw || base.summaryLine),
+          removeCgmAutoPraise(sanitizeEmpathicLanguage(summaryRaw), lang),
           lang,
           (base.stats as any).holisticSignals,
           profile?.grammaticalGender,
         ),
         '📊',
       );
-      const keyLine = ensurePrefix(sanitizeEmpathicLanguage(keyRaw || base.keyLine), '🔎');
+      const keyLine = ensurePrefix(
+        suppressRawTrendCountLanguage(
+          softenTechnicalRatioLanguage(removeCgmAutoPraise(sanitizeEmpathicLanguage(keyRaw), lang), lang),
+          lang,
+          base.keyLine,
+        ),
+        '🔎',
+      );
       const tacticalAction = ensureTacticalTinyHabit(
-        sanitizeEmpathicLanguage(actionRaw || ''),
+        softenTechnicalRatioLanguage(removeCgmAutoPraise(sanitizeEmpathicLanguage(actionRaw), lang), lang),
         sanitizeEmpathicLanguage(base.actionLine),
       );
       const actionLine = ensurePrefix(tacticalAction, '🎯');
-      const whyLine = ensurePrefix(sanitizeEmpathicLanguage(whyRaw || base.whyLine), '🧠');
+      const whyLine = ensurePrefix(
+        suppressRawTrendCountLanguage(
+          removeCgmAutoPraise(sanitizeEmpathicLanguage(whyRaw), lang),
+          lang,
+          base.whyLine,
+        ),
+        '🧠',
+      );
 
       if (!summaryLine || !keyLine || !actionLine || !whyLine) continue;
 
