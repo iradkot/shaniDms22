@@ -582,6 +582,37 @@ const DailyReviewScreen: React.FC = () => {
   const tirDelta = yTirPct - wTirPct;
   const lowDelta = yLowPct - wLowPct;
   const highDelta = yHighPct - wHighPct;
+
+  const keyHighlightLine = useMemo(() => {
+    // Positive-first framing: prioritize wins before any challenge signals.
+    if (yTirPct >= 75) {
+      return language === 'he'
+        ? `נקודת האור: ${yTirPct}% זמן בטווח היעד אתמול.`
+        : `Highlight: ${yTirPct}% time in target range yesterday.`;
+    }
+
+    if (tirDelta > 0) {
+      return language === 'he'
+        ? `נרשם שיפור של ${tirDelta}% ב-TIR לעומת השבוע האחרון.`
+        : `You improved TIR by ${tirDelta}% vs the recent week.`;
+    }
+
+    if (lowDelta < 0) {
+      return language === 'he'
+        ? `הצלחת להפחית אירועי נמוך ב-${Math.abs(lowDelta)}% לעומת השבוע האחרון.`
+        : `You reduced low events by ${Math.abs(lowDelta)}% vs the recent week.`;
+    }
+
+    if (highDelta < 0) {
+      return language === 'he'
+        ? `הצלחת להפחית ערכים גבוהים ב-${Math.abs(highDelta)}% לעומת השבוע האחרון.`
+        : `You reduced high readings by ${Math.abs(highDelta)}% vs the recent week.`;
+    }
+
+    return language === 'he'
+      ? `נקודת ייחוס חיובית: ${yTirPct}% מהזמן נשארת בטווח היעד.`
+      : `Positive anchor: you stayed in target range ${yTirPct}% of the time.`;
+  }, [highDelta, language, lowDelta, tirDelta, yTirPct]);
   const mealComparisons = useMemo(() => {
     const prevMap = new Map(mealScoresPrev.map(m => [m.bucket, m]));
     return mealScoresY
@@ -1020,9 +1051,7 @@ const DailyReviewScreen: React.FC = () => {
       <View style={card}>
         <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{tr(language, 'dailyReview.key')}</Text>
         <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>
-          {llmKeyLine || (yLows > yHighs
-            ? tr(language, 'dailyReview.lowsVsHighs', {lows: yLows, highs: yHighs})
-            : tr(language, 'dailyReview.highsVsLows', {lows: yLows, highs: yHighs}))}
+          {llmKeyLine || keyHighlightLine}
         </Text>
       </View>
 
