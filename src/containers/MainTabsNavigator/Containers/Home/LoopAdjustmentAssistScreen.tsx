@@ -82,6 +82,23 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
   const [generalDetails, setGeneralDetails] = useState('');
 
   const [submitted, setSubmitted] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  const hasAtLeastOneAnswer = stressOrSick !== null || specialExercise !== null || pumpSetOk !== null;
+  const allCoreAnswersProvided = stressOrSick !== null && specialExercise !== null && pumpSetOk !== null;
+
+  const contextPayload = useMemo(
+    () => ({
+      stressOrSick,
+      specialExercise,
+      pumpSetOk,
+      stressDetails: stressDetails.trim(),
+      exerciseDetails: exerciseDetails.trim(),
+      pumpDetails: pumpDetails.trim(),
+      generalDetails: generalDetails.trim(),
+    }),
+    [exerciseDetails, generalDetails, pumpDetails, pumpSetOk, specialExercise, stressDetails, stressOrSick],
+  );
 
   const score = useMemo(() => {
     const base = Number(trend?.confidence ?? 0.5);
@@ -198,25 +215,59 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         ) : null}
       </View>
 
+      {!hasAtLeastOneAnswer ? (
+        <Text style={{color: addOpacity(theme.textColor, 0.6), fontSize: 12}}>
+          {language === 'he' ? 'התחל/י במענה על השאלות, ואז נפיק המלצה מותאמת.' : 'Start by answering the questions, then we will generate a tailored recommendation.'}
+        </Text>
+      ) : null}
+
       <Pressable
-        onPress={() => setSubmitted(true)}
-        style={{marginTop: 4, alignSelf: 'flex-start', paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10, backgroundColor: theme.accentColor}}
+        onPress={() => {
+          setSubmitAttempted(true);
+          if (!allCoreAnswersProvided) {
+            setSubmitted(false);
+            return;
+          }
+          setSubmitted(true);
+        }}
+        style={{
+          marginTop: 4,
+          alignSelf: 'flex-start',
+          paddingVertical: 9,
+          paddingHorizontal: 14,
+          borderRadius: 10,
+          backgroundColor: allCoreAnswersProvided ? theme.accentColor : addOpacity(theme.accentColor, 0.45),
+        }}
       >
         <Text style={{color: theme.white, fontWeight: '800'}}>{language === 'he' ? 'קבל המלצה' : 'Get recommendation'}</Text>
       </Pressable>
+
+      {submitAttempted && !allCoreAnswersProvided ? (
+        <Text style={{color: '#8d6e63', fontSize: 12}}>
+          {language === 'he'
+            ? 'כדי לקבל המלצה, צריך להשלים תשובה בכל 3 השאלות.'
+            : 'To get a recommendation, please answer all 3 core questions.'}
+        </Text>
+      ) : null}
 
       {submitted ? (
         <View style={{marginTop: 6, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.16), backgroundColor: theme.white}}>
           <Text style={{fontWeight: '800', color: theme.textColor}}>{language === 'he' ? 'המלצה מסכמת' : 'Final recommendation'}</Text>
           <Text style={{marginTop: 8, color: theme.textColor}}>{recommendation}</Text>
 
-          {(stressDetails || exerciseDetails || pumpDetails || generalDetails) ? (
+          {(contextPayload.stressDetails || contextPayload.exerciseDetails || contextPayload.pumpDetails || contextPayload.generalDetails) ? (
             <Text style={{marginTop: 10, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>
               {language === 'he' ? 'שילבנו גם את ההרחבות שהוספת כדי לשפר את הרלוונטיות של ההמלצה.' : 'We also incorporated your added details to improve recommendation relevance.'}
             </Text>
           ) : null}
 
           <Text style={{marginTop: 10, color: addOpacity(theme.textColor, 0.62), fontSize: 12}}>
+            {language === 'he'
+              ? `תשובות שסוכמו: לחץ/מחלה=${contextPayload.stressOrSick ?? '-'}, פעילות חריגה=${contextPayload.specialExercise ?? '-'}, סט תקין=${contextPayload.pumpSetOk ?? '-'}`
+              : `Captured answers: stress/sick=${contextPayload.stressOrSick ?? '-'}, unusual exercise=${contextPayload.specialExercise ?? '-'}, set OK=${contextPayload.pumpSetOk ?? '-'}`}
+          </Text>
+
+          <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.62), fontSize: 12}}>
             {language === 'he' ? `רמת ודאות לאחר שקלול הקשר: ${Math.round(score * 100)}%` : `Context-adjusted confidence: ${Math.round(score * 100)}%`}
           </Text>
         </View>
