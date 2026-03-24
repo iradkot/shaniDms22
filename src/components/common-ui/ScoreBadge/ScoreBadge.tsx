@@ -1,13 +1,23 @@
 import React from 'react';
 import {Text, View} from 'react-native';
+import {useTheme} from 'styled-components/native';
 import {addOpacity} from 'app/style/styling.utils';
+import type {ThemeType} from 'app/types/theme';
 
 type Props = {
   score: number;
 };
 
 const ScoreBadge: React.FC<Props> = ({score}) => {
-  const color = score >= 75 ? '#2e7d32' : score >= 55 ? '#f9a825' : '#c62828';
+  const theme = useTheme() as ThemeType;
+  const isPerfect = score >= 100;
+  const color = isPerfect
+    ? theme.accentColor
+    : score >= 75
+      ? theme.inRangeColor
+      : score >= 55
+        ? theme.aboveRangeColor
+        : theme.belowRangeColor;
 
   return (
     <View
@@ -15,10 +25,10 @@ const ScoreBadge: React.FC<Props> = ({score}) => {
         borderRadius: 999,
         paddingHorizontal: 10,
         paddingVertical: 4,
-        backgroundColor: addOpacity(color, 0.18),
+        backgroundColor: addOpacity(color, isPerfect ? 0.22 : 0.18),
       }}
     >
-      <Text style={{fontWeight: '900', color}}>{score}</Text>
+      <Text style={{fontWeight: '900', color}}>{isPerfect ? `${score} ✨` : score}</Text>
     </View>
   );
 };
