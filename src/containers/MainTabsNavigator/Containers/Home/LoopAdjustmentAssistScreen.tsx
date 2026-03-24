@@ -8,7 +8,7 @@ import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
-import {createLlmProvider} from 'app/services/llm/llmClient';
+import {createLlmProvider, withAppLanguagePolicy} from 'app/services/llm/llmClient';
 import {
   fetchBgDataForDateRangeUncached,
   fetchTreatmentsForDateRangeUncached,
@@ -237,6 +237,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       const correctionCount = txList.filter(t => String(t?.eventType ?? '').toLowerCase().includes('correction')).length;
 
       const contextForAi = {
+        language,
         trend,
         clinicalQa: contextPayload,
         dataSummary: {
@@ -254,15 +255,18 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         profile,
       };
 
-      const systemInstruction = [
-        'Return JSON only.',
-        'You are a conservative Loop settings assistant.',
-        'Use user answers + trend + fetched data to produce one practical recommendation.',
-        'Output keys EXACTLY: setting_focus,time_window,current_value,suggested_value,practical_instruction,rationale,confidence_pct,safety_note.',
-        'setting_focus must be one of: carb_ratio,isf,target,dia,timing,monitor_only.',
-        'If data is insufficient or noisy, return setting_focus=monitor_only with clear reason.',
-        'Never provide dangerous/aggressive changes. Keep it small and reversible.',
-      ].join(' ');
+      const systemInstruction = withAppLanguagePolicy(
+        [
+          'Return JSON only.',
+          'You are a conservative Loop settings assistant.',
+          'Use user answers + trend + fetched data to produce one practical recommendation.',
+          'Output keys EXACTLY: setting_focus,time_window,current_value,suggested_value,practical_instruction,rationale,confidence_pct,safety_note.',
+          'setting_focus must be one of: carb_ratio,isf,target,dia,timing,monitor_only.',
+          'If data is insufficient or noisy, return setting_focus=monitor_only with clear reason.',
+          'Never provide dangerous/aggressive changes. Keep it small and reversible.',
+        ].join(' '),
+        language,
+      );
 
       const apiKey = (aiSettings.apiKey ?? '').trim();
       if (!aiSettings.enabled) {
@@ -291,7 +295,35 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         throw new Error(language === 'he' ? 'המודל החזיר תשובה לא תקינה (לא JSON).' : 'Model returned invalid response (not JSON).');
       }
 
-      setAiRecommendation(parsed);
+      let normalized = parsed;
+      const needsHebrewNormalization =
+        language === 'he' && /[A-Za-z]{3,}/.test(String(parsed?.practical_instruction ?? ''));
+
+      if (needsHebrewNormalization) {
+        const translateInstruction = [
+          'Return JSON only.',
+          'Translate all user-facing values to natural Hebrew.',
+          'Keep all keys and numeric values unchanged.',
+          'Do not add or remove fields.',
+        ].join(' ');
+
+        const trRes = await provider.sendChat({
+          model,
+          messages: [
+            {role: 'system', content: translateInstruction},
+            {role: 'user', content: JSON.stringify(parsed)},
+          ],
+          temperature: 0,
+          maxOutputTokens: 420,
+        });
+
+        const translated = parseJsonObject(String(trRes?.content ?? '').trim()) as LoopAiRecommendation | null;
+        if (translated) {
+          normalized = translated;
+        }
+      }
+
+      setAiRecommendation(normalized);
       setDebugLog({
         createdAt: new Date().toISOString(),
         appScreen: 'LoopAdjustmentAssistScreen',
@@ -300,7 +332,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         systemInstruction,
         contextSent: contextForAi,
         aiRawResponse: rawResponse,
-        aiParsedResponse: parsed,
+        aiParsedResponse: normalized,
       });
     } catch (e: any) {
       Alert.alert(language === 'he' ? 'שגיאה' : 'Error', String(e?.message ?? e));
