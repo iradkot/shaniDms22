@@ -108,6 +108,9 @@ type HolisticSignals = {
   severeLowEvents: number;
   preBolusMissingMeals: number;
   preBolusCoveragePct: number;
+  correctionBolusCount: number;
+  mealsWithResponsibleCorrectionCount: number;
+  followUpChecksAfterHighCount: number;
 };
 
 type DailyProfile = {
@@ -171,7 +174,10 @@ function computeHolisticSignals(params: {
 
   const boluses = (yTreatments ?? [])
     .filter(t => Number(t?.insulin ?? 0) > 0)
-    .map(t => ({ts: Date.parse(String(t?.created_at ?? ''))}))
+    .map(t => ({
+      ts: Date.parse(String(t?.created_at ?? '')),
+      eventType: String(t?.eventType ?? ''),
+    }))
     .filter(b => Number.isFinite(b.ts));
 
   let preBolusDetected = 0;
@@ -183,11 +189,46 @@ function computeHolisticSignals(params: {
   const preBolusMissingMeals = Math.max(0, meals.length - preBolusDetected);
   const preBolusCoveragePct = meals.length ? Math.round((preBolusDetected / meals.length) * 100) : 0;
 
+  const correctionBoluses = boluses.filter(b => {
+    const type = b.eventType.toLowerCase();
+    return type.includes('correction') || type.includes('bolus');
+  });
+  const correctionBolusCount = correctionBoluses.length;
+
+  let mealsWithResponsibleCorrectionCount = 0;
+  for (const meal of meals) {
+    const corrected = correctionBoluses.some(
+      b => b.ts >= meal.ts + 20 * 60 * 1000 && b.ts <= meal.ts + 3 * 60 * 60 * 1000,
+    );
+    if (corrected) {
+      mealsWithResponsibleCorrectionCount += 1;
+    }
+  }
+
+  let followUpChecksAfterHighCount = 0;
+  for (let i = 0; i < yList.length; i += 1) {
+    const cur = Number(yList[i]?.sgv ?? 0);
+    const t0 = Number(yList[i]?.date ?? 0);
+    if (!Number.isFinite(t0) || cur <= hyper) continue;
+
+    let checks = 0;
+    for (let j = i + 1; j < yList.length; j += 1) {
+      const nextTs = Number(yList[j]?.date ?? 0);
+      if (!Number.isFinite(nextTs) || nextTs <= t0) continue;
+      if (nextTs - t0 > 2 * 60 * 60 * 1000) break;
+      checks += 1;
+    }
+    if (checks >= 3) followUpChecksAfterHighCount += 1;
+  }
+
   return {
     reboundEpisodes,
     severeLowEvents,
     preBolusMissingMeals,
     preBolusCoveragePct,
+    correctionBolusCount,
+    mealsWithResponsibleCorrectionCount,
+    followUpChecksAfterHighCount,
   };
 }
 
@@ -228,7 +269,7 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
       actionLine: tr(lang, 'brief.actionCollect'),
       whyLine: tr(lang, 'brief.whyTirAvg', {tir: 0, avg: 0}),
       source: 'fallback' as const,
-      stats: {yesterday: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, week: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, nightLows: 0, tirDeltaVsWeek: 0, avgDeltaVsWeek: 0, holisticSignals: {reboundEpisodes: 0, severeLowEvents: 0, preBolusMissingMeals: 0, preBolusCoveragePct: 0}, sleepScore: 0},
+      stats: {yesterday: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, week: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, nightLows: 0, tirDeltaVsWeek: 0, avgDeltaVsWeek: 0, holisticSignals: {reboundEpisodes: 0, severeLowEvents: 0, preBolusMissingMeals: 0, preBolusCoveragePct: 0, correctionBolusCount: 0, mealsWithResponsibleCorrectionCount: 0, followUpChecksAfterHighCount: 0}, sleepScore: 0},
     };
   }
 
@@ -259,10 +300,16 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
   const nightLine = nightLows > 0 ? tr(lang, 'brief.nightLows', {count: nightLows}) : tr(lang, 'brief.nightStable');
   const summaryLine = `${tr(lang, 'brief.yesterdayTir', {tir: yStats.tir, tier: rank.tier})} | ${lang === 'he' ? `Δשבוע TIR ${tirDeltaVsWeek >= 0 ? '+' : ''}${tirDeltaVsWeek}% | Δממוצע ${avgDeltaVsWeek >= 0 ? '+' : ''}${avgDeltaVsWeek}` : `Δ7d TIR ${tirDeltaVsWeek >= 0 ? '+' : ''}${tirDeltaVsWeek}% | ΔAvg ${avgDeltaVsWeek >= 0 ? '+' : ''}${avgDeltaVsWeek}`}`;
 
-  const keyLine =
-    lang === 'he'
-      ? `🔎 מה עבד: נשמר TIR של ${yStats.tir}% — זו עבודה טובה ביום מורכב.`
-      : `🔎 What worked: you kept ${yStats.tir}% TIR — solid work on a demanding day.`;
+  const keyLine = ensurePrefix(
+    ensureEffortFirstOpening(
+      lang === 'he'
+        ? `מה עבד: נשמר TIR של ${yStats.tir}% — זו עבודה טובה ביום מורכב.`
+        : `What worked: you kept ${yStats.tir}% TIR — solid work on a demanding day.`,
+      lang,
+      holisticSignals,
+    ),
+    '🔎',
+  );
 
   let actionLine =
     lang === 'he'
@@ -465,6 +512,35 @@ function sanitizeEmpathicLanguage(line: string): string {
   return out;
 }
 
+function hasEffortSignals(signals: HolisticSignals): boolean {
+  return (
+    (signals.correctionBolusCount ?? 0) > 0 ||
+    (signals.mealsWithResponsibleCorrectionCount ?? 0) > 0 ||
+    (signals.followUpChecksAfterHighCount ?? 0) > 0
+  );
+}
+
+function effortPraisePrefix(lang: Lang): string {
+  return lang === 'he'
+    ? '👏 קודם כל, כל הכבוד על לקיחת אחריות וניהול פעיל — זה מאמץ משמעותי.'
+    : '👏 First, great job taking responsibility and actively managing — that effort really matters.';
+}
+
+function ensureEffortFirstOpening(line: string, lang: Lang, signals: HolisticSignals): string {
+  const cleaned = line.trim();
+  if (!hasEffortSignals(signals)) return cleaned;
+
+  const low = cleaned.toLowerCase();
+  const alreadyAffirming =
+    low.includes('כל הכבוד') ||
+    low.includes('לקיחת אחריות') ||
+    low.includes('great job') ||
+    low.includes('taking responsibility');
+
+  if (alreadyAffirming) return cleaned;
+  return `${effortPraisePrefix(lang)} ${cleaned}`.trim();
+}
+
 export function buildDailyBriefSystemInstruction(lang: Lang): string {
   const core = [
     'Return JSON only.',
@@ -474,6 +550,7 @@ export function buildDailyBriefSystemInstruction(lang: Lang): string {
     'Use motivational interviewing tone (affirmation + reflection + one tiny next step).',
     'Never use blame/fear words (failure, dangerous, non-compliant, worsening).',
     'Do not punish success: if a meal improved, start by highlighting that concrete improvement.',
+    'If effort signals exist (follow-up checks and/or correction insulin), the opening MUST start with explicit praise for responsibility before discussing high glucose.',
     'Analyze sequence links: if low BG is followed by high BG within ~3h, frame it as likely rebound physiology (not personal failure).',
     'Use preBolus signals: when preBolus coverage is low/missing, recommend one tiny habit (example: 5 minutes pre-bolus cue) instead of complex recalculation.',
     'Keep language soft, non-judgmental, and practical. Suggest exactly one micro-habit action.',
@@ -579,7 +656,14 @@ async function maybeGenerateLlmSections(params: {
       const actionRaw = String(payload.tiny_habit_recommendation ?? payload.actionLine ?? '').trim();
       const whyRaw = String(payload.encouraging_closing ?? payload.whyLine ?? '').trim();
 
-      const summaryLine = ensurePrefix(sanitizeEmpathicLanguage(summaryRaw), '📊');
+      const summaryLine = ensurePrefix(
+        ensureEffortFirstOpening(
+          sanitizeEmpathicLanguage(summaryRaw),
+          lang,
+          (base.stats as any).holisticSignals,
+        ),
+        '📊',
+      );
       const keyLine = ensurePrefix(sanitizeEmpathicLanguage(keyRaw), '🔎');
       const actionLine = ensurePrefix(sanitizeEmpathicLanguage(actionRaw), '🎯');
       const whyLine = ensurePrefix(sanitizeEmpathicLanguage(whyRaw), '🧠');
