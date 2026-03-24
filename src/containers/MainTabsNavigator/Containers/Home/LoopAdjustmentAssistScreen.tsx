@@ -426,28 +426,45 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         <View style={{marginTop: 6, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.16), backgroundColor: theme.white}}>
           <Text style={{fontWeight: '800', color: theme.textColor}}>{language === 'he' ? 'המלצה מסכמת' : 'Final recommendation'}</Text>
 
-          <Text style={{marginTop: 8, color: theme.textColor}}>
-            {aiRecommendation?.practical_instruction || recommendation}
-          </Text>
+          <View style={{marginTop: 10, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.22), backgroundColor: addOpacity(theme.accentColor, 0.06)}}>
+            <Text style={{fontWeight: '800', color: theme.textColor}}>
+              {language === 'he' ? 'מה הגוף שלך עובר' : 'What your body is going through'}
+            </Text>
+            <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.86)}}>
+              {aiRecommendation?.rationale || recommendation}
+            </Text>
+          </View>
 
-          {aiRecommendation ? (
-            <>
-              <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.82)}}>
-                {language === 'he'
-                  ? `פוקוס הגדרה: ${aiRecommendation.setting_focus} | חלון זמן: ${aiRecommendation.time_window}`
-                  : `Setting focus: ${aiRecommendation.setting_focus} | Time window: ${aiRecommendation.time_window}`}
-              </Text>
-              <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.82)}}>
-                {language === 'he'
-                  ? `נוכחי: ${aiRecommendation.current_value} → מוצע: ${aiRecommendation.suggested_value}`
-                  : `Current: ${aiRecommendation.current_value} → Suggested: ${aiRecommendation.suggested_value}`}
-              </Text>
-              <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>{aiRecommendation.rationale}</Text>
-              <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>
-                {language === 'he' ? `ודאות AI: ${Math.round(Number(aiRecommendation.confidence_pct ?? 0))}%` : `AI confidence: ${Math.round(Number(aiRecommendation.confidence_pct ?? 0))}%`}
-              </Text>
-              <Text style={{marginTop: 4, color: '#8d6e63', fontSize: 12}}>{aiRecommendation.safety_note}</Text>
-            </>
+          <View style={{marginTop: 10, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.18), backgroundColor: theme.white}}>
+            <Text style={{fontWeight: '800', color: theme.textColor}}>
+              {language === 'he' ? 'הפעולה המומלצת' : 'Recommended action'}
+            </Text>
+
+            <Text style={{marginTop: 6, color: theme.textColor}}>
+              {aiRecommendation?.practical_instruction || recommendation}
+            </Text>
+
+            {aiRecommendation ? (
+              <>
+                <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.82)}}>
+                  {language === 'he'
+                    ? `פוקוס הגדרה: ${aiRecommendation.setting_focus} | חלון זמן: ${aiRecommendation.time_window}`
+                    : `Setting focus: ${aiRecommendation.setting_focus} | Time window: ${aiRecommendation.time_window}`}
+                </Text>
+                <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.82)}}>
+                  {language === 'he'
+                    ? `נוכחי: ${aiRecommendation.current_value} → מוצע: ${aiRecommendation.suggested_value}`
+                    : `Current: ${aiRecommendation.current_value} → Suggested: ${aiRecommendation.suggested_value}`}
+                </Text>
+                <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>
+                  {language === 'he' ? `ודאות AI: ${Math.round(Number(aiRecommendation.confidence_pct ?? 0))}%` : `AI confidence: ${Math.round(Number(aiRecommendation.confidence_pct ?? 0))}%`}
+                </Text>
+              </>
+            ) : null}
+          </View>
+
+          {aiRecommendation?.safety_note ? (
+            <Text style={{marginTop: 8, color: '#8d6e63', fontSize: 12}}>{aiRecommendation.safety_note}</Text>
           ) : null}
 
           {(contextPayload.stressDetails || contextPayload.exerciseDetails || contextPayload.pumpDetails || contextPayload.generalDetails) ? (
