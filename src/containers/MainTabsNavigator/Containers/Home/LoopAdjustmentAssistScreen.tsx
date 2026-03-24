@@ -184,6 +184,42 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
     ? 'גילוי נאות: זו תובנה אוטומטית תומכת החלטה בלבד, לא ייעוץ רפואי. לפני שינוי בהגדרות טיפול, מומלץ לעבור על ההמלצה עם הצוות הרפואי המטפל.'
     : 'Disclaimer: this is an automated decision-support insight, not medical advice. Before changing therapy settings, review with your treating clinical team.';
 
+  const getSettingFocusLabel = (focus: LoopAiRecommendation['setting_focus']) => {
+    if (language === 'he') {
+      switch (focus) {
+        case 'carb_ratio':
+          return 'יחס פחמימות';
+        case 'isf':
+          return 'רגישות לאינסולין (ISF)';
+        case 'target':
+          return 'יעד סוכר';
+        case 'dia':
+          return 'משך פעילות אינסולין (DIA)';
+        case 'timing':
+          return 'תזמון';
+        case 'monitor_only':
+        default:
+          return 'מעקב בלבד';
+      }
+    }
+
+    switch (focus) {
+      case 'carb_ratio':
+        return 'Carb ratio';
+      case 'isf':
+        return 'Insulin sensitivity (ISF)';
+      case 'target':
+        return 'Glucose target';
+      case 'dia':
+        return 'Insulin duration (DIA)';
+      case 'timing':
+        return 'Timing';
+      case 'monitor_only':
+      default:
+        return 'Monitor only';
+    }
+  };
+
   const parseJsonObject = (text: string): any | null => {
     const trimmed = text.trim();
     try {
@@ -448,8 +484,8 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
               <>
                 <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.82)}}>
                   {language === 'he'
-                    ? `פוקוס הגדרה: ${aiRecommendation.setting_focus} | חלון זמן: ${aiRecommendation.time_window}`
-                    : `Setting focus: ${aiRecommendation.setting_focus} | Time window: ${aiRecommendation.time_window}`}
+                    ? `פוקוס הגדרה: ${getSettingFocusLabel(aiRecommendation.setting_focus)} | חלון זמן: ${aiRecommendation.time_window}`
+                    : `Setting focus: ${getSettingFocusLabel(aiRecommendation.setting_focus)} | Time window: ${aiRecommendation.time_window}`}
                 </Text>
                 <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.82)}}>
                   {language === 'he'
