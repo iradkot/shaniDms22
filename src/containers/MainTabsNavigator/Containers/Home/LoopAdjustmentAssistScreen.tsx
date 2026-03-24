@@ -1,6 +1,6 @@
 /* eslint-disable react-native/no-inline-styles */
 import React, {useMemo, useState} from 'react';
-import {Pressable, ScrollView, Text, View} from 'react-native';
+import {Pressable, ScrollView, Text, TextInput, View} from 'react-native';
 import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
@@ -13,13 +13,28 @@ type OptionRowProps = {
   label: string;
   value: YesNo;
   onChange: (v: YesNo) => void;
+  details: string;
+  onDetailsChange: (v: string) => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
   theme: ThemeType;
   language: string;
 };
 
-const OptionRow: React.FC<OptionRowProps> = ({label, value, onChange, theme, language}) => (
+const OptionRow: React.FC<OptionRowProps> = ({
+  label,
+  value,
+  onChange,
+  details,
+  onDetailsChange,
+  expanded,
+  onToggleExpanded,
+  theme,
+  language,
+}) => (
   <View style={{marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.15), backgroundColor: theme.white}}>
     <Text style={{color: theme.textColor, fontWeight: '700'}}>{label}</Text>
+
     <View style={{marginTop: 8, flexDirection: 'row', gap: 8}}>
       <Pressable onPress={() => onChange('yes')} style={{paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: value === 'yes' ? theme.accentColor : addOpacity(theme.textColor, 0.2), backgroundColor: value === 'yes' ? addOpacity(theme.accentColor, 0.12) : 'transparent'}}>
         <Text style={{color: theme.textColor}}>{language === 'he' ? 'כן' : 'Yes'}</Text>
@@ -27,7 +42,22 @@ const OptionRow: React.FC<OptionRowProps> = ({label, value, onChange, theme, lan
       <Pressable onPress={() => onChange('no')} style={{paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: value === 'no' ? theme.accentColor : addOpacity(theme.textColor, 0.2), backgroundColor: value === 'no' ? addOpacity(theme.accentColor, 0.12) : 'transparent'}}>
         <Text style={{color: theme.textColor}}>{language === 'he' ? 'לא' : 'No'}</Text>
       </Pressable>
+
+      <Pressable onPress={onToggleExpanded} style={{paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.25), backgroundColor: expanded ? addOpacity(theme.textColor, 0.08) : 'transparent'}}>
+        <Text style={{color: theme.textColor}}>{language === 'he' ? 'הרחב' : 'Expand'}</Text>
+      </Pressable>
     </View>
+
+    {expanded ? (
+      <TextInput
+        value={details}
+        onChangeText={onDetailsChange}
+        placeholder={language === 'he' ? 'הוסף עוד פרטים (אופציונלי)' : 'Add more details (optional)'}
+        placeholderTextColor={addOpacity(theme.textColor, 0.45)}
+        multiline
+        style={{marginTop: 10, minHeight: 72, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.2), borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, color: theme.textColor, textAlignVertical: 'top'}}
+      />
+    ) : null}
   </View>
 );
 
@@ -41,6 +71,18 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
   const [specialExercise, setSpecialExercise] = useState<YesNo>(null);
   const [pumpSetOk, setPumpSetOk] = useState<YesNo>(null);
 
+  const [stressExpanded, setStressExpanded] = useState(false);
+  const [exerciseExpanded, setExerciseExpanded] = useState(false);
+  const [pumpExpanded, setPumpExpanded] = useState(false);
+  const [generalExpanded, setGeneralExpanded] = useState(false);
+
+  const [stressDetails, setStressDetails] = useState('');
+  const [exerciseDetails, setExerciseDetails] = useState('');
+  const [pumpDetails, setPumpDetails] = useState('');
+  const [generalDetails, setGeneralDetails] = useState('');
+
+  const [submitted, setSubmitted] = useState(false);
+
   const score = useMemo(() => {
     const base = Number(trend?.confidence ?? 0.5);
     let s = base;
@@ -53,8 +95,13 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
     if (pumpSetOk === 'no') {
       s -= 0.22;
     }
+
+    if (stressDetails.trim().length > 30) s -= 0.04;
+    if (exerciseDetails.trim().length > 30) s -= 0.04;
+    if (pumpDetails.trim().length > 30) s -= 0.04;
+
     return Math.max(0, Math.min(1, s));
-  }, [pumpSetOk, specialExercise, stressOrSick, trend?.confidence]);
+  }, [exerciseDetails, pumpDetails, pumpSetOk, specialExercise, stressDetails, stressOrSick, trend?.confidence]);
 
   const recommendation = useMemo(() => {
     if (!trend?.detected) {
@@ -105,6 +152,10 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         label={language === 'he' ? 'האם היית בלחץ משמעותי או חולה בימים האחרונים?' : 'Were you under major stress or sick in recent days?'}
         value={stressOrSick}
         onChange={setStressOrSick}
+        details={stressDetails}
+        onDetailsChange={setStressDetails}
+        expanded={stressExpanded}
+        onToggleExpanded={() => setStressExpanded(prev => !prev)}
         theme={theme}
         language={language}
       />
@@ -112,6 +163,10 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         label={language === 'he' ? 'האם הייתה פעילות גופנית חריגה?' : 'Was there unusual exercise activity?'}
         value={specialExercise}
         onChange={setSpecialExercise}
+        details={exerciseDetails}
+        onDetailsChange={setExerciseDetails}
+        expanded={exerciseExpanded}
+        onToggleExpanded={() => setExerciseExpanded(prev => !prev)}
         theme={theme}
         language={language}
       />
@@ -119,17 +174,53 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         label={language === 'he' ? 'האם סט המשאבה היה תקין?' : 'Was the pump set working properly?'}
         value={pumpSetOk}
         onChange={setPumpSetOk}
+        details={pumpDetails}
+        onDetailsChange={setPumpDetails}
+        expanded={pumpExpanded}
+        onToggleExpanded={() => setPumpExpanded(prev => !prev)}
         theme={theme}
         language={language}
       />
 
-      <View style={{marginTop: 6, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.16), backgroundColor: theme.white}}>
-        <Text style={{fontWeight: '800', color: theme.textColor}}>{language === 'he' ? 'המלצה מסכמת' : 'Final recommendation'}</Text>
-        <Text style={{marginTop: 8, color: theme.textColor}}>{recommendation}</Text>
-        <Text style={{marginTop: 10, color: addOpacity(theme.textColor, 0.62), fontSize: 12}}>
-          {language === 'he' ? `רמת ודאות לאחר שקלול הקשר: ${Math.round(score * 100)}%` : `Context-adjusted confidence: ${Math.round(score * 100)}%`}
-        </Text>
+      <View style={{marginTop: 2, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.15), backgroundColor: theme.white}}>
+        <Pressable onPress={() => setGeneralExpanded(prev => !prev)} style={{paddingVertical: 2}}>
+          <Text style={{fontWeight: '700', color: theme.textColor}}>{language === 'he' ? 'הרחב כללי' : 'General expand'}</Text>
+        </Pressable>
+        {generalExpanded ? (
+          <TextInput
+            value={generalDetails}
+            onChangeText={setGeneralDetails}
+            placeholder={language === 'he' ? 'עוד מידע חשוב שתרצה/י להוסיף' : 'Any extra context you want to add'}
+            placeholderTextColor={addOpacity(theme.textColor, 0.45)}
+            multiline
+            style={{marginTop: 8, minHeight: 80, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.2), borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, color: theme.textColor, textAlignVertical: 'top'}}
+          />
+        ) : null}
       </View>
+
+      <Pressable
+        onPress={() => setSubmitted(true)}
+        style={{marginTop: 4, alignSelf: 'flex-start', paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10, backgroundColor: theme.accentColor}}
+      >
+        <Text style={{color: theme.white, fontWeight: '800'}}>{language === 'he' ? 'קבל המלצה' : 'Get recommendation'}</Text>
+      </Pressable>
+
+      {submitted ? (
+        <View style={{marginTop: 6, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.16), backgroundColor: theme.white}}>
+          <Text style={{fontWeight: '800', color: theme.textColor}}>{language === 'he' ? 'המלצה מסכמת' : 'Final recommendation'}</Text>
+          <Text style={{marginTop: 8, color: theme.textColor}}>{recommendation}</Text>
+
+          {(stressDetails || exerciseDetails || pumpDetails || generalDetails) ? (
+            <Text style={{marginTop: 10, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>
+              {language === 'he' ? 'שילבנו גם את ההרחבות שהוספת כדי לשפר את הרלוונטיות של ההמלצה.' : 'We also incorporated your added details to improve recommendation relevance.'}
+            </Text>
+          ) : null}
+
+          <Text style={{marginTop: 10, color: addOpacity(theme.textColor, 0.62), fontSize: 12}}>
+            {language === 'he' ? `רמת ודאות לאחר שקלול הקשר: ${Math.round(score * 100)}%` : `Context-adjusted confidence: ${Math.round(score * 100)}%`}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={{marginTop: 4, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: addOpacity('#8d6e63', 0.28), backgroundColor: '#fff8f4'}}>
         <Text style={{fontWeight: '800', color: '#8d6e63'}}>{language === 'he' ? '⚠️ גילוי נאות' : '⚠️ Disclaimer'}</Text>
