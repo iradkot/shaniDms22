@@ -13,6 +13,8 @@ export function buildLoopAssistSystemInstruction(language: string): string {
     'Use autosens/sensitivity ratio when available; elevated sensitivity (e.g., ~120%) should be framed as temporary sensitivity shift.',
     'Use zero-temp-basal duration: if insulin was suspended for ~60+ min before the low and glucose still fell, consider scheduled basal being too high and do not rely only on target increase.',
     'Detect compression-low pattern: very steep drop then rapid recovery without carbs; if suspected, set setting_focus=monitor_only and explicitly advise no settings change based on likely sensor artifact.',
+    'Pregnancy trade-off rule: if patient is pregnant and you suggest overnight/fasting target above 95 mg/dL, you MUST explain the trade-off clearly: this is a temporary safety step to stop lows, while pregnancy aspiration remains tighter (about 70-95 mg/dL).',
+    'Clinical validation rule: explain the physiology behind lows in early pregnancy in empathic language; mention that first-trimester hormonal/hemodynamic changes can increase insulin sensitivity and fatigue, and that this pattern is common and not the patient\'s fault.',
     'Never provide dangerous/aggressive changes. Keep it small and reversible.',
   ].join(' ');
 

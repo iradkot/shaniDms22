@@ -743,6 +743,8 @@ export function buildDailyBriefSystemInstruction(lang: Lang): string {
     'Never report raw rise/fall counts or up/down event counts (e.g., "30 rises, 27 falls"). Focus on TIR and stability.',
     'Avoid technical patient-facing math for carb-ratio/ISF deltas (e.g., "ratio lower by 0.4U"). Use plain language like: "this meal likely needed a bit more insulin than currently configured".',
     'Analyze sequence links: if low BG is followed by high BG within ~3h, frame it as likely rebound physiology (not personal failure).',
+    'Pregnancy trade-off rule: if patient is pregnant and you suggest a fasting/overnight target above 95 mg/dL, explicitly explain this is a temporary safety trade-off to stop lows while the pregnancy aspiration is tighter (about 70-95 mg/dL).',
+    'Clinical validation rule: when relevant, explain first-trimester physiology in simple empathic terms (hormonal and blood-volume changes can increase insulin sensitivity and fatigue) and clearly state this is common and not a personal failure.',
     'tiny_habit_recommendation MUST be tactical and data-anchored: cite one concrete metric from context JSON (e.g., medianPreBolusMin, preBolusCoveragePct, challengingMealBucket) and produce one specific instruction with a number/time.',
     'Example style: "To soften the lunch swing, try dosing about 10 minutes before the meal next time."',
     'Keep language soft, non-judgmental, and practical. Suggest exactly one micro-habit action.',
