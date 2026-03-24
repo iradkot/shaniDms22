@@ -986,7 +986,13 @@ const DailyReviewScreen: React.FC = () => {
                 <Text style={{color: addOpacity(theme.textColor, 0.75)}}>{language === 'he' ? 'מול ממוצע שבועי' : 'vs weekly baseline'}</Text>
               </View>
               <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
-                {explainMealDelta(topImprovedMeal.bucket, topImprovedMeal.delta)}
+                {topImprovedMeal.score >= 100
+                  ? (
+                    language === 'he'
+                      ? 'מדהים! זו ארוחה מצוינת עם ביצוע מושלם — מגיע לך לגמרי להרגיש סיפוק וגאווה 👏'
+                      : 'Amazing! This was an excellent meal with a perfect execution — you should feel proud 👏'
+                  )
+                  : explainMealDelta(topImprovedMeal.bucket, topImprovedMeal.delta)}
               </Text>
             </View>
           ) : (
