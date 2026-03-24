@@ -118,6 +118,7 @@ type DailyProfile = {
   dominantRisk: 'lows' | 'highs' | 'balanced';
   avgTir7d: number;
   avgGlucose7d: number;
+  grammaticalGender?: 'female' | 'male';
 };
 
 function calcStats(list: any[], hypo: number, hyper: number): PeriodStats {
@@ -307,6 +308,7 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
         : `What worked: you kept ${yStats.tir}% TIR — solid work on a demanding day.`,
       lang,
       holisticSignals,
+      undefined,
     ),
     '🔎',
   );
@@ -520,25 +522,68 @@ function hasEffortSignals(signals: HolisticSignals): boolean {
   );
 }
 
-function effortPraisePrefix(lang: Lang): string {
-  return lang === 'he'
-    ? '👏 קודם כל, כל הכבוד על לקיחת אחריות וניהול פעיל — זה מאמץ משמעותי.'
-    : '👏 First, great job taking responsibility and actively managing — that effort really matters.';
+function effortPraisePrefix(params: {
+  lang: Lang;
+  signals: HolisticSignals;
+  gender?: DailyProfile['grammaticalGender'];
+}): string {
+  const {lang, signals, gender} = params;
+
+  if (lang === 'he') {
+    const roleWord = gender === 'female' ? 'אחראית' : gender === 'male' ? 'אחראי' : 'אחראי/ת';
+    const evidenceBits: string[] = [];
+
+    if ((signals.mealsWithResponsibleCorrectionCount ?? 0) > 0) {
+      evidenceBits.push('ביצעת תיקון אחרי ארוחה מאתגרת');
+    }
+    if ((signals.followUpChecksAfterHighCount ?? 0) > 0) {
+      evidenceBits.push('והמשכת מעקב עם בדיקות חוזרות אחרי עלייה');
+    }
+    if (evidenceBits.length === 0 && (signals.correctionBolusCount ?? 0) > 0) {
+      evidenceBits.push('ביצעת תיקון כשצריך');
+    }
+
+    const evidence = evidenceBits.join(' ');
+    return evidence
+      ? `👏 כל הכבוד על איך שניהלת את זה בצורה ${roleWord}: ${evidence}.`
+      : `👏 כל הכבוד על הניהול ה${roleWord} שלך בפועל.`;
+  }
+
+  const evidenceBitsEn: string[] = [];
+  if ((signals.mealsWithResponsibleCorrectionCount ?? 0) > 0) {
+    evidenceBitsEn.push('you corrected after a challenging meal');
+  }
+  if ((signals.followUpChecksAfterHighCount ?? 0) > 0) {
+    evidenceBitsEn.push('and followed up with repeated checks after a rise');
+  }
+  if (evidenceBitsEn.length === 0 && (signals.correctionBolusCount ?? 0) > 0) {
+    evidenceBitsEn.push('you made a correction when needed');
+  }
+
+  const evidence = evidenceBitsEn.join(' ');
+  return evidence
+    ? `👏 Great job on the way you handled this in practice: ${evidence}.`
+    : '👏 Great job on your active and responsible self-management.';
 }
 
-function ensureEffortFirstOpening(line: string, lang: Lang, signals: HolisticSignals): string {
+function ensureEffortFirstOpening(
+  line: string,
+  lang: Lang,
+  signals: HolisticSignals,
+  gender?: DailyProfile['grammaticalGender'],
+): string {
   const cleaned = line.trim();
   if (!hasEffortSignals(signals)) return cleaned;
 
   const low = cleaned.toLowerCase();
   const alreadyAffirming =
     low.includes('כל הכבוד') ||
-    low.includes('לקיחת אחריות') ||
+    low.includes('ניהלת') ||
     low.includes('great job') ||
-    low.includes('taking responsibility');
+    low.includes('handled this');
 
   if (alreadyAffirming) return cleaned;
-  return `${effortPraisePrefix(lang)} ${cleaned}`.trim();
+  return `${effortPraisePrefix({lang, signals, gender})} ${cleaned}`.trim();
 }
 
 export function buildDailyBriefSystemInstruction(lang: Lang): string {
@@ -551,6 +596,7 @@ export function buildDailyBriefSystemInstruction(lang: Lang): string {
     'Never use blame/fear words (failure, dangerous, non-compliant, worsening).',
     'Do not punish success: if a meal improved, start by highlighting that concrete improvement.',
     'If effort signals exist (follow-up checks and/or correction insulin), the opening MUST start with explicit praise for responsibility before discussing high glucose.',
+    'Praise must be evidence-based and concrete (mention the actual action), not exaggerated or generic.',
     'Analyze sequence links: if low BG is followed by high BG within ~3h, frame it as likely rebound physiology (not personal failure).',
     'Use preBolus signals: when preBolus coverage is low/missing, recommend one tiny habit (example: 5 minutes pre-bolus cue) instead of complex recalculation.',
     'Keep language soft, non-judgmental, and practical. Suggest exactly one micro-habit action.',
@@ -661,6 +707,7 @@ async function maybeGenerateLlmSections(params: {
           sanitizeEmpathicLanguage(summaryRaw),
           lang,
           (base.stats as any).holisticSignals,
+          profile?.grammaticalGender,
         ),
         '📊',
       );
