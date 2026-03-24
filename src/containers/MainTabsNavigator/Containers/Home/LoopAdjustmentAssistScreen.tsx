@@ -1,6 +1,8 @@
 /* eslint-disable react-native/no-inline-styles */
-import React, {useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, ScrollView, Share, Text, TextInput, View} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import notifee, {AndroidImportance} from '@notifee/react-native';
 import {subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 
@@ -32,6 +34,10 @@ type LoopAiRecommendation = {
   confidence_pct: number;
   safety_note: string;
 };
+
+const LOOP_ASSIST_LAST_RESULT_KEY = 'loopAssist:lastRecommendation:v1';
+const LOOP_ASSIST_LAST_ERROR_KEY = 'loopAssist:lastError:v1';
+const LOOP_ASSIST_NOTIFICATION_CHANNEL = 'loop-assist-ready';
 
 type OptionRowProps = {
   label: string;
@@ -112,6 +118,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
   const [generationStage, setGenerationStage] = useState<string | null>(null);
   const [aiRecommendation, setAiRecommendation] = useState<LoopAiRecommendation | null>(null);
   const [debugLog, setDebugLog] = useState<any | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   const stressAnswered = stressOrSick !== null || stressDetails.trim().length > 0;
   const exerciseAnswered = specialExercise !== null || exerciseDetails.trim().length > 0;
@@ -119,6 +126,30 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
 
   const hasAtLeastOneAnswer = stressAnswered || exerciseAnswered || pumpAnswered || generalDetails.trim().length > 0;
   const allCoreAnswersProvided = stressAnswered && exerciseAnswered && pumpAnswered;
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(LOOP_ASSIST_LAST_RESULT_KEY);
+        if (!raw || !alive) return;
+        const parsed = JSON.parse(raw) as {savedAt?: string; recommendation?: LoopAiRecommendation; debugLog?: any};
+        if (parsed?.recommendation) {
+          setAiRecommendation(parsed.recommendation);
+          setSubmitted(true);
+          if (parsed.debugLog) setDebugLog(parsed.debugLog);
+          if (parsed.savedAt) setLastSavedAt(parsed.savedAt);
+        }
+      } catch {
+        // ignore storage parse/read failures
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const contextPayload = useMemo<LoopAssistContextPayload>(
     () => ({
@@ -375,7 +406,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       setAiRecommendation(normalized);
       setSubmitted(true);
       markStage(language === 'he' ? 'ההמלצה מוכנה ✅' : 'Recommendation ready ✅');
-      setDebugLog({
+      const finalLog = {
         ...runLog,
         model,
         requestedBackgroundData,
@@ -392,15 +423,37 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         contextSent: finalDecisionPayload,
         aiRawResponse: rawResponse,
         aiParsedResponse: normalized,
+      };
+      setDebugLog(finalLog);
+
+      const savedAt = new Date().toISOString();
+      setLastSavedAt(savedAt);
+      await AsyncStorage.setItem(
+        LOOP_ASSIST_LAST_RESULT_KEY,
+        JSON.stringify({savedAt, recommendation: normalized, debugLog: finalLog}),
+      );
+      await AsyncStorage.removeItem(LOOP_ASSIST_LAST_ERROR_KEY);
+
+      const channelId = await notifee.createChannel({
+        id: LOOP_ASSIST_NOTIFICATION_CHANNEL,
+        name: language === 'he' ? 'המלצת לופ מוכנה' : 'Loop recommendation ready',
+        importance: AndroidImportance.HIGH,
+      });
+      await notifee.displayNotification({
+        title: language === 'he' ? 'המלצת התאמת לופ מוכנה' : 'Loop adjustment recommendation is ready',
+        body: language === 'he' ? 'אפשר לפתוח את המסך ולראות את ההמלצה השמורה.' : 'Open the screen to view the saved recommendation.',
+        android: {channelId, pressAction: {id: 'default'}},
       });
     } catch (e: any) {
       setSubmitted(false);
       const errMsg = String(e?.message ?? e);
-      setDebugLog({
+      const errorLog = {
         ...runLog,
         failed: true,
         errorMessage: errMsg,
-      });
+      };
+      setDebugLog(errorLog);
+      await AsyncStorage.setItem(LOOP_ASSIST_LAST_ERROR_KEY, JSON.stringify(errorLog));
       Alert.alert(language === 'he' ? 'שגיאה' : 'Error', errMsg);
     } finally {
       setIsGenerating(false);
@@ -505,10 +558,17 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       </Pressable>
 
       {isGenerating ? (
-        <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
-          <ActivityIndicator size="small" color={theme.accentColor} />
-          <Text style={{color: addOpacity(theme.textColor, 0.75)}}>
-            {generationStage || (language === 'he' ? 'מחשב המלצה בעזרת AI ומושך נתונים נוספים...' : 'Computing AI recommendation and fetching additional data...')}
+        <View style={{gap: 6}}>
+          <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+            <ActivityIndicator size="small" color={theme.accentColor} />
+            <Text style={{color: addOpacity(theme.textColor, 0.75)}}>
+              {generationStage || (language === 'he' ? 'מחשב המלצה בעזרת AI ומושך נתונים נוספים...' : 'Computing AI recommendation and fetching additional data...')}
+            </Text>
+          </View>
+          <Text style={{color: addOpacity(theme.textColor, 0.62), fontSize: 12}}>
+            {language === 'he'
+              ? 'אפשר לעבור למסך אחר — נשלח התראה כשההמלצה תהיה מוכנה ונשמור אותה במכשיר.'
+              : 'You can leave this screen — we will notify you when ready and save the recommendation on device.'}
           </Text>
         </View>
       ) : null}
@@ -527,6 +587,12 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
             {language === 'he' ? 'הורד לוג שגיאה מלא' : 'Download full error log'}
           </Text>
         </Pressable>
+      ) : null}
+
+      {lastSavedAt ? (
+        <Text style={{color: addOpacity(theme.textColor, 0.6), fontSize: 12}}>
+          {language === 'he' ? `המלצה אחרונה נשמרה במכשיר: ${new Date(lastSavedAt).toLocaleString()}` : `Last recommendation saved on device: ${new Date(lastSavedAt).toLocaleString()}`}
+        </Text>
       ) : null}
 
       {submitted ? (
