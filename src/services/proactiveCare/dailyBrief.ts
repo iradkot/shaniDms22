@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import notifee, {AndroidImportance, RepeatFrequency, TriggerType} from '@notifee/react-native';
 
-import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
+import {fetchBgDataForDateRangeUncached, fetchTreatmentsForDateRangeUncached} from 'app/api/apiRequests';
 import {GlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {getStoredAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr, Lang} from 'app/i18n/translations';
@@ -98,6 +98,13 @@ type PeriodStats = {
   downMoves: number;
 };
 
+type HolisticSignals = {
+  reboundEpisodes: number;
+  severeLowEvents: number;
+  preBolusMissingMeals: number;
+  preBolusCoveragePct: number;
+};
+
 type DailyProfile = {
   updatedAt: string;
   dominantRisk: 'lows' | 'highs' | 'balanced';
@@ -129,6 +136,56 @@ function calcStats(list: any[], hypo: number, hyper: number): PeriodStats {
   return {tir, avg, lows, highs, inRange, count: list.length, upMoves, downMoves};
 }
 
+function computeHolisticSignals(params: {
+  yList: any[];
+  yTreatments: any[];
+  hypo: number;
+  hyper: number;
+}): HolisticSignals {
+  const {yList, yTreatments, hypo, hyper} = params;
+
+  const severeLowEvents = yList.filter(r => Number(r?.sgv ?? 0) <= 54).length;
+
+  const reboundEpisodes = yList.filter((row, idx) => {
+    const cur = Number(row?.sgv ?? 0);
+    if (cur > hypo) return false;
+    const t0 = Number(row?.date ?? 0);
+    if (!Number.isFinite(t0) || t0 <= 0) return false;
+    for (let i = idx + 1; i < yList.length; i += 1) {
+      const nextTs = Number(yList[i]?.date ?? 0);
+      if (!Number.isFinite(nextTs) || nextTs <= t0) continue;
+      if (nextTs - t0 > 3 * 60 * 60 * 1000) break;
+      if (Number(yList[i]?.sgv ?? 0) >= hyper) return true;
+    }
+    return false;
+  }).length;
+
+  const meals = (yTreatments ?? []).filter(t => Number(t?.carbs ?? 0) > 0).map(t => ({
+    ts: Date.parse(String(t?.created_at ?? '')),
+  })).filter(m => Number.isFinite(m.ts));
+
+  const boluses = (yTreatments ?? [])
+    .filter(t => Number(t?.insulin ?? 0) > 0)
+    .map(t => ({ts: Date.parse(String(t?.created_at ?? ''))}))
+    .filter(b => Number.isFinite(b.ts));
+
+  let preBolusDetected = 0;
+  for (const meal of meals) {
+    const hasPre = boluses.some(b => b.ts <= meal.ts && b.ts >= meal.ts - 25 * 60 * 1000);
+    if (hasPre) preBolusDetected += 1;
+  }
+
+  const preBolusMissingMeals = Math.max(0, meals.length - preBolusDetected);
+  const preBolusCoveragePct = meals.length ? Math.round((preBolusDetected / meals.length) * 100) : 0;
+
+  return {
+    reboundEpisodes,
+    severeLowEvents,
+    preBolusMissingMeals,
+    preBolusCoveragePct,
+  };
+}
+
 async function readDailyProfile(): Promise<DailyProfile | null> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEYS.userProfile);
@@ -150,9 +207,10 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
   const weekStart = new Date(todayStart);
   weekStart.setDate(weekStart.getDate() - 8);
 
-  const [yRows, wRows] = await Promise.all([
+  const [yRows, wRows, yTreatments] = await Promise.all([
     fetchBgDataForDateRangeUncached(yesterdayStart, todayStart, {throwOnError: false}),
     fetchBgDataForDateRangeUncached(weekStart, yesterdayStart, {throwOnError: false}),
+    fetchTreatmentsForDateRangeUncached(yesterdayStart, todayStart),
   ]);
 
   const yList = ((yRows as any[]) ?? []).sort((a, b) => Number(a?.date ?? 0) - Number(b?.date ?? 0));
@@ -167,7 +225,7 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
       actionLine: tr(lang, 'brief.actionCollect'),
       whyLine: tr(lang, 'brief.whyTirAvg', {tir: 0, avg: 0}),
       source: 'fallback' as const,
-      stats: {yesterday: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, week: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, nightLows: 0, tirDeltaVsWeek: 0, avgDeltaVsWeek: 0},
+      stats: {yesterday: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, week: {tir: 0, avg: 0, lows: 0, highs: 0, inRange: 0, count: 0, upMoves: 0, downMoves: 0}, nightLows: 0, tirDeltaVsWeek: 0, avgDeltaVsWeek: 0, holisticSignals: {reboundEpisodes: 0, severeLowEvents: 0, preBolusMissingMeals: 0, preBolusCoveragePct: 0}},
     };
   }
 
@@ -176,6 +234,12 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
 
   const yStats = calcStats(yList, hypo, hyper);
   const wStats = calcStats(wList, hypo, hyper);
+  const holisticSignals = computeHolisticSignals({
+    yList,
+    yTreatments: (yTreatments as any[]) ?? [],
+    hypo,
+    hyper,
+  });
 
   const nightRows = yList.filter(r => {
     const ds = r?.dateString;
@@ -241,6 +305,7 @@ async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
       nightLows,
       tirDeltaVsWeek,
       avgDeltaVsWeek,
+      holisticSignals,
     },
   };
 }
@@ -388,9 +453,24 @@ function sanitizeEmpathicLanguage(line: string): string {
 }
 
 export function buildDailyBriefSystemInstruction(lang: Lang): string {
-  return lang === 'he'
-    ? '???? JSON ????. ???? ?? ????? empathic_opening,clinical_validation,tiny_habit_recommendation,encouraging_closing. ??????? ???? summaryLine,keyLine,actionLine,whyLine. ?? ???? ???? ??????. ???? ?????? ??????: ?????, ?????/??????, ??????, ???? ????. ???? ????? ?????? ?????, ?????? ??? ????, ?????? ????? ???? ??? ????.'
-    : 'Return JSON only. Prefer keys empathic_opening,clinical_validation,tiny_habit_recommendation,encouraging_closing. Alternatively summaryLine,keyLine,actionLine,whyLine is allowed. Keep lines short and gentle. Never use blame/fear wording. Always start with positive reinforcement, include non-judgmental validation, and suggest exactly one tiny action.';
+  const core = [
+    'Return JSON only.',
+    'Preferred keys: empathic_opening, clinical_validation, tiny_habit_recommendation, encouraging_closing.',
+    'Fallback keys allowed: summaryLine, keyLine, actionLine, whyLine.',
+    'Persona: empathetic diabetes coach for people living with type 1 diabetes.',
+    'Use motivational interviewing tone (affirmation + reflection + one tiny next step).',
+    'Never use blame/fear words (failure, dangerous, non-compliant, worsening).',
+    'Do not punish success: if a meal improved, start by highlighting that concrete improvement.',
+    'Analyze sequence links: if low BG is followed by high BG within ~3h, frame it as likely rebound physiology (not personal failure).',
+    'Use preBolus signals: when preBolus coverage is low/missing, recommend one tiny habit (example: 5 minutes pre-bolus cue) instead of complex recalculation.',
+    'Keep language soft, non-judgmental, and practical. Suggest exactly one micro-habit action.',
+  ].join(' ');
+
+  if (lang === 'he') {
+    return `${core} Keep the final user-facing wording in Hebrew, simple and warm.`;
+  }
+
+  return core;
 }
 
 export function getDailyBriefLanguageGuardrails() {
@@ -455,6 +535,11 @@ async function maybeGenerateLlmSections(params: {
                   avgDeltaVsWeek: base.stats.avgDeltaVsWeek,
                 },
                 nightLows: base.stats.nightLows,
+                holisticSignals: (base.stats as any).holisticSignals,
+                derivedFocus: {
+                  topImprovedMealDelta: base.stats.tirDeltaVsWeek,
+                  weeklyImprovementAnchor: base.stats.tirDeltaVsWeek > 0 ? `TIR +${base.stats.tirDeltaVsWeek}%` : `TIR ${base.stats.tirDeltaVsWeek}%`,
+                },
                 fallback: {
                   summaryLine: base.summaryLine,
                   keyLine: base.keyLine,
