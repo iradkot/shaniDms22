@@ -80,6 +80,8 @@ export const MessageBubble = styled.View<{role: 'user' | 'assistant'}>`
   margin: 6px 12px;
   padding: 10px 12px;
   border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 1;
   background-color: ${({theme, role}: {theme: ThemeType; role: 'user' | 'assistant'}) =>
     role === 'user' ? addOpacity(theme.accentColor, 0.14) : addOpacity(theme.textColor, 0.06)};
 `;

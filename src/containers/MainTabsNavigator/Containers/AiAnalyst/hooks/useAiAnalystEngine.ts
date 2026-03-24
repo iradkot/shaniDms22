@@ -346,7 +346,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
   const startOpenChatInternal = useCallback(async (contextPrompt?: string) => {
     if (!provider) return;
-    const {runId, signal, conversationId: nextId} = initMission('Preparing context…', null);
+    const {runId, signal, conversationId: nextId} = initMission(language === 'he' ? 'מכין הקשר…' : 'Preparing context…', null);
 
     try {
       const [cgmResult, insulinResult, profileResult] = await Promise.all([
@@ -361,20 +361,32 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       setCompactKpi(cgmResult?.ok ? deriveCompactKpiFromCgmResult(cgmResult.result) : null);
       if (runSeqRef.current !== runId) return;
 
-      setProgressText('Starting chat…');
+      setProgressText(language === 'he' ? 'פותח שיחה…' : 'Starting chat…');
 
       const contextualSection = contextPrompt?.trim()
-        ? `\n\nContext from Home recommendation:\n${contextPrompt.trim()}\n\nStart by addressing this specific context before asking follow-up questions.`
+        ? language === 'he'
+          ? `\n\nהקשר מהמלצה במסך הבית:\n${contextPrompt.trim()}\n\nתתחיל מלהתייחס להקשר הזה לפני שאלות המשך.`
+          : `\n\nContext from Home recommendation:\n${contextPrompt.trim()}\n\nStart by addressing this specific context before asking follow-up questions.`
         : '';
 
+      const languageHint =
+        language === 'he'
+          ? 'חשוב: כתוב למשתמש בעברית בלבד.'
+          : 'Important: respond to the user in English only.';
+
       const userPrompt =
-        `Mission: Open Chat\n\n` +
-        `Start with a short, friendly greeting and one concise question asking what the user wants to focus on now.\n` +
-        `You can answer broad and random diabetes questions, but ground recommendations in available data.\n\n` +
+        (language === 'he' ? `משימה: צ׳אט פתוח\n\n` : `Mission: Open Chat\n\n`) +
+        (language === 'he'
+          ? `התחל בברכה קצרה וידידותית ושאלה קצרה אחת על מה המשתמש רוצה להתמקד עכשיו.\n`
+          : `Start with a short, friendly greeting and one concise question asking what the user wants to focus on now.\n`) +
+        (language === 'he'
+          ? `אפשר לענות על שאלות מגוונות על סוכרת, אבל לבסס המלצות על הנתונים הזמינים.\n\n`
+          : `You can answer broad and random diabetes questions, but ground recommendations in available data.\n\n`) +
+        `${languageHint}\n\n` +
         `Disclosure: ${DISCLOSURE_TEXT}${contextualSection}\n\n` +
-        `Recent CGM snapshot (14d):\n${JSON.stringify(cgmResult.ok ? cgmResult.result : 'Data unavailable')}\n\n` +
-        `Recent insulin summary (14d):\n${JSON.stringify(insulinResult.ok ? insulinResult.result : 'Data unavailable')}\n\n` +
-        `Current profile settings:\n${JSON.stringify(profileResult.ok ? profileResult.result : 'Data unavailable')}`;
+        `${language === 'he' ? 'תמונת CGM אחרונה (14 ימים):' : 'Recent CGM snapshot (14d):'}\n${JSON.stringify(cgmResult.ok ? cgmResult.result : language === 'he' ? 'נתונים לא זמינים' : 'Data unavailable')}\n\n` +
+        `${language === 'he' ? 'סיכום אינסולין אחרון (14 ימים):' : 'Recent insulin summary (14d):'}\n${JSON.stringify(insulinResult.ok ? insulinResult.result : language === 'he' ? 'נתונים לא זמינים' : 'Data unavailable')}\n\n` +
+        `${language === 'he' ? 'הגדרות פרופיל נוכחיות:' : 'Current profile settings:'}\n${JSON.stringify(profileResult.ok ? profileResult.result : language === 'he' ? 'נתונים לא זמינים' : 'Data unavailable')}`;
 
       const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
       setLlmMessages(baseLlmMessages);
@@ -382,7 +394,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const {finalText, llmMessages: updatedMessages} = await runLlmToolLoop({
         provider,
         model: aiSettings.openAiModel,
-        systemPrompt: buildSystemPrompt(null, glucoseSettings),
+        systemPrompt: buildSystemPrompt(null, glucoseSettings, language),
         initialMessages: baseLlmMessages,
         maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
         maxOutputTokens: maxOutputTokensForModel(aiSettings.openAiModel, DEFAULT_MAX_OUTPUT_TOKENS),
@@ -422,12 +434,14 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     provider,
     aiSettings.openAiModel,
     glucoseSettings,
+    language,
     initMission,
     recordDataUsed,
     handleMissionError,
     finaliseMission,
     scrollToEnd,
     deriveCompactKpiFromCgmResult,
+    sanitizeAssistantToneAndAvailability,
   ]);
 
   const startOpenChat = useCallback(async () => {
@@ -500,7 +514,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } finally {
       finaliseMission(runId);
     }
-  }, [provider, glucoseSettings.severeHypo, aiSettings.openAiModel, initMission, handleMissionError, finaliseMission, scrollToEnd]);
+  }, [provider, glucoseSettings.severeHypo, aiSettings.openAiModel, initMission, handleMissionError, finaliseMission, scrollToEnd, sanitizeAssistantToneAndAvailability]);
 
   const startUserBehavior = useCallback(async () => {
     if (!provider) return;
@@ -539,7 +553,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
       setLlmMessages(baseLlmMessages);
 
-      const systemPrompt = buildSystemPrompt('userBehavior', glucoseSettings);
+      const systemPrompt = buildSystemPrompt('userBehavior', glucoseSettings, language);
 
       const res = await provider.sendChat({
         model: aiSettings.openAiModel,
@@ -573,7 +587,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } finally {
       finaliseMission(runId);
     }
-  }, [provider, aiSettings.openAiModel, glucoseSettings, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd, deriveCompactKpiFromCgmResult]);
+  }, [provider, aiSettings.openAiModel, glucoseSettings, language, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd, deriveCompactKpiFromCgmResult, sanitizeAssistantToneAndAvailability]);
 
   const startLoopSettingsAdvisor = useCallback(async () => {
     if (!provider) return;
@@ -608,7 +622,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
       setLlmMessages(baseLlmMessages);
 
-      const systemPrompt = buildSystemPrompt('loopSettings', glucoseSettings);
+      const systemPrompt = buildSystemPrompt('loopSettings', glucoseSettings, language);
 
       const res = await provider.sendChat({
         model: aiSettings.openAiModel,
@@ -642,7 +656,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } finally {
       finaliseMission(runId);
     }
-  }, [provider, aiSettings.openAiModel, glucoseSettings, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd]);
+  }, [provider, aiSettings.openAiModel, glucoseSettings, language, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd, sanitizeAssistantToneAndAvailability]);
 
   // ====================================================================
   // Follow-up (shared across all missions)
@@ -866,7 +880,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         aiSettings.openAiModel,
         analystMode === 'loopSettings' ? LOOP_SETTINGS_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS,
       );
-      const systemPrompt = buildSystemPrompt(analystMode, glucoseSettings);
+      const systemPrompt = buildSystemPrompt(analystMode, glucoseSettings, language);
 
       const contextWindowMessages = buildContextWindow(workingLlmMessages);
 
@@ -914,6 +928,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     glucoseSettings, persistHistorySnapshot, recordDataUsed, beginRun,
     finaliseMission, scrollToEnd, maybePreFetchGlycemicEvents, handleFollowUpError,
     buildContextWindow, maybeInjectEvidenceTag, deriveCompactKpiFromCgmResult,
+    language, sanitizeAssistantToneAndAvailability,
   ]);
 
   // ====================================================================

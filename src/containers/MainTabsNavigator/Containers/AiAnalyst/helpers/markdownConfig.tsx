@@ -83,6 +83,7 @@ export function createMarkdownStyle(theme: ThemeType) {
       color: theme.textColor,
       fontSize: theme.typography.size.md,
       lineHeight: 24,
+      flexShrink: 1,
     },
     paragraph: {
       marginTop: 0,

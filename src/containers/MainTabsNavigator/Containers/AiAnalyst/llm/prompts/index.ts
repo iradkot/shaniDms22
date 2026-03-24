@@ -15,6 +15,7 @@ export {
 export {buildGlucoseThresholdsBlock} from './glucoseThresholds';
 
 import {GlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
+import {withAppLanguagePolicy} from 'app/services/llm/llmClient';
 import {AnalystMode} from '../../types';
 
 import {AI_ANALYST_SYSTEM_PROMPT} from './baseAnalyst';
@@ -47,20 +48,22 @@ const EVIDENCE_LINK_INSTRUCTION =
 export function buildSystemPrompt(
   analystMode: AnalystMode | null,
   glucoseSettings: GlucoseSettings,
+  language?: string,
 ): string {
+  let base: string;
+
   if (analystMode === 'loopSettings') {
-    return (
+    base =
       LOOP_SETTINGS_ADVISOR_SYSTEM_PROMPT +
       '\n' +
       LOOP_SETTINGS_TOOL_SYSTEM_PROMPT +
       buildGlucoseThresholdsBlock(glucoseSettings) +
-      EVIDENCE_LINK_INSTRUCTION
-    );
+      EVIDENCE_LINK_INSTRUCTION;
+  } else if (analystMode === 'userBehavior') {
+    base = USER_BEHAVIOR_SYSTEM_PROMPT + EVIDENCE_LINK_INSTRUCTION;
+  } else {
+    base = AI_ANALYST_SYSTEM_PROMPT + '\n' + DEFAULT_TOOL_SYSTEM_PROMPT + EVIDENCE_LINK_INSTRUCTION;
   }
 
-  if (analystMode === 'userBehavior') {
-    return USER_BEHAVIOR_SYSTEM_PROMPT + EVIDENCE_LINK_INSTRUCTION;
-  }
-
-  return AI_ANALYST_SYSTEM_PROMPT + '\n' + DEFAULT_TOOL_SYSTEM_PROMPT + EVIDENCE_LINK_INSTRUCTION;
+  return withAppLanguagePolicy(base, language ?? 'en');
 }
