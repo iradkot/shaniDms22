@@ -28,6 +28,7 @@ export const FULL_SCREEN_VIEW_SCREEN: string = 'FullScreenViewScreen';
 export const HYPO_INVESTIGATION_SCREEN: string = 'HypoInvestigationScreen';
 export const DAILY_REVIEW_SCREEN: string = 'DailyReviewScreen';
 export const RANKS_INFO_SCREEN: string = 'RanksInfoScreen';
+export const LOOP_ADJUSTMENT_ASSIST_SCREEN: string = 'LoopAdjustmentAssistScreen';
 
 // Loop Settings Impact Analysis
 export const LOOP_TUNER_TAB_SCREEN: string = 'LoopTunerTabScreen';

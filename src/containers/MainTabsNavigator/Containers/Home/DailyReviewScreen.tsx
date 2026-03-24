@@ -34,6 +34,8 @@ import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsul
 import {addMemoryEntry} from 'app/services/aiMemory/aiMemoryStore';
 import notifee, {TriggerType} from '@notifee/react-native';
 import ScoreBadge from 'app/components/common-ui/ScoreBadge/ScoreBadge';
+import {detectLoopAdjustmentTrend, LoopTrendSignal} from 'app/services/loopAssist/loopAdjustmentAssist';
+import {LOOP_ADJUSTMENT_ASSIST_SCREEN} from 'app/constants/SCREEN_NAMES';
 
 type Row = {sgv: number; dateString?: string};
 
@@ -370,6 +372,7 @@ const DailyReviewScreen: React.FC = () => {
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
   const [whyLine, setWhyLine] = useState<string | null>(null);
   const [actionSource, setActionSource] = useState<'ai' | 'fallback'>('fallback');
+  const [loopTrendSignal, setLoopTrendSignal] = useState<LoopTrendSignal | null>(null);
   const successChipAnim = React.useRef(new Animated.Value(0)).current;
   const [_openingMealBucket, setOpeningMealBucket] = useState<MealBucket | null>(null);
 
@@ -945,6 +948,22 @@ const DailyReviewScreen: React.FC = () => {
     ]).start();
   }, [isHighDailyScore, successChipAnim]);
 
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        const signal = await detectLoopAdjustmentTrend({daysWindow: 5});
+        if (mounted) setLoopTrendSignal(signal);
+      } catch {
+        if (mounted) setLoopTrendSignal(null);
+      }
+    };
+    run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   if (loading) {
     return <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}><ActivityIndicator /></View>;
   }
@@ -1024,6 +1043,26 @@ const DailyReviewScreen: React.FC = () => {
               {language === 'he' ? 'מעולה! עבודה עקבית שממש משתלמת 👏' : 'Excellent! Your consistency is paying off 👏'}
             </Text>
           </Animated.View>
+        ) : null}
+
+        {loopTrendSignal?.detected ? (
+          <Pressable
+            onPress={() => navigation.navigate(LOOP_ADJUSTMENT_ASSIST_SCREEN, {trend: loopTrendSignal, source: 'daily-review'})}
+            style={{
+              marginTop: 10,
+              alignSelf: 'flex-start',
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: addOpacity(theme.accentColor, 0.35),
+              backgroundColor: addOpacity(theme.accentColor, 0.08),
+            }}
+          >
+            <Text style={{fontSize: 12, fontWeight: '700', color: theme.accentColor}}>
+              {language === 'he' ? 'רוצה לבדוק יחד התאמת הגדרות לופ?' : 'Want to explore Loop setting adjustment together?'}
+            </Text>
+          </Pressable>
         ) : null}
 
         <View style={{marginTop: 10, flexDirection: 'row', alignItems: 'baseline'}}>

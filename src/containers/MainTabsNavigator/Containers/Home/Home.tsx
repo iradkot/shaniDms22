@@ -35,8 +35,9 @@ import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home
 import {useMealTags} from 'app/hooks/useMealTags';
 import TagMealSheet from 'app/components/MealTagging/TagMealSheet';
 import {format, subDays} from 'date-fns';
-import {AI_ANALYST_TAB_SCREEN, DAILY_REVIEW_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {AI_ANALYST_TAB_SCREEN, DAILY_REVIEW_SCREEN, LOOP_ADJUSTMENT_ASSIST_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
+import {detectLoopAdjustmentTrend, LoopTrendSignal} from 'app/services/loopAssist/loopAdjustmentAssist';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
@@ -461,11 +462,6 @@ const Home: React.FC = () => {
     };
   }, [language, listBgData, taggedSegments]);
 
-  const handleRefreshAll = useCallback(() => {
-    getUpdatedBgData();
-    getUpdatedInsulinData();
-  }, [getUpdatedBgData, getUpdatedInsulinData]);
-
   const [isRefreshing, setIsRefreshing] = useState(false);
   const handlePullToRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -865,6 +861,7 @@ const Home: React.FC = () => {
 
   const [showDailySummaryAlert, setShowDailySummaryAlert] = useState(false);
   const [pendingSummaryDate, setPendingSummaryDate] = useState<string | null>(null);
+  const [loopTrendSignal, setLoopTrendSignal] = useState<LoopTrendSignal | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -889,6 +886,28 @@ const Home: React.FC = () => {
     };
 
     run();
+    return () => {
+      mounted = false;
+    };
+  }, [isShowingToday]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const runTrendDetect = async () => {
+      try {
+        const signal = await detectLoopAdjustmentTrend({daysWindow: 5});
+        if (!mounted) return;
+        setLoopTrendSignal(signal);
+      } catch {
+        if (mounted) setLoopTrendSignal(null);
+      }
+    };
+
+    if (isShowingToday) {
+      runTrendDetect();
+    }
+
     return () => {
       mounted = false;
     };
@@ -935,6 +954,27 @@ const Home: React.FC = () => {
         ) : !isShowingToday ? (
           <DailySummaryAlert onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
             <Text style={{fontWeight: '700', color: theme.textColor, fontSize: 14}}>{tr(language, 'home.openDailySummary')}</Text>
+          </DailySummaryAlert>
+        ) : null}
+
+        {isShowingToday && loopTrendSignal?.detected ? (
+          <DailySummaryAlert
+            onPress={() =>
+              (navigation as any).navigate(LOOP_ADJUSTMENT_ASSIST_SCREEN, {
+                trend: loopTrendSignal,
+                source: 'home-nudge',
+              })
+            }
+          >
+            <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 15}}>
+              {language === 'he' ? 'זיהינו מגמה עקבית שכדאי לחקור יחד' : 'We detected a stable pattern worth exploring together'}
+            </Text>
+            <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.78)}}>
+              {language === 'he' ? loopTrendSignal.summaryHe : loopTrendSignal.summaryEn}
+            </Text>
+            <Text style={{marginTop: 8, color: theme.accentColor, fontWeight: '700'}}>
+              {language === 'he' ? 'פתח סייע התאמת לופ' : 'Open Loop Tuning Assist'}
+            </Text>
           </DailySummaryAlert>
         ) : null}
 

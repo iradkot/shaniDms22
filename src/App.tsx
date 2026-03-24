@@ -31,6 +31,7 @@ import {
   HYPO_INVESTIGATION_SCREEN,
   DAILY_REVIEW_SCREEN,
   RANKS_INFO_SCREEN,
+  LOOP_ADJUSTMENT_ASSIST_SCREEN,
 } from './constants/SCREEN_NAMES';
 import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 import {TabsSettingsProvider} from 'app/contexts/TabsSettingsContext';
@@ -63,6 +64,7 @@ import FullScreenViewScreen from 'app/containers/FullScreen/FullScreenViewScreen
 import HypoInvestigationScreen from 'app/containers/MainTabsNavigator/Containers/Trends/HypoInvestigationScreen';
 import DailyReviewScreen from 'app/containers/MainTabsNavigator/Containers/Home/DailyReviewScreen';
 import RanksInfoScreen from 'app/containers/MainTabsNavigator/Containers/Home/RanksInfoScreen';
+import LoopAdjustmentAssistScreen from 'app/containers/MainTabsNavigator/Containers/Home/LoopAdjustmentAssistScreen';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TouchProvider} from './components/charts/CgmGraph/contextStores/TouchContext';
 import {isE2E} from 'app/utils/e2e';
@@ -349,6 +351,16 @@ const AppInner: () => React.ReactElement = () => {
                                 }}
                                 name={RANKS_INFO_SCREEN}
                                 component={RanksInfoScreen}
+                              />
+
+                              <Stack.Screen
+                                options={{
+                                  headerShown: true,
+                                  headerTitle: language === 'he' ? 'סייע התאמת לופ' : 'Loop Tuning Assist',
+                                  headerTitleStyle: {fontSize: 16, fontWeight: '700'},
+                                }}
+                                name={LOOP_ADJUSTMENT_ASSIST_SCREEN}
+                                component={LoopAdjustmentAssistScreen}
                               />
 
                               <Stack.Screen
