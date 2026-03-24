@@ -245,7 +245,8 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       return;
     }
 
-    setSubmitted(true);
+    setSubmitted(false);
+    setAiRecommendation(null);
     setIsGenerating(true);
 
     try {
@@ -275,6 +276,16 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         profile,
       });
 
+      const compactContextForAi = {
+        ...contextForAi,
+        samples: {
+          bgFirst80: (contextForAi as any)?.samples?.bgFirst80?.slice?.(0, 20) ?? [],
+          treatmentsFirst80: (contextForAi as any)?.samples?.treatmentsFirst80?.slice?.(0, 20) ?? [],
+          deviceStatusFirst80: (contextForAi as any)?.samples?.deviceStatusFirst80?.slice?.(0, 20) ?? [],
+        },
+        profile: null,
+      };
+
       const systemInstruction = buildLoopAssistSystemInstruction(language);
 
       const apiKey = (aiSettings.apiKey ?? '').trim();
@@ -288,20 +299,43 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       const provider = createLlmProvider(aiSettings);
       const model = (aiSettings.openAiModel ?? 'gpt-5.4').trim() || 'gpt-5.4';
 
-      const res = await provider.sendChat({
-        model,
-        messages: [
-          {role: 'system', content: systemInstruction},
-          {role: 'user', content: JSON.stringify(contextForAi)},
-        ],
-        temperature: 0.2,
-        maxOutputTokens: 420,
-      });
+      let rawResponse = '';
+      let parsed: LoopAiRecommendation | null = null;
+      let usedCompactContext = false;
 
-      const rawResponse = String(res?.content ?? '').trim();
-      const parsed = parseJsonObject(rawResponse) as LoopAiRecommendation | null;
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const useCompact = attempt === 2;
+        usedCompactContext = useCompact;
+        try {
+          const res = await provider.sendChat({
+            model,
+            messages: [
+              {role: 'system', content: systemInstruction},
+              {role: 'user', content: JSON.stringify(useCompact ? compactContextForAi : contextForAi)},
+            ],
+            temperature: 0.2,
+            maxOutputTokens: useCompact ? 1200 : 800,
+          });
+
+          rawResponse = String(res?.content ?? '').trim();
+          parsed = parseJsonObject(rawResponse) as LoopAiRecommendation | null;
+          if (parsed) {
+            break;
+          }
+
+          throw new Error(language === 'he' ? 'המודל החזיר תשובה לא תקינה (לא JSON).' : 'Model returned invalid response (not JSON).');
+        } catch (err: any) {
+          const msg = String(err?.message ?? err ?? '');
+          const looksLikeLength = msg.includes('finish_reason=length') || msg.toLowerCase().includes('not complete');
+          if (attempt === 1 && looksLikeLength) {
+            continue;
+          }
+          throw err;
+        }
+      }
+
       if (!parsed) {
-        throw new Error(language === 'he' ? 'המודל החזיר תשובה לא תקינה (לא JSON).' : 'Model returned invalid response (not JSON).');
+        throw new Error(language === 'he' ? 'לא התקבלה תשובת AI תקינה.' : 'No valid AI response was produced.');
       }
 
       let normalized = parsed;
@@ -328,17 +362,20 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       }
 
       setAiRecommendation(normalized);
+      setSubmitted(true);
       setDebugLog({
         createdAt: new Date().toISOString(),
         appScreen: 'LoopAdjustmentAssistScreen',
         model,
         requestedBackgroundData,
         systemInstruction,
-        contextSent: contextForAi,
+        usedCompactContext,
+        contextSent: usedCompactContext ? compactContextForAi : contextForAi,
         aiRawResponse: rawResponse,
         aiParsedResponse: normalized,
       });
     } catch (e: any) {
+      setSubmitted(false);
       Alert.alert(language === 'he' ? 'שגיאה' : 'Error', String(e?.message ?? e));
     } finally {
       setIsGenerating(false);
