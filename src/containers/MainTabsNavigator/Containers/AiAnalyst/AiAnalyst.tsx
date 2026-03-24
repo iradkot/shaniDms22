@@ -95,6 +95,7 @@ const AiAnalyst: React.FC = () => {
         markdown={engine.markdown}
         onBack={() => engine.setState({mode: 'history'})}
         onDelete={engine.deleteConversation}
+        onContinue={engine.resumeConversation}
       />
     );
   }

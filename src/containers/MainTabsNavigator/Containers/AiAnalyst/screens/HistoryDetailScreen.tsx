@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import React, {useMemo} from 'react';
 import {Pressable, ScrollView, Text, View} from 'react-native';
 import {useTheme} from 'styled-components/native';
@@ -22,6 +23,7 @@ export interface HistoryDetailScreenProps {
   markdown: MarkdownConfig;
   onBack: () => void;
   onDelete: (id: string) => void;
+  onContinue: (id: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -34,6 +36,7 @@ const HistoryDetailScreen: React.FC<HistoryDetailScreenProps> = ({
   markdown,
   onBack,
   onDelete,
+  onContinue,
 }) => {
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
@@ -80,6 +83,10 @@ const HistoryDetailScreen: React.FC<HistoryDetailScreenProps> = ({
       </ScrollView>
 
       <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md, gap: theme.spacing.sm}}>
+        <Pressable onPress={() => onContinue(detailId)} accessibilityRole="button">
+          <Text style={{color: theme.accentColor, fontWeight: '700'}}>{tr(language, 'ai.continueConversation')}</Text>
+        </Pressable>
+
         <Pressable onPress={onBack} accessibilityRole="button">
           <Text style={{color: addOpacity(theme.textColor, 0.7)}}>{tr(language, 'ai.backToHistory')}</Text>
         </Pressable>

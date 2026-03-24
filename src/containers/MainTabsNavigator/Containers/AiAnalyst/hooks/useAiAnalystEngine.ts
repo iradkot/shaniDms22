@@ -949,6 +949,38 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     [refreshHistory],
   );
 
+  const resumeConversation = useCallback(
+    async (id: string) => {
+      const items = historyItems.length ? historyItems : await loadAiAnalystHistory();
+      const selected = (items ?? []).find((x: any) => x.id === id);
+      if (!selected) return;
+
+      const mission =
+        selected?.mission === 'hypoDetective' ||
+        selected?.mission === 'userBehavior' ||
+        selected?.mission === 'loopSettings' ||
+        selected?.mission === 'openChat'
+          ? (selected.mission as MissionKey)
+          : 'openChat';
+
+      const restoredUiMessages: LlmChatMessage[] = (selected.messages ?? [])
+        .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant'))
+        .map((m: any) => ({role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content ?? '')}))
+        .filter((m: LlmChatMessage) => m.content.trim().length > 0);
+
+      setConversationId(selected.id);
+      setUiMessages(restoredUiMessages);
+      setLlmMessages(restoredUiMessages);
+      setErrorText(null);
+      setProgressText('');
+      setInput('');
+      setState({mode: 'mission', mission});
+      activeMissionRef.current = mission;
+      scrollToEnd();
+    },
+    [historyItems, scrollToEnd],
+  );
+
   const onAttachMealImage = useCallback(async () => {
     try {
       const res = await launchImageLibrary({
@@ -1078,6 +1110,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     openHistory,
     clearHistory: clearAllHistory,
     deleteConversation,
+    resumeConversation,
     startOpenChat,
     startOpenChatWithContext,
     startHypoDetective,

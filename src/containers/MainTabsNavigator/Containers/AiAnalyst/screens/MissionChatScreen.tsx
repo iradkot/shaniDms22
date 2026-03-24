@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import React, {RefObject, useMemo} from 'react';
 import {formatDistanceToNowStrict} from 'date-fns';
 import {
@@ -106,14 +107,22 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
 
   const kpiTone = useMemo(() => {
     const bg = compactKpi?.bgMgdl;
-    if (typeof bg !== 'number') return {color: addOpacity(theme.textColor, 0.8), border: addOpacity(theme.borderColor, 0.4), bg: addOpacity(theme.textColor, 0.05)};
-    if (bg < 70) return {color: '#c62828', border: addOpacity('#c62828', 0.35), bg: addOpacity('#c62828', 0.08)};
-    if (bg <= 180) return {color: '#2e7d32', border: addOpacity('#2e7d32', 0.35), bg: addOpacity('#2e7d32', 0.08)};
+    if (typeof bg !== 'number') {
+      return {color: addOpacity(theme.textColor, 0.8), border: addOpacity(theme.borderColor, 0.4), bg: addOpacity(theme.textColor, 0.05)};
+    }
+    if (bg < 70) {
+      return {color: '#c62828', border: addOpacity('#c62828', 0.35), bg: addOpacity('#c62828', 0.08)};
+    }
+    if (bg <= 180) {
+      return {color: '#2e7d32', border: addOpacity('#2e7d32', 0.35), bg: addOpacity('#2e7d32', 0.08)};
+    }
     return {color: '#f9a825', border: addOpacity('#f9a825', 0.35), bg: addOpacity('#f9a825', 0.1)};
   }, [compactKpi?.bgMgdl, theme.borderColor, theme.textColor]);
 
   const kpiAge = useMemo(() => {
-    if (!compactKpi?.sampleTimeMs) return null;
+    if (!compactKpi?.sampleTimeMs) {
+      return null;
+    }
     try {
       return formatDistanceToNowStrict(new Date(compactKpi.sampleTimeMs), {addSuffix: true});
     } catch {
@@ -301,7 +310,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
             </View>
           ) : null}
 
-          {!!errorText ? (
+          {errorText ? (
             <Text style={{marginTop: 10, marginLeft: 12, color: theme.belowRangeColor}}>
               {errorText}
             </Text>
