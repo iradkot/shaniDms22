@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Alert, I18nManager, LayoutAnimation, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, UIManager, View} from 'react-native';
+import {ActivityIndicator, Alert, Animated, I18nManager, LayoutAnimation, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, UIManager, View} from 'react-native';
 import {addDays, format, subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -370,6 +370,7 @@ const DailyReviewScreen: React.FC = () => {
   const [llmActionLine, setLlmActionLine] = useState<string | null>(null);
   const [whyLine, setWhyLine] = useState<string | null>(null);
   const [actionSource, setActionSource] = useState<'ai' | 'fallback'>('fallback');
+  const successChipAnim = React.useRef(new Animated.Value(0)).current;
   const [_openingMealBucket, setOpeningMealBucket] = useState<MealBucket | null>(null);
 
   const textAlign: 'left' | 'right' = I18nManager.isRTL ? 'right' : 'left';
@@ -891,6 +892,32 @@ const DailyReviewScreen: React.FC = () => {
   const avgScore = Math.max(0, Math.min(100, 100 - Math.round(avgDistance * 0.9)));
   const isHighDailyScore = avgScore >= 95;
 
+  useEffect(() => {
+    if (!isHighDailyScore) {
+      successChipAnim.setValue(0);
+      return;
+    }
+
+    successChipAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(successChipAnim, {
+        toValue: 1,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+      Animated.timing(successChipAnim, {
+        toValue: 0.82,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+      Animated.timing(successChipAnim, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [isHighDailyScore, successChipAnim]);
+
   const nightLows = yRows.filter(r => {
     const ts = r?.dateString ? Date.parse(r.dateString) : NaN;
     if (!Number.isFinite(ts)) return false;
@@ -940,12 +967,32 @@ const DailyReviewScreen: React.FC = () => {
         </View>
 
         {isHighDailyScore ? (
-          <View style={{marginTop: 8, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(theme.inRangeColor, 0.35), backgroundColor: addOpacity(theme.inRangeColor, 0.12)}}>
+          <Animated.View
+            style={{
+              marginTop: 8,
+              alignSelf: 'flex-start',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              paddingVertical: 6,
+              paddingHorizontal: 10,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: addOpacity(theme.inRangeColor, 0.35),
+              backgroundColor: addOpacity(theme.inRangeColor, 0.12),
+              opacity: successChipAnim.interpolate({inputRange: [0, 1], outputRange: [0.75, 1]}),
+              transform: [
+                {
+                  scale: successChipAnim.interpolate({inputRange: [0, 1], outputRange: [0.985, 1]}),
+                },
+              ],
+            }}
+          >
             <MaterialIcons name="check-circle" size={18} color={theme.inRangeColor} />
             <Text style={{fontWeight: '800', color: theme.inRangeColor}}>
               {language === 'he' ? 'מעולה! עבודה עקבית שממש משתלמת 👏' : 'Excellent! Your consistency is paying off 👏'}
             </Text>
-          </View>
+          </Animated.View>
         ) : null}
 
         <View style={{marginTop: 10, flexDirection: 'row', alignItems: 'baseline'}}>
