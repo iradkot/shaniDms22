@@ -427,6 +427,13 @@ function buildCompactBody(params: {
   const avgDelta = base.stats.avgDeltaVsWeek;
 
   return [
+    // 4-step psychological structure (always first)
+    sanitizeEmpathicLanguage(llm.summaryLine),
+    sanitizeEmpathicLanguage(llm.keyLine),
+    sanitizeEmpathicLanguage(llm.actionLine),
+    sanitizeEmpathicLanguage(llm.whyLine),
+
+    // Compact metrics afterward
     compactDeltaLine({
       lang,
       labelHe: 'ממוצע יומי',
@@ -463,8 +470,6 @@ function buildCompactBody(params: {
       betterWhenLower: true,
       emoji: '🟠',
     }),
-    sanitizeEmpathicLanguage(llm.actionLine),
-    sanitizeEmpathicLanguage(llm.whyLine),
   ].join('\n');
 }
 
@@ -589,8 +594,10 @@ function ensureEffortFirstOpening(
 export function buildDailyBriefSystemInstruction(lang: Lang): string {
   const core = [
     'Return JSON only.',
-    'Preferred keys: empathic_opening, clinical_validation, tiny_habit_recommendation, encouraging_closing.',
-    'Fallback keys allowed: summaryLine, keyLine, actionLine, whyLine.',
+    'Return EXACTLY this 4-step psychological schema with these keys: empathic_opening, clinical_validation, tiny_habit_recommendation, encouraging_closing.',
+    'Do not omit keys. Do not add narrative outside JSON.',
+    'Fallback keys allowed only for compatibility: summaryLine, keyLine, actionLine, whyLine.',
+    'Step intent: empathic_opening=affirm effort with empathy, clinical_validation=normalize physiology and remove blame, tiny_habit_recommendation=one tiny actionable habit, encouraging_closing=brief hopeful close.',
     'Persona: empathetic diabetes coach for people living with type 1 diabetes.',
     'Use motivational interviewing tone (affirmation + reflection + one tiny next step).',
     'Never use blame/fear words (failure, dangerous, non-compliant, worsening).',
@@ -704,16 +711,16 @@ async function maybeGenerateLlmSections(params: {
 
       const summaryLine = ensurePrefix(
         ensureEffortFirstOpening(
-          sanitizeEmpathicLanguage(summaryRaw),
+          sanitizeEmpathicLanguage(summaryRaw || base.summaryLine),
           lang,
           (base.stats as any).holisticSignals,
           profile?.grammaticalGender,
         ),
         '📊',
       );
-      const keyLine = ensurePrefix(sanitizeEmpathicLanguage(keyRaw), '🔎');
-      const actionLine = ensurePrefix(sanitizeEmpathicLanguage(actionRaw), '🎯');
-      const whyLine = ensurePrefix(sanitizeEmpathicLanguage(whyRaw), '🧠');
+      const keyLine = ensurePrefix(sanitizeEmpathicLanguage(keyRaw || base.keyLine), '🔎');
+      const actionLine = ensurePrefix(sanitizeEmpathicLanguage(actionRaw || base.actionLine), '🎯');
+      const whyLine = ensurePrefix(sanitizeEmpathicLanguage(whyRaw || base.whyLine), '🧠');
 
       if (!summaryLine || !keyLine || !actionLine || !whyLine) continue;
 
