@@ -1,13 +1,32 @@
 /* eslint-disable react-native/no-inline-styles */
 import React, {useMemo, useState} from 'react';
-import {Pressable, ScrollView, Text, TextInput, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, ScrollView, Share, Text, TextInput, View} from 'react-native';
+import {subDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {useAiSettings} from 'app/contexts/AiSettingsContext';
+import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
+import {
+  fetchBgDataForDateRangeUncached,
+  fetchTreatmentsForDateRangeUncached,
+  getUserProfileFromNightscout,
+} from 'app/api/apiRequests';
 
 type YesNo = 'yes' | 'no' | null;
+
+type LoopAiRecommendation = {
+  setting_focus: 'carb_ratio' | 'isf' | 'target' | 'dia' | 'timing' | 'monitor_only';
+  time_window: string;
+  current_value: string;
+  suggested_value: string;
+  practical_instruction: string;
+  rationale: string;
+  confidence_pct: number;
+  safety_note: string;
+};
 
 type OptionRowProps = {
   label: string;
@@ -64,6 +83,7 @@ const OptionRow: React.FC<OptionRowProps> = ({
 const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
+  const {settings: aiSettings} = useAiSettings();
 
   const trend = route?.params?.trend ?? null;
 
@@ -83,6 +103,9 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
 
   const [submitted, setSubmitted] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiRecommendation, setAiRecommendation] = useState<LoopAiRecommendation | null>(null);
+  const [debugLog, setDebugLog] = useState<any | null>(null);
 
   const stressAnswered = stressOrSick !== null || stressDetails.trim().length > 0;
   const exerciseAnswered = specialExercise !== null || exerciseDetails.trim().length > 0;
@@ -158,6 +181,144 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
     ? 'גילוי נאות: זו תובנה אוטומטית תומכת החלטה בלבד, לא ייעוץ רפואי. לפני שינוי בהגדרות טיפול, מומלץ לעבור על ההמלצה עם הצוות הרפואי המטפל.'
     : 'Disclaimer: this is an automated decision-support insight, not medical advice. Before changing therapy settings, review with your treating clinical team.';
 
+  const parseJsonObject = (text: string): any | null => {
+    const trimmed = text.trim();
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      const start = trimmed.indexOf('{');
+      const end = trimmed.lastIndexOf('}');
+      if (start >= 0 && end > start) {
+        try {
+          return JSON.parse(trimmed.slice(start, end + 1));
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+  };
+
+  const generateRecommendation = async () => {
+    setSubmitAttempted(true);
+    if (!allCoreAnswersProvided) {
+      setSubmitted(false);
+      return;
+    }
+
+    setSubmitted(true);
+    setIsGenerating(true);
+
+    try {
+      const end = new Date();
+      const start = subDays(end, 7);
+      const requestedBackgroundData: string[] = [];
+
+      requestedBackgroundData.push('fetchBgDataForDateRangeUncached(7d)');
+      requestedBackgroundData.push('fetchTreatmentsForDateRangeUncached(7d)');
+      requestedBackgroundData.push('getUserProfileFromNightscout(today)');
+
+      const [bgRows, treatments, profile] = await Promise.all([
+        fetchBgDataForDateRangeUncached(start, end, {throwOnError: false}),
+        fetchTreatmentsForDateRangeUncached(start, end),
+        getUserProfileFromNightscout(new Date().toISOString()).catch(() => null),
+      ]);
+
+      const bgList = (bgRows ?? []) as any[];
+      const txList = (treatments ?? []) as any[];
+
+      const avgBg = bgList.length
+        ? Math.round(bgList.reduce((s, r) => s + Number(r?.sgv ?? 0), 0) / bgList.length)
+        : null;
+      const tirPct = bgList.length
+        ? Math.round((bgList.filter(r => Number(r?.sgv ?? 0) >= 70 && Number(r?.sgv ?? 0) <= 180).length / bgList.length) * 100)
+        : null;
+
+      const correctionCount = txList.filter(t => String(t?.eventType ?? '').toLowerCase().includes('correction')).length;
+
+      const contextForAi = {
+        trend,
+        clinicalQa: contextPayload,
+        dataSummary: {
+          windowDays: 7,
+          bgCount: bgList.length,
+          treatmentsCount: txList.length,
+          avgBg,
+          tirPct,
+          correctionCount,
+        },
+        samples: {
+          bgFirst80: bgList.slice(0, 80),
+          treatmentsFirst80: txList.slice(0, 80),
+        },
+        profile,
+      };
+
+      const systemInstruction = [
+        'Return JSON only.',
+        'You are a conservative Loop settings assistant.',
+        'Use user answers + trend + fetched data to produce one practical recommendation.',
+        'Output keys EXACTLY: setting_focus,time_window,current_value,suggested_value,practical_instruction,rationale,confidence_pct,safety_note.',
+        'setting_focus must be one of: carb_ratio,isf,target,dia,timing,monitor_only.',
+        'If data is insufficient or noisy, return setting_focus=monitor_only with clear reason.',
+        'Never provide dangerous/aggressive changes. Keep it small and reversible.',
+      ].join(' ');
+
+      const apiKey = (aiSettings.openAiApiKey ?? '').trim();
+      if (!apiKey) {
+        throw new Error(language === 'he' ? 'חסר OpenAI API key בהגדרות AI' : 'Missing OpenAI API key in AI settings');
+      }
+
+      const provider = new OpenAIProvider({apiKey});
+      const model = (aiSettings.openAiModel ?? 'gpt-5.4').trim() || 'gpt-5.4';
+
+      const res = await provider.sendChat({
+        model,
+        messages: [
+          {role: 'system', content: systemInstruction},
+          {role: 'user', content: JSON.stringify(contextForAi)},
+        ],
+        temperature: 0.2,
+        maxOutputTokens: 420,
+      });
+
+      const rawResponse = String(res?.content ?? '').trim();
+      const parsed = parseJsonObject(rawResponse) as LoopAiRecommendation | null;
+      if (!parsed) {
+        throw new Error(language === 'he' ? 'המודל החזיר תשובה לא תקינה (לא JSON).' : 'Model returned invalid response (not JSON).');
+      }
+
+      setAiRecommendation(parsed);
+      setDebugLog({
+        createdAt: new Date().toISOString(),
+        appScreen: 'LoopAdjustmentAssistScreen',
+        model,
+        requestedBackgroundData,
+        systemInstruction,
+        contextSent: contextForAi,
+        aiRawResponse: rawResponse,
+        aiParsedResponse: parsed,
+      });
+    } catch (e: any) {
+      Alert.alert(language === 'he' ? 'שגיאה' : 'Error', String(e?.message ?? e));
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const exportDebugLog = async () => {
+    if (!debugLog) {
+      Alert.alert(language === 'he' ? 'עדיין אין לוג' : 'No logs yet');
+      return;
+    }
+
+    const payload = JSON.stringify(debugLog, null, 2);
+    await Share.share({
+      title: language === 'he' ? 'ייצוא לוג התאמת לופ' : 'Export loop assist logs',
+      message: payload,
+    });
+  };
+
   return (
     <ScrollView style={{flex: 1, backgroundColor: '#f7f8fb'}} contentContainerStyle={{padding: 16, gap: 12}}>
       <View style={{padding: 14, borderRadius: 14, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.25), backgroundColor: addOpacity(theme.accentColor, 0.08)}}>
@@ -226,14 +387,8 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       ) : null}
 
       <Pressable
-        onPress={() => {
-          setSubmitAttempted(true);
-          if (!allCoreAnswersProvided) {
-            setSubmitted(false);
-            return;
-          }
-          setSubmitted(true);
-        }}
+        onPress={generateRecommendation}
+        disabled={isGenerating}
         style={{
           marginTop: 4,
           alignSelf: 'flex-start',
@@ -241,10 +396,20 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
           paddingHorizontal: 14,
           borderRadius: 10,
           backgroundColor: allCoreAnswersProvided ? theme.accentColor : addOpacity(theme.accentColor, 0.45),
+          opacity: isGenerating ? 0.75 : 1,
         }}
       >
         <Text style={{color: theme.white, fontWeight: '800'}}>{language === 'he' ? 'קבל המלצה' : 'Get recommendation'}</Text>
       </Pressable>
+
+      {isGenerating ? (
+        <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+          <ActivityIndicator size="small" color={theme.accentColor} />
+          <Text style={{color: addOpacity(theme.textColor, 0.75)}}>
+            {language === 'he' ? 'מחשב המלצה בעזרת AI ומושך נתונים נוספים...' : 'Computing AI recommendation and fetching additional data...'}
+          </Text>
+        </View>
+      ) : null}
 
       {submitAttempted && !allCoreAnswersProvided ? (
         <Text style={{color: '#8d6e63', fontSize: 12}}>
@@ -257,7 +422,30 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       {submitted ? (
         <View style={{marginTop: 6, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.16), backgroundColor: theme.white}}>
           <Text style={{fontWeight: '800', color: theme.textColor}}>{language === 'he' ? 'המלצה מסכמת' : 'Final recommendation'}</Text>
-          <Text style={{marginTop: 8, color: theme.textColor}}>{recommendation}</Text>
+
+          <Text style={{marginTop: 8, color: theme.textColor}}>
+            {aiRecommendation?.practical_instruction || recommendation}
+          </Text>
+
+          {aiRecommendation ? (
+            <>
+              <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.82)}}>
+                {language === 'he'
+                  ? `פוקוס הגדרה: ${aiRecommendation.setting_focus} | חלון זמן: ${aiRecommendation.time_window}`
+                  : `Setting focus: ${aiRecommendation.setting_focus} | Time window: ${aiRecommendation.time_window}`}
+              </Text>
+              <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.82)}}>
+                {language === 'he'
+                  ? `נוכחי: ${aiRecommendation.current_value} → מוצע: ${aiRecommendation.suggested_value}`
+                  : `Current: ${aiRecommendation.current_value} → Suggested: ${aiRecommendation.suggested_value}`}
+              </Text>
+              <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>{aiRecommendation.rationale}</Text>
+              <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>
+                {language === 'he' ? `ודאות AI: ${Math.round(Number(aiRecommendation.confidence_pct ?? 0))}%` : `AI confidence: ${Math.round(Number(aiRecommendation.confidence_pct ?? 0))}%`}
+              </Text>
+              <Text style={{marginTop: 4, color: '#8d6e63', fontSize: 12}}>{aiRecommendation.safety_note}</Text>
+            </>
+          ) : null}
 
           {(contextPayload.stressDetails || contextPayload.exerciseDetails || contextPayload.pumpDetails || contextPayload.generalDetails) ? (
             <Text style={{marginTop: 10, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>
@@ -274,6 +462,12 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
           <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.62), fontSize: 12}}>
             {language === 'he' ? `רמת ודאות לאחר שקלול הקשר: ${Math.round(score * 100)}%` : `Context-adjusted confidence: ${Math.round(score * 100)}%`}
           </Text>
+
+          <Pressable onPress={exportDebugLog} style={{marginTop: 10, alignSelf: 'flex-start'}}>
+            <Text style={{color: theme.accentColor, fontWeight: '700'}}>
+              {language === 'he' ? 'הורד לוגים מלאים של ההמלצה' : 'Download full recommendation logs'}
+            </Text>
+          </Pressable>
         </View>
       ) : null}
 
