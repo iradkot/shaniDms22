@@ -9,6 +9,7 @@ import {addOpacity} from 'app/style/styling.utils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {createLlmProvider} from 'app/services/llm/llmClient';
+import {sendJsonWithAdaptiveContext} from 'app/services/llm/robustJson';
 import {
   fetchBgDataForDateRangeUncached,
   fetchTreatmentsForDateRangeUncached,
@@ -299,44 +300,31 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       const provider = createLlmProvider(aiSettings);
       const model = (aiSettings.openAiModel ?? 'gpt-5.4').trim() || 'gpt-5.4';
 
-      let rawResponse = '';
-      let parsed: LoopAiRecommendation | null = null;
-      let usedCompactContext = false;
+      const ultraCompactContextForAi = {
+        ...compactContextForAi,
+        samples: {
+          bgFirst80: (compactContextForAi as any)?.samples?.bgFirst80?.slice?.(0, 8) ?? [],
+          treatmentsFirst80: (compactContextForAi as any)?.samples?.treatmentsFirst80?.slice?.(0, 8) ?? [],
+          deviceStatusFirst80: (compactContextForAi as any)?.samples?.deviceStatusFirst80?.slice?.(0, 8) ?? [],
+        },
+      };
 
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
-        const useCompact = attempt === 2;
-        usedCompactContext = useCompact;
-        try {
-          const res = await provider.sendChat({
-            model,
-            messages: [
-              {role: 'system', content: systemInstruction},
-              {role: 'user', content: JSON.stringify(useCompact ? compactContextForAi : contextForAi)},
-            ],
-            temperature: 0.2,
-            maxOutputTokens: useCompact ? 1200 : 800,
-          });
+      const adaptive = await sendJsonWithAdaptiveContext<LoopAiRecommendation>({
+        provider,
+        model,
+        systemInstruction,
+        temperature: 0.2,
+        parse: raw => parseJsonObject(raw) as LoopAiRecommendation | null,
+        contexts: [
+          {name: 'full', payload: contextForAi, maxOutputTokens: 900},
+          {name: 'compact', payload: compactContextForAi, maxOutputTokens: 1200},
+          {name: 'ultra-compact', payload: ultraCompactContextForAi, maxOutputTokens: 1400},
+        ],
+      });
 
-          rawResponse = String(res?.content ?? '').trim();
-          parsed = parseJsonObject(rawResponse) as LoopAiRecommendation | null;
-          if (parsed) {
-            break;
-          }
-
-          throw new Error(language === 'he' ? 'המודל החזיר תשובה לא תקינה (לא JSON).' : 'Model returned invalid response (not JSON).');
-        } catch (err: any) {
-          const msg = String(err?.message ?? err ?? '');
-          const looksLikeLength = msg.includes('finish_reason=length') || msg.toLowerCase().includes('not complete');
-          if (attempt === 1 && looksLikeLength) {
-            continue;
-          }
-          throw err;
-        }
-      }
-
-      if (!parsed) {
-        throw new Error(language === 'he' ? 'לא התקבלה תשובת AI תקינה.' : 'No valid AI response was produced.');
-      }
+      const rawResponse = adaptive.raw;
+      const parsed = adaptive.parsed;
+      const usedCompactContext = adaptive.usedContextName !== 'full';
 
       let normalized = parsed;
       const needsHebrewNormalization =
@@ -363,6 +351,11 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
 
       setAiRecommendation(normalized);
       setSubmitted(true);
+      const contextByName: Record<string, unknown> = {
+        full: contextForAi,
+        compact: compactContextForAi,
+        'ultra-compact': ultraCompactContextForAi,
+      };
       setDebugLog({
         createdAt: new Date().toISOString(),
         appScreen: 'LoopAdjustmentAssistScreen',
@@ -370,7 +363,9 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         requestedBackgroundData,
         systemInstruction,
         usedCompactContext,
-        contextSent: usedCompactContext ? compactContextForAi : contextForAi,
+        usedContextName: adaptive.usedContextName,
+        adaptiveTraces: adaptive.traces,
+        contextSent: contextByName[adaptive.usedContextName] ?? contextForAi,
         aiRawResponse: rawResponse,
         aiParsedResponse: normalized,
       });
