@@ -120,6 +120,8 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
   const [aiRecommendation, setAiRecommendation] = useState<LoopAiRecommendation | null>(null);
   const [debugLog, setDebugLog] = useState<any | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [persistedStatus, setPersistedStatus] = useState<{status: 'running' | 'ready' | 'failed'; startedAt?: string; readyAt?: string; failedAt?: string; errorMessage?: string} | null>(null);
+  const [persistedErrorLog, setPersistedErrorLog] = useState<any | null>(null);
 
   const stressAnswered = stressOrSick !== null || stressDetails.trim().length > 0;
   const exerciseAnswered = specialExercise !== null || exerciseDetails.trim().length > 0;
@@ -133,14 +135,34 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
 
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(LOOP_ASSIST_LAST_RESULT_KEY);
-        if (!raw || !alive) return;
-        const parsed = JSON.parse(raw) as {savedAt?: string; recommendation?: LoopAiRecommendation; debugLog?: any};
-        if (parsed?.recommendation) {
-          setAiRecommendation(parsed.recommendation);
-          setSubmitted(true);
-          if (parsed.debugLog) setDebugLog(parsed.debugLog);
-          if (parsed.savedAt) setLastSavedAt(parsed.savedAt);
+        const [rawResult, rawStatus, rawError] = await Promise.all([
+          AsyncStorage.getItem(LOOP_ASSIST_LAST_RESULT_KEY),
+          AsyncStorage.getItem(LOOP_ASSIST_STATUS_KEY),
+          AsyncStorage.getItem(LOOP_ASSIST_LAST_ERROR_KEY),
+        ]);
+        if (!alive) return;
+
+        if (rawResult) {
+          const parsed = JSON.parse(rawResult) as {savedAt?: string; recommendation?: LoopAiRecommendation; debugLog?: any};
+          if (parsed?.recommendation) {
+            setAiRecommendation(parsed.recommendation);
+            setSubmitted(true);
+            if (parsed.debugLog) setDebugLog(parsed.debugLog);
+            if (parsed.savedAt) setLastSavedAt(parsed.savedAt);
+          }
+        }
+
+        if (rawStatus) {
+          const parsedStatus = JSON.parse(rawStatus);
+          if (parsedStatus?.status === 'running' || parsedStatus?.status === 'ready' || parsedStatus?.status === 'failed') {
+            setPersistedStatus(parsedStatus);
+          }
+        }
+
+        if (rawError) {
+          const parsedError = JSON.parse(rawError);
+          setPersistedErrorLog(parsedError);
+          setDebugLog(parsedError);
         }
       } catch {
         // ignore storage parse/read failures
@@ -253,10 +275,9 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
     setAiRecommendation(null);
     setIsGenerating(true);
     setGenerationStage(language === 'he' ? 'מתחיל חישוב...' : 'Starting analysis...');
-    await AsyncStorage.setItem(
-      LOOP_ASSIST_STATUS_KEY,
-      JSON.stringify({status: 'running', startedAt: new Date().toISOString()}),
-    );
+    const runningStatus = {status: 'running' as const, startedAt: new Date().toISOString()};
+    setPersistedStatus(runningStatus);
+    await AsyncStorage.setItem(LOOP_ASSIST_STATUS_KEY, JSON.stringify(runningStatus));
 
     const runLog: any = {
       createdAt: new Date().toISOString(),
@@ -438,10 +459,9 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         JSON.stringify({savedAt, recommendation: normalized, debugLog: finalLog}),
       );
       await AsyncStorage.removeItem(LOOP_ASSIST_LAST_ERROR_KEY);
-      await AsyncStorage.setItem(
-        LOOP_ASSIST_STATUS_KEY,
-        JSON.stringify({status: 'ready', readyAt: savedAt}),
-      );
+      const readyStatus = {status: 'ready' as const, readyAt: savedAt};
+      setPersistedStatus(readyStatus);
+      await AsyncStorage.setItem(LOOP_ASSIST_STATUS_KEY, JSON.stringify(readyStatus));
 
       const channelId = await notifee.createChannel({
         id: LOOP_ASSIST_NOTIFICATION_CHANNEL,
@@ -462,11 +482,11 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         errorMessage: errMsg,
       };
       setDebugLog(errorLog);
+      setPersistedErrorLog(errorLog);
       await AsyncStorage.setItem(LOOP_ASSIST_LAST_ERROR_KEY, JSON.stringify(errorLog));
-      await AsyncStorage.setItem(
-        LOOP_ASSIST_STATUS_KEY,
-        JSON.stringify({status: 'failed', failedAt: new Date().toISOString(), errorMessage: errMsg}),
-      );
+      const failedStatus = {status: 'failed' as const, failedAt: new Date().toISOString(), errorMessage: errMsg};
+      setPersistedStatus(failedStatus);
+      await AsyncStorage.setItem(LOOP_ASSIST_STATUS_KEY, JSON.stringify(failedStatus));
       Alert.alert(language === 'he' ? 'שגיאה' : 'Error', errMsg);
     } finally {
       setIsGenerating(false);
@@ -475,12 +495,13 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
   };
 
   const exportDebugLog = async () => {
-    if (!debugLog) {
+    const candidateLog = debugLog ?? persistedErrorLog;
+    if (!candidateLog) {
       Alert.alert(language === 'he' ? 'עדיין אין לוג' : 'No logs yet');
       return;
     }
 
-    const payload = JSON.stringify(debugLog, null, 2);
+    const payload = JSON.stringify(candidateLog, null, 2);
     await Share.share({
       title: language === 'he' ? 'ייצוא לוג התאמת לופ' : 'Export loop assist logs',
       message: payload,
@@ -497,6 +518,28 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
           {language === 'he' ? (trend?.summaryHe ?? 'אנחנו בודקים יחד אם יש דפוס יציב שמצדיק שינוי.') : (trend?.summaryEn ?? 'We are checking together whether there is a stable pattern that justifies a change.')}
         </Text>
       </View>
+
+      {persistedStatus ? (
+        <View style={{padding: 12, borderRadius: 12, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.18), backgroundColor: theme.white}}>
+          <Text style={{fontWeight: '800', color: theme.textColor}}>
+            {language === 'he' ? 'סטטוס ריצה אחרונה' : 'Latest run status'}
+          </Text>
+          <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
+            {persistedStatus.status === 'running'
+              ? (language === 'he' ? 'בהכנה: ניתוח רץ ברקע. אפשר לחזור למסך הבית ונודיע כשהכול מוכן.' : 'Running in background. You can leave this screen and we will notify when ready.')
+              : persistedStatus.status === 'ready'
+              ? (language === 'he' ? 'מוכן: נמצאה המלצה ונשמרה על המכשיר.' : 'Ready: recommendation is available and saved on device.')
+              : (language === 'he' ? 'נכשל: הריצה האחרונה נכשלה. אפשר להוריד לוג שגיאה מלא.' : 'Failed: last run failed. You can download a full error log.')}
+          </Text>
+          {persistedStatus.status === 'failed' ? (
+            <Pressable onPress={exportDebugLog} style={{marginTop: 8, alignSelf: 'flex-start'}}>
+              <Text style={{color: theme.accentColor, fontWeight: '700'}}>
+                {language === 'he' ? 'הורד לוג שגיאה מלא' : 'Download full error log'}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
 
       <OptionRow
         label={language === 'he' ? 'האם היית בלחץ משמעותי או חולה בימים האחרונים?' : 'Were you under major stress or sick in recent days?'}
