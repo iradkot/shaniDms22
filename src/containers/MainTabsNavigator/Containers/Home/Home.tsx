@@ -995,6 +995,7 @@ const Home: React.FC = () => {
             onPress={() =>
               (navigation as any).navigate(LOOP_ADJUSTMENT_ASSIST_SCREEN, {
                 trend: loopTrendSignal,
+                status: loopAssistStatus,
                 source: 'home-nudge',
               })
             }
@@ -1016,6 +1017,7 @@ const Home: React.FC = () => {
             onPress={() =>
               (navigation as any).navigate(LOOP_ADJUSTMENT_ASSIST_SCREEN, {
                 trend: loopTrendSignal,
+                status: loopAssistStatus,
                 source: 'home-status-center',
               })
             }

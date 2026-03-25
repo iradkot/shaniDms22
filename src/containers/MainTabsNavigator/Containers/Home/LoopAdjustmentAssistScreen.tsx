@@ -120,7 +120,9 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
   const [aiRecommendation, setAiRecommendation] = useState<LoopAiRecommendation | null>(null);
   const [debugLog, setDebugLog] = useState<any | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  const [persistedStatus, setPersistedStatus] = useState<{status: 'running' | 'ready' | 'failed'; startedAt?: string; readyAt?: string; failedAt?: string; errorMessage?: string} | null>(null);
+  const [persistedStatus, setPersistedStatus] = useState<{status: 'running' | 'ready' | 'failed'; startedAt?: string; readyAt?: string; failedAt?: string; errorMessage?: string} | null>(
+    route?.params?.status ?? null,
+  );
   const [persistedErrorLog, setPersistedErrorLog] = useState<any | null>(null);
 
   const stressAnswered = stressOrSick !== null || stressDetails.trim().length > 0;
@@ -133,22 +135,28 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
   useEffect(() => {
     let alive = true;
 
-    (async () => {
+    const loadPersisted = async () => {
       try {
         const [rawResult, rawStatus, rawError] = await Promise.all([
           AsyncStorage.getItem(LOOP_ASSIST_LAST_RESULT_KEY),
           AsyncStorage.getItem(LOOP_ASSIST_STATUS_KEY),
           AsyncStorage.getItem(LOOP_ASSIST_LAST_ERROR_KEY),
         ]);
-        if (!alive) return;
+        if (!alive) {
+          return;
+        }
 
         if (rawResult) {
           const parsed = JSON.parse(rawResult) as {savedAt?: string; recommendation?: LoopAiRecommendation; debugLog?: any};
           if (parsed?.recommendation) {
             setAiRecommendation(parsed.recommendation);
             setSubmitted(true);
-            if (parsed.debugLog) setDebugLog(parsed.debugLog);
-            if (parsed.savedAt) setLastSavedAt(parsed.savedAt);
+            if (parsed.debugLog) {
+              setDebugLog(parsed.debugLog);
+            }
+            if (parsed.savedAt) {
+              setLastSavedAt(parsed.savedAt);
+            }
           }
         }
 
@@ -162,17 +170,23 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         if (rawError) {
           const parsedError = JSON.parse(rawError);
           setPersistedErrorLog(parsedError);
-          setDebugLog(parsedError);
+          if (!submitted) {
+            setDebugLog(parsedError);
+          }
         }
       } catch {
         // ignore storage parse/read failures
       }
-    })();
+    };
+
+    loadPersisted();
+    const interval = setInterval(loadPersisted, 5000);
 
     return () => {
       alive = false;
+      clearInterval(interval);
     };
-  }, []);
+  }, [submitted]);
 
   const contextPayload = useMemo<LoopAssistContextPayload>(
     () => ({
@@ -519,27 +533,27 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         </Text>
       </View>
 
-      {persistedStatus ? (
-        <View style={{padding: 12, borderRadius: 12, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.18), backgroundColor: theme.white}}>
-          <Text style={{fontWeight: '800', color: theme.textColor}}>
-            {language === 'he' ? 'סטטוס ריצה אחרונה' : 'Latest run status'}
-          </Text>
-          <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
-            {persistedStatus.status === 'running'
-              ? (language === 'he' ? 'בהכנה: ניתוח רץ ברקע. אפשר לחזור למסך הבית ונודיע כשהכול מוכן.' : 'Running in background. You can leave this screen and we will notify when ready.')
-              : persistedStatus.status === 'ready'
-              ? (language === 'he' ? 'מוכן: נמצאה המלצה ונשמרה על המכשיר.' : 'Ready: recommendation is available and saved on device.')
-              : (language === 'he' ? 'נכשל: הריצה האחרונה נכשלה. אפשר להוריד לוג שגיאה מלא.' : 'Failed: last run failed. You can download a full error log.')}
-          </Text>
-          {persistedStatus.status === 'failed' ? (
-            <Pressable onPress={exportDebugLog} style={{marginTop: 8, alignSelf: 'flex-start'}}>
-              <Text style={{color: theme.accentColor, fontWeight: '700'}}>
-                {language === 'he' ? 'הורד לוג שגיאה מלא' : 'Download full error log'}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
+      <View style={{padding: 12, borderRadius: 12, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.18), backgroundColor: theme.white}}>
+        <Text style={{fontWeight: '800', color: theme.textColor}}>
+          {language === 'he' ? 'סטטוס ריצה אחרונה' : 'Latest run status'}
+        </Text>
+        <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.78)}}>
+          {!persistedStatus
+            ? (language === 'he' ? 'עדיין אין ריצה שמורה. אפשר להתחיל ריצה חדשה מכפתור "קבל המלצה".' : 'No persisted run yet. Start a new run using "Get recommendation".')
+            : persistedStatus.status === 'running'
+            ? (language === 'he' ? 'בהכנה: ניתוח רץ ברקע. אפשר לחזור למסך הבית ונודיע כשהכול מוכן.' : 'Running in background. You can leave this screen and we will notify when ready.')
+            : persistedStatus.status === 'ready'
+            ? (language === 'he' ? 'מוכן: נמצאה המלצה ונשמרה על המכשיר.' : 'Ready: recommendation is available and saved on device.')
+            : (language === 'he' ? 'נכשל: הריצה האחרונה נכשלה. אפשר להוריד לוג שגיאה מלא.' : 'Failed: last run failed. You can download a full error log.')}
+        </Text>
+        {(persistedStatus?.status === 'failed' || persistedErrorLog || debugLog?.failed) ? (
+          <Pressable onPress={exportDebugLog} style={{marginTop: 8, alignSelf: 'flex-start'}}>
+            <Text style={{color: theme.accentColor, fontWeight: '700'}}>
+              {language === 'he' ? 'הורד לוג שגיאה מלא' : 'Download full error log'}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
 
       <OptionRow
         label={language === 'he' ? 'האם היית בלחץ משמעותי או חולה בימים האחרונים?' : 'Were you under major stress or sick in recent days?'}
