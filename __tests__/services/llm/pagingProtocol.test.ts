@@ -117,4 +117,55 @@ describe('collectPagedTextFromLlm', () => {
     expect(out.text).toBe('AB');
     expect(out.truncated).toBe(true);
   });
+
+  test('retries when chunk is empty', async () => {
+    const provider = new ScriptedProvider([
+      () => ({content: JSON.stringify({page: 1, has_more: true, chunk: '   '})}),
+      () => ({content: JSON.stringify({page: 1, has_more: false, chunk: 'OK'})}),
+    ]);
+
+    const out = await collectPagedTextFromLlm({
+      provider,
+      model: 'x',
+      baseSystemInstruction: 'Return report',
+      payload: {x: 1},
+      maxAttemptsPerPage: 2,
+    });
+
+    expect(out.text).toBe('OK');
+    expect(out.traces.some(t => t.error === 'empty_chunk')).toBe(true);
+  });
+
+  test('reduces page char target after length-like error', async () => {
+    let firstPrompt = '';
+    let secondPrompt = '';
+
+    const provider = new ScriptedProvider([
+      req => {
+        firstPrompt = String(req.messages?.[0]?.content ?? '');
+        throw new Error('finish_reason=length');
+      },
+      req => {
+        secondPrompt = String(req.messages?.[0]?.content ?? '');
+        return {content: JSON.stringify({page: 1, has_more: false, chunk: 'DONE'})};
+      },
+    ]);
+
+    const out = await collectPagedTextFromLlm({
+      provider,
+      model: 'x',
+      baseSystemInstruction: 'Return report',
+      payload: {x: 1},
+      pageCharTarget: 1500,
+      maxAttemptsPerPage: 3,
+    });
+
+    expect(out.text).toBe('DONE');
+
+    const firstMatch = firstPrompt.match(/Keep chunk around (\d+) chars/i);
+    const secondMatch = secondPrompt.match(/Keep chunk around (\d+) chars/i);
+    expect(firstMatch?.[1]).toBeDefined();
+    expect(secondMatch?.[1]).toBeDefined();
+    expect(Number(secondMatch?.[1])).toBeLessThan(Number(firstMatch?.[1]));
+  });
 });

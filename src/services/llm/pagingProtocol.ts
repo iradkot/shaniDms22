@@ -26,6 +26,7 @@ export type CollectPagedTextResult = {
     page: number;
     attempt: number;
     maxOutputTokens: number;
+    pageCharTarget: number;
     ok: boolean;
     error?: string;
   }>;
@@ -79,7 +80,7 @@ export async function collectPagedTextFromLlm(
   params: CollectPagedTextParams,
 ): Promise<CollectPagedTextResult> {
   const maxPages = Math.max(1, Math.min(20, Math.round(params.maxPages ?? 6)));
-  const pageCharTarget = Math.max(200, Math.min(4000, Math.round(params.pageCharTarget ?? 1200)));
+  const initialPageCharTarget = Math.max(200, Math.min(4000, Math.round(params.pageCharTarget ?? 1200)));
   const baseMaxTokens = Math.max(100, Math.round(params.maxOutputTokensPerPage ?? 1000));
   const maxAttemptsPerPage = Math.max(1, Math.min(6, Math.round(params.maxAttemptsPerPage ?? 3)));
 
@@ -91,13 +92,14 @@ export async function collectPagedTextFromLlm(
   for (let page = 1; page <= maxPages && hasMore; page += 1) {
     let pageDone = false;
     let localTokens = baseMaxTokens;
+    let localPageCharTarget = initialPageCharTarget;
 
     for (let attempt = 1; attempt <= maxAttemptsPerPage; attempt += 1) {
       try {
         const res = await params.provider.sendChat({
           model: params.model,
           messages: [
-            {role: 'system', content: buildSystemInstruction(params.baseSystemInstruction, pageCharTarget)},
+            {role: 'system', content: buildSystemInstruction(params.baseSystemInstruction, localPageCharTarget)},
             {
               role: 'user',
               content: JSON.stringify({
@@ -117,28 +119,62 @@ export async function collectPagedTextFromLlm(
 
         const parsed = parseChunk(String(res?.content ?? ''));
         if (!parsed) {
-          traces.push({page, attempt, maxOutputTokens: localTokens, ok: false, error: 'invalid_json_chunk'});
+          traces.push({
+            page,
+            attempt,
+            maxOutputTokens: localTokens,
+            pageCharTarget: localPageCharTarget,
+            ok: false,
+            error: 'invalid_json_chunk',
+          });
+          continue;
+        }
+
+        const chunk = String(parsed.chunk ?? '');
+        if (!chunk.trim()) {
+          traces.push({
+            page,
+            attempt,
+            maxOutputTokens: localTokens,
+            pageCharTarget: localPageCharTarget,
+            ok: false,
+            error: 'empty_chunk',
+          });
           continue;
         }
 
         // Tolerate wrong page value (models sometimes drift), but keep trace.
-        if (parsed.chunk) {
-          const last = assembled.slice(-parsed.chunk.length);
-          if (last !== parsed.chunk) {
-            assembled += parsed.chunk;
+        if (chunk) {
+          const last = assembled.slice(-chunk.length);
+          if (last !== chunk) {
+            assembled += chunk;
           }
         }
         hasMore = parsed.has_more;
         pagesUsed = page;
-        traces.push({page, attempt, maxOutputTokens: localTokens, ok: true});
+        traces.push({
+          page,
+          attempt,
+          maxOutputTokens: localTokens,
+          pageCharTarget: localPageCharTarget,
+          ok: true,
+        });
         pageDone = true;
         break;
       } catch (e: any) {
         const msg = String(e?.message ?? e);
-        traces.push({page, attempt, maxOutputTokens: localTokens, ok: false, error: msg});
+        traces.push({
+          page,
+          attempt,
+          maxOutputTokens: localTokens,
+          pageCharTarget: localPageCharTarget,
+          ok: false,
+          error: msg,
+        });
 
         if (isLengthLikeError(e)) {
           localTokens = Math.min(3200, Math.round(localTokens * 1.5));
+          localPageCharTarget = Math.max(220, Math.round(localPageCharTarget * 0.8));
           continue;
         }
 
