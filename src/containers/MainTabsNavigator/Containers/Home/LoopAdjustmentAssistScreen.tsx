@@ -278,6 +278,24 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
     }
   };
 
+  const hasFalseMissingSettingsClaim = (rec: LoopAiRecommendation, aiContext: any): boolean => {
+    const p = aiContext?.loopSettingsProfile;
+    const hasCarbRatio = Number.isFinite(Number(p?.around22_00?.carbRatio));
+    const hasISF = Number.isFinite(Number(p?.around04_00?.isf));
+    const hasTargets =
+      Number.isFinite(Number(p?.around22_00?.targetLow)) ||
+      Number.isFinite(Number(p?.around22_00?.targetHigh)) ||
+      Number.isFinite(Number(p?.around04_00?.targetLow)) ||
+      Number.isFinite(Number(p?.around04_00?.targetHigh));
+
+    const combined = `${rec?.practical_instruction ?? ''} ${rec?.rationale ?? ''} ${rec?.current_value ?? ''}`.toLowerCase();
+    const missingClaim =
+      /not\s+provided|missing|not\s+available|חסר|לא\s+סופק|לא\s+זמין/.test(combined) &&
+      /(carb\s*ratio|cr\b|יחס\s*פחמ|isf|sensitivity|target|יעד)/.test(combined);
+
+    return Boolean(missingClaim && (hasCarbRatio || hasISF || hasTargets));
+  };
+
   const generateRecommendation = async () => {
     setSubmitAttempted(true);
     if (!allCoreAnswersProvided) {
@@ -445,9 +463,42 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         ],
       });
 
-      const rawResponse = adaptive.raw;
-      const parsed = adaptive.parsed;
+      let rawResponse = adaptive.raw;
+      let parsed = adaptive.parsed;
       const usedCompactContext = false;
+
+      // One-shot self-check: if model claims settings are missing while context contains them,
+      // force a corrective re-run with explicit evidence.
+      const selfCheckTriggered = hasFalseMissingSettingsClaim(parsed, contextForAi);
+      runLog.selfCheckTriggered = selfCheckTriggered;
+      if (selfCheckTriggered) {
+        markStage(language === 'he' ? 'מבצע בדיקת עקביות פנימית של ההמלצה...' : 'Running internal recommendation consistency self-check...');
+        const evidencePayload = {
+          ...finalDecisionPayload,
+          self_check: {
+            reason: 'Model stated settings are missing although payload includes loop settings profile values.',
+            must_use_settings_snapshot: (contextForAi as any)?.loopSettingsProfile ?? null,
+            instruction:
+              'Recompute recommendation using available loopSettingsProfile fields and do not claim missing settings unless specific field is null.',
+          },
+        };
+
+        const selfCheckAdaptive = await sendJsonWithAdaptiveContext<LoopAiRecommendation>({
+          provider,
+          model,
+          systemInstruction,
+          temperature: 0.2,
+          parse: raw => parseJsonObject(raw) as LoopAiRecommendation | null,
+          contexts: [
+            {name: 'self-check-pass', payload: evidencePayload, maxOutputTokens: 1100},
+            {name: 'self-check-pass-retry', payload: evidencePayload, maxOutputTokens: 1500},
+          ],
+        });
+
+        rawResponse = selfCheckAdaptive.raw;
+        parsed = selfCheckAdaptive.parsed;
+        runLog.selfCheckAdaptiveTraces = selfCheckAdaptive.traces;
+      }
 
       let normalized = parsed;
       const needsHebrewNormalization =
@@ -482,7 +533,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         requestedBackgroundData,
         systemInstruction,
         usedCompactContext,
-        usedContextName: adaptive.usedContextName,
+        usedContextName: runLog.selfCheckTriggered ? 'self-check-pass' : adaptive.usedContextName,
         adaptiveTraces: adaptive.traces,
         pagingAnalysis: {
           pagesUsed: analysisPaged.pagesUsed,
