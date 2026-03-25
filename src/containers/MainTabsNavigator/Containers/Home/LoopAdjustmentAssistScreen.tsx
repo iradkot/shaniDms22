@@ -37,6 +37,7 @@ type LoopAiRecommendation = {
 
 const LOOP_ASSIST_LAST_RESULT_KEY = 'loopAssist:lastRecommendation:v1';
 const LOOP_ASSIST_LAST_ERROR_KEY = 'loopAssist:lastError:v1';
+const LOOP_ASSIST_STATUS_KEY = 'loopAssist:status:v1';
 const LOOP_ASSIST_NOTIFICATION_CHANNEL = 'loop-assist-ready';
 
 type OptionRowProps = {
@@ -252,6 +253,10 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
     setAiRecommendation(null);
     setIsGenerating(true);
     setGenerationStage(language === 'he' ? 'מתחיל חישוב...' : 'Starting analysis...');
+    await AsyncStorage.setItem(
+      LOOP_ASSIST_STATUS_KEY,
+      JSON.stringify({status: 'running', startedAt: new Date().toISOString()}),
+    );
 
     const runLog: any = {
       createdAt: new Date().toISOString(),
@@ -433,6 +438,10 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         JSON.stringify({savedAt, recommendation: normalized, debugLog: finalLog}),
       );
       await AsyncStorage.removeItem(LOOP_ASSIST_LAST_ERROR_KEY);
+      await AsyncStorage.setItem(
+        LOOP_ASSIST_STATUS_KEY,
+        JSON.stringify({status: 'ready', readyAt: savedAt}),
+      );
 
       const channelId = await notifee.createChannel({
         id: LOOP_ASSIST_NOTIFICATION_CHANNEL,
@@ -454,6 +463,10 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       };
       setDebugLog(errorLog);
       await AsyncStorage.setItem(LOOP_ASSIST_LAST_ERROR_KEY, JSON.stringify(errorLog));
+      await AsyncStorage.setItem(
+        LOOP_ASSIST_STATUS_KEY,
+        JSON.stringify({status: 'failed', failedAt: new Date().toISOString(), errorMessage: errMsg}),
+      );
       Alert.alert(language === 'he' ? 'שגיאה' : 'Error', errMsg);
     } finally {
       setIsGenerating(false);

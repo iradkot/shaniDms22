@@ -50,6 +50,7 @@ import {
 } from 'app/services/aiMemory/aiMemoryStore';
 
 const HOME_RECOMMENDATION_STORAGE_KEY = 'home:todayRecommendation:v1';
+const LOOP_ASSIST_STATUS_KEY = 'loopAssist:status:v1';
 
 function normalizeRecommendationText(input: string): string {
   if (!input) return '';
@@ -862,6 +863,7 @@ const Home: React.FC = () => {
   const [showDailySummaryAlert, setShowDailySummaryAlert] = useState(false);
   const [pendingSummaryDate, setPendingSummaryDate] = useState<string | null>(null);
   const [loopTrendSignal, setLoopTrendSignal] = useState<LoopTrendSignal | null>(null);
+  const [loopAssistStatus, setLoopAssistStatus] = useState<{status: 'running' | 'ready' | 'failed'; startedAt?: string; readyAt?: string; failedAt?: string; errorMessage?: string} | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -888,6 +890,37 @@ const Home: React.FC = () => {
     run();
     return () => {
       mounted = false;
+    };
+  }, [isShowingToday]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadLoopAssistStatus = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(LOOP_ASSIST_STATUS_KEY);
+        if (!mounted) return;
+        if (!raw) {
+          setLoopAssistStatus(null);
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        if (parsed?.status === 'running' || parsed?.status === 'ready' || parsed?.status === 'failed') {
+          setLoopAssistStatus(parsed);
+        } else {
+          setLoopAssistStatus(null);
+        }
+      } catch {
+        if (mounted) setLoopAssistStatus(null);
+      }
+    };
+
+    loadLoopAssistStatus();
+    const interval = setInterval(loadLoopAssistStatus, 8000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
     };
   }, [isShowingToday]);
 
@@ -974,6 +1007,31 @@ const Home: React.FC = () => {
             </Text>
             <Text style={{marginTop: 8, color: theme.accentColor, fontWeight: '700'}}>
               {language === 'he' ? 'פתח סייע התאמת לופ' : 'Open Loop Tuning Assist'}
+            </Text>
+          </DailySummaryAlert>
+        ) : null}
+
+        {isShowingToday && loopAssistStatus ? (
+          <DailySummaryAlert
+            onPress={() =>
+              (navigation as any).navigate(LOOP_ADJUSTMENT_ASSIST_SCREEN, {
+                trend: loopTrendSignal,
+                source: 'home-status-center',
+              })
+            }
+          >
+            <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 15}}>
+              {language === 'he' ? 'מרכז סטטוס התאמת לופ' : 'Loop Tuning Status Center'}
+            </Text>
+            <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.78)}}>
+              {loopAssistStatus.status === 'running'
+                ? (language === 'he' ? 'בהכנה: החישוב רץ ברקע. נעדכן כשההמלצה מוכנה.' : 'In progress: analysis is running in background. We will notify when ready.')
+                : loopAssistStatus.status === 'ready'
+                ? (language === 'he' ? 'מוכן: יש המלצה שמורה במכשיר, אפשר לפתוח עכשיו.' : 'Ready: a recommendation is saved on device and ready to view.')
+                : (language === 'he' ? 'נכשל: החישוב האחרון נכשל. אפשר לפתוח ולייצא לוג שגיאה.' : 'Failed: the last run failed. Open to export full error log.')}
+            </Text>
+            <Text style={{marginTop: 8, color: theme.accentColor, fontWeight: '700'}}>
+              {language === 'he' ? 'פתח מרכז סטטוס לופ' : 'Open Loop Status Center'}
             </Text>
           </DailySummaryAlert>
         ) : null}
