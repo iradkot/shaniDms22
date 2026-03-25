@@ -183,7 +183,9 @@ export async function collectPagedTextFromLlm(
     }
 
     if (!pageDone) {
-      throw new Error(`Paging failed at page ${page}`);
+      const err = new Error(`Paging failed at page ${page}`) as Error & {pagingTraces?: CollectPagedTextResult['traces']};
+      err.pagingTraces = traces;
+      throw err;
     }
   }
 

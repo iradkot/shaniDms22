@@ -364,17 +364,47 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       ].join(' ');
 
       markStage(language === 'he' ? 'מבצע ניתוח קליני עמוק (בכמה חלקים)...' : 'Running deep clinical analysis (paged)...');
-      const analysisPaged = await collectPagedTextFromLlm({
-        provider,
-        model,
-        baseSystemInstruction: analysisInstruction,
-        payload: contextForAi,
-        maxPages: 6,
-        maxOutputTokensPerPage: 1200,
-        maxAttemptsPerPage: 3,
-        pageCharTarget: 1500,
-        temperature: 0.2,
-      });
+
+      const compactAnalysisPayload = {
+        language: (contextForAi as any).language,
+        trend: (contextForAi as any).trend,
+        clinicalQa: (contextForAi as any).clinicalQa,
+        dataSummary: (contextForAi as any).dataSummary,
+        loopDiagnostics: (contextForAi as any).loopDiagnostics,
+      };
+
+      let analysisPaged;
+      try {
+        analysisPaged = await collectPagedTextFromLlm({
+          provider,
+          model,
+          baseSystemInstruction: analysisInstruction,
+          payload: contextForAi,
+          maxPages: 6,
+          maxOutputTokensPerPage: 1200,
+          maxAttemptsPerPage: 3,
+          pageCharTarget: 1500,
+          temperature: 0.2,
+        });
+      } catch (e: any) {
+        runLog.pagingPrimaryError = String(e?.message ?? e);
+        if (Array.isArray(e?.pagingTraces)) {
+          runLog.pagingPrimaryTraces = e.pagingTraces;
+        }
+        markStage(language === 'he' ? 'ניתוח מלא נכשל, מנסה ניתוח קומפקטי...' : 'Full analysis failed, retrying compact analysis...');
+        analysisPaged = await collectPagedTextFromLlm({
+          provider,
+          model,
+          baseSystemInstruction: analysisInstruction,
+          payload: compactAnalysisPayload,
+          maxPages: 5,
+          maxOutputTokensPerPage: 1400,
+          maxAttemptsPerPage: 4,
+          pageCharTarget: 1100,
+          temperature: 0.2,
+        });
+        runLog.pagingUsedCompactAnalysisPayload = true;
+      }
 
       if (analysisPaged.truncated) {
         throw new Error(
