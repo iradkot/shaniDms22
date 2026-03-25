@@ -61,6 +61,81 @@ const estimateZeroTempBasalMinutes = (d: any): number => {
   return 0;
 };
 
+const toMinutes = (time: string | undefined): number => {
+  if (!time) return 0;
+  const [h, m] = String(time).split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
+  return h * 60 + m;
+};
+
+const valueAtMinutes = (arr: any[] | undefined, minutes: number): number | null => {
+  if (!Array.isArray(arr) || !arr.length) return null;
+  const sorted = [...arr]
+    .map((x: any) => ({timeAsSeconds: Number(x?.timeAsSeconds ?? toMinutes(String(x?.time ?? '00:00')) * 60), value: Number(x?.value ?? NaN)}))
+    .filter((x: any) => Number.isFinite(x.timeAsSeconds) && Number.isFinite(x.value))
+    .sort((a: any, b: any) => a.timeAsSeconds - b.timeAsSeconds);
+  if (!sorted.length) return null;
+
+  const targetSec = minutes * 60;
+  let chosen = sorted[0];
+  for (const item of sorted) {
+    if (item.timeAsSeconds <= targetSec) {
+      chosen = item;
+    } else {
+      break;
+    }
+  }
+  return chosen?.value ?? null;
+};
+
+const extractLoopSettingsProfile = (profileRaw: any) => {
+  const p0 = Array.isArray(profileRaw) ? profileRaw[0] : profileRaw;
+  const defaultProfileName = String(p0?.defaultProfile ?? '');
+  const store = p0?.store?.[defaultProfileName] ?? null;
+  if (!store) {
+    return {
+      available: false,
+      reason: 'store/defaultProfile missing',
+    };
+  }
+
+  const eveningMinutes = 22 * 60;
+  const predawnMinutes = 4 * 60;
+
+  const eveningCarbRatio = valueAtMinutes(store?.carbratio, eveningMinutes);
+  const predawnISF = valueAtMinutes(store?.sens, predawnMinutes);
+  const eveningTargetLow = valueAtMinutes(store?.target_low, eveningMinutes);
+  const eveningTargetHigh = valueAtMinutes(store?.target_high, eveningMinutes);
+  const predawnTargetLow = valueAtMinutes(store?.target_low, predawnMinutes);
+  const predawnTargetHigh = valueAtMinutes(store?.target_high, predawnMinutes);
+  const predawnBasal = valueAtMinutes(store?.basal, predawnMinutes);
+
+  return {
+    available: true,
+    defaultProfile: defaultProfileName,
+    units: String(store?.units ?? p0?.units ?? 'mg/dL'),
+    diaHours: Number(store?.dia ?? NaN),
+    around22_00: {
+      carbRatio: eveningCarbRatio,
+      targetLow: eveningTargetLow,
+      targetHigh: eveningTargetHigh,
+    },
+    around04_00: {
+      isf: predawnISF,
+      basal: predawnBasal,
+      targetLow: predawnTargetLow,
+      targetHigh: predawnTargetHigh,
+    },
+    rawSeries: {
+      carbratio: Array.isArray(store?.carbratio) ? store.carbratio : [],
+      sens: Array.isArray(store?.sens) ? store.sens : [],
+      target_low: Array.isArray(store?.target_low) ? store.target_low : [],
+      target_high: Array.isArray(store?.target_high) ? store.target_high : [],
+      basal: Array.isArray(store?.basal) ? store.basal : [],
+    },
+  };
+};
+
 export function buildLoopAssistAiContext(params: {
   language: string;
   trend: any;
@@ -75,6 +150,7 @@ export function buildLoopAssistAiContext(params: {
   const bgList = (bgRows ?? []) as any[];
   const txList = (treatments ?? []) as any[];
   const dsList = (deviceStatusRows ?? []) as any[];
+  const loopSettingsProfile = extractLoopSettingsProfile(profile);
 
   const avgBg = bgList.length
     ? Math.round(bgList.reduce((s, r) => s + Number(r?.sgv ?? 0), 0) / bgList.length)
@@ -215,6 +291,11 @@ export function buildLoopAssistAiContext(params: {
           autosensHighLikely: 'temporary increased sensitivity',
           compressionLowLikely: 'possible pressure low - avoid settings changes',
         },
+      },
+      loopSettingsProfile,
+      profileAvailability: {
+        hasRawProfile: Boolean(profile),
+        extractedAvailable: Boolean((loopSettingsProfile as any)?.available),
       },
       samples: {
         bgFirst80: bgList.slice(0, 80),
