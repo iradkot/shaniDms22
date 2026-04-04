@@ -1,7 +1,7 @@
-// /Trends/TrendsContainer.tsx
+﻿// /Trends/TrendsContainer.tsx
 
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {View, ScrollView, Text} from 'react-native';
+import {View, ScrollView, Text, Pressable} from 'react-native';
 import {differenceInCalendarDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 import {StackActions, useNavigation} from '@react-navigation/native';
@@ -49,11 +49,13 @@ const Trends: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation();
   const {language} = useAppLanguage();
+  const isRTL = language === 'he';
 
   const [presetDays, setPresetDays] = useState<number>(7);
   const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
   const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('tir');
+  const [loopViewMode, setLoopViewMode] = useState<'both' | 'open' | 'closed'>('both');
 
   const isCustomRange = useMemo(
     () => Boolean(customStartDate && customEndDate),
@@ -386,33 +388,73 @@ const Trends: React.FC = () => {
             />
           </View>
 
-          {/* (c) Loop open/closed exposure stats */}
+          {/* (c) Open vs Closed loop – interactive compare */}
           <View style={{marginBottom: theme.spacing.lg - 1}}>
             <SectionTitle>{language === 'he' ? 'לופ פתוח מול סגור' : 'Open vs Closed Loop'}</SectionTitle>
-            <View style={{paddingHorizontal: 4, gap: 4}}>
-              <Text style={{color: theme.textColor}}>
+
+            <View style={{flexDirection: isRTL ? 'row-reverse' : 'row', marginBottom: 10}}>
+              {([
+                {key: 'both', labelHe: 'שניהם', labelEn: 'Both'},
+                {key: 'open', labelHe: 'רק פתוח', labelEn: 'Open only'},
+                {key: 'closed', labelHe: 'רק סגור', labelEn: 'Closed only'},
+              ] as const).map(opt => {
+                const active = loopViewMode === opt.key;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() => setLoopViewMode(opt.key)}
+                    style={{
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: active ? theme.primaryColor : addOpacity(theme.textColor, 0.25),
+                      backgroundColor: active
+                        ? addOpacity(theme.primaryColor, 0.2)
+                        : addOpacity(theme.textColor, 0.04),
+                      paddingHorizontal: 12,
+                      paddingVertical: 7,
+                      marginRight: isRTL ? 0 : 8,
+                      marginLeft: isRTL ? 8 : 0,
+                    }}>
+                    <Text style={{color: theme.textColor, fontWeight: active ? '700' : '500'}}>
+                      {language === 'he' ? opt.labelHe : opt.labelEn}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View
+              style={{
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: addOpacity(theme.textColor, 0.12),
+                backgroundColor: addOpacity(theme.textColor, 0.03),
+                padding: 12,
+                gap: 8,
+              }}>
+              {(loopViewMode === 'both' || loopViewMode === 'open') && (
+                <Text style={{color: theme.textColor, fontSize: 15}}>
+                  {language === 'he'
+                    ? `פתוח: ${loopModeStats.openPct.toFixed(1)}% • ${Math.round(loopModeStats.openMinutes / 60)} שעות • ממוצע ${loopModeStats.openAvgBg?.toFixed(0) ?? '-'} • TIR ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}%`
+                    : `Open: ${loopModeStats.openPct.toFixed(1)}% • ${Math.round(loopModeStats.openMinutes / 60)}h • Avg ${loopModeStats.openAvgBg?.toFixed(0) ?? '-'} • TIR ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}%`}
+                </Text>
+              )}
+
+              {(loopViewMode === 'both' || loopViewMode === 'closed') && (
+                <Text style={{color: theme.textColor, fontSize: 15}}>
+                  {language === 'he'
+                    ? `סגור: ${loopModeStats.closedPct.toFixed(1)}% • ${Math.round(loopModeStats.closedMinutes / 60)} שעות • ממוצע ${loopModeStats.closedAvgBg?.toFixed(0) ?? '-'} • TIR ${loopModeStats.closedTirPct?.toFixed(1) ?? '-'}%`
+                    : `Closed: ${loopModeStats.closedPct.toFixed(1)}% • ${Math.round(loopModeStats.closedMinutes / 60)}h • Avg ${loopModeStats.closedAvgBg?.toFixed(0) ?? '-'} • TIR ${loopModeStats.closedTirPct?.toFixed(1) ?? '-'}%`}
+                </Text>
+              )}
+
+              <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>
                 {language === 'he'
-                  ? `זמן לופ פתוח: ${loopModeStats.openPct.toFixed(1)}% (${Math.round(loopModeStats.openMinutes / 60)} שעות)`
-                  : `Open loop time: ${loopModeStats.openPct.toFixed(1)}% (${Math.round(loopModeStats.openMinutes / 60)}h)`}
-              </Text>
-              <Text style={{color: theme.textColor}}>
-                {language === 'he'
-                  ? `זמן לופ סגור: ${loopModeStats.closedPct.toFixed(1)}% (${Math.round(loopModeStats.closedMinutes / 60)} שעות)`
-                  : `Closed loop time: ${loopModeStats.closedPct.toFixed(1)}% (${Math.round(loopModeStats.closedMinutes / 60)}h)`}
-              </Text>
-              <Text style={{color: theme.textColor}}>
-                {language === 'he'
-                  ? `ממוצע סוכר (פתוח/סגור): ${loopModeStats.openAvgBg?.toFixed(0) ?? '-'} / ${loopModeStats.closedAvgBg?.toFixed(0) ?? '-'}`
-                  : `Avg BG (open/closed): ${loopModeStats.openAvgBg?.toFixed(0) ?? '-'} / ${loopModeStats.closedAvgBg?.toFixed(0) ?? '-'}`}
-              </Text>
-              <Text style={{color: theme.textColor}}>
-                {language === 'he'
-                  ? `TIR (פתוח/סגור): ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}% / ${loopModeStats.closedTirPct?.toFixed(1) ?? '-'}%`
-                  : `TIR (open/closed): ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}% / ${loopModeStats.closedTirPct?.toFixed(1) ?? '-'}%`}
+                  ? `דיאגנוסטיקה: אירועים ${loopModeStats.diagnostics.eventsFetched}, מסווגים ${loopModeStats.diagnostics.eventsClassified}, דגימות פתוח ${loopModeStats.diagnostics.openSamples}, דגימות סגור ${loopModeStats.diagnostics.closedSamples}`
+                  : `Diagnostics: events ${loopModeStats.diagnostics.eventsFetched}, classified ${loopModeStats.diagnostics.eventsClassified}, open samples ${loopModeStats.diagnostics.openSamples}, closed samples ${loopModeStats.diagnostics.closedSamples}`}
               </Text>
             </View>
           </View>
-
           {/* (d) AGP Summary */}
           <View style={{marginBottom: theme.spacing.lg - 1}}>
             <SectionTitle>{tr(language, 'trends.agp')}</SectionTitle>
