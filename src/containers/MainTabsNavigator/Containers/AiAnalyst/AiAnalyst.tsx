@@ -1,6 +1,6 @@
-import React, {useEffect, useRef} from 'react';
-import {Text} from 'react-native';
-import {useNavigation, useRoute} from '@react-navigation/native';
+import React, {useCallback, useEffect, useRef} from 'react';
+import {BackHandler, Text} from 'react-native';
+import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
@@ -35,6 +35,33 @@ const AiAnalyst: React.FC = () => {
     engine.startOpenChatWithContext(String(contextPrompt));
     navigation.setParams?.({homeRecommendationContext: undefined});
   }, [engine, navigation, route?.params?.homeRecommendationContext]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (engine.state.mode === 'historyDetail') {
+          engine.setState({mode: 'history'});
+          return true;
+        }
+        if (engine.state.mode === 'evidence') {
+          engine.backToMissionFromEvidence();
+          return true;
+        }
+        if (engine.state.mode === 'mission') {
+          engine.goBackToDashboard();
+          return true;
+        }
+        if (engine.state.mode === 'history') {
+          engine.setState({mode: 'dashboard'});
+          return true;
+        }
+        return false;
+      };
+
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }, [engine]),
+  );
 
   if (!engine.isEnabled) {
     return (

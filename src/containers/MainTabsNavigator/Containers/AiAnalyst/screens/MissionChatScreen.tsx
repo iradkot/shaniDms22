@@ -309,6 +309,10 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
               return (
                 <Bubble
                   {...props}
+                  containerStyle={{
+                    left: {marginLeft: 2, marginRight: 2},
+                    right: {marginLeft: 2, marginRight: 2},
+                  }}
                   wrapperStyle={{
                     left: {
                       backgroundColor: addOpacity(theme.textColor, 0.06),
