@@ -97,19 +97,20 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
     [markdown.style, textAlign, writingDirection],
   );
 
-  const giftedMessages: IMessage[] = useMemo(
-    () =>
-      (uiMessages ?? []).map((m, idx) => ({
-        _id: `m-${idx}`,
-        text: m.content,
-        createdAt: new Date(Date.now() - (uiMessages.length - idx) * 1000),
-        user: {
-          _id: m.role === 'assistant' ? 2 : 1,
-          name: m.role === 'assistant' ? 'AI' : 'You',
-        },
-      })),
-    [uiMessages],
-  );
+  const giftedMessages: IMessage[] = useMemo(() => {
+    const base = (uiMessages ?? []).map((m, idx) => ({
+      _id: `m-${idx}`,
+      text: m.content,
+      createdAt: new Date(Date.now() - (uiMessages.length - idx) * 1000),
+      user: {
+        _id: m.role === 'assistant' ? 2 : 1,
+        name: m.role === 'assistant' ? 'AI' : 'You',
+      },
+    }));
+
+    // GiftedChat works best with newest-first ordering.
+    return base.reverse();
+  }, [uiMessages]);
 
   const kpiTone = useMemo(() => {
     const bg = compactKpi?.bgMgdl;
@@ -294,8 +295,9 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
             messages={giftedMessages}
             onSend={() => {}}
             user={{_id: 1}}
-            inverted={false}
             renderInputToolbar={() => null}
+            renderAvatar={() => null}
+            showAvatarForEveryMessage={false}
             listViewProps={{
               keyboardShouldPersistTaps: 'handled',
               keyboardDismissMode: Platform.OS === 'ios' ? 'interactive' : 'on-drag',
@@ -310,13 +312,15 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                   wrapperStyle={{
                     left: {
                       backgroundColor: addOpacity(theme.textColor, 0.06),
-                      maxWidth: '92%',
-                      padding: 2,
+                      maxWidth: '97%',
+                      padding: 4,
+                      marginRight: 6,
                     },
                     right: {
                       backgroundColor: addOpacity(theme.accentColor, 0.14),
-                      maxWidth: '92%',
-                      padding: 2,
+                      maxWidth: '94%',
+                      padding: 4,
+                      marginLeft: 14,
                     },
                   }}
                   renderMessageText={messageProps => {
