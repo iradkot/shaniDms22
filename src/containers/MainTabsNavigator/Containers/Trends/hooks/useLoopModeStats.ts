@@ -65,29 +65,36 @@ function classifyMode(text?: string): LoopMode {
   return 'unknown';
 }
 
-function classifyBasalMode(text?: string): BasalMode {
+function classifyBasalMode(text?: string, row?: any): BasalMode {
   const s = (text || '').toLowerCase();
-  if (!s) return 'other';
+
+  const rate = Number(row?.rate ?? row?.absolute ?? NaN);
+  const duration = Number(row?.duration ?? row?.durationInMinutes ?? NaN);
+
   if (
     s.includes('suspend') ||
     s.includes('suspended') ||
     s.includes('pump suspend') ||
     s.includes('suspend pump') ||
     s.includes('השע') ||
-    s.includes('מושהה')
+    s.includes('מושהה') ||
+    (Number.isFinite(rate) && rate === 0 && Number.isFinite(duration) && duration > 0)
   ) {
     return 'suspended';
   }
+
   if (
     s.includes('temp basal') ||
     s.includes('temporary basal') ||
     s.includes('temp') ||
     s.includes('tempbasal') ||
     s.includes('basal temp') ||
-    s.includes('זמני')
+    s.includes('זמני') ||
+    Number.isFinite(duration)
   ) {
     return 'temp';
   }
+
   if (
     s.includes('planned basal') ||
     s.includes('plan basal') ||
@@ -100,6 +107,7 @@ function classifyBasalMode(text?: string): BasalMode {
   ) {
     return 'planned';
   }
+
   return 'other';
 }
 
@@ -247,11 +255,12 @@ export function useLoopModeStats({
             const notes = (r as any)?.notes || '';
             const enteredBy = (r as any)?.enteredBy || '';
             const profile = (r as any)?.profile || '';
-            const text = `${eventType} ${notes} ${enteredBy} ${profile} ${r.profileName || ''} ${r.summary || ''}`;
+            const raw = JSON.stringify(r || {}).slice(0, 400);
+            const text = `${eventType} ${notes} ${enteredBy} ${profile} ${r.profileName || ''} ${r.summary || ''} ${raw}`;
             return {
               timestamp: r.timestamp,
               mode: classifyMode(text),
-              basalMode: classifyBasalMode(text),
+              basalMode: classifyBasalMode(text, r),
             };
           })
           .sort((a, b) => a.timestamp - b.timestamp);

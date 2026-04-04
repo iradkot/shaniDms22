@@ -33,16 +33,20 @@ function classifyMode(text?: string): LoopMode {
   return 'unknown';
 }
 
-function classifyBasalMode(text?: string): BasalMode {
+function classifyBasalMode(text?: string, row?: any): BasalMode {
   const s = (text || '').toLowerCase();
   if (!s) return 'other';
+
+  const rate = Number(row?.rate ?? row?.absolute ?? NaN);
+  const duration = Number(row?.duration ?? row?.durationInMinutes ?? NaN);
 
   if (
     s.includes('suspend') ||
     s.includes('suspended') ||
     s.includes('suspend basal') ||
     s.includes('השע') ||
-    s.includes('מושהה')
+    s.includes('מושהה') ||
+    (Number.isFinite(rate) && rate === 0 && Number.isFinite(duration) && duration > 0)
   ) {
     return 'suspended';
   }
@@ -52,7 +56,8 @@ function classifyBasalMode(text?: string): BasalMode {
     s.includes('temporary basal') ||
     s.includes('temp') ||
     s.includes('זמני') ||
-    s.includes('בסל זמני')
+    s.includes('בסל זמני') ||
+    Number.isFinite(duration)
   ) {
     return 'temp';
   }
@@ -93,11 +98,12 @@ export async function buildLoopModeSummary({
       const notes = (r as any)?.notes || '';
       const enteredBy = (r as any)?.enteredBy || '';
       const profile = (r as any)?.profile || '';
-      const text = `${eventType} ${notes} ${enteredBy} ${profile} ${r.profileName || ''} ${r.summary || ''}`;
+      const raw = JSON.stringify(r || {}).slice(0, 400);
+      const text = `${eventType} ${notes} ${enteredBy} ${profile} ${r.profileName || ''} ${r.summary || ''} ${raw}`;
       return {
         timestamp: r.timestamp,
         mode: classifyMode(text),
-        basalMode: classifyBasalMode(text),
+        basalMode: classifyBasalMode(text, r),
       };
     })
     .sort((a, b) => a.timestamp - b.timestamp);
