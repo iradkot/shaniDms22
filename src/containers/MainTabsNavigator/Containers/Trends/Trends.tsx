@@ -29,6 +29,7 @@ import QuickStatsRow from './components/QuickStatsRow';
 import {useTrendsQuickStats} from './hooks/useTrendsQuickStats';
 import {extractHypoEvents} from 'app/containers/MainTabsNavigator/Containers/Trends/utils/hypoInvestigation.utils';
 import {useLoopModeStats} from './hooks/useLoopModeStats';
+import {addOpacity} from 'app/style/styling.utils';
 
 import {
   TrendsContainer,
