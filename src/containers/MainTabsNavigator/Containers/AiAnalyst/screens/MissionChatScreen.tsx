@@ -6,11 +6,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   Text,
   ToastAndroid,
   View,
 } from 'react-native';
+import {Bubble, GiftedChat, IMessage} from 'react-native-gifted-chat';
 import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Markdown from 'react-native-markdown-display';
@@ -26,16 +26,7 @@ import {t as tr} from 'app/i18n/translations';
 import {CompactKpi, EvidenceRequest, MissionKey, MarkdownConfig} from '../types';
 import {extractEvidenceLinks, stripEvidenceTags} from '../helpers/evidenceLinks';
 import {DISCLOSURE_TEXT, SCROLL_DELAY_MS, getMissionTitle} from '../constants';
-import {
-  Container,
-  Title,
-  Subtle,
-  MessageBubble,
-  MessageText,
-  InputRow,
-  ChatInput,
-  SendButton,
-} from '../styled';
+import {Container, Title, Subtle, MessageText, InputRow, ChatInput, SendButton} from '../styled';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -103,6 +94,20 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
       em: {...(markdown.style as any).em, textAlign, writingDirection, lineHeight: 24},
     }),
     [markdown.style, textAlign, writingDirection],
+  );
+
+  const giftedMessages: IMessage[] = useMemo(
+    () =>
+      (uiMessages ?? []).map((m, idx) => ({
+        _id: `m-${idx}`,
+        text: m.content,
+        createdAt: new Date(Date.now() - (uiMessages.length - idx) * 1000),
+        user: {
+          _id: m.role === 'assistant' ? 2 : 1,
+          name: m.role === 'assistant' ? 'AI' : 'You',
+        },
+      })),
+    [uiMessages],
   );
 
   const kpiTone = useMemo(() => {
@@ -213,85 +218,131 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
         ) : null}
 
         {/* Messages */}
-        <ScrollView
-          ref={scrollRef}
-          style={{flex: 1, marginTop: theme.spacing.sm}}
-          contentContainerStyle={{paddingBottom: theme.spacing.xl * 3}}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        >
-          {uiMessages.map((m, idx) => {
-            const evidenceLinks = m.role === 'assistant' ? extractEvidenceLinks(m.content) : [];
-            const visibleText = m.role === 'assistant' ? stripEvidenceTags(m.content) : m.content;
+        <View style={{flex: 1, marginTop: theme.spacing.sm}}>
+          <GiftedChat
+            messages={giftedMessages}
+            onSend={() => {}}
+            user={{_id: 1}}
+            inverted={false}
+            renderInputToolbar={() => null}
+            listViewProps={{
+              keyboardShouldPersistTaps: 'handled',
+              keyboardDismissMode: Platform.OS === 'ios' ? 'interactive' : 'on-drag',
+              maintainVisibleContentPosition: {minIndexForVisible: 0},
+              contentContainerStyle: {paddingBottom: theme.spacing.xl * 2},
+            }}
+            renderBubble={props => {
+              const isAssistant = props.currentMessage?.user?._id === 2;
+              return (
+                <Bubble
+                  {...props}
+                  wrapperStyle={{
+                    left: {
+                      backgroundColor: addOpacity(theme.textColor, 0.06),
+                      maxWidth: '92%',
+                      padding: 2,
+                    },
+                    right: {
+                      backgroundColor: addOpacity(theme.accentColor, 0.14),
+                      maxWidth: '92%',
+                      padding: 2,
+                    },
+                  }}
+                  renderMessageText={messageProps => {
+                    const raw = messageProps.currentMessage?.text ?? '';
+                    const visibleText = stripEvidenceTags(raw);
+                    if (isAssistant) {
+                      return (
+                        <Markdown markdownit={markdown.instance} rules={markdown.rules} style={markdownStyle}>
+                          {visibleText}
+                        </Markdown>
+                      );
+                    }
+                    return (
+                      <MessageText selectable style={{textAlign, writingDirection}}>
+                        {visibleText}
+                      </MessageText>
+                    );
+                  }}
+                  renderCustomView={messageProps => {
+                    if (!isAssistant) {
+                      return null;
+                    }
+                    const raw = messageProps.currentMessage?.text ?? '';
+                    const visibleText = stripEvidenceTags(raw);
+                    const evidenceLinks = extractEvidenceLinks(raw);
+                    return (
+                      <View style={{marginTop: 6}}>
+                        <View style={{flexDirection: isHebrew ? 'row-reverse' : 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                          <Pressable
+                            onPress={() => copyToClipboard(visibleText)}
+                            accessibilityRole="button"
+                            accessibilityLabel={tr(language, 'ai.copy')}
+                            style={{flexDirection: isHebrew ? 'row-reverse' : 'row', alignItems: 'center'}}
+                          >
+                            <MaterialIcons name="content-copy" size={14} color={addOpacity(theme.textColor, 0.7)} />
+                            <Text
+                              style={{
+                                marginLeft: isHebrew ? 0 : 4,
+                                marginRight: isHebrew ? 4 : 0,
+                                color: addOpacity(theme.textColor, 0.7),
+                                fontSize: 12,
+                              }}
+                            >
+                              {tr(language, 'ai.copy')}
+                            </Text>
+                          </Pressable>
 
-            return (
-              <MessageBubble key={String(idx)} role={m.role === 'user' ? 'user' : 'assistant'}>
-                {m.role === 'assistant' ? (
-                  <>
-                    <Markdown markdownit={markdown.instance} rules={markdown.rules} style={markdownStyle}>
-                      {visibleText}
-                    </Markdown>
-                    <View style={{flexDirection: isHebrew ? 'row-reverse' : 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6}}>
-                      <Pressable
-                        onPress={() => copyToClipboard(visibleText)}
-                        accessibilityRole="button"
-                        accessibilityLabel={tr(language, 'ai.copy')}
-                        style={{flexDirection: isHebrew ? 'row-reverse' : 'row', alignItems: 'center'}}
-                      >
-                        <MaterialIcons name="content-copy" size={14} color={addOpacity(theme.textColor, 0.7)} />
-                        <Text style={{marginLeft: isHebrew ? 0 : 4, marginRight: isHebrew ? 4 : 0, color: addOpacity(theme.textColor, 0.7), fontSize: 12}}>{tr(language, 'ai.copy')}</Text>
-                      </Pressable>
+                          <View style={{flexDirection: isHebrew ? 'row-reverse' : 'row'}}>
+                            <Pressable
+                              onPress={() => onAssistantFeedback({content: visibleText, helpful: true})}
+                              style={{paddingHorizontal: 8, paddingVertical: 4}}
+                            >
+                              <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.7)}}>
+                                {language === 'he' ? 'עזר 👍' : 'Helpful 👍'}
+                              </Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => onAssistantFeedback({content: visibleText, helpful: false})}
+                              style={{paddingHorizontal: 8, paddingVertical: 4}}
+                            >
+                              <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.7)}}>
+                                {language === 'he' ? 'לא עזר 👎' : 'Not helpful 👎'}
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </View>
 
-                      <View style={{flexDirection: isHebrew ? 'row-reverse' : 'row'}}>
-                        <Pressable
-                          onPress={() => onAssistantFeedback({content: visibleText, helpful: true})}
-                          style={{paddingHorizontal: 8, paddingVertical: 4}}
-                        >
-                          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.7)}}>
-                            {language === 'he' ? 'עזר 👍' : 'Helpful 👍'}
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => onAssistantFeedback({content: visibleText, helpful: false})}
-                          style={{paddingHorizontal: 8, paddingVertical: 4}}
-                        >
-                          <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.7)}}>
-                            {language === 'he' ? 'לא עזר 👎' : 'Not helpful 👎'}
-                          </Text>
-                        </Pressable>
+                        {evidenceLinks.length > 0 ? (
+                          <View style={{marginTop: theme.spacing.sm, gap: theme.spacing.xs}}>
+                            {evidenceLinks.map((link, linkIdx) => (
+                              <Pressable
+                                key={`${link.request.kind}-${link.request.rangeDays}-${linkIdx}`}
+                                onPress={() => onOpenEvidence(link.request)}
+                                style={{
+                                  borderWidth: 1,
+                                  borderColor: addOpacity(theme.accentColor, 0.45),
+                                  borderRadius: 10,
+                                  paddingVertical: 8,
+                                  paddingHorizontal: 10,
+                                  alignSelf: 'flex-start',
+                                  backgroundColor: addOpacity(theme.accentColor, 0.12),
+                                }}
+                                accessibilityRole="button"
+                                accessibilityLabel={link.label}
+                              >
+                                <Text style={{color: theme.textColor, fontWeight: '600'}}>{link.label}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        ) : null}
                       </View>
-                    </View>
-                  </>
-                ) : (
-                  <MessageText selectable style={{textAlign, writingDirection}}>{visibleText}</MessageText>
-                )}
-
-                {evidenceLinks.length > 0 ? (
-                  <View style={{marginTop: theme.spacing.sm, gap: theme.spacing.xs}}>
-                    {evidenceLinks.map((link, linkIdx) => (
-                      <Pressable
-                        key={`${link.request.kind}-${link.request.rangeDays}-${linkIdx}`}
-                        onPress={() => onOpenEvidence(link.request)}
-                        style={{
-                          borderWidth: 1,
-                          borderColor: addOpacity(theme.accentColor, 0.45),
-                          borderRadius: 10,
-                          paddingVertical: 8,
-                          paddingHorizontal: 10,
-                          alignSelf: 'flex-start',
-                          backgroundColor: addOpacity(theme.accentColor, 0.12),
-                        }}
-                        accessibilityRole="button"
-                        accessibilityLabel={link.label}
-                      >
-                        <Text style={{color: theme.textColor, fontWeight: '600'}}>{link.label}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : null}
-              </MessageBubble>
-            );
-          })}
+                    );
+                  }}
+                />
+              );
+            }}
+          />
 
           {isBusy ? (
             <View style={{marginTop: 6, marginLeft: 12, flexDirection: 'row', alignItems: 'center'}}>
@@ -311,11 +362,9 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
           ) : null}
 
           {errorText ? (
-            <Text style={{marginTop: 10, marginLeft: 12, color: theme.belowRangeColor}}>
-              {errorText}
-            </Text>
+            <Text style={{marginTop: 10, marginLeft: 12, color: theme.belowRangeColor}}>{errorText}</Text>
           ) : null}
-        </ScrollView>
+        </View>
 
         {/* Quick actions (meal flow) */}
         {mission === 'openChat' ? (
