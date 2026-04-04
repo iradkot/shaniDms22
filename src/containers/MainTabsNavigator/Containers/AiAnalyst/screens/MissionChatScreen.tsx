@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   ToastAndroid,
   View,
@@ -142,6 +143,76 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
     }
   };
 
+  const renderAssistantContent = (text: string) => {
+    const parts: Array<{type: 'md' | 'code'; content: string; lang?: string}> = [];
+    const re = /```([a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+
+    while ((m = re.exec(text)) != null) {
+      const [full, lang, code] = m;
+      const start = m.index;
+      if (start > last) {
+        parts.push({type: 'md', content: text.slice(last, start)});
+      }
+      parts.push({type: 'code', content: code ?? '', lang: lang || undefined});
+      last = start + full.length;
+    }
+
+    if (last < text.length) {
+      parts.push({type: 'md', content: text.slice(last)});
+    }
+
+    if (parts.length === 0) {
+      parts.push({type: 'md', content: text});
+    }
+
+    return (
+      <View>
+        {parts.map((p, i) => {
+          if (p.type === 'md') {
+            return (
+              <Markdown key={`md-${i}`} markdownit={markdown.instance} rules={markdown.rules} style={markdownStyle}>
+                {p.content}
+              </Markdown>
+            );
+          }
+
+          return (
+            <View
+              key={`code-${i}`}
+              style={{
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: addOpacity(theme.textColor, 0.2),
+                backgroundColor: addOpacity(theme.textColor, 0.04),
+                marginTop: 8,
+                marginBottom: 8,
+                overflow: 'hidden',
+              }}
+            >
+              <View
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderBottomWidth: 1,
+                  borderBottomColor: addOpacity(theme.textColor, 0.15),
+                }}
+              >
+                <Text style={{fontSize: 11, color: addOpacity(theme.textColor, 0.7)}}>{p.lang || 'code'}</Text>
+              </View>
+              <ScrollView horizontal contentContainerStyle={{padding: 10}} showsHorizontalScrollIndicator>
+                <Text selectable style={{fontFamily: Platform.select({ios: 'Menlo', android: 'monospace'}), color: theme.textColor}}>
+                  {p.content}
+                </Text>
+              </ScrollView>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
   return (
     <Container testID={E2E_TEST_IDS.screens.aiAnalyst}>
       <KeyboardAvoidingView style={{flex: 1}} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -252,11 +323,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                     const raw = messageProps.currentMessage?.text ?? '';
                     const visibleText = stripEvidenceTags(raw);
                     if (isAssistant) {
-                      return (
-                        <Markdown markdownit={markdown.instance} rules={markdown.rules} style={markdownStyle}>
-                          {visibleText}
-                        </Markdown>
-                      );
+                      return renderAssistantContent(visibleText);
                     }
                     return (
                       <MessageText selectable style={{textAlign, writingDirection}}>
