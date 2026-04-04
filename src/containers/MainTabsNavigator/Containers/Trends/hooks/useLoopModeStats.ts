@@ -38,6 +38,8 @@ function classifyMode(text?: string): LoopMode {
     s.includes('open loop') ||
     s.includes('open') ||
     s.includes('manual') ||
+    s.includes('profile switch') ||
+    s.includes('openaps disabled') ||
     s.includes('פתוח') ||
     s.includes('ידני')
   ) {
@@ -51,6 +53,8 @@ function classifyMode(text?: string): LoopMode {
     s.includes('aps') ||
     s.includes('loop on') ||
     s.includes('openaps') ||
+    s.includes('profile switch') ||
+    s.includes('autotune') ||
     s.includes('סגור') ||
     s.includes('אוטו') ||
     s.includes('אוטומ')
@@ -67,6 +71,8 @@ function classifyBasalMode(text?: string): BasalMode {
   if (
     s.includes('suspend') ||
     s.includes('suspended') ||
+    s.includes('pump suspend') ||
+    s.includes('suspend pump') ||
     s.includes('השע') ||
     s.includes('מושהה')
   ) {
@@ -76,6 +82,8 @@ function classifyBasalMode(text?: string): BasalMode {
     s.includes('temp basal') ||
     s.includes('temporary basal') ||
     s.includes('temp') ||
+    s.includes('tempbasal') ||
+    s.includes('basal temp') ||
     s.includes('זמני')
   ) {
     return 'temp';
@@ -85,6 +93,8 @@ function classifyBasalMode(text?: string): BasalMode {
     s.includes('plan basal') ||
     s.includes('scheduled basal') ||
     s.includes('profile') ||
+    s.includes('profile switch') ||
+    s.includes('basal profile') ||
     s.includes('פרופיל') ||
     s.includes('בסל מתוכנן')
   ) {
@@ -233,7 +243,11 @@ export function useLoopModeStats({
 
         const normalized = rows
           .map(r => {
-            const text = `${r.profileName || ''} ${r.summary || ''}`;
+            const eventType = (r as any)?.eventType || '';
+            const notes = (r as any)?.notes || '';
+            const enteredBy = (r as any)?.enteredBy || '';
+            const profile = (r as any)?.profile || '';
+            const text = `${eventType} ${notes} ${enteredBy} ${profile} ${r.profileName || ''} ${r.summary || ''}`;
             return {
               timestamp: r.timestamp,
               mode: classifyMode(text),

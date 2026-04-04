@@ -9,13 +9,22 @@ function classifyMode(text?: string): LoopMode {
   if (!s) {
     return 'unknown';
   }
-  if (s.includes('open') || s.includes('manual') || s.includes('פתוח') || s.includes('ידני')) {
+  if (
+    s.includes('open loop') ||
+    s.includes('open') ||
+    s.includes('manual') ||
+    s.includes('profile switch') ||
+    s.includes('פתוח') ||
+    s.includes('ידני')
+  ) {
     return 'open';
   }
   if (
+    s.includes('closed loop') ||
     s.includes('closed') ||
     s.includes('auto') ||
     s.includes('aps') ||
+    s.includes('openaps') ||
     s.includes('סגור') ||
     s.includes('אוטו')
   ) {
@@ -80,7 +89,11 @@ export async function buildLoopModeSummary({
 
   const events = rows
     .map(r => {
-      const text = `${r.profileName || ''} ${r.summary || ''}`;
+      const eventType = (r as any)?.eventType || '';
+      const notes = (r as any)?.notes || '';
+      const enteredBy = (r as any)?.enteredBy || '';
+      const profile = (r as any)?.profile || '';
+      const text = `${eventType} ${notes} ${enteredBy} ${profile} ${r.profileName || ''} ${r.summary || ''}`;
       return {
         timestamp: r.timestamp,
         mode: classifyMode(text),
