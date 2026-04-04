@@ -310,21 +310,22 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                 <Bubble
                   {...props}
                   containerStyle={{
-                    left: {marginLeft: 2, marginRight: 2},
-                    right: {marginLeft: 2, marginRight: 2},
+                    left: {marginLeft: 0, marginRight: 0, width: '100%'},
+                    right: {marginLeft: 0, marginRight: 0},
                   }}
                   wrapperStyle={{
                     left: {
                       backgroundColor: addOpacity(theme.textColor, 0.06),
-                      maxWidth: '97%',
-                      padding: 4,
-                      marginRight: 6,
+                      maxWidth: '100%',
+                      width: '98%',
+                      padding: 6,
+                      marginRight: 0,
                     },
                     right: {
                       backgroundColor: addOpacity(theme.accentColor, 0.14),
                       maxWidth: '94%',
-                      padding: 4,
-                      marginLeft: 14,
+                      padding: 6,
+                      marginLeft: 18,
                     },
                   }}
                   renderMessageText={messageProps => {

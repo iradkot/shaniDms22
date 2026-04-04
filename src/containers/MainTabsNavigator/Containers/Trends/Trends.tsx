@@ -28,6 +28,7 @@ import {AGPSummary} from 'app/components/charts/AGPGraph';
 import QuickStatsRow from './components/QuickStatsRow';
 import {useTrendsQuickStats} from './hooks/useTrendsQuickStats';
 import {extractHypoEvents} from 'app/containers/MainTabsNavigator/Containers/Trends/utils/hypoInvestigation.utils';
+import {useLoopModeStats} from './hooks/useLoopModeStats';
 
 import {
   TrendsContainer,
@@ -115,6 +116,7 @@ const Trends: React.FC = () => {
   } = useTrendsData({ rangeDays, start, end });
 
   const {stats: quickStats} = useTrendsQuickStats({bgData, start, end, rangeDays});
+  const loopModeStats = useLoopModeStats({start, end, bgData});
 
   const hypoInvestigationNavLockRef = useRef(false);
   const hypoInvestigationUnlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -384,7 +386,34 @@ const Trends: React.FC = () => {
             />
           </View>
 
-          {/* (c) AGP Summary */}
+          {/* (c) Loop open/closed exposure stats */}
+          <View style={{marginBottom: theme.spacing.lg - 1}}>
+            <SectionTitle>{language === 'he' ? 'לופ פתוח מול סגור' : 'Open vs Closed Loop'}</SectionTitle>
+            <View style={{paddingHorizontal: 4, gap: 4}}>
+              <Text style={{color: theme.textColor}}>
+                {language === 'he'
+                  ? `זמן לופ פתוח: ${loopModeStats.openPct.toFixed(1)}% (${Math.round(loopModeStats.openMinutes / 60)} שעות)`
+                  : `Open loop time: ${loopModeStats.openPct.toFixed(1)}% (${Math.round(loopModeStats.openMinutes / 60)}h)`}
+              </Text>
+              <Text style={{color: theme.textColor}}>
+                {language === 'he'
+                  ? `זמן לופ סגור: ${loopModeStats.closedPct.toFixed(1)}% (${Math.round(loopModeStats.closedMinutes / 60)} שעות)`
+                  : `Closed loop time: ${loopModeStats.closedPct.toFixed(1)}% (${Math.round(loopModeStats.closedMinutes / 60)}h)`}
+              </Text>
+              <Text style={{color: theme.textColor}}>
+                {language === 'he'
+                  ? `ממוצע סוכר (פתוח/סגור): ${loopModeStats.openAvgBg?.toFixed(0) ?? '-'} / ${loopModeStats.closedAvgBg?.toFixed(0) ?? '-'}`
+                  : `Avg BG (open/closed): ${loopModeStats.openAvgBg?.toFixed(0) ?? '-'} / ${loopModeStats.closedAvgBg?.toFixed(0) ?? '-'}`}
+              </Text>
+              <Text style={{color: theme.textColor}}>
+                {language === 'he'
+                  ? `TIR (פתוח/סגור): ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}% / ${loopModeStats.closedTirPct?.toFixed(1) ?? '-'}%`
+                  : `TIR (open/closed): ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}% / ${loopModeStats.closedTirPct?.toFixed(1) ?? '-'}%`}
+              </Text>
+            </View>
+          </View>
+
+          {/* (d) AGP Summary */}
           <View style={{marginBottom: theme.spacing.lg - 1}}>
             <SectionTitle>{tr(language, 'trends.agp')}</SectionTitle>
             <AGPSummary bgData={bgData} testID={E2E_TEST_IDS.charts.agpSummary} />
