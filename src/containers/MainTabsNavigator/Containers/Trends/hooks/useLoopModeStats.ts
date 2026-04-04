@@ -80,6 +80,23 @@ function classifyBasalMode(text?: string, row?: any): BasalMode {
 
   const rate = Number(row?.rate ?? row?.absolute ?? NaN);
   const duration = Number(row?.duration ?? row?.durationInMinutes ?? NaN);
+  const hasBasalSignal =
+    s.includes('basal') ||
+    s.includes('temp basal') ||
+    s.includes('temporary basal') ||
+    s.includes('tempbasal') ||
+    s.includes('profile switch') ||
+    s.includes('profile') ||
+    s.includes('suspend') ||
+    s.includes('suspended') ||
+    s.includes('בסל') ||
+    s.includes('פרופיל') ||
+    s.includes('זמני') ||
+    s.includes('מושהה');
+
+  if (!hasBasalSignal) {
+    return 'other';
+  }
 
   if (
     s.includes('suspend') ||
@@ -96,11 +113,10 @@ function classifyBasalMode(text?: string, row?: any): BasalMode {
   if (
     s.includes('temp basal') ||
     s.includes('temporary basal') ||
-    s.includes('temp') ||
     s.includes('tempbasal') ||
     s.includes('basal temp') ||
     s.includes('זמני') ||
-    Number.isFinite(duration)
+    (Number.isFinite(duration) && duration > 0 && !s.includes('profile'))
   ) {
     return 'temp';
   }
