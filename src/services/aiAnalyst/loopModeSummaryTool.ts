@@ -4,6 +4,16 @@ import {BgSample} from 'app/types/day_bgs.types';
 
 type BasalMode = 'temp' | 'suspended' | 'planned' | 'other';
 
+function inferLoopModeFromBasal(basalMode: BasalMode): LoopMode {
+  if (basalMode === 'temp' || basalMode === 'suspended') {
+    return 'closed';
+  }
+  if (basalMode === 'planned') {
+    return 'open';
+  }
+  return 'unknown';
+}
+
 function classifyMode(text?: string): LoopMode {
   const s = (text || '').toLowerCase();
   if (!s) {
@@ -100,10 +110,13 @@ export async function buildLoopModeSummary({
       const profile = (r as any)?.profile || '';
       const raw = JSON.stringify(r || {}).slice(0, 400);
       const text = `${eventType} ${notes} ${enteredBy} ${profile} ${r.profileName || ''} ${r.summary || ''} ${raw}`;
+      const basalMode = classifyBasalMode(text, r);
+      const modeRaw = classifyMode(text);
+      const mode = modeRaw === 'unknown' ? inferLoopModeFromBasal(basalMode) : modeRaw;
       return {
         timestamp: r.timestamp,
-        mode: classifyMode(text),
-        basalMode: classifyBasalMode(text, r),
+        mode,
+        basalMode,
       };
     })
     .sort((a, b) => a.timestamp - b.timestamp);

@@ -5,6 +5,16 @@ import {fetchProfileChangeHistory} from 'app/services/loopAnalysis/profileHistor
 export type LoopMode = 'open' | 'closed' | 'unknown';
 type BasalMode = 'temp' | 'suspended' | 'planned' | 'other';
 
+function inferLoopModeFromBasal(basalMode: BasalMode): LoopMode {
+  if (basalMode === 'temp' || basalMode === 'suspended') {
+    return 'closed';
+  }
+  if (basalMode === 'planned') {
+    return 'open';
+  }
+  return 'unknown';
+}
+
 export interface LoopModeStats {
   openMinutes: number;
   closedMinutes: number;
@@ -257,10 +267,13 @@ export function useLoopModeStats({
             const profile = (r as any)?.profile || '';
             const raw = JSON.stringify(r || {}).slice(0, 400);
             const text = `${eventType} ${notes} ${enteredBy} ${profile} ${r.profileName || ''} ${r.summary || ''} ${raw}`;
+            const basalMode = classifyBasalMode(text, r);
+            const modeRaw = classifyMode(text);
+            const mode = modeRaw === 'unknown' ? inferLoopModeFromBasal(basalMode) : modeRaw;
             return {
               timestamp: r.timestamp,
-              mode: classifyMode(text),
-              basalMode: classifyBasalMode(text, r),
+              mode,
+              basalMode,
             };
           })
           .sort((a, b) => a.timestamp - b.timestamp);
