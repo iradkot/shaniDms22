@@ -3,6 +3,7 @@ import {BgSample} from 'app/types/day_bgs.types';
 import {fetchProfileChangeHistory} from 'app/services/loopAnalysis/profileHistoryService';
 
 export type LoopMode = 'open' | 'closed' | 'unknown';
+type BasalMode = 'temp' | 'suspended' | 'planned' | 'other';
 
 export interface LoopModeStats {
   openMinutes: number;
@@ -14,11 +15,18 @@ export interface LoopModeStats {
   closedAvgBg: number | null;
   openTirPct: number | null;
   closedTirPct: number | null;
+  tempBasalMinutes: number;
+  suspendedMinutes: number;
+  plannedBasalMinutes: number;
+  tempBasalPct: number;
+  suspendedPct: number;
+  plannedBasalPct: number;
   diagnostics: {
     eventsFetched: number;
     eventsClassified: number;
     openSamples: number;
     closedSamples: number;
+    basalEvents: number;
   };
 }
 
@@ -51,6 +59,38 @@ function classifyMode(text?: string): LoopMode {
   }
 
   return 'unknown';
+}
+
+function classifyBasalMode(text?: string): BasalMode {
+  const s = (text || '').toLowerCase();
+  if (!s) return 'other';
+  if (
+    s.includes('suspend') ||
+    s.includes('suspended') ||
+    s.includes('השע') ||
+    s.includes('מושהה')
+  ) {
+    return 'suspended';
+  }
+  if (
+    s.includes('temp basal') ||
+    s.includes('temporary basal') ||
+    s.includes('temp') ||
+    s.includes('זמני')
+  ) {
+    return 'temp';
+  }
+  if (
+    s.includes('planned basal') ||
+    s.includes('plan basal') ||
+    s.includes('scheduled basal') ||
+    s.includes('profile') ||
+    s.includes('פרופיל') ||
+    s.includes('בסל מתוכנן')
+  ) {
+    return 'planned';
+  }
+  return 'other';
 }
 
 function avg(arr: number[]) {
@@ -87,11 +127,18 @@ export function computeLoopModeStats({
       closedAvgBg: null,
       openTirPct: null,
       closedTirPct: null,
+      tempBasalMinutes: 0,
+      suspendedMinutes: 0,
+      plannedBasalMinutes: 0,
+      tempBasalPct: 0,
+      suspendedPct: 0,
+      plannedBasalPct: 0,
       diagnostics: {
         eventsFetched: 0,
         eventsClassified: 0,
         openSamples: 0,
         closedSamples: 0,
+        basalEvents: 0,
       },
     };
   }
@@ -147,11 +194,18 @@ export function computeLoopModeStats({
     closedAvgBg: avg(closedSamples),
     openTirPct: tir(openSamples),
     closedTirPct: tir(closedSamples),
+    tempBasalMinutes: 0,
+    suspendedMinutes: 0,
+    plannedBasalMinutes: 0,
+    tempBasalPct: 0,
+    suspendedPct: 0,
+    plannedBasalPct: 0,
     diagnostics: {
       eventsFetched: events.length,
       eventsClassified: events.filter(e => e.mode !== 'unknown').length,
       openSamples: openSamples.length,
       closedSamples: closedSamples.length,
+      basalEvents: events.length,
     },
   };
 }
@@ -165,7 +219,7 @@ export function useLoopModeStats({
   end: Date;
   bgData: BgSample[];
 }) {
-  const [events, setEvents] = useState<Array<{timestamp: number; mode: LoopMode}>>([]);
+  const [events, setEvents] = useState<Array<{timestamp: number; mode: LoopMode; basalMode: BasalMode}>>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -178,10 +232,14 @@ export function useLoopModeStats({
         });
 
         const normalized = rows
-          .map(r => ({
-            timestamp: r.timestamp,
-            mode: classifyMode(`${r.profileName || ''} ${r.summary || ''}`),
-          }))
+          .map(r => {
+            const text = `${r.profileName || ''} ${r.summary || ''}`;
+            return {
+              timestamp: r.timestamp,
+              mode: classifyMode(text),
+              basalMode: classifyBasalMode(text),
+            };
+          })
           .sort((a, b) => a.timestamp - b.timestamp);
 
         if (!cancelled) setEvents(normalized);
@@ -195,8 +253,57 @@ export function useLoopModeStats({
     };
   }, [start, end]);
 
-  return useMemo(
-    () => computeLoopModeStats({start, end, bgData, events}),
-    [events, bgData, start, end],
-  );
+  return useMemo(() => {
+    const base = computeLoopModeStats({
+      start,
+      end,
+      bgData,
+      events: events.map(e => ({timestamp: e.timestamp, mode: e.mode})),
+    });
+
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+    const totalMinutes = Math.max(1, Math.round((endMs - startMs) / 60000));
+
+    let currentBasal: BasalMode = 'other';
+    const prior = events.filter(e => e.timestamp <= startMs).slice(-1)[0];
+    if (prior) currentBasal = prior.basalMode;
+
+    let cursor = startMs;
+    let tempBasalMinutes = 0;
+    let suspendedMinutes = 0;
+    let plannedBasalMinutes = 0;
+
+    for (const e of events) {
+      if (e.timestamp <= startMs || e.timestamp >= endMs) {
+        if (e.timestamp <= startMs) currentBasal = e.basalMode;
+        continue;
+      }
+      const delta = Math.max(0, Math.round((e.timestamp - cursor) / 60000));
+      if (currentBasal === 'temp') tempBasalMinutes += delta;
+      if (currentBasal === 'suspended') suspendedMinutes += delta;
+      if (currentBasal === 'planned') plannedBasalMinutes += delta;
+      currentBasal = e.basalMode;
+      cursor = e.timestamp;
+    }
+
+    const tail = Math.max(0, Math.round((endMs - cursor) / 60000));
+    if (currentBasal === 'temp') tempBasalMinutes += tail;
+    if (currentBasal === 'suspended') suspendedMinutes += tail;
+    if (currentBasal === 'planned') plannedBasalMinutes += tail;
+
+    return {
+      ...base,
+      tempBasalMinutes,
+      suspendedMinutes,
+      plannedBasalMinutes,
+      tempBasalPct: (tempBasalMinutes / totalMinutes) * 100,
+      suspendedPct: (suspendedMinutes / totalMinutes) * 100,
+      plannedBasalPct: (plannedBasalMinutes / totalMinutes) * 100,
+      diagnostics: {
+        ...base.diagnostics,
+        basalEvents: events.length,
+      },
+    };
+  }, [events, bgData, start, end]);
 }

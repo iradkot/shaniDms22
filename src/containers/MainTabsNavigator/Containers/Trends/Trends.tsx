@@ -449,10 +449,16 @@ const Trends: React.FC = () => {
                 </Text>
               )}
 
+              <Text style={{color: theme.textColor, fontSize: 14}}>
+                {language === 'he'
+                  ? `טמפ בזאל: ${loopModeStats.tempBasalPct.toFixed(1)}% (${Math.round(loopModeStats.tempBasalMinutes / 60)} ש׳) • מושעה: ${loopModeStats.suspendedPct.toFixed(1)}% (${Math.round(loopModeStats.suspendedMinutes / 60)} ש׳) • בזאל מתוכנן: ${loopModeStats.plannedBasalPct.toFixed(1)}% (${Math.round(loopModeStats.plannedBasalMinutes / 60)} ש׳)`
+                  : `Temp basal: ${loopModeStats.tempBasalPct.toFixed(1)}% (${Math.round(loopModeStats.tempBasalMinutes / 60)}h) • Suspended: ${loopModeStats.suspendedPct.toFixed(1)}% (${Math.round(loopModeStats.suspendedMinutes / 60)}h) • Planned basal: ${loopModeStats.plannedBasalPct.toFixed(1)}% (${Math.round(loopModeStats.plannedBasalMinutes / 60)}h)`}
+              </Text>
+
               <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>
                 {language === 'he'
-                  ? `דיאגנוסטיקה: אירועים ${loopModeStats.diagnostics.eventsFetched}, מסווגים ${loopModeStats.diagnostics.eventsClassified}, דגימות פתוח ${loopModeStats.diagnostics.openSamples}, דגימות סגור ${loopModeStats.diagnostics.closedSamples}`
-                  : `Diagnostics: events ${loopModeStats.diagnostics.eventsFetched}, classified ${loopModeStats.diagnostics.eventsClassified}, open samples ${loopModeStats.diagnostics.openSamples}, closed samples ${loopModeStats.diagnostics.closedSamples}`}
+                  ? `דיאגנוסטיקה: אירועים ${loopModeStats.diagnostics.eventsFetched}, מסווגים ${loopModeStats.diagnostics.eventsClassified}, דגימות פתוח ${loopModeStats.diagnostics.openSamples}, דגימות סגור ${loopModeStats.diagnostics.closedSamples}, אירועי בזאל ${loopModeStats.diagnostics.basalEvents}`
+                  : `Diagnostics: events ${loopModeStats.diagnostics.eventsFetched}, classified ${loopModeStats.diagnostics.eventsClassified}, open samples ${loopModeStats.diagnostics.openSamples}, closed samples ${loopModeStats.diagnostics.closedSamples}, basal events ${loopModeStats.diagnostics.basalEvents}`}
               </Text>
             </View>
           </View>

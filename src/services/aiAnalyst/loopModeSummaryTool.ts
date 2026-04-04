@@ -2,6 +2,8 @@ import {fetchProfileChangeHistory} from 'app/services/loopAnalysis/profileHistor
 import {computeLoopModeStats, LoopMode} from 'app/containers/MainTabsNavigator/Containers/Trends/hooks/useLoopModeStats';
 import {BgSample} from 'app/types/day_bgs.types';
 
+type BasalMode = 'temp' | 'suspended' | 'planned' | 'other';
+
 function classifyMode(text?: string): LoopMode {
   const s = (text || '').toLowerCase();
   if (!s) {
@@ -10,10 +12,55 @@ function classifyMode(text?: string): LoopMode {
   if (s.includes('open') || s.includes('manual') || s.includes('פתוח') || s.includes('ידני')) {
     return 'open';
   }
-  if (s.includes('closed') || s.includes('auto') || s.includes('aps') || s.includes('סגור') || s.includes('אוטו')) {
+  if (
+    s.includes('closed') ||
+    s.includes('auto') ||
+    s.includes('aps') ||
+    s.includes('סגור') ||
+    s.includes('אוטו')
+  ) {
     return 'closed';
   }
   return 'unknown';
+}
+
+function classifyBasalMode(text?: string): BasalMode {
+  const s = (text || '').toLowerCase();
+  if (!s) return 'other';
+
+  if (
+    s.includes('suspend') ||
+    s.includes('suspended') ||
+    s.includes('suspend basal') ||
+    s.includes('השע') ||
+    s.includes('מושהה')
+  ) {
+    return 'suspended';
+  }
+
+  if (
+    s.includes('temp basal') ||
+    s.includes('temporary basal') ||
+    s.includes('temp') ||
+    s.includes('זמני') ||
+    s.includes('בסל זמני')
+  ) {
+    return 'temp';
+  }
+
+  if (
+    s.includes('profile') ||
+    s.includes('planned basal') ||
+    s.includes('plan basal') ||
+    s.includes('scheduled basal') ||
+    s.includes('programmed basal') ||
+    s.includes('בסל מתוכנן') ||
+    s.includes('פרופיל')
+  ) {
+    return 'planned';
+  }
+
+  return 'other';
 }
 
 export async function buildLoopModeSummary({
@@ -32,10 +79,55 @@ export async function buildLoopModeSummary({
   });
 
   const events = rows
-    .map(r => ({timestamp: r.timestamp, mode: classifyMode(`${r.profileName || ''} ${r.summary || ''}`)}))
+    .map(r => {
+      const text = `${r.profileName || ''} ${r.summary || ''}`;
+      return {
+        timestamp: r.timestamp,
+        mode: classifyMode(text),
+        basalMode: classifyBasalMode(text),
+      };
+    })
     .sort((a, b) => a.timestamp - b.timestamp);
 
-  const stats = computeLoopModeStats({start, end, bgData, events});
+  const stats = computeLoopModeStats({
+    start,
+    end,
+    bgData,
+    events: events.map(e => ({timestamp: e.timestamp, mode: e.mode})),
+  });
+
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  const totalMinutes = Math.max(1, Math.round((endMs - startMs) / 60000));
+
+  let currentBasalMode: BasalMode = 'other';
+  const prior = events.filter(e => e.timestamp <= startMs).slice(-1)[0];
+  if (prior) currentBasalMode = prior.basalMode;
+
+  let cursor = startMs;
+  let tempBasalMinutes = 0;
+  let suspendedMinutes = 0;
+  let plannedBasalMinutes = 0;
+
+  for (const e of events) {
+    if (e.timestamp <= startMs || e.timestamp >= endMs) {
+      if (e.timestamp <= startMs) currentBasalMode = e.basalMode;
+      continue;
+    }
+
+    const deltaMin = Math.max(0, Math.round((e.timestamp - cursor) / 60000));
+    if (currentBasalMode === 'temp') tempBasalMinutes += deltaMin;
+    if (currentBasalMode === 'suspended') suspendedMinutes += deltaMin;
+    if (currentBasalMode === 'planned') plannedBasalMinutes += deltaMin;
+
+    currentBasalMode = e.basalMode;
+    cursor = e.timestamp;
+  }
+
+  const tailMin = Math.max(0, Math.round((endMs - cursor) / 60000));
+  if (currentBasalMode === 'temp') tempBasalMinutes += tailMin;
+  if (currentBasalMode === 'suspended') suspendedMinutes += tailMin;
+  if (currentBasalMode === 'planned') plannedBasalMinutes += tailMin;
 
   return {
     openPct: Number(stats.openPct.toFixed(1)),
@@ -46,6 +138,17 @@ export async function buildLoopModeSummary({
     closedAvgBg: stats.closedAvgBg ? Number(stats.closedAvgBg.toFixed(0)) : null,
     openTirPct: stats.openTirPct ? Number(stats.openTirPct.toFixed(1)) : null,
     closedTirPct: stats.closedTirPct ? Number(stats.closedTirPct.toFixed(1)) : null,
-    diagnostics: stats.diagnostics,
+
+    tempBasalMinutes,
+    suspendedMinutes,
+    plannedBasalMinutes,
+    tempBasalPct: Number(((tempBasalMinutes / totalMinutes) * 100).toFixed(1)),
+    suspendedPct: Number(((suspendedMinutes / totalMinutes) * 100).toFixed(1)),
+    plannedBasalPct: Number(((plannedBasalMinutes / totalMinutes) * 100).toFixed(1)),
+
+    diagnostics: {
+      ...stats.diagnostics,
+      basalEvents: events.length,
+    },
   };
 }
