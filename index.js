@@ -10,10 +10,17 @@ import '@react-native-firebase/app';
 import {AppRegistry} from 'react-native';
 import { getApp } from '@react-native-firebase/app';
 import { getMessaging } from '@react-native-firebase/messaging';
-import notifee, { AndroidImportance } from '@notifee/react-native';
+import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
+import {handleSnoozeAction} from './src/services/notifications/snoozeStore';
 
 // Setup crash-proof background message handler with notification display
 const messagingBG = getMessaging(getApp());
+
+notifee.onBackgroundEvent(async ({type, detail}) => {
+  if (type !== EventType.ACTION_PRESS) return;
+  await handleSnoozeAction(detail?.pressAction?.id, detail?.notification?.data?.ruleId);
+});
+
 messagingBG.setBackgroundMessageHandler(remoteMessage => {
   setImmediate(async () => {
     console.log('index.js: background message handler, msgID=', remoteMessage.messageId);

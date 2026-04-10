@@ -49,6 +49,7 @@ import {useDailyBriefNotifications} from 'app/hooks/useDailyBriefNotifications';
 import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
 import {useAndroidGlucoseLiveSurface} from 'app/hooks/useAndroidGlucoseLiveSurface';
 import {useGlucoseRuleNotifications} from 'app/hooks/useGlucoseRuleNotifications';
+import {handleSnoozeAction} from 'app/services/notifications/snoozeStore';
 import {
   navigateToHypoInvestigation,
   rootNavigationRef,
@@ -243,7 +244,15 @@ const AppInner: () => React.ReactElement = () => {
   React.useEffect(() => {
     if (isE2E) return;
 
-    const unsubscribeForeground = notifee.onForegroundEvent(({type, detail}: {type: number; detail: any}) => {
+    const unsubscribeForeground = notifee.onForegroundEvent(async ({type, detail}: {type: number; detail: any}) => {
+      if (type === EventType.ACTION_PRESS) {
+        const consumed = await handleSnoozeAction(
+          detail?.pressAction?.id,
+          detail?.notification?.data?.ruleId,
+        );
+        if (consumed) return;
+      }
+
       if (type !== EventType.PRESS) return;
       handleNotificationNavigation({notification: detail.notification});
     });

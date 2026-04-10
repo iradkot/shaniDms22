@@ -3,6 +3,7 @@ import notifee, {AndroidImportance} from '@notifee/react-native';
 
 import {BgSample} from 'app/types/day_bgs.types';
 import {getNotificationRules, markNotificationRuleCalled} from 'app/services/notifications/localNotificationsStore';
+import {isRuleSnoozed} from 'app/services/notifications/snoozeStore';
 
 const CHANNEL_ID = 'glucose-rule-alerts';
 const RULE_COOLDOWN_MS = 20 * 60 * 1000;
@@ -73,6 +74,8 @@ export function useGlucoseRuleNotifications(sample?: BgSample | null) {
       await ensureChannel();
 
       for (const rule of rules) {
+        const ruleId = String(rule.id);
+        if (await isRuleSnoozed(ruleId, nowMs)) continue;
         if (!shouldTriggerForRule(rule, sample, nowMs)) continue;
 
         const body = `${Math.round(sample.sgv)} mg/dL • ${sample.direction ?? '—'} • ${rule.name}`;
@@ -84,14 +87,19 @@ export function useGlucoseRuleNotifications(sample?: BgSample | null) {
             smallIcon: 'ic_launcher',
             importance: AndroidImportance.HIGH,
             pressAction: {id: 'default'},
+            actions: [
+              {title: 'Snooze 10m', pressAction: {id: 'snooze_10'}},
+              {title: 'Snooze 20m', pressAction: {id: 'snooze_20'}},
+              {title: 'Snooze 30m', pressAction: {id: 'snooze_30'}},
+            ],
           },
           data: {
             source: 'rule_based',
-            ruleId: String(rule.id),
+            ruleId,
           },
         });
 
-        await markNotificationRuleCalled(String(rule.id), nowMs);
+        await markNotificationRuleCalled(ruleId, nowMs);
       }
     };
 
