@@ -577,6 +577,7 @@ const DailyReviewScreen: React.FC = () => {
   const wHighs = useMemo(() => wRows.filter(r => r.sgv > (glucoseSettings.hyper ?? 180)).length, [wRows, glucoseSettings.hyper]);
 
   const yLowPct = useMemo(() => (yRows.length ? Math.round((yLows / yRows.length) * 100) : 0), [yRows.length, yLows]);
+  const hasBaseline = wRows.length > 0;
   const yHighPct = useMemo(() => (yRows.length ? Math.round((yHighs / yRows.length) * 100) : 0), [yRows.length, yHighs]);
   const wLowPct = useMemo(() => (wRows.length ? Math.round((wLows / wRows.length) * 100) : 0), [wRows.length, wLows]);
   const wHighPct = useMemo(() => (wRows.length ? Math.round((wHighs / wRows.length) * 100) : 0), [wRows.length, wHighs]);
@@ -588,6 +589,7 @@ const DailyReviewScreen: React.FC = () => {
 
   const percentToRoundedMinutes = (pct: number) => {
     const raw = Math.abs((pct / 100) * 1440);
+    if (!Number.isFinite(raw) || raw <= 0) return 0;
     const step = raw >= 60 ? 10 : 5;
     return Math.max(step, Math.round(raw / step) * step);
   };
@@ -1012,10 +1014,14 @@ const DailyReviewScreen: React.FC = () => {
     return inNight && (r.sgv ?? 0) < (glucoseSettings.hypo ?? 70);
   }).length;
 
+  const positiveColor = theme.inRangeColor;
+  const cautionColor = theme.aboveRangeColor;
+  const riskColor = theme.belowRangeColor;
+
   const metricChip = (label: string, delta: number, betterWhen: 'higher' | 'lower') => {
     const improved = betterWhen === 'higher' ? delta > 0 : delta < 0;
     const worse = betterWhen === 'higher' ? delta < 0 : delta > 0;
-    const color = improved ? '#2e7d32' : worse ? '#c62828' : '#757575';
+    const color = improved ? positiveColor : worse ? riskColor : addOpacity(theme.textColor, 0.65);
     const sign = delta > 0 ? '+' : '';
     return (
       <View key={label} style={{paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(color, 0.35), backgroundColor: addOpacity(color, 0.08)}}>
@@ -1127,16 +1133,18 @@ const DailyReviewScreen: React.FC = () => {
         </Text>
         <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.75), textAlign}}>
           {language === 'he'
-            ? `${tirDelta >= 0 ? '+' : ''}${tirDelta}% מול הייחוס השבועי • ${tirDelta >= 0 ? `הרווחת כ-${tirDeltaMinutes} דקות ביעד` : `איבדת כ-${tirDeltaMinutes} דקות ביעד`}`
-            : `${tirDelta >= 0 ? '+' : ''}${tirDelta}% vs baseline • ${tirDelta >= 0 ? `~${tirDeltaMinutes} more minutes in range` : `~${tirDeltaMinutes} fewer minutes in range`}`}
+            ? `${tirDelta >= 0 ? '+' : ''}${tirDelta}% ${hasBaseline ? 'מול הייחוס השבועי' : 'מול טווח היעד'} • ${tirDelta >= 0 ? `הרווחת כ-${tirDeltaMinutes} דקות ביעד` : `איבדת כ-${tirDeltaMinutes} דקות ביעד`}`
+            : `${tirDelta >= 0 ? '+' : ''}${tirDelta}% ${hasBaseline ? 'vs baseline' : 'vs target'} • ${tirDelta >= 0 ? `~${tirDeltaMinutes} more minutes in range` : `~${tirDeltaMinutes} fewer minutes in range`}`}
         </Text>
 
         <View style={{marginTop: 10, gap: 8}}>
-          <View style={{padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.white, 0.82), borderWidth: 1, borderColor: addOpacity('#1565c0', 0.2)}}>
+          <View style={{padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.white, 0.82), borderWidth: 1, borderColor: addOpacity(theme.belowRangeColor, 0.2)}}>
             <Text style={{fontWeight: '800', color: theme.textColor}}>
-              {language === 'he' ? `🧊 זמן בהיפו: ${yLowPct}% (ייחוס ${wLowPct}%)` : `🧊 Low time: ${yLowPct}% (baseline ${wLowPct}%)`}
+              {language === 'he'
+                ? `🧊 זמן בהיפו: ${yLowPct}%${hasBaseline ? ` (ייחוס ${wLowPct}%)` : ''}`
+                : `🧊 Low time: ${yLowPct}%${hasBaseline ? ` (baseline ${wLowPct}%)` : ''}`}
             </Text>
-            <Text style={{marginTop: 4, color: lowDelta <= 0 ? '#2e7d32' : '#c62828', fontWeight: '800'}}>
+            <Text style={{marginTop: 4, color: lowDelta <= 0 ? positiveColor : riskColor, fontWeight: '800'}}>
               {language === 'he'
                 ? lowDelta <= 0
                   ? `⬇️ חסכת ${lowDeltaMinutes} דקות של נמוכים`
@@ -1147,11 +1155,13 @@ const DailyReviewScreen: React.FC = () => {
             </Text>
           </View>
 
-          <View style={{padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.white, 0.82), borderWidth: 1, borderColor: addOpacity('#ef6c00', 0.2)}}>
+          <View style={{padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.white, 0.82), borderWidth: 1, borderColor: addOpacity(theme.aboveRangeColor, 0.2)}}>
             <Text style={{fontWeight: '800', color: theme.textColor}}>
-              {language === 'he' ? `📈 זמן בגבוהים: ${yHighPct}% (ייחוס ${wHighPct}%)` : `📈 High time: ${yHighPct}% (baseline ${wHighPct}%)`}
+              {language === 'he'
+                ? `📈 זמן בגבוהים: ${yHighPct}%${hasBaseline ? ` (ייחוס ${wHighPct}%)` : ''}`
+                : `📈 High time: ${yHighPct}%${hasBaseline ? ` (baseline ${wHighPct}%)` : ''}`}
             </Text>
-            <Text style={{marginTop: 4, color: highDelta <= 0 ? '#2e7d32' : '#c62828', fontWeight: '800'}}>
+            <Text style={{marginTop: 4, color: highDelta <= 0 ? positiveColor : riskColor, fontWeight: '800'}}>
               {language === 'he'
                 ? highDelta <= 0
                   ? `⬇️ קיזזת עוד ${highDeltaMinutes} דקות בגבוהים`
@@ -1268,7 +1278,7 @@ const DailyReviewScreen: React.FC = () => {
               const delta = item.delta ?? 0;
               const improved = (item.delta ?? 0) > 0;
               const same = item.delta == null || item.delta === 0;
-              const deltaColor = same ? addOpacity(theme.textColor, 0.6) : improved ? '#2e7d32' : '#c62828';
+              const deltaColor = same ? addOpacity(theme.textColor, 0.6) : improved ? positiveColor : riskColor;
               const isExpanded = expandedMealCard === item.bucket;
               const isPerfectScore = item.score >= 100;
               const bucketEpisodes = todayEpisodes.filter(e => e.bucket === item.bucket);
@@ -1312,8 +1322,8 @@ const DailyReviewScreen: React.FC = () => {
                       <Text style={{fontSize: 11, color: addOpacity(theme.textColor, 0.62), writingDirection: 'ltr'}}>{`${item.avgLowPct}% • ${item.avgTirPct}% • ${item.avgHighPct}%`}</Text>
                       <View style={{padding: 8, borderRadius: 10, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.12)}}>
                         <Text style={{color: theme.textColor, fontWeight: '700'}}>{language === 'he' ? 'שיאי סוכר' : 'Glucose peaks'}</Text>
-                        <Text style={{marginTop: 4, color: '#c62828', writingDirection: 'ltr'}}>{language === 'he' ? 'שיא גבוה (3ש): ' : 'Peak High (3h): '}{peakHigh ?? '—'} mg/dL</Text>
-                        <Text style={{marginTop: 2, color: '#1565c0', writingDirection: 'ltr'}}>{language === 'he' ? 'שיא נמוך (4ש): ' : 'Peak Low (4h): '}{peakLow ?? '—'} mg/dL</Text>
+                        <Text style={{marginTop: 4, color: theme.aboveRangeColor, writingDirection: 'ltr'}}>{language === 'he' ? 'שיא גבוה (3ש): ' : 'Peak High (3h): '}{peakHigh ?? '—'} mg/dL</Text>
+                        <Text style={{marginTop: 2, color: theme.belowRangeColor, writingDirection: 'ltr'}}>{language === 'he' ? 'שיא נמוך (4ש): ' : 'Peak Low (4h): '}{peakLow ?? '—'} mg/dL</Text>
                       </View>
 
                       <View style={{padding: 8, borderRadius: 10, borderWidth: 1, borderColor: addOpacity(theme.textColor, 0.12)}}>
@@ -1335,9 +1345,9 @@ const DailyReviewScreen: React.FC = () => {
                               setFocusModalBucket(item.bucket);
                               setFocusNote('');
                             }}
-                            style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: addOpacity('#c62828', 0.12)}}
+                            style={{paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: addOpacity(theme.belowRangeColor, 0.12)}}
                           >
-                            <Text style={{color: '#c62828', fontWeight: '800', fontSize: 12}}>{language === 'he' ? 'תכנן מחדש למחר' : 'Plan for tomorrow'}</Text>
+                            <Text style={{color: theme.belowRangeColor, fontWeight: '800', fontSize: 12}}>{language === 'he' ? 'תכנן מחדש למחר' : 'Plan for tomorrow'}</Text>
                           </Pressable>
                         ) : <View />}
                       </View>
