@@ -12,6 +12,7 @@ import {
 } from 'app/utils/mergeDeviceStatusIntoBgSamples.utils';
 
 const POLL_INTERVAL_MS = 60 * 1000;
+const EMPTY_STATE_RETRY_MS = 15 * 1000;
 const STALE_WARNING_MS = 10 * 60 * 1000;
 const STALE_HIDE_PREDICTION_MS = 15 * 60 * 1000;
 const DEFAULT_PREDICTION_STEP_MS = 5 * 60 * 1000;
@@ -183,6 +184,17 @@ export function useLatestNightscoutSnapshot(params: {
 
     return () => clearInterval(id);
   }, [pollingEnabled, refresh]);
+
+  useEffect(() => {
+    if (!pollingEnabled) return;
+    if (snapshot?.bg) return;
+
+    const retryId = setInterval(() => {
+      refresh();
+    }, EMPTY_STATE_RETRY_MS);
+
+    return () => clearInterval(retryId);
+  }, [pollingEnabled, snapshot?.bg, refresh]);
 
   return useMemo(
     () => ({

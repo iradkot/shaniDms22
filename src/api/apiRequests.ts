@@ -195,9 +195,16 @@ export const fetchDeviceStatusForDateRangeUncached = async (
 export const fetchLatestBgEntry = async (): Promise<BgSample | null> => {
   try {
     const response = await nightscoutInstance.get<BgSample[]>(
-      '/api/v1/entries.json?count=1',
+      '/api/v1/entries.json?count=10',
     );
-    return response.data?.[0] ?? null;
+    const rows = Array.isArray(response.data) ? response.data : [];
+
+    const latestValid = rows.find((item: any) => {
+      const sgv = typeof item?.sgv === 'number' ? item.sgv : Number(item?.sgv);
+      return Number.isFinite(sgv);
+    });
+
+    return latestValid ?? null;
   } catch (error: any) {
     console.warn('fetchLatestBgEntry: Failed to fetch latest BG entry', error);
     return null;
