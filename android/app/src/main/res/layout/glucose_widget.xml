@@ -26,13 +26,32 @@
     android:textColor="#B3FFFFFF" />
 
   <TextView
-    android:id="@+id/glucose_extras"
+    android:id="@+id/glucose_iob"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:layout_marginTop="6dp"
-    android:text="IOB --U • COB --g • Pred --"
+    android:text="IOB --U"
     android:textSize="12sp"
     android:textColor="#CCFFFFFF" />
+
+  <TextView
+    android:id="@+id/glucose_cob"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="2dp"
+    android:text="COB --g"
+    android:textSize="12sp"
+    android:textColor="#CCFFFFFF" />
+
+  <TextView
+    android:id="@+id/glucose_projected"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="2dp"
+    android:text="Projected --"
+    android:textSize="12sp"
+    android:textStyle="bold"
+    android:textColor="#B3FFFFFF" />
 
   <TextView
     android:id="@+id/glucose_updated"

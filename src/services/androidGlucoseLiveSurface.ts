@@ -10,6 +10,8 @@ type GlucoseNativeModule = {
     iob?: number,
     cob?: number,
     projected?: number,
+    low?: number,
+    high?: number,
   ) => void;
   clearLiveSurface: () => void;
 };
@@ -17,6 +19,11 @@ type GlucoseNativeModule = {
 type GlucoseWidgetSnapshot = {
   enrichedBg?: BgSample | null;
   predictions?: Array<{sgv: number}>;
+};
+
+type RangeThresholds = {
+  low?: number;
+  high?: number;
 };
 
 const nativeModule: GlucoseNativeModule | undefined =
@@ -43,7 +50,10 @@ function trendToSymbol(direction?: string): string {
   }
 }
 
-export function updateAndroidGlucoseLiveSurface(snapshot?: GlucoseWidgetSnapshot | null): void {
+export function updateAndroidGlucoseLiveSurface(
+  snapshot?: GlucoseWidgetSnapshot | null,
+  thresholds?: RangeThresholds,
+): void {
   if (!nativeModule) return;
 
   const sample = snapshot?.enrichedBg;
@@ -62,5 +72,8 @@ export function updateAndroidGlucoseLiveSurface(snapshot?: GlucoseWidgetSnapshot
   const projectedRaw = snapshot?.predictions?.[0]?.sgv;
   const projected = typeof projectedRaw === 'number' && Number.isFinite(projectedRaw) ? Math.round(projectedRaw) : undefined;
 
-  nativeModule.updateLiveSurface(value, trend, timestampMs, iob, cob, projected);
+  const low = typeof thresholds?.low === 'number' && Number.isFinite(thresholds.low) ? thresholds.low : undefined;
+  const high = typeof thresholds?.high === 'number' && Number.isFinite(thresholds.high) ? thresholds.high : undefined;
+
+  nativeModule.updateLiveSurface(value, trend, timestampMs, iob, cob, projected, low, high);
 }

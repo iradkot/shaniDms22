@@ -17,10 +17,14 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
     iob: Double?,
     cob: Double?,
     projected: Double?,
+    low: Double?,
+    high: Double?,
   ) {
     val ts = timestampMs.toLong()
     val projectedInt = if (projected != null && projected.isFinite()) projected.toInt() else null
-    GlucoseWidgetUpdater.save(reactApplicationContext, value, trend, ts, iob, cob, projectedInt)
+    val lowInt = if (low != null && low.isFinite()) low.toInt() else null
+    val highInt = if (high != null && high.isFinite()) high.toInt() else null
+    GlucoseWidgetUpdater.save(reactApplicationContext, value, trend, ts, iob, cob, projectedInt, lowInt, highInt)
     GlucoseWidgetUpdater.updateWidgets(reactApplicationContext)
     GlucoseWidgetUpdater.updateNotification(reactApplicationContext)
   }
