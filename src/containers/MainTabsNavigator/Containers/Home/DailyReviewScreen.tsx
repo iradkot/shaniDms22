@@ -1018,17 +1018,6 @@ const DailyReviewScreen: React.FC = () => {
   const cautionColor = theme.aboveRangeColor;
   const riskColor = theme.belowRangeColor;
 
-  const metricChip = (label: string, delta: number, betterWhen: 'higher' | 'lower') => {
-    const improved = betterWhen === 'higher' ? delta > 0 : delta < 0;
-    const worse = betterWhen === 'higher' ? delta < 0 : delta > 0;
-    const color = improved ? positiveColor : worse ? riskColor : addOpacity(theme.textColor, 0.65);
-    const sign = delta > 0 ? '+' : '';
-    return (
-      <View key={label} style={{paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: addOpacity(color, 0.35), backgroundColor: addOpacity(color, 0.08)}}>
-        <Text style={{fontSize: 12, color, fontWeight: '700'}}>{label} {sign}{delta}{label.includes('%') ? '%' : ''}</Text>
-      </View>
-    );
-  };
 
   return (
     <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 10}}>
@@ -1043,12 +1032,6 @@ const DailyReviewScreen: React.FC = () => {
         <View style={{width: 24}} />
       </View>
 
-      <View style={{...card, backgroundColor: addOpacity(theme.accentColor, 0.08), borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.28)}}>
-        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{language === 'he' ? 'בוקר טוב 🌤️' : 'Good morning 🌤️'}</Text>
-        <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.78), textAlign}}>
-          {language === 'he' ? 'הגוף שלך עבד קשה אתמול. הנה סיכום ברור ועדין כדי לעזור ליום רגוע יותר.' : 'Your body worked hard yesterday. Here is a calm, clear summary to support today.'}
-        </Text>
-      </View>
 
       <View style={{...card, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.3), backgroundColor: addOpacity(theme.accentColor, 0.06)}}>
         <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
@@ -1115,16 +1098,6 @@ const DailyReviewScreen: React.FC = () => {
             : `Weekly avg: ${wAvg} | daily target: ${targetMid}`}
         </Text>
 
-        <View style={{marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
-          {metricChip(language === 'he' ? 'Δממוצע' : 'ΔAvg', avgDelta, 'lower')}
-          {metricChip(language === 'he' ? 'ΔTIR%' : 'ΔTIR%', tirDelta, 'higher')}
-          {metricChip(language === 'he' ? 'Δנמוכים%' : 'ΔLows%', lowDelta, 'lower')}
-          {metricChip(language === 'he' ? 'Δגבוהים%' : 'ΔHighs%', highDelta, 'lower')}
-        </View>
-
-        {llmSummaryLine ? (
-          <Text style={{marginTop: 10, color: theme.textColor, textAlign}}>{llmSummaryLine}</Text>
-        ) : null}
       </View>
 
       <View style={{...card, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.28), backgroundColor: addOpacity(theme.accentColor, 0.05)}}>
@@ -1144,14 +1117,18 @@ const DailyReviewScreen: React.FC = () => {
                 ? `🧊 זמן בהיפו: ${yLowPct}%${hasBaseline ? ` (ייחוס ${wLowPct}%)` : ''}`
                 : `🧊 Low time: ${yLowPct}%${hasBaseline ? ` (baseline ${wLowPct}%)` : ''}`}
             </Text>
-            <Text style={{marginTop: 4, color: lowDelta <= 0 ? positiveColor : riskColor, fontWeight: '800'}}>
+            <Text style={{marginTop: 4, color: lowDelta < 0 ? positiveColor : lowDelta > 0 ? riskColor : addOpacity(theme.textColor, 0.75), fontWeight: '800'}}>
               {language === 'he'
-                ? lowDelta <= 0
+                ? lowDelta < 0
                   ? `⬇️ חסכת ${lowDeltaMinutes} דקות של נמוכים`
-                  : `⬆️ היו עוד ${lowDeltaMinutes} דקות של נמוכים`
-                : lowDelta <= 0
+                  : lowDelta > 0
+                  ? `⬆️ היו עוד ${lowDeltaMinutes} דקות של נמוכים`
+                  : '➖ ללא שינוי מאתמול'
+                : lowDelta < 0
                 ? `⬇️ Saved ${lowDeltaMinutes} minutes of lows`
-                : `⬆️ ${lowDeltaMinutes} extra minutes in lows`}
+                : lowDelta > 0
+                ? `⬆️ ${lowDeltaMinutes} extra minutes in lows`
+                : '➖ No change vs yesterday'}
             </Text>
           </View>
 
@@ -1161,14 +1138,18 @@ const DailyReviewScreen: React.FC = () => {
                 ? `📈 זמן בגבוהים: ${yHighPct}%${hasBaseline ? ` (ייחוס ${wHighPct}%)` : ''}`
                 : `📈 High time: ${yHighPct}%${hasBaseline ? ` (baseline ${wHighPct}%)` : ''}`}
             </Text>
-            <Text style={{marginTop: 4, color: highDelta <= 0 ? positiveColor : riskColor, fontWeight: '800'}}>
+            <Text style={{marginTop: 4, color: highDelta < 0 ? positiveColor : highDelta > 0 ? riskColor : addOpacity(theme.textColor, 0.75), fontWeight: '800'}}>
               {language === 'he'
-                ? highDelta <= 0
+                ? highDelta < 0
                   ? `⬇️ קיזזת עוד ${highDeltaMinutes} דקות בגבוהים`
-                  : `⬆️ נוספו ${highDeltaMinutes} דקות בגבוהים`
-                : highDelta <= 0
+                  : highDelta > 0
+                  ? `⬆️ נוספו ${highDeltaMinutes} דקות בגבוהים`
+                  : '➖ ללא שינוי מאתמול'
+                : highDelta < 0
                 ? `⬇️ Trimmed another ${highDeltaMinutes} minutes high`
-                : `⬆️ Added ${highDeltaMinutes} more high minutes`}
+                : highDelta > 0
+                ? `⬆️ Added ${highDeltaMinutes} more high minutes`
+                : '➖ No change vs yesterday'}
             </Text>
           </View>
         </View>
@@ -1216,8 +1197,8 @@ const DailyReviewScreen: React.FC = () => {
             <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.2), backgroundColor: addOpacity(theme.accentColor, 0.06)}}>
               <Text style={{fontWeight: '700', color: theme.textColor}}>
                 {language === 'he'
-                  ? 'שמנו דגש על מה שכן עבד. נקודות לשיפור זמינות למטה כשמתאים לך.'
-                  : 'We focused on what worked. Improvement points are available below when you choose.'}
+                  ? 'סיכום קצר: מה עבד טוב ולמטה מה אפשר לשפר.'
+                  : 'Quick summary: what worked, and below what can be improved.'}
               </Text>
             </View>
           )}
@@ -1438,4 +1419,10 @@ const DailyReviewScreen: React.FC = () => {
 };
 
 export default DailyReviewScreen;
+
+
+
+
+
+
 
