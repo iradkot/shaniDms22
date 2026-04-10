@@ -34,12 +34,13 @@ function trendToSymbol(direction?: string): string {
 export function updateAndroidGlucoseLiveSurface(sample?: BgSample | null): void {
   if (!nativeModule) return;
 
-  if (!sample || typeof sample.sgv !== 'number' || !Number.isFinite(sample.sgv)) {
-    nativeModule.clearLiveSurface();
-    return;
-  }
+  if (!sample) return;
 
-  const value = Math.round(sample.sgv);
+  const rawSgv: unknown = (sample as any).sgv;
+  const sgv = typeof rawSgv === 'number' ? rawSgv : Number(rawSgv);
+  if (!Number.isFinite(sgv)) return;
+
+  const value = Math.round(sgv);
   const trend = trendToSymbol(sample.direction);
   const timestampMs = typeof sample.date === 'number' && Number.isFinite(sample.date) ? sample.date : Date.now();
 

@@ -7,6 +7,7 @@ import {updateAndroidGlucoseLiveSurface} from 'app/services/androidGlucoseLiveSu
 export function useAndroidGlucoseLiveSurface(sample?: BgSample | null): void {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
-    updateAndroidGlucoseLiveSurface(sample ?? null);
+    if (!sample) return;
+    updateAndroidGlucoseLiveSurface(sample);
   }, [sample]);
 }
