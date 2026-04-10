@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW} from 'app/constants/GLUCOSE_WINDOWS';
+import {setAndroidWidgetThresholds} from 'app/services/androidGlucoseLiveSurface';
 
 export type GlucoseSettings = {
   /** mg/dL; values <= this are considered severe low. */
@@ -201,6 +202,10 @@ export const GlucoseSettingsProvider = ({children}: {children: React.ReactNode})
     applyToGlobals(DEFAULT_SETTINGS);
     persist(DEFAULT_SETTINGS);
   }, [persist]);
+
+  useEffect(() => {
+    setAndroidWidgetThresholds(settings.hypo, settings.hyper);
+  }, [settings.hypo, settings.hyper]);
 
   const value = useMemo<GlucoseSettingsContextValue>(
     () => ({

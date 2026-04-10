@@ -17,6 +17,7 @@ import {
   NightscoutProfile,
 } from 'app/services/nightscoutProfiles';
 import {clearNightscoutInstance, configureNightscoutInstance} from 'app/api/shaniNightscoutInstances';
+import {configureAndroidWidgetBackgroundSync} from 'app/services/androidGlucoseLiveSurface';
 
 export type NightscoutConfigContextValue = {
   profiles: NightscoutProfile[];
@@ -80,7 +81,14 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
           const active = storedProfiles.find(p => p.id === resolvedActiveId) ?? null;
           if (active) {
             configureNightscoutInstance({baseUrl: active.baseUrl, apiSecretSha1: active.apiSecretSha1});
+            configureAndroidWidgetBackgroundSync({
+              baseUrl: active.baseUrl,
+              apiSecretSha1: active.apiSecretSha1,
+              enabled: true,
+            });
           }
+        } else {
+          configureAndroidWidgetBackgroundSync({enabled: false});
         }
 
         // Persist repaired active ID if needed.
@@ -127,6 +135,11 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
       setActiveProfileIdState(profile.id);
 
       configureNightscoutInstance({baseUrl: profile.baseUrl, apiSecretSha1: profile.apiSecretSha1});
+      configureAndroidWidgetBackgroundSync({
+        baseUrl: profile.baseUrl,
+        apiSecretSha1: profile.apiSecretSha1,
+        enabled: true,
+      });
       await persistNightscoutProfiles(nextProfiles, profile.id);
     },
     [],
@@ -139,6 +152,11 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
 
       setActiveProfileIdState(id);
       configureNightscoutInstance({baseUrl: nextActive.baseUrl, apiSecretSha1: nextActive.apiSecretSha1});
+      configureAndroidWidgetBackgroundSync({
+        baseUrl: nextActive.baseUrl,
+        apiSecretSha1: nextActive.apiSecretSha1,
+        enabled: true,
+      });
       await persistNightscoutProfiles(profiles, id);
     },
     [profiles],
@@ -184,6 +202,11 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
           baseUrl: updatedActive.baseUrl,
           apiSecretSha1: updatedActive.apiSecretSha1,
         });
+        configureAndroidWidgetBackgroundSync({
+          baseUrl: updatedActive.baseUrl,
+          apiSecretSha1: updatedActive.apiSecretSha1,
+          enabled: true,
+        });
       }
 
       await persistNightscoutProfiles(nextProfiles, activeProfileId);
@@ -206,9 +229,15 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
         const active = nextProfiles.find(p => p.id === nextActiveId) ?? null;
         if (active) {
           configureNightscoutInstance({baseUrl: active.baseUrl, apiSecretSha1: active.apiSecretSha1});
+          configureAndroidWidgetBackgroundSync({
+            baseUrl: active.baseUrl,
+            apiSecretSha1: active.apiSecretSha1,
+            enabled: true,
+          });
         }
       } else {
         clearNightscoutInstance();
+        configureAndroidWidgetBackgroundSync({enabled: false});
       }
 
       await persistNightscoutProfiles(nextProfiles, nextActiveId);

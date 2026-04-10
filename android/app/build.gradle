@@ -134,6 +134,9 @@ dependencies {
     // Manual linking for @react-native-community/datetimepicker
     implementation project(':react-native-community_datetimepicker')
 
+    // Background widget refresh
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {

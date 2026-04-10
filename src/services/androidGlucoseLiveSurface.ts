@@ -14,6 +14,8 @@ type GlucoseNativeModule = {
     high?: number,
   ) => void;
   clearLiveSurface: () => void;
+  setWidgetThresholds: (low?: number, high?: number) => void;
+  configureBackgroundSync: (baseUrl?: string, apiSecretSha1?: string, enabled?: boolean) => void;
 };
 
 type GlucoseWidgetSnapshot = {
@@ -76,4 +78,22 @@ export function updateAndroidGlucoseLiveSurface(
   const high = typeof thresholds?.high === 'number' && Number.isFinite(thresholds.high) ? thresholds.high : undefined;
 
   nativeModule.updateLiveSurface(value, trend, timestampMs, iob, cob, projected, low, high);
+}
+
+export function setAndroidWidgetThresholds(low?: number, high?: number): void {
+  if (!nativeModule?.setWidgetThresholds) return;
+  nativeModule.setWidgetThresholds(low, high);
+}
+
+export function configureAndroidWidgetBackgroundSync(params: {
+  baseUrl?: string;
+  apiSecretSha1?: string;
+  enabled: boolean;
+}): void {
+  if (!nativeModule?.configureBackgroundSync) return;
+  nativeModule.configureBackgroundSync(
+    params.baseUrl,
+    params.apiSecretSha1,
+    params.enabled,
+  );
 }

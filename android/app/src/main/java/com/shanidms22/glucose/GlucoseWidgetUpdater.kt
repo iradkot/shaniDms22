@@ -62,6 +62,14 @@ object GlucoseWidgetUpdater {
     updateWidgets(context)
   }
 
+  fun setThresholds(context: Context, low: Int?, high: Int?) {
+    val e = prefs(context).edit()
+    if (low != null) e.putInt(KEY_LOW, low) else e.remove(KEY_LOW)
+    if (high != null) e.putInt(KEY_HIGH, high) else e.remove(KEY_HIGH)
+    e.apply()
+    updateWidgets(context)
+  }
+
   private data class WidgetState(
     val value: Int?,
     val trend: String,
