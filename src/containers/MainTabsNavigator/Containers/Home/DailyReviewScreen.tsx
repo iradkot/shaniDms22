@@ -586,6 +586,16 @@ const DailyReviewScreen: React.FC = () => {
   const lowDelta = yLowPct - wLowPct;
   const highDelta = yHighPct - wHighPct;
 
+  const percentToRoundedMinutes = (pct: number) => {
+    const raw = Math.abs((pct / 100) * 1440);
+    const step = raw >= 60 ? 10 : 5;
+    return Math.max(step, Math.round(raw / step) * step);
+  };
+
+  const tirDeltaMinutes = percentToRoundedMinutes(tirDelta);
+  const lowDeltaMinutes = percentToRoundedMinutes(lowDelta);
+  const highDeltaMinutes = percentToRoundedMinutes(highDelta);
+
   const keyHighlightLine = useMemo(() => {
     // Positive-first framing: prioritize wins before any challenge signals.
     if (yTirPct >= 75) {
@@ -616,6 +626,30 @@ const DailyReviewScreen: React.FC = () => {
       ? `נקודת ייחוס חיובית: ${yTirPct}% מהזמן נשארת בטווח היעד.`
       : `Positive anchor: you stayed in target range ${yTirPct}% of the time.`;
   }, [highDelta, language, lowDelta, tirDelta, yTirPct]);
+  const quickInsights = useMemo(() => {
+    if (language === 'he') {
+      return [
+        lowDelta < 0
+          ? `💡 נרשמה ירידה בזמן נמוך — פחות כ-${lowDeltaMinutes} דקות בנמוכים.`
+          : `💡 זמן נמוך נשאר דומה — שמירה יציבה על בטיחות.`,
+        highDelta < 0
+          ? `📉 פחות זמן בגבוהים — קיזוז של כ-${highDeltaMinutes} דקות.`
+          : `📈 יש עדיין מקום לקיזוז זמן בגבוהים בצעדים קטנים.`,
+        `🧭 קו מנחה להיום: לשמור על הקצב שעבד, בלי להעמיס.`
+      ];
+    }
+
+    return [
+      lowDelta < 0
+        ? `💡 Low time improved — about ${lowDeltaMinutes} fewer minutes in lows.`
+        : `💡 Low time stayed similar — steady safety baseline.`,
+      highDelta < 0
+        ? `📉 High time improved — about ${highDeltaMinutes} fewer minutes high.`
+        : `📈 There is still room to trim high-time exposure.`,
+      `🧭 Today: keep the pace that worked, one small step at a time.`
+    ];
+  }, [highDelta, highDeltaMinutes, language, lowDelta, lowDeltaMinutes]);
+
   const mealComparisons = useMemo(() => {
     const prevMap = new Map(mealScoresPrev.map(m => [m.bucket, m]));
     return mealScoresY
@@ -1087,11 +1121,58 @@ const DailyReviewScreen: React.FC = () => {
         ) : null}
       </View>
 
-      <View style={card}>
-        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{tr(language, 'dailyReview.key')}</Text>
-        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>
-          {llmKeyLine || keyHighlightLine}
+      <View style={{...card, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.28), backgroundColor: addOpacity(theme.accentColor, 0.05)}}>
+        <Text style={{fontWeight: '900', color: theme.textColor, textAlign}}>
+          {language === 'he' ? `🎯 הזמן בטווח עלה ל-${yTirPct}%` : `🎯 Time in range reached ${yTirPct}%`}
         </Text>
+        <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.75), textAlign}}>
+          {language === 'he'
+            ? `${tirDelta >= 0 ? '+' : ''}${tirDelta}% מול הייחוס השבועי • ${tirDelta >= 0 ? `הרווחת כ-${tirDeltaMinutes} דקות ביעד` : `איבדת כ-${tirDeltaMinutes} דקות ביעד`}`
+            : `${tirDelta >= 0 ? '+' : ''}${tirDelta}% vs baseline • ${tirDelta >= 0 ? `~${tirDeltaMinutes} more minutes in range` : `~${tirDeltaMinutes} fewer minutes in range`}`}
+        </Text>
+
+        <View style={{marginTop: 10, gap: 8}}>
+          <View style={{padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.white, 0.82), borderWidth: 1, borderColor: addOpacity('#1565c0', 0.2)}}>
+            <Text style={{fontWeight: '800', color: theme.textColor}}>
+              {language === 'he' ? `🧊 זמן בהיפו: ${yLowPct}% (ייחוס ${wLowPct}%)` : `🧊 Low time: ${yLowPct}% (baseline ${wLowPct}%)`}
+            </Text>
+            <Text style={{marginTop: 4, color: lowDelta <= 0 ? '#2e7d32' : '#c62828', fontWeight: '800'}}>
+              {language === 'he'
+                ? lowDelta <= 0
+                  ? `⬇️ חסכת ${lowDeltaMinutes} דקות של נמוכים`
+                  : `⬆️ היו עוד ${lowDeltaMinutes} דקות של נמוכים`
+                : lowDelta <= 0
+                ? `⬇️ Saved ${lowDeltaMinutes} minutes of lows`
+                : `⬆️ ${lowDeltaMinutes} extra minutes in lows`}
+            </Text>
+          </View>
+
+          <View style={{padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.white, 0.82), borderWidth: 1, borderColor: addOpacity('#ef6c00', 0.2)}}>
+            <Text style={{fontWeight: '800', color: theme.textColor}}>
+              {language === 'he' ? `📈 זמן בגבוהים: ${yHighPct}% (ייחוס ${wHighPct}%)` : `📈 High time: ${yHighPct}% (baseline ${wHighPct}%)`}
+            </Text>
+            <Text style={{marginTop: 4, color: highDelta <= 0 ? '#2e7d32' : '#c62828', fontWeight: '800'}}>
+              {language === 'he'
+                ? highDelta <= 0
+                  ? `⬇️ קיזזת עוד ${highDeltaMinutes} דקות בגבוהים`
+                  : `⬆️ נוספו ${highDeltaMinutes} דקות בגבוהים`
+                : highDelta <= 0
+                ? `⬇️ Trimmed another ${highDeltaMinutes} minutes high`
+                : `⬆️ Added ${highDeltaMinutes} more high minutes`}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={card}>
+        <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>
+          {language === 'he' ? 'תובנות מהירות' : 'Quick insights'}
+        </Text>
+        <View style={{marginTop: 8, gap: 6}}>
+          {quickInsights.map(line => (
+            <Text key={line} style={{color: addOpacity(theme.textColor, 0.9), textAlign}}>{line}</Text>
+          ))}
+        </View>
       </View>
 
       <View style={card}>
@@ -1101,7 +1182,7 @@ const DailyReviewScreen: React.FC = () => {
 
       <View style={card}>
         <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>
-          {language === 'he' ? 'ציוני ארוחות יומיים' : 'Daily meal scores'}
+          {language === 'he' ? 'תחקיר ארוחות: איפה אפשר להשתפר?' : 'Meal investigation: where can we improve?'}
         </Text>
 
         <View style={{marginTop: 8, gap: 8}}>
