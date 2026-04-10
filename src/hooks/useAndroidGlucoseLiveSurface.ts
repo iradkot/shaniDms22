@@ -1,13 +1,13 @@
 import {useEffect} from 'react';
 import {Platform} from 'react-native';
 
-import {BgSample} from 'app/types/day_bgs.types';
+import {LatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
 import {updateAndroidGlucoseLiveSurface} from 'app/services/androidGlucoseLiveSurface';
 
-export function useAndroidGlucoseLiveSurface(sample?: BgSample | null): void {
+export function useAndroidGlucoseLiveSurface(snapshot?: LatestNightscoutSnapshot | null): void {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
-    if (!sample) return;
-    updateAndroidGlucoseLiveSurface(sample);
-  }, [sample]);
+    if (!snapshot?.enrichedBg) return;
+    updateAndroidGlucoseLiveSurface(snapshot);
+  }, [snapshot]);
 }

@@ -10,9 +10,17 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
   override fun getName(): String = "GlucoseLiveModule"
 
   @ReactMethod
-  fun updateLiveSurface(value: Int, trend: String?, timestampMs: Double) {
+  fun updateLiveSurface(
+    value: Int,
+    trend: String?,
+    timestampMs: Double,
+    iob: Double?,
+    cob: Double?,
+    projected: Double?,
+  ) {
     val ts = timestampMs.toLong()
-    GlucoseWidgetUpdater.save(reactApplicationContext, value, trend, ts)
+    val projectedInt = if (projected != null && projected.isFinite()) projected.toInt() else null
+    GlucoseWidgetUpdater.save(reactApplicationContext, value, trend, ts, iob, cob, projectedInt)
     GlucoseWidgetUpdater.updateWidgets(reactApplicationContext)
     GlucoseWidgetUpdater.updateNotification(reactApplicationContext)
   }

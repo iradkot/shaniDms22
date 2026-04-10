@@ -19,18 +19,34 @@ object GlucoseWidgetUpdater {
   private const val KEY_VALUE = "value"
   private const val KEY_TREND = "trend"
   private const val KEY_TIMESTAMP = "timestamp"
+  private const val KEY_IOB = "iob"
+  private const val KEY_COB = "cob"
+  private const val KEY_PROJECTED = "projected"
   private const val CHANNEL_ID = "glucose_live"
   private const val NOTIFICATION_ID = 220022
 
   private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-  fun save(context: Context, value: Int, trend: String?, timestamp: Long) {
-    prefs(context)
+  fun save(
+    context: Context,
+    value: Int,
+    trend: String?,
+    timestamp: Long,
+    iob: Double?,
+    cob: Double?,
+    projected: Int?,
+  ) {
+    val e = prefs(context)
       .edit()
       .putInt(KEY_VALUE, value)
       .putString(KEY_TREND, trend ?: "")
       .putLong(KEY_TIMESTAMP, timestamp)
-      .apply()
+
+    if (iob != null && iob.isFinite()) e.putString(KEY_IOB, String.format("%.1f", iob)) else e.remove(KEY_IOB)
+    if (cob != null && cob.isFinite()) e.putString(KEY_COB, String.format("%.0f", cob)) else e.remove(KEY_COB)
+    if (projected != null) e.putInt(KEY_PROJECTED, projected) else e.remove(KEY_PROJECTED)
+
+    e.apply()
   }
 
   fun clear(context: Context) {
@@ -39,17 +55,32 @@ object GlucoseWidgetUpdater {
     updateWidgets(context)
   }
 
-  private fun read(context: Context): Triple<Int?, String, Long?> {
+  private data class WidgetState(
+    val value: Int?,
+    val trend: String,
+    val ts: Long?,
+    val iob: String,
+    val cob: String,
+    val projected: Int?,
+  )
+
+  private fun read(context: Context): WidgetState {
     val p = prefs(context)
     val has = p.contains(KEY_VALUE)
     val value = if (has) p.getInt(KEY_VALUE, 0) else null
     val trend = p.getString(KEY_TREND, "") ?: ""
     val ts = if (p.contains(KEY_TIMESTAMP)) p.getLong(KEY_TIMESTAMP, 0L) else null
-    return Triple(value, trend, ts)
+    val iob = p.getString(KEY_IOB, "--") ?: "--"
+    val cob = p.getString(KEY_COB, "--") ?: "--"
+    val projected = if (p.contains(KEY_PROJECTED)) p.getInt(KEY_PROJECTED, 0) else null
+    return WidgetState(value, trend, ts, iob, cob, projected)
   }
 
   fun updateWidgets(context: Context) {
-    val (value, trend, ts) = read(context)
+    val state = read(context)
+    val value = state.value
+    val trend = state.trend
+    val ts = state.ts
     val manager = AppWidgetManager.getInstance(context)
     val widgetComponent = ComponentName(context, GlucoseWidgetProvider::class.java)
     val appWidgetIds = manager.getAppWidgetIds(widgetComponent)
@@ -60,6 +91,10 @@ object GlucoseWidgetUpdater {
       views.setTextViewText(
         R.id.glucose_updated,
         if (ts != null && ts > 0) android.text.format.DateUtils.getRelativeTimeSpanString(ts).toString() else "No data"
+      )
+      views.setTextViewText(
+        R.id.glucose_extras,
+        "IOB ${state.iob}U • COB ${state.cob}g • Pred ${state.projected?.toString() ?: "--"}"
       )
 
       val launchIntent = Intent(context, MainActivity::class.java)
@@ -75,7 +110,10 @@ object GlucoseWidgetUpdater {
   }
 
   fun updateNotification(context: Context) {
-    val (value, trend, ts) = read(context)
+    val state = read(context)
+    val value = state.value
+    val trend = state.trend
+    val ts = state.ts
     if (value == null) {
       cancelNotification(context)
       return

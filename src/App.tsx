@@ -238,7 +238,7 @@ const AppInner: () => React.ReactElement = () => {
   const {snapshot: liveGlucoseSnapshot} = useLatestNightscoutSnapshot({
     pollingEnabled: !isE2E,
   });
-  useAndroidGlucoseLiveSurface(liveGlucoseSnapshot?.enrichedBg ?? null);
+  useAndroidGlucoseLiveSurface(liveGlucoseSnapshot ?? null);
   useGlucoseRuleNotifications(liveGlucoseSnapshot?.enrichedBg ?? null);
 
   React.useEffect(() => {
