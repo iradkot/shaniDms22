@@ -9,7 +9,9 @@ type GlucoseNativeModule = {
     timestampMs: number,
     iob?: number,
     cob?: number,
-    projected?: number,
+    projected1?: number,
+    projected2?: number,
+    projected3?: number,
     low?: number,
     high?: number,
   ) => void;
@@ -71,13 +73,28 @@ export function updateAndroidGlucoseLiveSurface(
 
   const iob = typeof sample.iob === 'number' && Number.isFinite(sample.iob) ? sample.iob : undefined;
   const cob = typeof sample.cob === 'number' && Number.isFinite(sample.cob) ? sample.cob : undefined;
-  const projectedRaw = snapshot?.predictions?.[0]?.sgv;
-  const projected = typeof projectedRaw === 'number' && Number.isFinite(projectedRaw) ? Math.round(projectedRaw) : undefined;
+  const p1Raw = snapshot?.predictions?.[0]?.sgv;
+  const p2Raw = snapshot?.predictions?.[1]?.sgv;
+  const p3Raw = snapshot?.predictions?.[2]?.sgv;
+  const projected1 = typeof p1Raw === 'number' && Number.isFinite(p1Raw) ? Math.round(p1Raw) : undefined;
+  const projected2 = typeof p2Raw === 'number' && Number.isFinite(p2Raw) ? Math.round(p2Raw) : undefined;
+  const projected3 = typeof p3Raw === 'number' && Number.isFinite(p3Raw) ? Math.round(p3Raw) : undefined;
 
   const low = typeof thresholds?.low === 'number' && Number.isFinite(thresholds.low) ? thresholds.low : undefined;
   const high = typeof thresholds?.high === 'number' && Number.isFinite(thresholds.high) ? thresholds.high : undefined;
 
-  nativeModule.updateLiveSurface(value, trend, timestampMs, iob, cob, projected, low, high);
+  nativeModule.updateLiveSurface(
+    value,
+    trend,
+    timestampMs,
+    iob,
+    cob,
+    projected1,
+    projected2,
+    projected3,
+    low,
+    high,
+  );
 }
 
 export function setAndroidWidgetThresholds(low?: number, high?: number): void {

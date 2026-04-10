@@ -30,7 +30,9 @@ class GlucoseSyncWorker(
           latest.date,
           load?.iob,
           load?.cob,
-          load?.projected,
+          load?.projected1,
+          load?.projected2,
+          load?.projected3,
           null,
           null,
         )
@@ -79,12 +81,19 @@ class GlucoseSyncWorker(
     val predictedValues = loop
       ?.optJSONObject("predicted")
       ?.optJSONArray("values")
-    val projected = if (predictedValues != null && predictedValues.length() > 0) {
-      val v = predictedValues.optDouble(0, Double.NaN)
-      if (v.isFinite()) v.toInt() else null
-    } else null
+    fun projectedAt(idx: Int): Int? {
+      if (predictedValues == null || predictedValues.length() <= idx) return null
+      val v = predictedValues.optDouble(idx, Double.NaN)
+      return if (v.isFinite()) v.toInt() else null
+    }
 
-    return LoadData(iob = iob, cob = cob, projected = projected)
+    return LoadData(
+      iob = iob,
+      cob = cob,
+      projected1 = projectedAt(0),
+      projected2 = projectedAt(1),
+      projected3 = projectedAt(2),
+    )
   }
 
   private fun getJsonArray(url: String, secret: String?): JSONArray? {
@@ -120,7 +129,13 @@ class GlucoseSyncWorker(
   }
 
   private data class LatestBg(val sgv: Int, val date: Long, val trend: String)
-  private data class LoadData(val iob: Double?, val cob: Double?, val projected: Int?)
+  private data class LoadData(
+    val iob: Double?,
+    val cob: Double?,
+    val projected1: Int?,
+    val projected2: Int?,
+    val projected3: Int?,
+  )
 
   companion object {
     const val PREFS = "glucose_sync_prefs"
