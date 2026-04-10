@@ -684,26 +684,26 @@ const DailyReviewScreen: React.FC = () => {
   const quickInsights = useMemo(() => {
     if (language === 'he') {
       return [
-        lowDelta < 0
-          ? `💡 נרשמה ירידה בזמן נמוך — פחות כ-${lowDeltaMinutes} דקות בנמוכים.`
-          : `💡 זמן נמוך נשאר דומה — שמירה יציבה על בטיחות.`,
         highDelta < 0
-          ? `📉 פחות זמן בגבוהים — קיזוז של כ-${highDeltaMinutes} דקות.`
-          : `📈 יש עדיין מקום לקיזוז זמן בגבוהים בצעדים קטנים.`,
-        `🧭 קו מנחה להיום: לשמור על הקצב שעבד, בלי להעמיס.`
+          ? '💡 ניהול החשיפות לגבוהים היה טוב יותר לעומת הייחוס.'
+          : '💡 שווה להתמקד היום בצמצום זמן בגבוהים בצעדים קטנים.',
+        lowDelta <= 0
+          ? '🌙 שמרת על יציבות טובה בבטיחות לאורך היום והלילה.'
+          : '🌙 מומלץ היום לשים דגש עדין על מניעת ירידות לא רצויות.',
+        '🧭 קו מנחה להיום: לשמור על הקצב שעבד, בלי להעמיס.'
       ];
     }
 
     return [
-      lowDelta < 0
-        ? `💡 Low time improved — about ${lowDeltaMinutes} fewer minutes in lows.`
-        : `💡 Low time stayed similar — steady safety baseline.`,
       highDelta < 0
-        ? `📉 High time improved — about ${highDeltaMinutes} fewer minutes high.`
-        : `📈 There is still room to trim high-time exposure.`,
-      `🧭 Today: keep the pace that worked, one small step at a time.`
+        ? '💡 High-exposure handling was better vs baseline.'
+        : '💡 Today, focus on trimming high-time in small steps.',
+      lowDelta <= 0
+        ? '🌙 Safety stability looked better through day and night.'
+        : '🌙 Today, put gentle focus on preventing unnecessary lows.',
+      '🧭 Keep the pace that worked, one small step at a time.'
     ];
-  }, [highDelta, highDeltaMinutes, language, lowDelta, lowDeltaMinutes]);
+  }, [highDelta, language, lowDelta]);
 
   const mealComparisons = useMemo(() => {
     const prevMap = new Map(mealScoresPrev.map(m => [m.bucket, m]));
@@ -735,6 +735,28 @@ const DailyReviewScreen: React.FC = () => {
     if (!declinedOnly.length) return null;
     return [...declinedOnly].sort((a, b) => (a.delta as number) - (b.delta as number))[0];
   }, [mealComparisons]);
+
+  const mealDaySummary = useMemo(() => {
+    const improvedLabel = topImprovedMeal ? mealBucketLabel(language, topImprovedMeal.bucket) : null;
+    const challenge = topDeclinedMeal || needsAttentionMeal;
+    const challengeLabel = challenge ? mealBucketLabel(language, challenge.bucket) : null;
+
+    if (language === 'he') {
+      if (improvedLabel && challengeLabel) {
+        return `סיכום קצר: ב-${improvedLabel} נרשמה שליטה טובה; ב-${challengeLabel} זוהה אתגר ששווה לדייק.`;
+      }
+      if (improvedLabel) return `סיכום קצר: ${improvedLabel} נוהלה טוב מאוד אתמול.`;
+      if (challengeLabel) return `סיכום קצר: ב-${challengeLabel} יש הזדמנות לשיפור תזמון וניהול.`;
+      return 'סיכום קצר: אין מספיק נתונים לאפיון ארוחות, ננסה שוב עם עוד יום דאטה.';
+    }
+
+    if (improvedLabel && challengeLabel) {
+      return `Quick summary: ${improvedLabel} was managed very well; ${challengeLabel} is the main refinement point.`;
+    }
+    if (improvedLabel) return `Quick summary: ${improvedLabel} was managed very well yesterday.`;
+    if (challengeLabel) return `Quick summary: ${challengeLabel} has the clearest improvement opportunity.`;
+    return 'Quick summary: not enough meal data yet; we will refine after more samples.';
+  }, [language, needsAttentionMeal, topDeclinedMeal, topImprovedMeal]);
 
   const mealInvestigationMap = useMemo(() => new Map(mealInvestigations.map(m => [m.bucket, m])), [mealInvestigations]);
 
@@ -1095,6 +1117,10 @@ const DailyReviewScreen: React.FC = () => {
   const positiveColor = theme.inRangeColor;
   const riskColor = theme.belowRangeColor;
 
+  const recommendationHeader = llmActionLine || tr(language, 'dailyReview.fallbackAction');
+  const recommendationBody = whyLine || (language === 'he'
+    ? 'לפי הנתונים של אתמול, זה הצעד הקטן עם הסיכוי הגבוה ביותר לשיפור היום.'
+    : 'Based on yesterday data, this is the smallest action with the highest chance to improve today.');
 
   return (
     <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 10}}>
@@ -1252,6 +1278,7 @@ const DailyReviewScreen: React.FC = () => {
         <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>
           {language === 'he' ? 'תחקיר ארוחות: איפה אפשר להשתפר?' : 'Meal investigation: where can we improve?'}
         </Text>
+        <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.82), textAlign}}>{mealDaySummary}</Text>
 
         <View style={{marginTop: 8, gap: 8}}>
           {topImprovedMeal ? (
@@ -1270,15 +1297,7 @@ const DailyReviewScreen: React.FC = () => {
                   : explainMealDelta(topImprovedMeal.bucket, topImprovedMeal.delta)}
               </Text>
             </View>
-          ) : (
-            <View style={{padding: 10, borderRadius: 12, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.2), backgroundColor: addOpacity(theme.accentColor, 0.06)}}>
-              <Text style={{fontWeight: '700', color: theme.textColor}}>
-                {language === 'he'
-                  ? 'סיכום קצר: מה עבד טוב ולמטה מה אפשר לשפר.'
-                  : 'Quick summary: what worked, and below what can be improved.'}
-              </Text>
-            </View>
-          )}
+          ) : null}
 
           {(needsAttentionMeal || topDeclinedMeal) ? (
             <View>
@@ -1454,9 +1473,9 @@ const DailyReviewScreen: React.FC = () => {
 
       <View style={card}>
         <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{tr(language, 'dailyReview.rec')}</Text>
-        <Text style={{marginTop: 6, color: theme.textColor, textAlign}}>{llmActionLine || tr(language, 'dailyReview.fallbackAction')}</Text>
-        {whyLine ? <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.75), textAlign}}>{whyLine}</Text> : null}
-        <Text style={{marginTop: 4, fontSize: 12, color: addOpacity(theme.textColor, 0.6), textAlign}}>{actionSource === 'ai' ? tr(language, 'dailyReview.sourceAi') : tr(language, 'dailyReview.sourceAuto')}</Text>
+        <Text style={{marginTop: 8, fontWeight: '800', color: theme.textColor, textAlign}}>{recommendationHeader}</Text>
+        <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.82), textAlign}}>{recommendationBody}</Text>
+        <Text style={{marginTop: 6, fontSize: 12, color: addOpacity(theme.textColor, 0.6), textAlign}}>{actionSource === 'ai' ? tr(language, 'dailyReview.sourceAi') : tr(language, 'dailyReview.sourceAuto')}</Text>
       </View>
 
       <Pressable onPress={exportDailyReviewDebugPackage} style={{...card, alignItems: 'center', borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.35)}}>
