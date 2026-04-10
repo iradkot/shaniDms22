@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Alert, Animated, I18nManager, LayoutAnimation, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, UIManager, View} from 'react-native';
 import {addDays, format, subDays} from 'date-fns';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useNavigation} from '@react-navigation/native';
@@ -346,6 +347,9 @@ function mealBucketLabel(language: string, bucket: MealBucket): string {
   return 'Snack';
 }
 
+const DAILY_REVIEW_LOAD_HISTORY_KEY = 'daily-review:load-ms-history:v1';
+const MAX_LOAD_SAMPLES = 12;
+
 const DailyReviewScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation<any>();
@@ -354,6 +358,9 @@ const DailyReviewScreen: React.FC = () => {
   const {language} = useAppLanguage();
 
   const [loading, setLoading] = useState(true);
+  const [estimatedTotalMs, setEstimatedTotalMs] = useState<number | null>(null);
+  const [loadingElapsedSec, setLoadingElapsedSec] = useState(0);
+  const loadingStartRef = React.useRef<number>(Date.now());
   const [refreshingAction, setRefreshingAction] = useState(false);
   const [yRows, setYRows] = useState<Row[]>([]);
   const [wRows, setWRows] = useState<Row[]>([]);
@@ -387,6 +394,34 @@ const DailyReviewScreen: React.FC = () => {
   const yStart = useMemo(() => subDays(todayStart, 1), [todayStart]);
   const prevDayStart = useMemo(() => subDays(yStart, 1), [yStart]);
   const wStart = useMemo(() => subDays(yStart, 7), [yStart]);
+
+  const loadEstimatedDuration = useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem(DAILY_REVIEW_LOAD_HISTORY_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as number[];
+      if (!Array.isArray(parsed) || !parsed.length) return;
+      const clean = parsed.filter(v => Number.isFinite(v) && v > 0);
+      if (!clean.length) return;
+      const avg = Math.round(clean.reduce((s, n) => s + n, 0) / clean.length);
+      setEstimatedTotalMs(avg);
+    } catch {
+      // ignore eta hydration errors
+    }
+  }, []);
+
+  const persistLoadDuration = useCallback(async (durationMs: number) => {
+    if (!Number.isFinite(durationMs) || durationMs <= 0) return;
+    try {
+      const raw = await AsyncStorage.getItem(DAILY_REVIEW_LOAD_HISTORY_KEY);
+      const prev = raw ? (JSON.parse(raw) as number[]) : [];
+      const cleanPrev = Array.isArray(prev) ? prev.filter(v => Number.isFinite(v) && v > 0) : [];
+      const next = [...cleanPrev, Math.round(durationMs)].slice(-MAX_LOAD_SAMPLES);
+      await AsyncStorage.setItem(DAILY_REVIEW_LOAD_HISTORY_KEY, JSON.stringify(next));
+    } catch {
+      // ignore eta persistence errors
+    }
+  }, []);
 
   const getDayInsulinTotal = async (dayStart: Date): Promise<number> => {
     const s = new Date(dayStart);
@@ -503,12 +538,31 @@ const DailyReviewScreen: React.FC = () => {
 
   useEffect(() => {
     let mounted = true;
+    loadingStartRef.current = Date.now();
+    setLoadingElapsedSec(0);
     setLoading(true);
-    loadData().finally(() => mounted && setLoading(false));
+    loadEstimatedDuration();
+
+    loadData()
+      .finally(() => {
+        const duration = Date.now() - loadingStartRef.current;
+        persistLoadDuration(duration);
+        if (mounted) setLoading(false);
+      });
+
     return () => {
       mounted = false;
     };
-  }, [loadData]);
+  }, [loadData, loadEstimatedDuration, persistLoadDuration]);
+
+  useEffect(() => {
+    if (!loading) return;
+    const id = setInterval(() => {
+      const elapsedSec = Math.max(0, Math.floor((Date.now() - loadingStartRef.current) / 1000));
+      setLoadingElapsedSec(elapsedSec);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [loading]);
 
   const handleRegenerate = async () => {
     try {
@@ -582,7 +636,6 @@ const DailyReviewScreen: React.FC = () => {
   const wLowPct = useMemo(() => (wRows.length ? Math.round((wLows / wRows.length) * 100) : 0), [wRows.length, wLows]);
   const wHighPct = useMemo(() => (wRows.length ? Math.round((wHighs / wRows.length) * 100) : 0), [wRows.length, wHighs]);
 
-  const avgDelta = yAvg - wAvg;
   const tirDelta = yTirPct - wTirPct;
   const lowDelta = yLowPct - wLowPct;
   const highDelta = yHighPct - wHighPct;
@@ -1001,7 +1054,32 @@ const DailyReviewScreen: React.FC = () => {
   }, []);
 
   if (loading) {
-    return <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}><ActivityIndicator /></View>;
+    const estimatedSec = estimatedTotalMs ? Math.max(1, Math.round(estimatedTotalMs / 1000)) : null;
+    const remainingSec = estimatedSec != null ? Math.max(0, estimatedSec - loadingElapsedSec) : null;
+    const progressPct = estimatedSec != null
+      ? Math.max(8, Math.min(96, Math.round((loadingElapsedSec / Math.max(estimatedSec, 1)) * 100)))
+      : null;
+
+    return (
+      <View style={{flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.backgroundColor, paddingHorizontal: 24}}>
+        <ActivityIndicator size="large" color={theme.accentColor} />
+        <Text style={{marginTop: 14, fontWeight: '700', color: theme.textColor, textAlign: 'center'}}>
+          {language === 'he' ? 'טוען את סיכום אתמול…' : 'Loading yesterday summary…'}
+        </Text>
+        <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.72), textAlign: 'center'}}>
+          {remainingSec != null
+            ? (language === 'he'
+              ? `זמן משוער שנותר: ~${remainingSec} שנ׳ (לפי טעינות קודמות)`
+              : `Estimated time left: ~${remainingSec}s (based on previous loads)`)
+            : (language === 'he' ? 'מחשב זמן משוער לפי טעינות קודמות…' : 'Estimating wait time from previous loads…')}
+        </Text>
+        {progressPct != null ? (
+          <View style={{marginTop: 12, width: '80%', height: 8, borderRadius: 999, backgroundColor: addOpacity(theme.textColor, 0.15), overflow: 'hidden'}}>
+            <View style={{width: `${progressPct}%`, height: 8, backgroundColor: theme.accentColor}} />
+          </View>
+        ) : null}
+      </View>
+    );
   }
 
   const nightLows = yRows.filter(r => {
@@ -1015,7 +1093,6 @@ const DailyReviewScreen: React.FC = () => {
   }).length;
 
   const positiveColor = theme.inRangeColor;
-  const cautionColor = theme.aboveRangeColor;
   const riskColor = theme.belowRangeColor;
 
 
