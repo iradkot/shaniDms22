@@ -9,6 +9,7 @@ import {
   FlatList,
   ListRenderItemInfo,
   View,
+  Text,
 } from 'react-native';
 import {NavigationProp} from '@react-navigation/native';
 import styled from 'styled-components/native';
@@ -28,6 +29,23 @@ const NotificationsManagerContainer = styled.View`
   flex: 1;
   background-color: #f2f2f2;
   padding: 8px;
+`;
+
+const InfoCard = styled.View`
+  background-color: #e3f2fd;
+  border-radius: 10px;
+  padding: 10px;
+  margin: 8px;
+`;
+
+const InfoTitle = styled.Text`
+  font-weight: 700;
+  color: #0d47a1;
+  margin-bottom: 4px;
+`;
+
+const InfoBody = styled.Text`
+  color: #0d47a1;
 `;
 
 // create dummy home component with typescript
@@ -75,6 +93,11 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
         keyExtractor={getKeyExtractor}
         refreshing={isLoading}
         onRefresh={getNotificationsData}
+        ListEmptyComponent={
+          <View style={{padding: 24, alignItems: 'center'}}>
+            <Text>No notification rules yet</Text>
+          </View>
+        }
         contentContainerStyle={{ paddingBottom: 80 }}
         style={{ flex: 1 }}
       />
@@ -83,6 +106,13 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
 
   return (
     <NotificationsManagerContainer testID={E2E_TEST_IDS.screens.notifications}>
+      <InfoCard>
+        <InfoTitle>Internal alerts are active</InfoTitle>
+        <InfoBody>
+          These rules now run locally in the app (Notifee) based on live Nightscout glucose,
+          with per-rule cooldown to reduce alert spam.
+        </InfoBody>
+      </InfoCard>
       {renderNotifications()}
       <AddNotificationButton
         callback={() => navigation.navigate(ADD_NOTIFICATION_SCREEN)}

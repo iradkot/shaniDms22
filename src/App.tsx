@@ -48,6 +48,7 @@ import {useHypoNowMvp} from 'app/hooks/useHypoNowMvp';
 import {useDailyBriefNotifications} from 'app/hooks/useDailyBriefNotifications';
 import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
 import {useAndroidGlucoseLiveSurface} from 'app/hooks/useAndroidGlucoseLiveSurface';
+import {useGlucoseRuleNotifications} from 'app/hooks/useGlucoseRuleNotifications';
 import {
   navigateToHypoInvestigation,
   rootNavigationRef,
@@ -237,6 +238,7 @@ const AppInner: () => React.ReactElement = () => {
     pollingEnabled: !isE2E,
   });
   useAndroidGlucoseLiveSurface(liveGlucoseSnapshot?.enrichedBg ?? null);
+  useGlucoseRuleNotifications(liveGlucoseSnapshot?.enrichedBg ?? null);
 
   React.useEffect(() => {
     if (isE2E) return;

@@ -1,31 +1,21 @@
 import {useCallback, useEffect, useState} from 'react';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+
 import {NotificationResponse} from 'app/types/notifications';
-import {docDTOConvert} from 'app/types/firestore';
-import {useGetUser} from 'app/hooks/useGetUser';
+import {getNotificationRules} from 'app/services/notifications/localNotificationsStore';
 
 export const useGetNotifications = () => {
   const [data, setData] = useState<NotificationResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const {userData} = useGetUser();
 
   const getNotificationsData = useCallback(async () => {
-    const uid = userData?.id ?? auth().currentUser?.uid;
-    if (!uid) {
-      setData([]);
-      return;
-    }
     setIsLoading(true);
-    const userRef = firestore().collection('users').doc(uid);
-    const snapshot = await firestore()
-      .collection('notifications')
-      .where('related_user', '==', userRef)
-      .get();
-    const notifications = snapshot.docs.map(docDTOConvert) as NotificationResponse[];
-    setData(notifications);
-    setIsLoading(false);
-  }, [userData?.id]);
+    try {
+      const rules = await getNotificationRules();
+      setData(rules);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     getNotificationsData();

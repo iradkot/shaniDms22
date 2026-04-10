@@ -12,16 +12,16 @@ export const useToggleNotification = (enabled: boolean) => {
   ): Promise<void> => {
     try {
       setIsLoading(true);
-      const newNotification: NotificationResponse = {
+      const nextEnabled = !isEnabled;
+      await updateNotification(notification.id, {
         ...notification,
-        enabled: !isEnabled,
-      };
-      await updateNotification(newNotification);
-      setIsLoading(false);
-      setIsEnabled(!isEnabled);
+        enabled: nextEnabled,
+      });
+      setIsEnabled(nextEnabled);
     } catch (error) {
       console.log(error);
-      setIsEnabled(isEnabled);
+    } finally {
+      setIsLoading(false);
     }
   };
 

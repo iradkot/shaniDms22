@@ -1,6 +1,3 @@
-import {FirebaseFirestoreTypes} from '@react-native-firebase/firestore';
-import DocumentReference = FirebaseFirestoreTypes.DocumentReference;
-
 export type TrendDirectionString =
   | 'FortyFiveDown'
   | 'FortyFiveUp'
@@ -23,7 +20,7 @@ export interface NotificationRequest {
 }
 
 export interface NotificationStored extends NotificationRequest {
-  related_user: DocumentReference;
+  related_user?: string | null;
 }
 
 export interface NotificationResponse extends NotificationStored {
