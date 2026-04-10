@@ -1,0 +1,143 @@
+package com.shanidms22.glucose
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.widget.RemoteViews
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import com.shanidms22.MainActivity
+import com.shanidms22.R
+
+object GlucoseWidgetUpdater {
+  private const val PREFS = "glucose_live_prefs"
+  private const val KEY_VALUE = "value"
+  private const val KEY_TREND = "trend"
+  private const val KEY_TIMESTAMP = "timestamp"
+  private const val CHANNEL_ID = "glucose_live"
+  private const val NOTIFICATION_ID = 220022
+
+  private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+  fun save(context: Context, value: Int, trend: String?, timestamp: Long) {
+    prefs(context)
+      .edit()
+      .putInt(KEY_VALUE, value)
+      .putString(KEY_TREND, trend ?: "")
+      .putLong(KEY_TIMESTAMP, timestamp)
+      .apply()
+  }
+
+  fun clear(context: Context) {
+    prefs(context).edit().clear().apply()
+    cancelNotification(context)
+    updateWidgets(context)
+  }
+
+  private fun read(context: Context): Triple<Int?, String, Long?> {
+    val p = prefs(context)
+    val has = p.contains(KEY_VALUE)
+    val value = if (has) p.getInt(KEY_VALUE, 0) else null
+    val trend = p.getString(KEY_TREND, "") ?: ""
+    val ts = if (p.contains(KEY_TIMESTAMP)) p.getLong(KEY_TIMESTAMP, 0L) else null
+    return Triple(value, trend, ts)
+  }
+
+  fun updateWidgets(context: Context) {
+    val (value, trend, ts) = read(context)
+    val manager = AppWidgetManager.getInstance(context)
+    val widgetComponent = ComponentName(context, GlucoseWidgetProvider::class.java)
+    val appWidgetIds = manager.getAppWidgetIds(widgetComponent)
+    appWidgetIds.forEach { widgetId ->
+      val views = RemoteViews(context.packageName, R.layout.glucose_widget)
+      views.setTextViewText(R.id.glucose_value, value?.toString() ?: "--")
+      views.setTextViewText(R.id.glucose_trend, trend.ifBlank { "•" })
+      views.setTextViewText(
+        R.id.glucose_updated,
+        if (ts != null && ts > 0) android.text.format.DateUtils.getRelativeTimeSpanString(ts).toString() else "No data"
+      )
+
+      val launchIntent = Intent(context, MainActivity::class.java)
+      val pendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        launchIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      )
+      views.setOnClickPendingIntent(R.id.glucose_widget_root, pendingIntent)
+      manager.updateAppWidget(widgetId, views)
+    }
+  }
+
+  fun updateNotification(context: Context) {
+    val (value, trend, ts) = read(context)
+    if (value == null) {
+      cancelNotification(context)
+      return
+    }
+
+    createChannel(context)
+
+    val intent = Intent(context, MainActivity::class.java)
+    val pendingIntent = PendingIntent.getActivity(
+      context,
+      1,
+      intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    val contentText = buildString {
+      append("${value} mg/dL")
+      if (trend.isNotBlank()) append("  ${trend}")
+      if (ts != null && ts > 0) {
+        append(" • ")
+        append(android.text.format.DateUtils.getRelativeTimeSpanString(ts))
+      }
+    }
+
+    val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+      .setSmallIcon(R.mipmap.ic_launcher)
+      .setContentTitle(context.getString(R.string.glucose_notification_title))
+      .setContentText(contentText)
+      .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
+      .setContentIntent(pendingIntent)
+      .setOngoing(true)
+      .setOnlyAlertOnce(true)
+      .setSilent(true)
+      .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      .build()
+
+    try {
+      NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+    } catch (_: SecurityException) {
+      // POST_NOTIFICATIONS denied; keep widget updates working.
+    }
+  }
+
+  private fun cancelNotification(context: Context) {
+    NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+  }
+
+  private fun createChannel(context: Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    if (nm.getNotificationChannel(CHANNEL_ID) != null) return
+
+    val channel = NotificationChannel(
+      CHANNEL_ID,
+      context.getString(R.string.glucose_channel_name),
+      NotificationManager.IMPORTANCE_LOW,
+    ).apply {
+      description = context.getString(R.string.glucose_channel_description)
+      lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+      setShowBadge(false)
+    }
+    nm.createNotificationChannel(channel)
+  }
+}

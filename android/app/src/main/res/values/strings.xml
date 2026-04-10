@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">shaniDms22</string>
+    <string name="glucose_channel_name">Live Glucose</string>
+    <string name="glucose_channel_description">Persistent lock-screen glucose status</string>
+    <string name="glucose_notification_title">Current glucose</string>
+    <string name="glucose_widget_description">Live glucose widget</string>
 </resources>

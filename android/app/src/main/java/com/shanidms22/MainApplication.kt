@@ -13,6 +13,7 @@ import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
 import com.reactcommunity.rndatetimepicker.RNDateTimePickerPackage
 import com.shanidms22.e2e.E2EConfigPackage
+import com.shanidms22.glucose.GlucoseLivePackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -27,6 +28,7 @@ class MainApplication : Application(), ReactApplication {
                 add(RNDateTimePickerPackage())
               }
               add(E2EConfigPackage())
+              add(GlucoseLivePackage())
             }
 
         override fun getJSMainModuleName(): String = "index"
