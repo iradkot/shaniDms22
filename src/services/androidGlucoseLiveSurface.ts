@@ -80,19 +80,19 @@ export function updateAndroidGlucoseLiveSurface(
   const projected2 = typeof p2Raw === 'number' && Number.isFinite(p2Raw) ? Math.round(p2Raw) : undefined;
   const projected3 = typeof p3Raw === 'number' && Number.isFinite(p3Raw) ? Math.round(p3Raw) : undefined;
 
-  const low = typeof thresholds?.low === 'number' && Number.isFinite(thresholds.low) ? thresholds.low : Number.NaN;
-  const high = typeof thresholds?.high === 'number' && Number.isFinite(thresholds.high) ? thresholds.high : Number.NaN;
+  const low = typeof thresholds?.low === 'number' && Number.isFinite(thresholds.low) ? thresholds.low : -1;
+  const high = typeof thresholds?.high === 'number' && Number.isFinite(thresholds.high) ? thresholds.high : -1;
 
   try {
     nativeModule.updateLiveSurface(
       value,
       trend,
       timestampMs,
-      iob ?? Number.NaN,
-      cob ?? Number.NaN,
-      projected1 ?? Number.NaN,
-      projected2 ?? Number.NaN,
-      projected3 ?? Number.NaN,
+      typeof iob === 'number' && Number.isFinite(iob) ? iob : -1,
+      typeof cob === 'number' && Number.isFinite(cob) ? cob : -1,
+      typeof projected1 === 'number' && Number.isFinite(projected1) ? projected1 : -1,
+      typeof projected2 === 'number' && Number.isFinite(projected2) ? projected2 : -1,
+      typeof projected3 === 'number' && Number.isFinite(projected3) ? projected3 : -1,
       low,
       high,
     );
@@ -105,8 +105,8 @@ export function setAndroidWidgetThresholds(low?: number, high?: number): void {
   if (!nativeModule?.setWidgetThresholds) return;
   try {
     nativeModule.setWidgetThresholds(
-      typeof low === 'number' && Number.isFinite(low) ? low : Number.NaN,
-      typeof high === 'number' && Number.isFinite(high) ? high : Number.NaN,
+      typeof low === 'number' && Number.isFinite(low) ? low : -1,
+      typeof high === 'number' && Number.isFinite(high) ? high : -1,
     );
   } catch (err) {
     console.warn('androidGlucoseLiveSurface: setWidgetThresholds failed', err);

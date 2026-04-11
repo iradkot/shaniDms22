@@ -37,13 +37,13 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
     high: Double,
   ) {
     val ts = timestampMs.toLong()
-    val iobSafe = iob.takeIf { it.isFinite() }
-    val cobSafe = cob.takeIf { it.isFinite() }
-    val projected1Int = projected1.takeIf { it.isFinite() }?.toInt()
-    val projected2Int = projected2.takeIf { it.isFinite() }?.toInt()
-    val projected3Int = projected3.takeIf { it.isFinite() }?.toInt()
-    val lowInt = low.takeIf { it.isFinite() }?.toInt()
-    val highInt = high.takeIf { it.isFinite() }?.toInt()
+    val iobSafe = iob.takeIf { it.isFinite() && it >= 0 }
+    val cobSafe = cob.takeIf { it.isFinite() && it >= 0 }
+    val projected1Int = projected1.takeIf { it.isFinite() && it > 0 }?.toInt()
+    val projected2Int = projected2.takeIf { it.isFinite() && it > 0 }?.toInt()
+    val projected3Int = projected3.takeIf { it.isFinite() && it > 0 }?.toInt()
+    val lowInt = low.takeIf { it.isFinite() && it > 0 }?.toInt()
+    val highInt = high.takeIf { it.isFinite() && it > 0 }?.toInt()
     try {
       GlucoseWidgetUpdater.save(
         reactApplicationContext,
@@ -72,8 +72,8 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun setWidgetThresholds(low: Double, high: Double) {
-    val lowInt = low.takeIf { it.isFinite() }?.toInt()
-    val highInt = high.takeIf { it.isFinite() }?.toInt()
+    val lowInt = low.takeIf { it.isFinite() && it > 0 }?.toInt()
+    val highInt = high.takeIf { it.isFinite() && it > 0 }?.toInt()
     GlucoseWidgetUpdater.setThresholds(reactApplicationContext, lowInt, highInt)
   }
 
