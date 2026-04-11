@@ -7,9 +7,11 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.shanidms22.MainActivity
 import com.shanidms22.R
 import kotlinx.coroutines.CoroutineScope
@@ -27,24 +29,32 @@ import java.net.URL
 class GlucoseLiveForegroundService : Service() {
   private val serviceJob: Job = SupervisorJob()
   private val scope = CoroutineScope(Dispatchers.IO + serviceJob)
+  private var syncLoopJob: Job? = null
 
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onCreate() {
     super.onCreate()
-    startForeground(NOTIFICATION_ID, buildNotification())
+    val notification = buildNotification()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      ServiceCompat.startForeground(
+        this,
+        NOTIFICATION_ID,
+        notification,
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+      )
+    } else {
+      startForeground(NOTIFICATION_ID, notification)
+    }
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    if (intent?.action == ACTION_STOP) {
-      stopSelf()
-      return START_NOT_STICKY
-    }
-
-    scope.launch {
-      while (isActive) {
-        runCatching { syncOnce(applicationContext) }
-        delay(60_000L)
+    if (syncLoopJob?.isActive != true) {
+      syncLoopJob = scope.launch {
+        while (isActive) {
+          runCatching { syncOnce(applicationContext) }
+          delay(60_000L)
+        }
       }
     }
 
@@ -93,7 +103,6 @@ class GlucoseLiveForegroundService : Service() {
   companion object {
     private const val CHANNEL_ID = "glucose_live_mode"
     private const val NOTIFICATION_ID = 220023
-    private const val ACTION_STOP = "com.shanidms22.glucose.action.STOP_LIVE_MODE"
 
     fun start(context: Context): Boolean {
       return runCatching {
@@ -107,10 +116,6 @@ class GlucoseLiveForegroundService : Service() {
     }
 
     fun stop(context: Context) {
-      val intent = Intent(context, GlucoseLiveForegroundService::class.java).apply {
-        action = ACTION_STOP
-      }
-      context.startService(intent)
       context.stopService(Intent(context, GlucoseLiveForegroundService::class.java))
     }
 
