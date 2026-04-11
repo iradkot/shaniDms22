@@ -4,7 +4,6 @@ import styled, {useTheme} from 'styled-components/native';
 import DropShadow from 'react-native-drop-shadow';
 import {formatDistanceToNow} from 'date-fns';
 
-import BgGradient from 'app/components/BgGradient';
 import DirectionArrows from 'app/components/DirectionArrows';
 import LoadBars from 'app/components/LoadBars/LoadBars';
 import {ThemeType} from 'app/types/theme';
@@ -15,7 +14,7 @@ import {
 } from 'app/hooks/useLatestNightscoutSnapshot';
 import {isE2E} from 'app/utils/e2e';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
-import {addOpacity, pickReadableTextColor} from 'app/style/styling.utils';
+import {pickReadableTextColor} from 'app/style/styling.utils';
 
 const CONSTANTS = {
   minDeltaForGlow: 10,
@@ -106,8 +105,6 @@ const SmartExpandableHeader: React.FC<{
     const endColor = theme.determineBgColorByGlucoseValue(
       effectiveSnapshot.enrichedBg.sgv,
     );
-    // Keep header clearly tied to active theme/range color (especially High-Contrast mode)
-    const startColor = addOpacity(endColor, 0.18);
 
     const canUsePrev = shouldUsePreviousSample({
       current: effectiveSnapshot.bg,
@@ -126,7 +123,6 @@ const SmartExpandableHeader: React.FC<{
 
     return {
       ...effectiveSnapshot,
-      startColor,
       endColor,
       delta,
       deltaAbs,
@@ -165,7 +161,7 @@ const SmartExpandableHeader: React.FC<{
       <Pressable
         testID={E2E_TEST_IDS.homeHeader.toggle}
         onPress={onToggleExpanded}>
-        <BgGradient startColor={model.startColor} endColor={model.endColor} style={gradientStyle(theme)}>
+        <HeaderSurface $bgColor={model.endColor} style={gradientStyle(theme)}>
           <TimeBgSection>
             <Row>
               <DropShadow style={dropShadowStyle}>
@@ -228,7 +224,7 @@ const SmartExpandableHeader: React.FC<{
               </PredictionRow>
             )}
           </RightSection>
-        </BgGradient>
+        </HeaderSurface>
       </Pressable>
 
       {/* Keep layout stable: when expanded, show predictions on a second line (if any). */}
@@ -291,6 +287,10 @@ function gradientStyle(theme: ThemeType) {
     minHeight: LOAD_BARS_CONSTANTS.rowHeight,
   };
 }
+
+const HeaderSurface = styled.View<{$bgColor: string}>`
+  background-color: ${({$bgColor}) => $bgColor};
+`;
 
 const Container = styled.View<{theme: ThemeType}>`
   padding-left: ${(props: {theme: ThemeType}) => props.theme.spacing.md}px;
@@ -382,3 +382,4 @@ const ExpandedPredictionWrap = styled.View<{theme: ThemeType}>`
 `;
 
 export default React.memo(SmartExpandableHeader);
+
