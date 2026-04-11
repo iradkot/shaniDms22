@@ -1,6 +1,5 @@
 import React, {useContext, useMemo} from 'react';
 import {Text} from 'react-native-svg';
-import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import {InsulinDataEntry} from 'app/types/insulin.types';
@@ -13,6 +12,7 @@ import SvgTooltipBox from 'app/components/charts/SvgTooltipBox';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {determineBgColorByGlucoseValue} from 'app/style/styling.utils';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 type Props = {
   x: number;
   y: number;
@@ -40,7 +40,7 @@ const CombinedBgMultiBolusTooltip: React.FC<Props> = ({
   bolusEvents,
   carbEvents,
 }) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
   const rows = useMemo(() => {

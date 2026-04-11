@@ -2,11 +2,11 @@ import React, {FC, useMemo, useState} from 'react';
 import Icon from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
-import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {
+import {useAppTheme} from 'app/hooks/useAppTheme';
     ButtonContainer,
     Container,
     DateButton,
@@ -35,7 +35,7 @@ export const DateNavigatorRow: FC<DateNavigatorRowProps> = ({
     isLoading,
 }) => {
     const [isDateModalVisible, setIsDateModalVisible] = useState(false);
-    const theme = useTheme() as ThemeType;
+    const theme = useAppTheme();
 
     const gradientColors = useMemo(
         () => [addOpacity(theme.textColor, 0.8), addOpacity(theme.textColor, 0.6)],

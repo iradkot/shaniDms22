@@ -1,13 +1,13 @@
 import React, {useCallback, useMemo, useState} from 'react';
 import {View} from 'react-native';
 import Svg, {Circle, G, Rect, Line, Path, Text as SvgText} from 'react-native-svg';
-import {useTheme} from 'styled-components/native';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
 import {addOpacity} from 'app/style/styling.utils';
 import {AGPData, AGPPercentilePoint} from '../types';
 import {minutesToTimeLabel} from '../utils/percentiles';
 import AGPTooltip from './AGPTooltip';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 type LinearScale = ((value: number) => number) & {
   domain: () => [number, number];
   range: () => [number, number];
@@ -118,7 +118,7 @@ const AGPChart: React.FC<AGPChartProps> = ({
   targetRange = cgmRange.TARGET,
   enableTouch = true,
 }) => {
-  const theme = useTheme();
+  const theme = useAppTheme();
 
   const [activePoint, setActivePoint] = useState<AGPPercentilePoint | null>(null);
   const [activeX, setActiveX] = useState<number | null>(null);

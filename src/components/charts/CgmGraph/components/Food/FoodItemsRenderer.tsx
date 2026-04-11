@@ -1,10 +1,10 @@
 import React, {useContext, useMemo} from 'react';
 import {Circle, G} from 'react-native-svg';
-import {useTheme} from 'styled-components/native';
 import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import {ThemeType} from 'app/types/theme';
 import {GraphStyleContext} from '../../contextStores/GraphStyleContext';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 interface Props {
   foodItems: FoodItemDTO[] | formattedFoodItemDTO[] | null;
 
@@ -18,7 +18,7 @@ const MIN_X_GAP_PX = 14;
 const LANE_SPACING_PX = 12;
 
 const FoodItemsRenderer: React.FC<Props> = ({foodItems, focusedFoodItemIds}) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const [{xScale, yScale}] = useContext(GraphStyleContext);
 
   const focusedSet = useMemo(

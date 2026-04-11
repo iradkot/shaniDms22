@@ -1,6 +1,5 @@
 import React from 'react';
 import {Text} from 'react-native-svg';
-import {useTheme} from 'styled-components/native';
 import Tooltip from 'app/components/charts/CgmGraph/components/Tooltips/Tooltip';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
@@ -11,6 +10,7 @@ import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
 import {getSvgTooltipTextLayout} from 'app/components/charts/svgTooltipLayout';
 import SvgTooltipBox from 'app/components/charts/SvgTooltipBox';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 interface AGPTooltipProps {
   x: number; // point x within chart <G>
   y: number; // point y within chart <G>
@@ -20,7 +20,7 @@ interface AGPTooltipProps {
 }
 
 const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHeight}) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
 
   const tooltipWidth = 190;
 

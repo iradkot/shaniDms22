@@ -1,3 +1,4 @@
+import {useAppTheme} from 'app/hooks/useAppTheme';
 /**
  * Compact day chart that is always visible on the redesigned Home screen.
  *
@@ -8,7 +9,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Animated, Dimensions, InteractionManager, Pressable} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 
 import StackedHomeCharts from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
 import type {
@@ -50,7 +51,7 @@ const CompactDayChart: React.FC<Props> = ({
   onTooltipModelChange,
   testID,
 }) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const {language} = useAppLanguage();
   const chartWidth = useMemo(() => Dimensions.get('window').width, []);
 

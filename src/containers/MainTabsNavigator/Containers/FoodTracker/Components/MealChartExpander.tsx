@@ -1,6 +1,6 @@
 import React, {useMemo} from 'react';
 import {View, useWindowDimensions} from 'react-native';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 
 import StackedHomeCharts from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
 import {MealChartData, MealEntry} from 'app/containers/MainTabsNavigator/Containers/FoodTracker/types';
@@ -8,6 +8,7 @@ import {ChartExpanderContainer} from 'app/containers/MainTabsNavigator/Container
 import {ThemeType} from 'app/types/theme';
 import {TimeInRangePercentages} from 'app/utils/glucose/timeInRange';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 // ── Styled TIR bar ──────────────────────────────────
 
 const TirSection = styled.View`
@@ -103,7 +104,7 @@ const AbsorptionStat = styled.Text<{theme: ThemeType}>`
 // ── TIR breakdown mini-component ─────────────────────
 
 const PostMealTirBar: React.FC<{tir: TimeInRangePercentages}> = ({tir}) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
 
   const segments = [
     {pct: tir.veryLow, color: theme.severeBelowRange, label: 'VL'},
@@ -153,7 +154,7 @@ function absorptionColor(pct: number, theme: ThemeType): string {
 }
 
 const PostMealAbsorptionBar: React.FC<{meal: MealEntry}> = ({meal}) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
 
   if (meal.absorptionPct == null || meal.absorbed == null) return null;
 

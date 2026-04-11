@@ -1,12 +1,13 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, FlatList, Pressable, View} from 'react-native';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import {addOpacity} from 'app/style/styling.utils';
 import {
+import {useAppTheme} from 'app/hooks/useAppTheme';
   formatDateToDateAndTimeString,
   formatDateToLocaleTimeString,
   getRelativeDateText,
@@ -149,7 +150,7 @@ function formatCarbsSummary(summary: {count: number; totalG: number}): string {
 }
 
 const HypoInvestigationScreen: React.FC = () => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const {language} = useAppLanguage();
   const navigation = useNavigation();
   const route = useRoute();

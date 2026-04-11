@@ -1,16 +1,17 @@
 import React, {FC, useEffect, useRef} from 'react';
 import {Animated, Easing} from 'react-native';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 import MAIcon from 'react-native-vector-icons/MaterialIcons';
 import {theme} from 'app/style/theme';
 import {ThemeTypes} from 'app/style/theme.types';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 interface RollingFlowerProps {
   isLoading: boolean;
 }
 
 const LoadingIcon: FC<RollingFlowerProps> = ({isLoading}) => {
-  const appTheme = useTheme() as typeof theme;
+  const appTheme = useAppTheme();
   // const [rotation, setRotation] = useState(0);
   const iconRotation = useRef(new Animated.Value(0)).current;
 

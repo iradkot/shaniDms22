@@ -1,9 +1,10 @@
+import {useAppTheme} from 'app/hooks/useAppTheme';
 ﻿// noinspection CssInvalidPropertyValue
 
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Animated} from 'react-native';
 import DropShadow from 'react-native-drop-shadow';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 
 import {BgSample} from 'app/types/day_bgs.types';
 import {Theme} from 'app/types/theme';
@@ -135,7 +136,7 @@ type AnimationValues = {
 };
 
 export const TimeInRangeRow: React.FC<TimeInRangeRowProps> = ({bgData}) => {
-  const theme = useTheme() as Theme;
+  const theme = useAppTheme(); as Theme;
   const {language} = useAppLanguage();
   const {settings: glucoseSettings} = useGlucoseSettings();
 

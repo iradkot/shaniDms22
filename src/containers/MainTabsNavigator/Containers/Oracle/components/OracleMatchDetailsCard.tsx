@@ -1,6 +1,6 @@
 import React, {useMemo, useState} from 'react';
 import {Pressable, View} from 'react-native';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 
 import {OracleMatchTrace, OracleSeriesPoint} from 'app/services/oracle/oracleTypes';
 import OracleGhostGraph from 'app/components/charts/OracleGhostGraph/OracleGhostGraph';
@@ -17,6 +17,7 @@ import {t as tr} from 'app/i18n/translations';
 
 import {Card, CardSubtle, CardTitle, Spacer} from './OracleCards';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 const SegmentRow = styled.View<{theme: ThemeType}>`
   margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
   flex-direction: row;
@@ -105,7 +106,7 @@ export function OracleMatchDetailsCard(props: {
   testID?: string;
 }): React.JSX.Element {
   const {match, width, currentSeries, medianSeries} = props;
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const {language} = useAppLanguage();
   const [viewMode, setViewMode] = useState<'chart' | 'ghost'>('chart');
   const [cursorTimeMs, setCursorTimeMs] = useState<number | null>(null);

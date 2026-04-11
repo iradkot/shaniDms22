@@ -1,10 +1,10 @@
 import React, {useMemo, useState} from 'react';
 import {Pressable, ScrollView, Text, View} from 'react-native';
-import {useTheme} from 'styled-components/native';
 import {useRoute} from '@react-navigation/native';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 const TIERS = [
   {name: 'Bronze', minScore: 0},
   {name: 'Silver', minScore: 35},
@@ -39,7 +39,7 @@ function nextTierMinScore(nextTier?: string | null) {
 }
 
 const RanksInfoScreen: React.FC = () => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const route = useRoute<any>();
   const p = route.params ?? {};
 

@@ -1,10 +1,11 @@
 import {Text, Rect} from 'react-native-svg';
+import {useAppTheme} from 'app/hooks/useAppTheme';
 // Ensure XTick is correctly imported if it's a custom component
 // If XTick is not an SVG component, adjust its usage accordingly
 
 // Import statements for other dependencies
 import React, {useContext, useState} from 'react';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 // Adjusted import for XTick if it's an SVG-based component or ensure correct prop forwarding if custom
@@ -25,7 +26,7 @@ export const FoodItem = ({
   isFocused,
   setFocusedItem,
 }: FoodItemProps): JSX.Element => {
-  const appTheme = useTheme();
+  const appTheme = useAppTheme();
   const [{xScale, yScale, margin}] = useContext(GraphStyleContext);
 
   const x = xScale(new Date(foodItem.timestamp));

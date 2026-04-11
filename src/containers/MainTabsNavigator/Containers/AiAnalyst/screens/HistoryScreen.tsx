@@ -1,7 +1,7 @@
+import {useAppTheme} from 'app/hooks/useAppTheme';
 /* eslint-disable react-native/no-inline-styles */
 import React from 'react';
 import {ActivityIndicator, Pressable, ScrollView, Text, View} from 'react-native';
-import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {ThemeType} from 'app/types/theme';
@@ -46,7 +46,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
   onOpenDetail,
   onContinue,
 }) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const {language} = useAppLanguage();
 
   return (

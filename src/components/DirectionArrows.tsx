@@ -1,11 +1,12 @@
 import React, {useMemo} from 'react';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 import DropShadow from 'react-native-drop-shadow';
 import Icon from 'react-native-vector-icons/Ionicons';
 import PropTypes from 'prop-types';
 import {TrendDirectionString} from 'app/types/notifications';
 import {ThemeType} from 'app/types/theme';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 const TrendDirectionRotations: {[key in TrendDirectionString]: number} = {
   DoubleUp: 0,
   SingleUp: 0,
@@ -60,7 +61,7 @@ const DirectionArrows: React.FC<DirectionArrowsProps> = ({
   size = 20,
   color,
 }) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const effectiveColor = color || theme.textColor;
   const iconName = useMemo(() => getIconName(trendDirection), [trendDirection]);
   const iconCount = useMemo(

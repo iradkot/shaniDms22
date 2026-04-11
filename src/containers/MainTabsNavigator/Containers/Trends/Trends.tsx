@@ -1,9 +1,9 @@
+import {useAppTheme} from 'app/hooks/useAppTheme';
 ﻿// /Trends/TrendsContainer.tsx
 
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {View, ScrollView, Text, Pressable} from 'react-native';
 import {differenceInCalendarDays} from 'date-fns';
-import {useTheme} from 'styled-components/native';
 import {StackActions, useNavigation} from '@react-navigation/native';
 import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
 
@@ -47,7 +47,7 @@ import {t as tr} from 'app/i18n/translations';
 type MetricType = 'tir' | 'hypos' | 'hypers';
 
 const Trends: React.FC = () => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const navigation = useNavigation();
   const {language} = useAppLanguage();
   const isRTL = language === 'he';

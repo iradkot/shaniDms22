@@ -2,7 +2,7 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {RefreshControl, ScrollView, View, Text, Pressable} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
@@ -44,6 +44,7 @@ import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
 import {t as tr} from 'app/i18n/translations';
 import {
+import {useAppTheme} from 'app/hooks/useAppTheme';
   addMemoryEntry,
   buildCompactPatientMemory,
   markEpisodeKeyIfNew,
@@ -179,7 +180,7 @@ const DAILY_SUMMARY_SEEN_KEY = 'home.dailySummary.lastSeenDate.v1';
 
 const Home: React.FC = () => {
   const navigation = useNavigation();
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const {language} = useAppLanguage();
   const {settings: aiSettings} = useAiSettings();
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());

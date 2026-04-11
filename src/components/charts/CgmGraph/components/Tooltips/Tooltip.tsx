@@ -1,7 +1,7 @@
+import {useAppTheme} from 'app/hooks/useAppTheme';
 // Tooltip.tsx
 import React from 'react';
 import {G, Rect} from 'react-native-svg';
-import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 
 interface TooltipProps {
@@ -13,7 +13,7 @@ interface TooltipProps {
 }
 
 const Tooltip: React.FC<TooltipProps> = ({x, y, width, height, children}) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
 
   return (
     <G x={x} y={y}>

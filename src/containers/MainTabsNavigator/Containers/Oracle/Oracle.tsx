@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
+import {useAppTheme} from 'app/hooks/useAppTheme';
   ActivityIndicator,
   Pressable,
   ScrollView,
@@ -9,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
@@ -233,7 +234,7 @@ function clampInt(v: number, min: number, max: number): number {
 
 const Oracle: React.FC = () => {
   const {width} = useWindowDimensions();
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const {language} = useAppLanguage();
   const [selectedEventTs, setSelectedEventTs] = useState<number | null>(null);
   const [selectedPreviousTs, setSelectedPreviousTs] = useState<number | null>(null);

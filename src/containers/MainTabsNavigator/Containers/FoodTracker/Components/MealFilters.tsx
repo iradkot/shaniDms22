@@ -1,10 +1,10 @@
 import React from 'react';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import {useTheme} from 'styled-components/native';
 import {format, subDays, addDays, isFuture} from 'date-fns';
 
 import {CarbRangeFilter} from 'app/containers/MainTabsNavigator/Containers/FoodTracker/types';
 import {
+import {useAppTheme} from 'app/hooks/useAppTheme';
   FiltersRow,
   FilterChip,
   FilterChipText,
@@ -37,7 +37,7 @@ const MealFilters: React.FC<MealFiltersProps> = ({
   rangeStart,
   onWeekChange,
 }) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const rangeEnd = addDays(rangeStart, 6);
   const canGoForward = !isFuture(addDays(rangeEnd, 1));
 

@@ -1,5 +1,5 @@
 import React, {useMemo} from 'react';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import type {ThemeType} from 'app/types/theme';
@@ -10,6 +10,7 @@ import {addOpacity} from 'app/style/styling.utils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 type Props = {
   latestBgSample?: BgSample;
   insulinData: InsulinDataEntry[];
@@ -40,7 +41,7 @@ function trendLabel(direction: string | undefined, language: 'en' | 'he'): strin
 }
 
 const PreMealCard: React.FC<Props> = ({latestBgSample, insulinData, lastMealSegment}) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const {language} = useAppLanguage();
 
   const lastBolus = useMemo(() => {

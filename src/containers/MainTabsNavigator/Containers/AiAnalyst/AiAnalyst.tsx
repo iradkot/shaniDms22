@@ -1,7 +1,6 @@
 import React, {useCallback, useEffect, useRef} from 'react';
 import {BackHandler, Text} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
-import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
@@ -18,8 +17,9 @@ import MissionChatScreen from './screens/MissionChatScreen';
 import EvidenceScreen from './screens/EvidenceScreen';
 import {Container, Header, Title, Subtle, Card, Button, ButtonText} from './styled';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 const AiAnalyst: React.FC = () => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const {language} = useAppLanguage();
   const engine = useAiAnalystEngine();
   const route = useRoute<any>();

@@ -2,7 +2,7 @@ import React, {useCallback, useMemo, useRef, useState} from 'react';
 
 import {type GestureResponderEvent, Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 import * as d3 from 'd3';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
@@ -25,6 +25,7 @@ import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 /** Tooltip state exposed to parent when `tooltipPlacement="none"`. */
 export type StackedChartsTooltipModel = {
   visible: boolean;
@@ -164,7 +165,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     onTooltipModelChange,
   } = props;
 
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
 
   const [chartsTooltip, setChartsTooltip] = useState<CGMGraphExternalTooltipPayload | null>(null);
 

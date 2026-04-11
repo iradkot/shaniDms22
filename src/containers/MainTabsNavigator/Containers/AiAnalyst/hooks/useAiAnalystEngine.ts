@@ -1,7 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Alert, Keyboard, ScrollView, Share} from 'react-native';
 import {launchImageLibrary} from 'react-native-image-picker';
-import {useTheme} from 'styled-components/native';
 import {useNavigation} from '@react-navigation/native';
 
 import {ThemeType} from 'app/types/theme';
@@ -17,6 +16,7 @@ import {LlmChatMessage} from 'app/services/llm/llmTypes';
 import {buildHypoDetectiveContext} from 'app/services/aiAnalyst/hypoDetectiveContextBuilder';
 import {runAiAnalystTool} from 'app/services/aiAnalyst/aiAnalystLocalTools';
 import {
+import {useAppTheme} from 'app/hooks/useAppTheme';
   AiAnalystDataUsedItem,
   buildAiAnalystExportJson,
   buildAiAnalystExportMarkdown,
@@ -77,7 +77,7 @@ import {
 // ---------------------------------------------------------------------------
 
 export function useAiAnalystEngine(): AiAnalystEngine {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const navigation = useNavigation<any>();
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();

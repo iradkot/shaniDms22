@@ -1,7 +1,7 @@
+import {useAppTheme} from 'app/hooks/useAppTheme';
 // InsulinStatsRow.tsx
 import React from 'react';
 import styled from 'styled-components/native';
-import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
@@ -30,7 +30,7 @@ export const InsulinStatsRow: React.FC<InsulinStatsRowProps> = ({
                                                                   startDate,
                                                                   endDate,
                                                                 }) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
 
   const stats = computeInsulinStats(insulinData, basalProfileData, startDate, endDate);
 

@@ -1,12 +1,13 @@
 import React, {useCallback, useState} from 'react';
 import {
+import {useAppTheme} from 'app/hooks/useAppTheme';
   ActivityIndicator,
   FlatList,
   RefreshControl,
   Pressable,
   ScrollView,
 } from 'react-native';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
@@ -223,7 +224,7 @@ type ListItem =
 // ─────────────────────────────────────────────────────────────────────────────
 
 const LoopTuner: React.FC = () => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   
   // Type filter state
   const [typeFilter, setTypeFilter] = useState<ChangeTypeFilter>('all');

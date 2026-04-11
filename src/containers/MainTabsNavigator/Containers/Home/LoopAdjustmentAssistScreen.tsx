@@ -1,10 +1,10 @@
+import {useAppTheme} from 'app/hooks/useAppTheme';
 /* eslint-disable react-native/no-inline-styles */
 import React, {useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, ScrollView, Share, Text, TextInput, View} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import notifee, {AndroidImportance} from '@notifee/react-native';
 import {subDays} from 'date-fns';
-import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
@@ -93,7 +93,7 @@ const OptionRow: React.FC<OptionRowProps> = ({
 );
 
 const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const {language} = useAppLanguage();
   const {settings: aiSettings} = useAiSettings();
 

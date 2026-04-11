@@ -1,3 +1,4 @@
+import {useAppTheme} from 'app/hooks/useAppTheme';
 /**
  * Combined mini chart that overlays basal rate, active insulin, and COB
  * in a single SVG area. Used in "mixed" chart mode on the Home screen.
@@ -11,7 +12,7 @@
 import React, {useMemo} from 'react';
 import {View} from 'react-native';
 import Svg, {Circle, G, Line, Path, Rect, Text} from 'react-native-svg';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 import * as d3 from 'd3';
 
 import type {BgSample} from 'app/types/day_bgs.types';
@@ -51,7 +52,7 @@ const MixedMiniChart: React.FC<Props> = ({
   margin: marginOverride,
   testID,
 }) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
 
   const margin = useMemo(
     () => marginOverride ?? {top: 16, right: 15, bottom: 12, left: 50},

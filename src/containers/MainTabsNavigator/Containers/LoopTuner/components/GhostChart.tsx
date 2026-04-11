@@ -1,12 +1,13 @@
 import React, {useMemo} from 'react';
 import {View, useWindowDimensions} from 'react-native';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 import Svg, {Line, Path, Rect, Text as SvgText, G, Circle} from 'react-native-svg';
 
 import {ThemeType} from 'app/types/theme';
 import {PeriodStats} from 'app/types/loopAnalysis.types';
 import {addOpacity} from 'app/style/styling.utils';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,7 +113,7 @@ export const GhostChart: React.FC<GhostChartProps> = ({
   afterStats,
   height = 200,
 }) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
   const {width: screenWidth} = useWindowDimensions();
   const chartWidth = screenWidth - 48; // Account for container padding and margins
 

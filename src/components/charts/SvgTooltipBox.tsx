@@ -1,8 +1,8 @@
 import React from 'react';
 import {Rect} from 'react-native-svg';
-import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 
+import {useAppTheme} from 'app/hooks/useAppTheme';
 type Props = {
   width: number;
   height: number;
@@ -20,7 +20,7 @@ const SvgTooltipBox: React.FC<Props> = ({
   fill,
   stroke,
 }) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
 
   return (
     <Rect

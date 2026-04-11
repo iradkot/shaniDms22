@@ -1,8 +1,8 @@
+import {useAppTheme} from 'app/hooks/useAppTheme';
 // GradientColumnComponent.tsx
 import React from 'react';
 import styled from 'styled-components/native';
 import LinearGradient from 'react-native-linear-gradient';
-import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
@@ -55,7 +55,7 @@ export const GradientColumnComponent: React.FC<GradientColumnProps> = ({
   gradientColors,
   progress,
 }) => {
-  const theme = useTheme() as ThemeType;
+  const theme = useAppTheme();
 
   const effectiveGradientColors =
     gradientColors && gradientColors.length
