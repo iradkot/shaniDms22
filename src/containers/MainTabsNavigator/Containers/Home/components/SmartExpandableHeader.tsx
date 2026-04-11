@@ -4,6 +4,7 @@ import styled, {useTheme} from 'styled-components/native';
 import DropShadow from 'react-native-drop-shadow';
 import {formatDistanceToNow} from 'date-fns';
 
+import BgGradient from 'app/components/BgGradient';
 import DirectionArrows from 'app/components/DirectionArrows';
 import LoadBars from 'app/components/LoadBars/LoadBars';
 import {ThemeType} from 'app/types/theme';
@@ -105,6 +106,7 @@ const SmartExpandableHeader: React.FC<{
     const endColor = theme.determineBgColorByGlucoseValue(
       effectiveSnapshot.enrichedBg.sgv,
     );
+    const startColor = theme.backgroundColor;
 
     const canUsePrev = shouldUsePreviousSample({
       current: effectiveSnapshot.bg,
@@ -123,6 +125,7 @@ const SmartExpandableHeader: React.FC<{
 
     return {
       ...effectiveSnapshot,
+      startColor,
       endColor,
       delta,
       deltaAbs,
@@ -161,7 +164,11 @@ const SmartExpandableHeader: React.FC<{
       <Pressable
         testID={E2E_TEST_IDS.homeHeader.toggle}
         onPress={onToggleExpanded}>
-        <HeaderSurface $bgColor={model.endColor} style={gradientStyle(theme)}>
+        <BgGradient
+          startColor={model.startColor}
+          endColor={model.endColor}
+          useAlphaEdges={false}
+          style={gradientStyle(theme)}>
           <TimeBgSection>
             <Row>
               <DropShadow style={dropShadowStyle}>
@@ -224,7 +231,7 @@ const SmartExpandableHeader: React.FC<{
               </PredictionRow>
             )}
           </RightSection>
-        </HeaderSurface>
+        </BgGradient>
       </Pressable>
 
       {/* Keep layout stable: when expanded, show predictions on a second line (if any). */}
@@ -288,9 +295,6 @@ function gradientStyle(theme: ThemeType) {
   };
 }
 
-const HeaderSurface = styled.View<{$bgColor: string}>`
-  background-color: ${({$bgColor}) => $bgColor};
-`;
 
 const Container = styled.View<{theme: ThemeType}>`
   padding-left: ${(props: {theme: ThemeType}) => props.theme.spacing.md}px;
@@ -382,4 +386,6 @@ const ExpandedPredictionWrap = styled.View<{theme: ThemeType}>`
 `;
 
 export default React.memo(SmartExpandableHeader);
+
+
 
