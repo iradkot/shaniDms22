@@ -2,9 +2,8 @@ import React from 'react';
 import {Modal, View, Text, TouchableOpacity} from 'react-native';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
-import {useTheme} from 'styled-components/native';
-import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+import {theme} from 'app/style/theme';
 
 interface NotificationModalProps {
   visible: boolean;
@@ -20,7 +19,6 @@ const NotificationModal: React.FC<NotificationModalProps> = ({
   onClose,
 }) => {
   const {language} = useAppLanguage();
-  const theme = useTheme() as ThemeType;
 
   return (
     <Modal
@@ -56,7 +54,10 @@ const NotificationModal: React.FC<NotificationModalProps> = ({
           {body ? (
             <Text style={{color: theme.textColor, fontSize: 16, marginBottom: 20}}>{body}</Text>
           ) : null}
-          <TouchableOpacity onPress={onClose} style={{alignSelf: 'flex-end', paddingHorizontal: 10, paddingVertical: 6}}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={{alignSelf: 'flex-end', paddingHorizontal: 10, paddingVertical: 6}}
+          >
             <Text style={{color: theme.accentColor, fontSize: 16}}>{tr(language, 'common.close')}</Text>
           </TouchableOpacity>
         </View>
