@@ -161,7 +161,7 @@ const Pill = styled.View`
   align-items: center;
   padding: 2px;
   border-radius: 999px;
-  background-color: ${({theme}) => addOpacity(theme.black, 0.06)};
+  background-color: ${({theme}) => addOpacity(theme.textColor, 0.06)};
 `;
 
 const PillSegment = styled.TouchableOpacity<{selected?: boolean}>`

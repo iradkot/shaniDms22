@@ -64,7 +64,7 @@ const TitleRow = styled.View.attrs({collapsable: false})`
 const CardTitle = styled.Text<{theme: ThemeType}>`
   font-size: ${(props: ThemedProps) => props.theme.typography.size.xs}px;
   font-weight: 700;
-  color: ${(props: ThemedProps) => addOpacity(props.theme.black, 0.75)};
+  color: ${(props: ThemedProps) => addOpacity(props.theme.textColor, 0.75)};
 `;
 
 const CardValue = styled.Text<{theme: ThemeType; color?: string}>`
@@ -72,14 +72,14 @@ const CardValue = styled.Text<{theme: ThemeType; color?: string}>`
   font-size: 18px;
   font-weight: 800;
   color: ${(props: {theme: ThemeType; color?: string}) =>
-    props.color ?? props.theme.black};
+    props.color ?? props.theme.textColor};
 `;
 
 const CardSubtle = styled.Text<{theme: ThemeType}>`
   margin-top: ${(props: ThemedProps) => props.theme.spacing.xs}px;
   font-size: ${(props: ThemedProps) => props.theme.typography.size.xs}px;
   font-weight: 600;
-  color: ${(props: ThemedProps) => addOpacity(props.theme.black, 0.65)};
+  color: ${(props: ThemedProps) => addOpacity(props.theme.textColor, 0.65)};
 `;
 
 const InlineRow = styled.View.attrs({collapsable: false})`
@@ -257,7 +257,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({
                 <Text
                   style={{
                     fontSize: INLINE_ICON_FONT_SIZE,
-                    color: addOpacity(theme.black, 0.6),
+                    color: addOpacity(theme.textColor, 0.6),
                     marginHorizontal: INLINE_ICON_MARGIN_HORIZONTAL,
                   }}>
                   {'\u2191'}
@@ -299,7 +299,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({
                 <Text
                   style={{
                     fontSize: INLINE_ICON_FONT_SIZE,
-                    color: addOpacity(theme.black, 0.6),
+                    color: addOpacity(theme.textColor, 0.6),
                     marginHorizontal: INLINE_ICON_MARGIN_HORIZONTAL,
                   }}>
                   {'\u2193'}

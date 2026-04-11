@@ -17,7 +17,7 @@ const SectionSwitcherRow = styled.View.attrs({collapsable: false})`
     ${(props: {theme: ThemeType}) => props.theme.spacing.md}px;
   border-bottom-width: 1px;
   border-bottom-color: ${(props: {theme: ThemeType}) =>
-    addOpacity(props.theme.black, 0.08)};
+    addOpacity(props.theme.textColor, 0.08)};
 `;
 
 const SectionButton = styled(Pressable).attrs({collapsable: false})`
