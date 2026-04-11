@@ -348,7 +348,9 @@ function mealBucketLabel(language: string, bucket: MealBucket): string {
 }
 
 const DAILY_REVIEW_LOAD_HISTORY_KEY = 'daily-review:load-ms-history:v1';
-const MAX_LOAD_SAMPLES = 12;
+const MAX_LOAD_SAMPLES = 16;
+const MIN_VALID_LOAD_MS = 500;
+const MAX_VALID_LOAD_MS = 90_000;
 
 const DailyReviewScreen: React.FC = () => {
   const theme = useTheme() as ThemeType;
@@ -359,6 +361,7 @@ const DailyReviewScreen: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [estimatedTotalMs, setEstimatedTotalMs] = useState<number | null>(null);
+  const [estimatedWorstMs, setEstimatedWorstMs] = useState<number | null>(null);
   const [loadingElapsedSec, setLoadingElapsedSec] = useState(0);
   const loadingStartRef = React.useRef<number>(Date.now());
   const [refreshingAction, setRefreshingAction] = useState(false);
@@ -401,22 +404,39 @@ const DailyReviewScreen: React.FC = () => {
       if (!raw) return;
       const parsed = JSON.parse(raw) as number[];
       if (!Array.isArray(parsed) || !parsed.length) return;
-      const clean = parsed.filter(v => Number.isFinite(v) && v > 0);
+
+      const clean = parsed
+        .filter(v => Number.isFinite(v) && v >= MIN_VALID_LOAD_MS && v <= MAX_VALID_LOAD_MS)
+        .slice(-MAX_LOAD_SAMPLES)
+        .sort((a, b) => a - b);
+
       if (!clean.length) return;
-      const avg = Math.round(clean.reduce((s, n) => s + n, 0) / clean.length);
-      setEstimatedTotalMs(avg);
+
+      const trimCount = clean.length >= 8 ? 1 : 0;
+      const trimmed = trimCount > 0 ? clean.slice(trimCount, clean.length - trimCount) : clean;
+      const avg = Math.round(trimmed.reduce((s, n) => s + n, 0) / trimmed.length);
+      const p90Index = Math.min(clean.length - 1, Math.floor(clean.length * 0.9));
+      const p90 = clean[p90Index];
+
+      setEstimatedTotalMs(avg + 3000);
+      setEstimatedWorstMs(Math.min(MAX_VALID_LOAD_MS, p90 + 5000));
     } catch {
       // ignore eta hydration errors
     }
   }, []);
 
   const persistLoadDuration = useCallback(async (durationMs: number) => {
-    if (!Number.isFinite(durationMs) || durationMs <= 0) return;
+    if (!Number.isFinite(durationMs)) return;
+    const rounded = Math.round(durationMs);
+    if (rounded < MIN_VALID_LOAD_MS || rounded > MAX_VALID_LOAD_MS) return;
+
     try {
       const raw = await AsyncStorage.getItem(DAILY_REVIEW_LOAD_HISTORY_KEY);
       const prev = raw ? (JSON.parse(raw) as number[]) : [];
-      const cleanPrev = Array.isArray(prev) ? prev.filter(v => Number.isFinite(v) && v > 0) : [];
-      const next = [...cleanPrev, Math.round(durationMs)].slice(-MAX_LOAD_SAMPLES);
+      const cleanPrev = Array.isArray(prev)
+        ? prev.filter(v => Number.isFinite(v) && v >= MIN_VALID_LOAD_MS && v <= MAX_VALID_LOAD_MS)
+        : [];
+      const next = [...cleanPrev, rounded].slice(-MAX_LOAD_SAMPLES);
       await AsyncStorage.setItem(DAILY_REVIEW_LOAD_HISTORY_KEY, JSON.stringify(next));
     } catch {
       // ignore eta persistence errors
@@ -1077,9 +1097,11 @@ const DailyReviewScreen: React.FC = () => {
 
   if (loading) {
     const estimatedSec = estimatedTotalMs ? Math.max(1, Math.round(estimatedTotalMs / 1000)) : null;
+    const worstSec = estimatedWorstMs ? Math.max(estimatedSec ?? 1, Math.round(estimatedWorstMs / 1000)) : null;
     const remainingSec = estimatedSec != null ? Math.max(0, estimatedSec - loadingElapsedSec) : null;
-    const progressPct = estimatedSec != null
-      ? Math.max(8, Math.min(96, Math.round((loadingElapsedSec / Math.max(estimatedSec, 1)) * 100)))
+    const progressBase = worstSec ?? estimatedSec;
+    const progressPct = progressBase != null
+      ? Math.max(8, Math.min(96, Math.round((loadingElapsedSec / Math.max(progressBase, 1)) * 100)))
       : null;
 
     return (
@@ -1091,10 +1113,21 @@ const DailyReviewScreen: React.FC = () => {
         <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.72), textAlign: 'center'}}>
           {remainingSec != null
             ? (language === 'he'
-              ? `זמן משוער שנותר: ~${remainingSec} שנ׳ (לפי טעינות קודמות)`
-              : `Estimated time left: ~${remainingSec}s (based on previous loads)`)
+              ? `זמן משוער: עוד כ-${remainingSec} שנ׳`
+              : `Estimated time left: ~${remainingSec}s`)
             : (language === 'he' ? 'מחשב זמן משוער לפי טעינות קודמות…' : 'Estimating wait time from previous loads…')}
         </Text>
+        {worstSec != null ? (
+          <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.58), textAlign: 'center', fontSize: 12}}>
+            {language === 'he'
+              ? (loadingElapsedSec >= (estimatedSec ?? 0)
+                ? `עדיין טוען — לפעמים זה לוקח עד ${worstSec} שנ׳.`
+                : `בדרך כלל נטען עד ${worstSec} שנ׳ במצבים עמוסים.`)
+              : (loadingElapsedSec >= (estimatedSec ?? 0)
+                ? `Still loading — in busy cases this can take up to ${worstSec}s.`
+                : `Usually finishes within ${worstSec}s in heavy cases.`)}
+          </Text>
+        ) : null}
         {progressPct != null ? (
           <View style={{marginTop: 12, width: '80%', height: 8, borderRadius: 999, backgroundColor: addOpacity(theme.textColor, 0.15), overflow: 'hidden'}}>
             <View style={{width: `${progressPct}%`, height: 8, backgroundColor: theme.accentColor}} />
