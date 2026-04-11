@@ -10,7 +10,7 @@ import {Animated, FlexAlignType} from 'react-native';
 import LoadBars from 'app/components/LoadBars/LoadBars';
 import {LOAD_BARS_CONSTANTS} from 'app/utils/loadBars.utils';
 import {formatDistanceToNow} from 'date-fns';
-import {addOpacity} from 'app/style/styling.utils';
+import {addOpacity, pickReadableTextColor} from 'app/style/styling.utils';
 
 const BG_DATA_CARD_CONSTANTS = {
   borderBottomWidth: 1,
@@ -130,9 +130,14 @@ const BgDataCard = ({
     return formattedAbsoluteTime;
   }, [bgData.date, formattedAbsoluteTime, variant]);
 
+  const contentColor = useMemo(() => {
+    if (variant !== 'featured') return theme.textColor;
+    return pickReadableTextColor(bgEndColor);
+  }, [variant, theme.textColor, bgEndColor]);
+
   const dropShadowStyle = useMemo(() => {
     return {
-      shadowColor: theme.shadowColor,
+      shadowColor: contentColor,
       shadowOffset: {
         width: BG_DATA_CARD_CONSTANTS.shadowOffsetWidth,
         height: BG_DATA_CARD_CONSTANTS.shadowOffsetHeight,
@@ -140,7 +145,7 @@ const BgDataCard = ({
       shadowOpacity: BG_DATA_CARD_CONSTANTS.shadowOpacity,
       shadowRadius: BG_DATA_CARD_CONSTANTS.shadowRadius,
     };
-  }, [theme.shadowColor]);
+  }, [contentColor]);
 
   return (
     <DataRowContainer $variant={variant}>
@@ -152,15 +157,15 @@ const BgDataCard = ({
           <TimeBgSection>
             <BgAndTrendRow>
               <DropShadow style={dropShadowStyle}>
-                <BgValueText>{bgData.sgv}</BgValueText>
+                <BgValueText $color={contentColor}>{bgData.sgv}</BgValueText>
               </DropShadow>
-              <DirectionArrows trendDirection={bgData.direction} />
+              <DirectionArrows trendDirection={bgData.direction} color={contentColor} />
             </BgAndTrendRow>
-            <TimeText numberOfLines={1}>{timeLabel}</TimeText>
+            <TimeText $color={contentColor} numberOfLines={1}>{timeLabel}</TimeText>
           </TimeBgSection>
 
           <DeltaSection>
-            <DeltaText numberOfLines={1}>{delta}</DeltaText>
+            <DeltaText $color={contentColor} numberOfLines={1}>{delta}</DeltaText>
           </DeltaSection>
 
           <BarsSection>
@@ -171,6 +176,7 @@ const BgDataCard = ({
               cob={bgData.cob}
               maxIobReference={maxIobReference}
               maxCobReference={maxCobReference}
+              valueTextColor={contentColor}
             />
           </BarsSection>
         </BgGradient>
@@ -209,9 +215,9 @@ const DataRowContainer = styled.View<{$variant: 'list' | 'featured'}>`
   padding-right: ${({$variant, theme}) => ($variant === 'featured' ? theme.spacing.md : 0)}px;
 `;
 
-const DataRowText = styled.Text<{theme: ThemeType}>`
+const DataRowText = styled.Text<{$color?: string; theme: ThemeType}>`
   font-size: 16px;
-  color: ${props => props.theme.textColor};
+  color: ${props => props.$color || props.theme.textColor};
 `;
 
 const TimeBgSection = styled.View`
@@ -230,10 +236,10 @@ const BgValueText = styled(DataRowText)`
   font-weight: 800;
 `;
 
-const TimeText = styled.Text`
+const TimeText = styled.Text<{$color?: string}>`
   margin-top: ${BG_DATA_CARD_CONSTANTS.timeMarginTop}px;
   font-size: ${({theme}) => theme.typography.size.xs}px;
-  color: ${({theme}) => theme.textColor};
+  color: ${({theme, $color}) => $color || theme.textColor};
 `;
 
 const DeltaSection = styled.View`
@@ -243,10 +249,10 @@ const DeltaSection = styled.View`
   justify-content: center;
 `;
 
-const DeltaText = styled.Text`
+const DeltaText = styled.Text<{$color?: string}>`
   font-size: ${({theme}) => theme.typography.size.sm}px;
   font-weight: 700;
-  color: ${({theme}) => theme.textColor};
+  color: ${({theme, $color}) => $color || theme.textColor};
 `;
 
 const BarsSection = styled.View`

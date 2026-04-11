@@ -24,6 +24,7 @@ type Props = {
   cob?: number;
   maxIobReference: number;
   maxCobReference: number;
+  valueTextColor?: string;
 };
 
 const LoadBars: React.FC<Props> = ({
@@ -33,6 +34,7 @@ const LoadBars: React.FC<Props> = ({
   cob,
   maxIobReference,
   maxCobReference,
+  valueTextColor,
 }) => {
   const theme = useTheme() as ThemeType;
 
@@ -100,7 +102,7 @@ const LoadBars: React.FC<Props> = ({
   return (
     <Container testID={E2E_TEST_IDS.loadBars.container}>
       <BarRow>
-        <ValueText testID={E2E_TEST_IDS.loadBars.iobText} numberOfLines={1}>
+        <ValueText $color={valueTextColor || theme.textColor} testID={E2E_TEST_IDS.loadBars.iobText} numberOfLines={1}>
           {iobLabel}
         </ValueText>
         <LabelGap />
@@ -117,7 +119,7 @@ const LoadBars: React.FC<Props> = ({
       <BlockGap />
 
       <BarRow>
-        <ValueText testID={E2E_TEST_IDS.loadBars.cobText} numberOfLines={1}>
+        <ValueText $color={valueTextColor || theme.textColor} testID={E2E_TEST_IDS.loadBars.cobText} numberOfLines={1}>
           {formatCob(safeCob)}
         </ValueText>
         <LabelGap />
@@ -148,10 +150,10 @@ const BarRow = styled.View`
   width: 100%;
 `;
 
-const ValueText = styled.Text<{theme: ThemeType}>`
+const ValueText = styled.Text<{theme: ThemeType; $color: string}>`
   font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.xs}px;
   font-weight: 700;
-  color: ${(props: {theme: ThemeType}) => props.theme.textColor};
+  color: ${(props: { $color: string}) => props.$color};
 `;
 
 const Track = styled.View<{$color: string}>`

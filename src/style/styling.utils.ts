@@ -125,3 +125,35 @@ export const addBrightness = (color: string, amount: number): string => {
   return color;
 };
 
+export const pickReadableTextColor = (
+  backgroundColor: string,
+  light = '#F9FAFB',
+  dark = '#111111',
+): string => {
+  const color = backgroundColor.trim();
+
+  let r = 0;
+  let g = 0;
+  let b = 0;
+
+  if (color.startsWith('#')) {
+    const hex = color.replace('#', '');
+    const full = hex.length === 3 ? hex.split('').map(ch => ch + ch).join('') : hex;
+    if (full.length !== 6) return dark;
+    r = parseInt(full.slice(0, 2), 16);
+    g = parseInt(full.slice(2, 4), 16);
+    b = parseInt(full.slice(4, 6), 16);
+  } else {
+    const rgbaRegex =
+      /^rgba?\(\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*(?:,\s*([0-9.]+)\s*)?\)$/i;
+    const m = color.match(rgbaRegex);
+    if (!m) return dark;
+    r = parseInt(m[1], 10);
+    g = parseInt(m[2], 10);
+    b = parseInt(m[3], 10);
+  }
+
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.58 ? dark : light;
+};
+
