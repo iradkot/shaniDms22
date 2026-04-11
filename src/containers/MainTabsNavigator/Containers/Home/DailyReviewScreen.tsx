@@ -678,14 +678,14 @@ const DailyReviewScreen: React.FC = () => {
     }
 
     return language === 'he'
-      ? `נקודת ייחוס חיובית: ${yTirPct}% מהזמן נשארת בטווח היעד.`
+      ? `נקודה חיובית: ${yTirPct}% מהזמן נשארת בטווח היעד.`
       : `Positive anchor: you stayed in target range ${yTirPct}% of the time.`;
   }, [highDelta, language, lowDelta, tirDelta, yTirPct]);
   const quickInsights = useMemo(() => {
     if (language === 'he') {
       return [
         highDelta < 0
-          ? '💡 ניהול החשיפות לגבוהים היה טוב יותר לעומת הייחוס.'
+          ? '💡 ניהול הערכים הגבוהים היה טוב יותר לעומת הממוצע השבועי.'
           : '💡 שווה להתמקד היום בצמצום זמן בגבוהים בצעדים קטנים.',
         lowDelta <= 0
           ? '🌙 שמרת על יציבות טובה בבטיחות לאורך היום והלילה.'
@@ -1138,12 +1138,12 @@ const DailyReviewScreen: React.FC = () => {
 
       <View style={{...card, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.3), backgroundColor: addOpacity(theme.accentColor, 0.06)}}>
         <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-          <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{language === 'he' ? 'מדד היום' : 'Today score'}</Text>
+          <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{language === 'he' ? 'סיכום היום' : 'Today score'}</Text>
           <Text style={{fontWeight: '800', color: theme.accentColor}}>{avgScore}/100</Text>
         </View>
         <Text style={{marginTop: 4, fontSize: 12, color: addOpacity(theme.textColor, 0.72), textAlign}}>
           {language === 'he'
-            ? 'ציון יומי משוקלל לפי זמן בטווח, יציבות, חשיפות לנמוכים ולגבוהים.'
+            ? 'ציון יומי משוקלל לפי זמן בטווח, יציבות, וחשיפה לערכים נמוכים/גבוהים.'
             : 'Daily weighted score based on time-in-range, stability, and low/high exposure.'}
         </Text>
 
@@ -1191,7 +1191,7 @@ const DailyReviewScreen: React.FC = () => {
             }}
           >
             <Text style={{fontSize: 12, fontWeight: '700', color: theme.accentColor}}>
-              {language === 'he' ? 'רוצה לבדוק יחד התאמת הגדרות לופ?' : 'Want to explore Loop setting adjustment together?'}
+              {language === 'he' ? 'רוצה שאבדוק איתך התאמות לופ?' : 'Want to explore Loop setting adjustment together?'}
             </Text>
           </Pressable>
         ) : null}
@@ -1210,11 +1210,11 @@ const DailyReviewScreen: React.FC = () => {
 
       <View style={{...card, borderWidth: 1, borderColor: addOpacity(theme.accentColor, 0.28), backgroundColor: addOpacity(theme.accentColor, 0.05)}}>
         <Text style={{fontWeight: '900', color: theme.textColor, textAlign}}>
-          {language === 'he' ? `🎯 הזמן בטווח עלה ל-${yTirPct}%` : `🎯 Time in range reached ${yTirPct}%`}
+          {language === 'he' ? `🎯 הזמן בטווח שלך: ${yTirPct}%` : `🎯 Time in range reached ${yTirPct}%`}
         </Text>
         <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.75), textAlign}}>
           {language === 'he'
-            ? `${tirDelta >= 0 ? '+' : ''}${tirDelta}% ${hasBaseline ? 'ביחס לממוצע השבועי' : 'ביחס לטווח היעד'} • ${tirDelta >= 0 ? `הרווחת כ-${tirDeltaMinutes} דקות ביעד` : `איבדת כ-${tirDeltaMinutes} דקות ביעד`}`
+            ? `${tirDelta >= 0 ? '+' : ''}${tirDelta}% ${hasBaseline ? 'לעומת הממוצע השבועי' : 'לעומת טווח היעד'} • ${tirDelta >= 0 ? `הרווחת בערך ${tirDeltaMinutes} דקות בטווח` : `היו בערך ${tirDeltaMinutes} דקות פחות בטווח`}`
             : `${tirDelta >= 0 ? '+' : ''}${tirDelta}% ${hasBaseline ? 'vs weekly average' : 'vs target'} • ${tirDelta >= 0 ? `~${tirDeltaMinutes} more minutes in range` : `~${tirDeltaMinutes} fewer minutes in range`}`}
         </Text>
 
@@ -1222,15 +1222,15 @@ const DailyReviewScreen: React.FC = () => {
           <View style={{padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.white, 0.82), borderWidth: 1, borderColor: addOpacity(theme.belowRangeColor, 0.2)}}>
             <Text style={{fontWeight: '800', color: theme.textColor}}>
               {language === 'he'
-                ? `🧊 זמן בהיפו: ${yLowPct}%${hasBaseline ? ` (ממוצע שבועי: ${wLowPct}%)` : ''}`
+                ? `🧊 זמן בנמוכים: ${yLowPct}%${hasBaseline ? ` (ממוצע שבועי: ${wLowPct}%)` : ''}`
                 : `🧊 Low time: ${yLowPct}%${hasBaseline ? ` (weekly avg: ${wLowPct}%)` : ''}`}
             </Text>
             <Text style={{marginTop: 4, color: lowDelta < 0 ? positiveColor : lowDelta > 0 ? riskColor : addOpacity(theme.textColor, 0.75), fontWeight: '800'}}>
               {language === 'he'
                 ? lowDelta < 0
-                  ? `⬇️ חסכת ${lowDeltaMinutes} דקות של נמוכים`
+                  ? `⬇️ היו ${lowDeltaMinutes} דקות פחות בנמוכים`
                   : lowDelta > 0
-                  ? `⬆️ היו עוד ${lowDeltaMinutes} דקות של נמוכים`
+                  ? `⬆️ היו ${lowDeltaMinutes} דקות יותר בנמוכים`
                   : '➖ ללא שינוי מאתמול'
                 : lowDelta < 0
                 ? `⬇️ Saved ${lowDeltaMinutes} minutes of lows`
@@ -1291,7 +1291,7 @@ const DailyReviewScreen: React.FC = () => {
               <Text style={{fontWeight: '800', color: theme.accentColor}}>
                 {language === 'he' ? '✅ מה עבד טוב אתמול' : '✅ What worked well yesterday'}
               </Text>
-              <View style={{marginTop: 4, flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap'}}>
+              <View style={{marginTop: 4, flexDirection: language === 'he' ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap'}}>
                 <Text style={{color: theme.textColor}}>{mealBucketLabel(language, topImprovedMeal.bucket)}</Text>
                 <Text style={{color: theme.textColor, writingDirection: 'ltr'}}>{topImprovedMeal.score}/100</Text>
                 <Text style={{color: addOpacity(theme.textColor, 0.75)}}>{language === 'he' ? 'מול ממוצע שבועי' : 'vs weekly baseline'}</Text>
@@ -1339,7 +1339,7 @@ const DailyReviewScreen: React.FC = () => {
                       <Text style={{fontWeight: '800', color: theme.textColor}}>
                         {language === 'he' ? '🧩 נקודה ששווה לדייק' : '🧩 A point worth refining'}
                       </Text>
-                      <View style={{marginTop: 4, flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap'}}>
+                      <View style={{marginTop: 4, flexDirection: language === 'he' ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap'}}>
                         <Text style={{color: theme.textColor}}>{mealBucketLabel(language, topDeclinedMeal.bucket)}</Text>
                         <Text style={{color: addOpacity(theme.textColor, 0.8), writingDirection: 'ltr'}}>{`${topDeclinedMeal.score}/100`}</Text>
                       </View>
@@ -1520,6 +1520,7 @@ const DailyReviewScreen: React.FC = () => {
 };
 
 export default DailyReviewScreen;
+
 
 
 
