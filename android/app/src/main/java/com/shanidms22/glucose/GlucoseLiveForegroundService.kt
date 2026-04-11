@@ -95,13 +95,15 @@ class GlucoseLiveForegroundService : Service() {
     private const val NOTIFICATION_ID = 220023
     private const val ACTION_STOP = "com.shanidms22.glucose.action.STOP_LIVE_MODE"
 
-    fun start(context: Context) {
-      val intent = Intent(context, GlucoseLiveForegroundService::class.java)
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-      } else {
-        context.startService(intent)
-      }
+    fun start(context: Context): Boolean {
+      return runCatching {
+        val intent = Intent(context, GlucoseLiveForegroundService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          context.startForegroundService(intent)
+        } else {
+          context.startService(intent)
+        }
+      }.isSuccess
     }
 
     fun stop(context: Context) {

@@ -68,7 +68,11 @@ object GlucoseSyncScheduler {
 
     if (liveMode) {
       cancel(context)
-      GlucoseLiveForegroundService.start(context)
+      val started = GlucoseLiveForegroundService.start(context)
+      if (!started) {
+        // Fallback when foreground service can't be started on this device/state.
+        schedulePeriodic(context)
+      }
     } else {
       GlucoseLiveForegroundService.stop(context)
       schedulePeriodic(context)
