@@ -7,13 +7,18 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
 import android.os.Build
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.shanidms22.MainActivity
 import com.shanidms22.R
+import kotlin.math.max
 
 object GlucoseWidgetUpdater {
   private const val PREFS = "glucose_live_prefs"
@@ -27,6 +32,7 @@ object GlucoseWidgetUpdater {
   private const val KEY_PROJECTED3 = "projected3"
   private const val KEY_LOW = "low"
   private const val KEY_HIGH = "high"
+  private const val KEY_SPARKLINE = "sparkline_csv"
   private const val CHANNEL_ID = "glucose_live"
   private const val NOTIFICATION_ID = 220022
 
@@ -44,6 +50,7 @@ object GlucoseWidgetUpdater {
     projected3: Int?,
     low: Int?,
     high: Int?,
+    sparklinePoints: IntArray? = null,
   ) {
     val e = prefs(context)
       .edit()
@@ -58,6 +65,9 @@ object GlucoseWidgetUpdater {
     if (projected3 != null) e.putInt(KEY_PROJECTED3, projected3) else e.remove(KEY_PROJECTED3)
     if (low != null) e.putInt(KEY_LOW, low) else e.remove(KEY_LOW)
     if (high != null) e.putInt(KEY_HIGH, high) else e.remove(KEY_HIGH)
+    if (sparklinePoints != null && sparklinePoints.isNotEmpty()) {
+      e.putString(KEY_SPARKLINE, sparklinePoints.takeLast(48).joinToString(","))
+    }
 
     e.apply()
   }
@@ -87,6 +97,7 @@ object GlucoseWidgetUpdater {
     val projected3: Int?,
     val low: Int?,
     val high: Int?,
+    val sparkline: List<Int>,
   )
 
   private fun read(context: Context): WidgetState {
@@ -102,7 +113,12 @@ object GlucoseWidgetUpdater {
     val projected3 = if (p.contains(KEY_PROJECTED3)) p.getInt(KEY_PROJECTED3, 0) else null
     val low = if (p.contains(KEY_LOW)) p.getInt(KEY_LOW, 70) else null
     val high = if (p.contains(KEY_HIGH)) p.getInt(KEY_HIGH, 180) else null
-    return WidgetState(value, trend, ts, iob, cob, projected1, projected2, projected3, low, high)
+    val sparkline = (p.getString(KEY_SPARKLINE, "") ?: "")
+      .split(',')
+      .mapNotNull { it.trim().toIntOrNull() }
+      .takeLast(48)
+
+    return WidgetState(value, trend, ts, iob, cob, projected1, projected2, projected3, low, high, sparkline)
   }
 
   fun updateWidgets(context: Context) {
@@ -135,6 +151,11 @@ object GlucoseWidgetUpdater {
       }
       views.setTextColor(R.id.glucose_projected, projectedColor)
 
+      val sparkBitmap = drawSparklineBitmap(state.sparkline, state.low, state.high)
+      if (sparkBitmap != null) {
+        views.setImageViewBitmap(R.id.glucose_sparkline, sparkBitmap)
+      }
+
       val launchIntent = Intent(context, MainActivity::class.java)
       val pendingIntent = PendingIntent.getActivity(
         context,
@@ -145,6 +166,54 @@ object GlucoseWidgetUpdater {
       views.setOnClickPendingIntent(R.id.glucose_widget_root, pendingIntent)
       manager.updateAppWidget(widgetId, views)
     }
+  }
+
+  private fun drawSparklineBitmap(values: List<Int>, low: Int?, high: Int?): Bitmap? {
+    if (values.size < 2) return null
+
+    val width = 360
+    val height = 74
+    val padX = 4f
+    val padY = 6f
+
+    val minV = values.minOrNull() ?: return null
+    val maxV = values.maxOrNull() ?: return null
+    val spread = max(12, maxV - minV)
+
+    fun yFor(v: Int): Float {
+      val ratio = (v - minV).toFloat() / spread.toFloat()
+      return (height - padY) - ratio * (height - padY * 2)
+    }
+
+    val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+
+    val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.parseColor("#33FFFFFF")
+      strokeWidth = 1.4f
+      style = Paint.Style.STROKE
+    }
+
+    if (low != null) canvas.drawLine(0f, yFor(low), width.toFloat(), yFor(low), gridPaint)
+    if (high != null) canvas.drawLine(0f, yFor(high), width.toFloat(), yFor(high), gridPaint)
+
+    val path = Path()
+    values.forEachIndexed { i, v ->
+      val x = padX + (i.toFloat() / (values.size - 1).toFloat()) * (width - padX * 2)
+      val y = yFor(v)
+      if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    }
+
+    val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.parseColor("#99E3F2FD")
+      strokeWidth = 3.4f
+      style = Paint.Style.STROKE
+      strokeCap = Paint.Cap.ROUND
+      strokeJoin = Paint.Join.ROUND
+    }
+
+    canvas.drawPath(path, linePaint)
+    return bmp
   }
 
   fun updateNotification(context: Context) {

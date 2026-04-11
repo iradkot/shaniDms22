@@ -19,7 +19,8 @@ class GlucoseSyncWorker(
 
     return try {
       val secret = prefs.getString(KEY_API_SECRET_SHA1, null)
-      val latest = fetchLatestValidBg(baseUrl, secret)
+      val entries = fetchRecentEntries(baseUrl, secret)
+      val latest = latestFromEntries(entries)
 
       if (latest != null) {
         val load = fetchLatestLoad(baseUrl, secret)
@@ -35,6 +36,7 @@ class GlucoseSyncWorker(
           load?.projected3,
           null,
           null,
+          entriesToSparkline(entries),
         )
         GlucoseWidgetUpdater.updateWidgets(applicationContext)
         GlucoseWidgetUpdater.updateNotification(applicationContext)
@@ -46,25 +48,35 @@ class GlucoseSyncWorker(
     }
   }
 
-  private fun fetchLatestValidBg(baseUrl: String, secret: String?): LatestBg? {
-    val url = "${baseUrl.trimEnd('/')}/api/v1/entries.json?count=10"
-    val arr = getJsonArray(url, secret) ?: return null
+  private fun fetchRecentEntries(baseUrl: String, secret: String?): JSONArray? {
+    val url = "${baseUrl.trimEnd('/')}/api/v1/entries.json?count=36"
+    return getJsonArray(url, secret)
+  }
 
+  private fun latestFromEntries(arr: JSONArray?): LatestBg? {
+    if (arr == null) return null
     for (i in 0 until arr.length()) {
       val row = arr.optJSONObject(i) ?: continue
       val sgv = row.optInt("sgv", Int.MIN_VALUE)
-      if (sgv == Int.MIN_VALUE) continue
-      if (sgv <= 0) continue
+      if (sgv == Int.MIN_VALUE || sgv <= 0) continue
 
-      val date = when {
-        row.has("date") -> row.optLong("date", System.currentTimeMillis())
-        else -> System.currentTimeMillis()
-      }
+      val date = if (row.has("date")) row.optLong("date", System.currentTimeMillis()) else System.currentTimeMillis()
       val direction = row.optString("direction", "")
       return LatestBg(sgv = sgv, date = date, trend = directionToSymbol(direction))
     }
-
     return null
+  }
+
+  private fun entriesToSparkline(arr: JSONArray?): IntArray? {
+    if (arr == null) return null
+    val values = mutableListOf<Int>()
+    for (i in (arr.length() - 1) downTo 0) {
+      val row = arr.optJSONObject(i) ?: continue
+      val sgv = row.optInt("sgv", Int.MIN_VALUE)
+      if (sgv == Int.MIN_VALUE || sgv <= 0) continue
+      values.add(sgv)
+    }
+    return if (values.size >= 2) values.toIntArray() else null
   }
 
   private fun fetchLatestLoad(baseUrl: String, secret: String?): LoadData? {
