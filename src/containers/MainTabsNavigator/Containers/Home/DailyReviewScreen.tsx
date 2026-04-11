@@ -3,6 +3,7 @@ import {ActivityIndicator, Alert, Animated, I18nManager, LayoutAnimation, Modal,
 import {addDays, format, subDays} from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useTheme} from 'styled-components/native';
+import {theme as appTheme} from 'app/style/theme';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useNavigation} from '@react-navigation/native';
 
@@ -353,7 +354,8 @@ const MIN_VALID_LOAD_MS = 500;
 const MAX_VALID_LOAD_MS = 90_000;
 
 const DailyReviewScreen: React.FC = () => {
-  const theme = useTheme() as ThemeType;
+  const styledTheme = useTheme() as ThemeType | undefined;
+  const theme = styledTheme || appTheme;
   const navigation = useNavigation<any>();
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
@@ -1530,7 +1532,7 @@ const DailyReviewScreen: React.FC = () => {
       )}
 
       <Modal visible={!!focusModalBucket} transparent animationType="fade" onRequestClose={() => setFocusModalBucket(null)}>
-        <View style={{flex: 1, backgroundColor: addOpacity('#000', 0.35), justifyContent: 'center', padding: 18}}>
+        <View style={{flex: 1, backgroundColor: addOpacity(theme.black, 0.35), justifyContent: 'center', padding: 18}}>
           <View style={{backgroundColor: theme.white, borderRadius: 14, padding: 14}}>
             <Text style={{fontWeight: '900', color: theme.textColor}}>{language === 'he' ? 'תכנן מחדש למחר' : 'Plan for tomorrow'}</Text>
             <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.72)}}>{language === 'he' ? 'שעת תזכורת (HH:MM)' : 'Reminder time (HH:MM)'}</Text>

@@ -10,6 +10,7 @@ import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import type {ThemeType} from 'app/types/theme';
+import {theme as appTheme} from 'app/style/theme';
 import type {MealTag} from 'app/types/mealTag.types';
 import {addOpacity} from 'app/style/styling.utils';
 import TagChip from 'app/components/MealTagging/TagChip';
@@ -38,7 +39,8 @@ const TagMealSheet: React.FC<TagMealSheetProps> = ({
   onSave,
   onClose,
 }) => {
-  const theme = useTheme() as ThemeType;
+  const styledTheme = useTheme() as ThemeType | undefined;
+  const theme = styledTheme || appTheme;
   const [tags, setTags] = useState<MealTag[]>(currentTags);
   const tagInputRef = useRef<TagInputHandle>(null);
 
