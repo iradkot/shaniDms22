@@ -72,4 +72,9 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
       enabled = enabled,
     )
   }
+
+  @ReactMethod
+  fun setLiveModeEnabled(enabled: Boolean) {
+    GlucoseSyncScheduler.setLiveModeEnabled(reactApplicationContext, enabled)
+  }
 }

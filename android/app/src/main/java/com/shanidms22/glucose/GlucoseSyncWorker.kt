@@ -166,6 +166,7 @@ class GlucoseSyncWorker(
     const val KEY_BASE_URL = "base_url"
     const val KEY_API_SECRET_SHA1 = "api_secret_sha1"
     const val KEY_ENABLED = "enabled"
+    const val KEY_LIVE_MODE = "live_mode"
   }
 }
 

@@ -18,6 +18,7 @@ type GlucoseNativeModule = {
   clearLiveSurface: () => void;
   setWidgetThresholds: (low: number, high: number) => void;
   configureBackgroundSync: (baseUrl?: string, apiSecretSha1?: string, enabled?: boolean) => void;
+  setLiveModeEnabled: (enabled: boolean) => void;
 };
 
 type GlucoseWidgetSnapshot = {
@@ -127,5 +128,14 @@ export function configureAndroidWidgetBackgroundSync(params: {
     );
   } catch (err) {
     console.warn('androidGlucoseLiveSurface: configureBackgroundSync failed', err);
+  }
+}
+
+export function setAndroidWidgetLiveModeEnabled(enabled: boolean): void {
+  if (!nativeModule?.setLiveModeEnabled) return;
+  try {
+    nativeModule.setLiveModeEnabled(enabled);
+  } catch (err) {
+    console.warn('androidGlucoseLiveSurface: setLiveModeEnabled failed', err);
   }
 }
