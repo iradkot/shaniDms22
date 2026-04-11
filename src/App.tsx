@@ -143,6 +143,7 @@ const AppInner: () => React.ReactElement = () => {
   const extendedTheme = {
     ...theme,
   };
+  const {language} = useAppLanguage();
   React.useEffect(() => {
     console.log('App.tsx: App component mounted');
   }, []);  // Register FCM token on start, handle token refresh, and sync daily
@@ -222,7 +223,6 @@ const AppInner: () => React.ReactElement = () => {
   const {settings: proactiveSettings} = useProactiveCareSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
   const {settings: aiSettings} = useAiSettings();
-  const {language} = useAppLanguage();
 
   useHypoNowMvp({
     enabled: !isE2E && proactiveSettings.enabled && proactiveSettings.events.hypoNow,
