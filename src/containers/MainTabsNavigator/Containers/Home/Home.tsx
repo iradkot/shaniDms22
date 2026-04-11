@@ -21,6 +21,7 @@ import {getLoadReferences} from 'app/utils/loadBars.utils';
 import {buildFullScreenStackedChartsParams} from 'app/utils/stackedChartsData.utils';
 import {pushFullScreenStackedCharts} from 'app/utils/fullscreenNavigation.utils';
 import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
+import {updateAndroidGlucoseLiveSurface} from 'app/services/androidGlucoseLiveSurface';
 import {addOpacity} from 'app/style/styling.utils';
 
 import HomeHeaderSection from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeHeaderSection';
@@ -479,6 +480,16 @@ const Home: React.FC = () => {
     if (liveSnapshot?.enrichedBg) return liveSnapshot.enrichedBg;
     return headerLatestBgSample ?? undefined;
   }, [liveSnapshot, headerLatestBgSample]);
+
+  useEffect(() => {
+    if (!isShowingToday) return;
+    if (!liveBgSample) return;
+
+    updateAndroidGlucoseLiveSurface({
+      enrichedBg: liveBgSample,
+      predictions: liveSnapshot?.predictions,
+    });
+  }, [isShowingToday, liveBgSample, liveSnapshot?.predictions]);
 
   const [showTodayRecommendation, setShowTodayRecommendation] = useState(true);
   const [isRefreshingRecommendation, setIsRefreshingRecommendation] = useState(false);
