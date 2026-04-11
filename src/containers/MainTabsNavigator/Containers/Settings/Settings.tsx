@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   Switch,
@@ -28,8 +29,10 @@ import {NightscoutSection} from './sections/NightscoutSection';
 import {iconContainerStyle, labelStyle, rowStyle, SectionHeader} from './settingsShared';
 import {t as tr} from 'app/i18n/translations';
 import {addOpacity} from 'app/style/styling.utils';
+import {setAndroidWidgetLiveModeEnabled} from 'app/services/androidGlucoseLiveSurface';
 
 const UI_STORAGE_KEY = 'settings.ui.v1';
+const WIDGET_STORAGE_KEY = 'settings.widget.v1';
 
 const Settings: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -76,6 +79,7 @@ const Settings: React.FC = () => {
   const [dailyBriefMinuteText, setDailyBriefMinuteText] = useState('00');
   const [dailyBriefStatus, setDailyBriefStatus] = useState<string | null>(null);
   const [rangeError, setRangeError] = useState<string | null>(null);
+  const [androidLiveMode, setAndroidLiveMode] = useState(true);
 
   const openAiModelOptions = useMemo(
     () => [
@@ -218,6 +222,37 @@ const Settings: React.FC = () => {
     });
   }, [uiLoaded, showDisplayedTabs, showNightscout, showRanges, showNightWindow, showMealWindows, showAi, showProactiveCare]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    let isMounted = true;
+
+    const loadWidgetPrefs = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(WIDGET_STORAGE_KEY);
+        if (!isMounted) return;
+        if (!raw) {
+          setAndroidLiveMode(true);
+          setAndroidWidgetLiveModeEnabled(true);
+          return;
+        }
+
+        const parsed = JSON.parse(raw) as Partial<{liveMode: boolean}>;
+        const liveMode = typeof parsed.liveMode === 'boolean' ? parsed.liveMode : true;
+        setAndroidLiveMode(liveMode);
+        setAndroidWidgetLiveModeEnabled(liveMode);
+      } catch {
+        if (!isMounted) return;
+        setAndroidLiveMode(true);
+        setAndroidWidgetLiveModeEnabled(true);
+      }
+    };
+
+    loadWidgetPrefs();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const inputStyle = {
     borderWidth: 1,
     borderColor: theme.borderColor,
@@ -236,6 +271,14 @@ const Settings: React.FC = () => {
     const n = Number(trimmed);
     if (!Number.isFinite(n)) return null;
     return Math.trunc(n);
+  };
+
+  const setAndroidLiveModeAndPersist = (enabled: boolean) => {
+    setAndroidLiveMode(enabled);
+    setAndroidWidgetLiveModeEnabled(enabled);
+    AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify({liveMode: enabled})).catch(() => {
+      // Best-effort persistence.
+    });
   };
 
   const validateAndApplyRanges = () => {
@@ -985,6 +1028,30 @@ const Settings: React.FC = () => {
         }}
         onAddProfile={() => navigation.navigate(NIGHTSCOUT_SETUP_SCREEN)}
       />
+
+      {Platform.OS === 'android' && (
+        <View>
+          <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.xs}}>
+            <Text style={{color: theme.textColor, fontSize: theme.typography.size.md, fontWeight: '700'}}>
+              {language === 'he' ? 'ווידג׳ט אנדרואיד' : 'Android Widget'}
+            </Text>
+          </View>
+          <View style={rowStyle}>
+            <View style={iconContainerStyle}>
+              <MaterialIcons name="bolt" size={theme.typography.size.xl} color={theme.textColor} />
+            </View>
+            <View style={{flex: 1, paddingRight: theme.spacing.sm}}>
+              <Text style={labelStyle}>{language === 'he' ? 'Live Mode (כל דקה)' : 'Live Mode (every minute)'}</Text>
+              <Text style={{color: theme.textColor, opacity: 0.72, fontSize: theme.typography.size.xs}}>
+                {language === 'he'
+                  ? 'עדכון כמעט רציף דרך שירות רקע. צורך יותר סוללה ומציג התראה קבועה.'
+                  : 'Near real-time refresh via foreground service. Uses more battery and keeps a persistent notification.'}
+              </Text>
+            </View>
+            <Switch value={androidLiveMode} onValueChange={setAndroidLiveModeAndPersist} />
+          </View>
+        </View>
+      )}
 
       <View>
         <SectionHeader

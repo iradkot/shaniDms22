@@ -17,7 +17,7 @@ import {
   NightscoutProfile,
 } from 'app/services/nightscoutProfiles';
 import {clearNightscoutInstance, configureNightscoutInstance} from 'app/api/shaniNightscoutInstances';
-import {configureAndroidWidgetBackgroundSync, setAndroidWidgetLiveModeEnabled} from 'app/services/androidGlucoseLiveSurface';
+import {configureAndroidWidgetBackgroundSync} from 'app/services/androidGlucoseLiveSurface';
 
 export type NightscoutConfigContextValue = {
   profiles: NightscoutProfile[];
@@ -86,11 +86,9 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
               apiSecretSha1: active.apiSecretSha1,
               enabled: true,
             });
-            setAndroidWidgetLiveModeEnabled(true);
           }
         } else {
           configureAndroidWidgetBackgroundSync({enabled: false});
-          setAndroidWidgetLiveModeEnabled(false);
         }
 
         // Persist repaired active ID if needed.
@@ -142,7 +140,6 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
         apiSecretSha1: profile.apiSecretSha1,
         enabled: true,
       });
-      setAndroidWidgetLiveModeEnabled(true);
       await persistNightscoutProfiles(nextProfiles, profile.id);
     },
     [],
@@ -160,7 +157,6 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
         apiSecretSha1: nextActive.apiSecretSha1,
         enabled: true,
       });
-      setAndroidWidgetLiveModeEnabled(true);
       await persistNightscoutProfiles(profiles, id);
     },
     [profiles],
@@ -211,7 +207,6 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
           apiSecretSha1: updatedActive.apiSecretSha1,
           enabled: true,
         });
-        setAndroidWidgetLiveModeEnabled(true);
       }
 
       await persistNightscoutProfiles(nextProfiles, activeProfileId);
@@ -239,12 +234,10 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
             apiSecretSha1: active.apiSecretSha1,
             enabled: true,
           });
-          setAndroidWidgetLiveModeEnabled(true);
         }
       } else {
         clearNightscoutInstance();
         configureAndroidWidgetBackgroundSync({enabled: false});
-        setAndroidWidgetLiveModeEnabled(false);
       }
 
       await persistNightscoutProfiles(nextProfiles, nextActiveId);
