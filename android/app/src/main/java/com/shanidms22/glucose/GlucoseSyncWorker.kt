@@ -14,8 +14,9 @@ class GlucoseSyncWorker(
 
   override suspend fun doWork(): Result {
     val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    val enabled = prefs.getBoolean(KEY_ENABLED, false)
     val baseUrl = prefs.getString(KEY_BASE_URL, null)?.trim().orEmpty()
-    if (baseUrl.isBlank()) return Result.success()
+    if (!enabled || baseUrl.isBlank()) return Result.success()
 
     return try {
       val secret = prefs.getString(KEY_API_SECRET_SHA1, null)
@@ -164,6 +165,7 @@ class GlucoseSyncWorker(
     const val PREFS = "glucose_sync_prefs"
     const val KEY_BASE_URL = "base_url"
     const val KEY_API_SECRET_SHA1 = "api_secret_sha1"
+    const val KEY_ENABLED = "enabled"
   }
 }
 

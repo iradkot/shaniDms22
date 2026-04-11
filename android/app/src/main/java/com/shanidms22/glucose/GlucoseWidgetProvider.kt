@@ -11,11 +11,20 @@ class GlucoseWidgetProvider : AppWidgetProvider() {
     appWidgetIds: IntArray,
   ) {
     super.onUpdate(context, appWidgetManager, appWidgetIds)
+    GlucoseSyncScheduler.scheduleFromPrefs(context)
+    GlucoseSyncScheduler.enqueueImmediate(context)
     GlucoseWidgetUpdater.updateWidgets(context)
   }
 
   override fun onEnabled(context: Context) {
     super.onEnabled(context)
+    GlucoseSyncScheduler.scheduleFromPrefs(context)
+    GlucoseSyncScheduler.enqueueImmediate(context)
     GlucoseWidgetUpdater.updateWidgets(context)
+  }
+
+  override fun onDisabled(context: Context) {
+    super.onDisabled(context)
+    GlucoseSyncScheduler.cancel(context)
   }
 }

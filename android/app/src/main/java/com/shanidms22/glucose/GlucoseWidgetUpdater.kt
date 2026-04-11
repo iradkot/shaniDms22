@@ -13,6 +13,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.os.Build
+import android.os.SystemClock
+import android.view.View
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -134,10 +136,17 @@ object GlucoseWidgetUpdater {
         val views = RemoteViews(context.packageName, R.layout.glucose_widget)
         views.setTextViewText(R.id.glucose_value, value?.toString() ?: "--")
         views.setTextViewText(R.id.glucose_trend, trend.ifBlank { "•" })
-        views.setTextViewText(
-          R.id.glucose_updated,
-          if (ts != null && ts > 0) android.text.format.DateUtils.getRelativeTimeSpanString(ts).toString() else "No data"
-        )
+        if (ts != null && ts > 0) {
+          val ageMs = (System.currentTimeMillis() - ts).coerceAtLeast(0L)
+          val chronoBase = SystemClock.elapsedRealtime() - ageMs
+          views.setViewVisibility(R.id.glucose_updated, View.GONE)
+          views.setViewVisibility(R.id.glucose_updated_chrono, View.VISIBLE)
+          views.setChronometer(R.id.glucose_updated_chrono, chronoBase, "%s ago", true)
+        } else {
+          views.setViewVisibility(R.id.glucose_updated, View.VISIBLE)
+          views.setViewVisibility(R.id.glucose_updated_chrono, View.GONE)
+          views.setTextViewText(R.id.glucose_updated, "No data")
+        }
         views.setTextViewText(R.id.glucose_iob, "IOB ${state.iob}U")
         views.setTextViewText(R.id.glucose_cob, "COB ${state.cob}g")
         val p1 = state.projected1?.toString() ?: "--"
@@ -155,6 +164,8 @@ object GlucoseWidgetUpdater {
         val sparkBitmap = drawSparklineBitmap(state.sparkline, state.low, state.high)
         if (sparkBitmap != null) {
           views.setImageViewBitmap(R.id.glucose_sparkline, sparkBitmap)
+        } else {
+          views.setImageViewBitmap(R.id.glucose_sparkline, null)
         }
 
         val launchIntent = Intent(context, MainActivity::class.java)
