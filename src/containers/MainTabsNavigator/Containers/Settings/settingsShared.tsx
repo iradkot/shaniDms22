@@ -3,45 +3,27 @@ import {Text, TouchableOpacity, View} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {theme} from 'app/style/theme';
 
-export const rowStyle = {
+export const getRowStyle = () => ({
   flexDirection: 'row' as const,
   alignItems: 'center' as const,
   paddingVertical: theme.spacing.md,
   paddingHorizontal: theme.spacing.lg,
   borderBottomWidth: 1,
   borderBottomColor: theme.borderColor,
-};
+});
 
-export const iconContainerStyle = {
+export const getIconContainerStyle = () => ({
   width: 28,
   alignItems: 'center' as const,
   marginRight: theme.spacing.md,
-};
+});
 
-export const labelStyle = {
+export const getLabelStyle = () => ({
   color: theme.textColor,
   fontSize: theme.typography.size.md,
   flex: 1,
   paddingRight: theme.spacing.md,
-};
-
-const sectionHeaderRowStyle = {
-  flexDirection: 'row' as const,
-  alignItems: 'center' as const,
-  justifyContent: 'space-between' as const,
-};
-
-const sectionHeaderTextStyle = {
-  color: theme.textColor,
-  fontSize: theme.typography.size.lg,
-  fontWeight: '600' as const,
-};
-
-const sectionHeaderContainerStyle = {
-  paddingHorizontal: theme.spacing.lg,
-  paddingTop: theme.spacing.lg,
-  paddingBottom: theme.spacing.sm,
-};
+});
 
 /** Collapsible section header used by Settings. */
 export function SectionHeader(props: {
@@ -55,7 +37,11 @@ export function SectionHeader(props: {
     <TouchableOpacity
       accessibilityRole="button"
       onPress={onToggle}
-      style={sectionHeaderContainerStyle}
+      style={{
+        paddingHorizontal: theme.spacing.lg,
+        paddingTop: theme.spacing.lg,
+        paddingBottom: theme.spacing.sm,
+      }}
       hitSlop={{
         top: theme.spacing.sm,
         bottom: theme.spacing.sm,
@@ -63,8 +49,22 @@ export function SectionHeader(props: {
         right: theme.spacing.sm,
       }}
     >
-      <View style={sectionHeaderRowStyle}>
-        <Text style={sectionHeaderTextStyle}>{title}</Text>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <Text
+          style={{
+            color: theme.textColor,
+            fontSize: theme.typography.size.lg,
+            fontWeight: '600',
+          }}
+        >
+          {title}
+        </Text>
         <MaterialIcons
           name={expanded ? 'expand-less' : 'expand-more'}
           size={theme.typography.size.xxl}

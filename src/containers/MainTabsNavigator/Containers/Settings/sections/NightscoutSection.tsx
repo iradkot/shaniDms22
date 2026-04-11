@@ -3,7 +3,7 @@ import {Alert, Text, TouchableOpacity, View} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {theme} from 'app/style/theme';
 import {NightscoutProfile} from 'app/services/nightscoutProfiles';
-import {iconContainerStyle, rowStyle, SectionHeader} from '../settingsShared';
+import {getIconContainerStyle, getRowStyle, SectionHeader} from '../settingsShared';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 
@@ -28,6 +28,9 @@ export function NightscoutSection(props: {
     onDeleteProfile,
     onAddProfile,
   } = props;
+
+  const rowStyle = getRowStyle();
+  const iconContainerStyle = getIconContainerStyle();
 
   return (
     <View>

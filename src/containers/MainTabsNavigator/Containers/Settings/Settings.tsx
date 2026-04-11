@@ -26,7 +26,12 @@ import {validateOpenAiApiKey} from 'app/services/llm/providers/openaiProvider';
 import {sendDailyBriefNow} from 'app/services/proactiveCare/dailyBrief';
 import {clearAllMemory, getMemoryStats} from 'app/services/aiMemory/aiMemoryStore';
 import {NightscoutSection} from './sections/NightscoutSection';
-import {iconContainerStyle, labelStyle, rowStyle, SectionHeader} from './settingsShared';
+import {
+  getIconContainerStyle,
+  getLabelStyle,
+  getRowStyle,
+  SectionHeader,
+} from './settingsShared';
 import {t as tr} from 'app/i18n/translations';
 import {addOpacity} from 'app/style/styling.utils';
 import {setAndroidWidgetLiveModeEnabled} from 'app/services/androidGlucoseLiveSurface';
@@ -260,6 +265,10 @@ const Settings: React.FC = () => {
       isMounted = false;
     };
   }, []);
+
+  const rowStyle = getRowStyle();
+  const iconContainerStyle = getIconContainerStyle();
+  const labelStyle = getLabelStyle();
 
   const inputStyle = {
     borderWidth: 1,
