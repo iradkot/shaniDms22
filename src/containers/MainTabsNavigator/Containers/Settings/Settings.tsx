@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {theme} from 'app/style/theme';
+import {APP_THEME_OPTIONS, getThemeById, theme} from 'app/style/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {useTabsSettings} from 'app/contexts/TabsSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
@@ -30,6 +30,7 @@ import {iconContainerStyle, labelStyle, rowStyle, SectionHeader} from './setting
 import {t as tr} from 'app/i18n/translations';
 import {addOpacity} from 'app/style/styling.utils';
 import {setAndroidWidgetLiveModeEnabled} from 'app/services/androidGlucoseLiveSurface';
+import {useThemeSettings} from 'app/contexts/ThemeSettingsContext';
 
 const UI_STORAGE_KEY = 'settings.ui.v1';
 const WIDGET_STORAGE_KEY = 'settings.widget.v1';
@@ -43,8 +44,10 @@ const Settings: React.FC = () => {
   const {settings: aiSettings, setSetting: setAiSetting, isLoaded: aiLoaded} = useAiSettings();
   const {settings: proactiveSettings, setSetting: setProactiveSetting} = useProactiveCareSettings();
   const {language, setLanguage} = useAppLanguage();
+  const {themeId, setThemeId} = useThemeSettings();
 
   const [showDisplayedTabs, setShowDisplayedTabs] = useState(true);
+  const [showThemePicker, setShowThemePicker] = useState(true);
   const [showNightscout, setShowNightscout] = useState(false);
   const [showRanges, setShowRanges] = useState(false);
   const [showNightWindow, setShowNightWindow] = useState(false);
@@ -160,6 +163,7 @@ const Settings: React.FC = () => {
 
         const parsed = JSON.parse(raw) as Partial<{
           showDisplayedTabs: boolean;
+          showThemePicker: boolean;
           showNightscout: boolean;
           showRanges: boolean;
           showNightWindow: boolean;
@@ -170,6 +174,9 @@ const Settings: React.FC = () => {
 
         if (typeof parsed.showDisplayedTabs === 'boolean') {
           setShowDisplayedTabs(parsed.showDisplayedTabs);
+        }
+        if (typeof parsed.showThemePicker === 'boolean') {
+          setShowThemePicker(parsed.showThemePicker);
         }
         if (typeof parsed.showNightscout === 'boolean') {
           setShowNightscout(parsed.showNightscout);
@@ -210,6 +217,7 @@ const Settings: React.FC = () => {
       UI_STORAGE_KEY,
       JSON.stringify({
         showDisplayedTabs,
+        showThemePicker,
         showNightscout,
         showRanges,
         showNightWindow,
@@ -220,7 +228,7 @@ const Settings: React.FC = () => {
     ).catch(() => {
       // Best-effort persistence.
     });
-  }, [uiLoaded, showDisplayedTabs, showNightscout, showRanges, showNightWindow, showMealWindows, showAi, showProactiveCare]);
+  }, [uiLoaded, showDisplayedTabs, showThemePicker, showNightscout, showRanges, showNightWindow, showMealWindows, showAi, showProactiveCare]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -481,6 +489,51 @@ const Settings: React.FC = () => {
         >
           {tr(language, 'settings.subtitle')}
         </Text>
+      </View>
+
+      <View>
+        <SectionHeader
+          title={language === 'he' ? 'ערכת נושא' : 'Appearance Theme'}
+          expanded={showThemePicker}
+          onToggle={() => setShowThemePicker(v => !v)}
+        />
+
+        {showThemePicker &&
+          APP_THEME_OPTIONS.map(option => {
+            const selected = themeId === option.id;
+            const optionTheme = getThemeById(option.id);
+            return (
+              <Pressable
+                key={option.id}
+                accessibilityRole="button"
+                onPress={() => setThemeId(option.id)}
+                style={({pressed}) => ({
+                  ...rowStyle,
+                  backgroundColor: pressed ? theme.borderColor : 'transparent',
+                })}
+              >
+                <View style={iconContainerStyle}>
+                  <MaterialIcons
+                    name={selected ? 'radio-button-checked' : 'radio-button-unchecked'}
+                    size={theme.typography.size.lg}
+                    color={theme.textColor}
+                  />
+                </View>
+                <View style={{flex: 1, paddingRight: theme.spacing.md}}>
+                  <Text style={{...labelStyle, fontWeight: selected ? '700' : '500'}}>{option.title}</Text>
+                  <Text style={{color: theme.textColor, opacity: 0.65, fontSize: theme.typography.size.xs}}>
+                    {option.description}
+                  </Text>
+                  <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 8}}>
+                    <View style={{width: 12, height: 12, borderRadius: 6, marginRight: 5, backgroundColor: optionTheme.primaryColor}} />
+                    <View style={{width: 12, height: 12, borderRadius: 6, marginRight: 5, backgroundColor: optionTheme.inRangeColor}} />
+                    <View style={{width: 12, height: 12, borderRadius: 6, marginRight: 5, backgroundColor: optionTheme.belowRangeColor}} />
+                    <View style={{width: 12, height: 12, borderRadius: 6, marginRight: 5, backgroundColor: optionTheme.aboveRangeColor}} />
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })}
       </View>
 
       <View>

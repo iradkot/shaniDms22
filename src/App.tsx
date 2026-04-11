@@ -56,7 +56,7 @@ import {
 } from 'app/navigation/rootNavigation';
 import {ThemeProvider} from 'styled-components';
 import styled from 'styled-components/native';
-import {theme} from 'app/style/theme';
+import {ThemeSettingsProvider, useThemeSettings} from 'app/contexts/ThemeSettingsContext';
 import {ThemeType as Theme} from 'app/types/theme';
 import CameraScreen from 'app/components/CameraScreen/CameraScreen';
 import AddFoodItemScreen from 'app/containers/forms/Food/AddFoodItem';
@@ -140,8 +140,9 @@ function handleNotificationNavigation(initialNotification: {notification?: {data
 
 const AppInner: () => React.ReactElement = () => {
   console.log('App.tsx: Entering App component');
+  const {activeTheme} = useThemeSettings();
   const extendedTheme = {
-    ...theme,
+    ...activeTheme,
   };
   const {language} = useAppLanguage();
   React.useEffect(() => {
@@ -294,7 +295,7 @@ const AppInner: () => React.ReactElement = () => {
           <ThemeProvider theme={extendedTheme}>
             <ErrorBoundary>
               <TouchProvider>
-                <StatusBar backgroundColor={theme.backgroundColor} />
+                <StatusBar backgroundColor={extendedTheme.backgroundColor} />
                 <AppContainer>
                   <SafeAreaView style={{flex: 1}}>
                     <SportItemsProvider>
@@ -423,7 +424,9 @@ const AppInner: () => React.ReactElement = () => {
 
 const App: React.FC = () => (
   <AppLanguageProvider>
-    <AppInner />
+    <ThemeSettingsProvider>
+      <AppInner />
+    </ThemeSettingsProvider>
   </AppLanguageProvider>
 );
 
