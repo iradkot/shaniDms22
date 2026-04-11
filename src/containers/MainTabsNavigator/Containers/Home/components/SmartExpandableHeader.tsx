@@ -15,7 +15,7 @@ import {
 } from 'app/hooks/useLatestNightscoutSnapshot';
 import {isE2E} from 'app/utils/e2e';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
-import {pickReadableTextColor} from 'app/style/styling.utils';
+import {addOpacity, pickReadableTextColor} from 'app/style/styling.utils';
 
 const CONSTANTS = {
   minDeltaForGlow: 10,
@@ -103,10 +103,11 @@ const SmartExpandableHeader: React.FC<{
   const model = useMemo(() => {
     if (!effectiveSnapshot) return null;
 
-    const startColor = theme.white;
     const endColor = theme.determineBgColorByGlucoseValue(
       effectiveSnapshot.enrichedBg.sgv,
     );
+    // Keep header clearly tied to active theme/range color (especially High-Contrast mode)
+    const startColor = addOpacity(endColor, 0.18);
 
     const canUsePrev = shouldUsePreviousSample({
       current: effectiveSnapshot.bg,
