@@ -7,16 +7,16 @@ type GlucoseNativeModule = {
     value: number,
     trend: string,
     timestampMs: number,
-    iob?: number,
-    cob?: number,
-    projected1?: number,
-    projected2?: number,
-    projected3?: number,
-    low?: number,
-    high?: number,
+    iob: number,
+    cob: number,
+    projected1: number,
+    projected2: number,
+    projected3: number,
+    low: number,
+    high: number,
   ) => void;
   clearLiveSurface: () => void;
-  setWidgetThresholds: (low?: number, high?: number) => void;
+  setWidgetThresholds: (low: number, high: number) => void;
   configureBackgroundSync: (baseUrl?: string, apiSecretSha1?: string, enabled?: boolean) => void;
 };
 
@@ -80,19 +80,19 @@ export function updateAndroidGlucoseLiveSurface(
   const projected2 = typeof p2Raw === 'number' && Number.isFinite(p2Raw) ? Math.round(p2Raw) : undefined;
   const projected3 = typeof p3Raw === 'number' && Number.isFinite(p3Raw) ? Math.round(p3Raw) : undefined;
 
-  const low = typeof thresholds?.low === 'number' && Number.isFinite(thresholds.low) ? thresholds.low : undefined;
-  const high = typeof thresholds?.high === 'number' && Number.isFinite(thresholds.high) ? thresholds.high : undefined;
+  const low = typeof thresholds?.low === 'number' && Number.isFinite(thresholds.low) ? thresholds.low : Number.NaN;
+  const high = typeof thresholds?.high === 'number' && Number.isFinite(thresholds.high) ? thresholds.high : Number.NaN;
 
   try {
     nativeModule.updateLiveSurface(
       value,
       trend,
       timestampMs,
-      iob,
-      cob,
-      projected1,
-      projected2,
-      projected3,
+      iob ?? Number.NaN,
+      cob ?? Number.NaN,
+      projected1 ?? Number.NaN,
+      projected2 ?? Number.NaN,
+      projected3 ?? Number.NaN,
       low,
       high,
     );
@@ -104,7 +104,10 @@ export function updateAndroidGlucoseLiveSurface(
 export function setAndroidWidgetThresholds(low?: number, high?: number): void {
   if (!nativeModule?.setWidgetThresholds) return;
   try {
-    nativeModule.setWidgetThresholds(low, high);
+    nativeModule.setWidgetThresholds(
+      typeof low === 'number' && Number.isFinite(low) ? low : Number.NaN,
+      typeof high === 'number' && Number.isFinite(high) ? high : Number.NaN,
+    );
   } catch (err) {
     console.warn('androidGlucoseLiveSurface: setWidgetThresholds failed', err);
   }
