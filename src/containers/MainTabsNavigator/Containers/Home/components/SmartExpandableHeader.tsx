@@ -15,6 +15,7 @@ import {
 } from 'app/hooks/useLatestNightscoutSnapshot';
 import {isE2E} from 'app/utils/e2e';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {pickReadableTextColor} from 'app/style/styling.utils';
 
 const CONSTANTS = {
   minDeltaForGlow: 10,
@@ -137,9 +138,10 @@ const SmartExpandableHeader: React.FC<{
   }
 
   const glowShadow = model.deltaAbs >= CONSTANTS.minDeltaForGlow;
+  const contentColor = pickReadableTextColor(model.endColor);
 
   const dropShadowStyle = {
-    shadowColor: theme.shadowColor,
+    shadowColor: contentColor,
     shadowOffset: {width: 1, height: 1},
     shadowOpacity: glowShadow ? 0.75 : 0.5,
     shadowRadius: glowShadow ? 3 : 2,
@@ -166,15 +168,15 @@ const SmartExpandableHeader: React.FC<{
           <TimeBgSection>
             <Row>
               <DropShadow style={dropShadowStyle}>
-                <BgValueText>{model.bg.sgv}</BgValueText>
+                <BgValueText $color={contentColor}>{model.bg.sgv}</BgValueText>
               </DropShadow>
-              <DirectionArrows trendDirection={model.bg.direction} />
+              <DirectionArrows trendDirection={model.bg.direction} color={contentColor} />
             </Row>
-            <TimeText numberOfLines={1}>{timeLabel}</TimeText>
+            <TimeText $color={contentColor} numberOfLines={1}>{timeLabel}</TimeText>
           </TimeBgSection>
 
           <DeltaSection>
-            <DeltaText numberOfLines={1}>{model.delta}</DeltaText>
+            <DeltaText $color={contentColor} numberOfLines={1}>{model.delta}</DeltaText>
           </DeltaSection>
 
           <RightSection>
@@ -186,6 +188,7 @@ const SmartExpandableHeader: React.FC<{
                 cob={model.enrichedBg.cob}
                 maxIobReference={maxIobReference}
                 maxCobReference={maxCobReference}
+                valueTextColor={contentColor}
               />
             ) : (
               <PredictionRow testID={E2E_TEST_IDS.homeHeader.predictionsRow}>
@@ -193,6 +196,7 @@ const SmartExpandableHeader: React.FC<{
                   <PredictionLabel
                     testID={E2E_TEST_IDS.homeHeader.predictionLabel}
                     $dim={model.showDimmedPredictions}
+                    $color={contentColor}
                     numberOfLines={1}>
                     Next
                   </PredictionLabel>
@@ -201,6 +205,7 @@ const SmartExpandableHeader: React.FC<{
                   <PredictionItem key={p.ts}>
                     <PredictionArrow
                       $dim={model.showDimmedPredictions}
+                      $color={contentColor}
                       numberOfLines={1}>
                       →
                     </PredictionArrow>
@@ -213,6 +218,7 @@ const SmartExpandableHeader: React.FC<{
                             : E2E_TEST_IDS.homeHeader.predictionValue2
                       }
                       $dim={model.showDimmedPredictions}
+                      $color={contentColor}
                       numberOfLines={1}>
                       {p.sgv}
                     </PredictionText>
@@ -231,12 +237,13 @@ const SmartExpandableHeader: React.FC<{
             <PredictionLabel
               testID={E2E_TEST_IDS.homeHeader.predictionLabel}
               $dim={model.showDimmedPredictions}
+              $color={contentColor}
               numberOfLines={1}>
               Next
             </PredictionLabel>
             {model.predictions.map((p, idx) => (
               <PredictionItem key={p.ts}>
-                <PredictionArrow $dim={model.showDimmedPredictions} numberOfLines={1}>
+                <PredictionArrow $dim={model.showDimmedPredictions} $color={contentColor} numberOfLines={1}>
                   →
                 </PredictionArrow>
                 <PredictionText
@@ -248,6 +255,7 @@ const SmartExpandableHeader: React.FC<{
                         : E2E_TEST_IDS.homeHeader.predictionValue2
                   }
                   $dim={model.showDimmedPredictions}
+                  $color={contentColor}
                   numberOfLines={1}>
                   {p.sgv}
                 </PredictionText>
@@ -300,16 +308,16 @@ const Row = styled.View`
   align-items: center;
 `;
 
-const BgValueText = styled.Text<{theme: ThemeType}>`
+const BgValueText = styled.Text<{theme: ThemeType; $color?: string}>`
   font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.lg}px;
   font-weight: 800;
-  color: ${(props: {theme: ThemeType}) => props.theme.textColor};
+  color: ${(props: {theme: ThemeType; $color?: string}) => props.$color || props.theme.textColor};
 `;
 
-const TimeText = styled.Text<{theme: ThemeType}>`
+const TimeText = styled.Text<{theme: ThemeType; $color?: string}>`
   margin-top: ${(props: {theme: ThemeType}) => props.theme.spacing.xs / 2}px;
   font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.xs}px;
-  color: ${(props: {theme: ThemeType}) => props.theme.textColor};
+  color: ${(props: {theme: ThemeType; $color?: string}) => props.$color || props.theme.textColor};
 `;
 
 const DeltaSection = styled.View`
@@ -319,10 +327,10 @@ const DeltaSection = styled.View`
   justify-content: center;
 `;
 
-const DeltaText = styled.Text<{theme: ThemeType}>`
+const DeltaText = styled.Text<{theme: ThemeType; $color?: string}>`
   font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.sm}px;
   font-weight: 700;
-  color: ${(props: {theme: ThemeType}) => props.theme.textColor};
+  color: ${(props: {theme: ThemeType; $color?: string}) => props.$color || props.theme.textColor};
 `;
 
 const RightSection = styled.View<{theme: ThemeType}>`
@@ -344,26 +352,26 @@ const PredictionItem = styled.View<{theme: ThemeType}>`
   margin-left: ${(props: {theme: ThemeType}) => props.theme.spacing.sm}px;
 `;
 
-const PredictionLabel = styled.Text<{$dim: boolean; theme: ThemeType}>`
+const PredictionLabel = styled.Text<{$dim: boolean; $color?: string; theme: ThemeType}>`
   font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.xs}px;
   font-weight: 800;
-  color: ${(props: {$dim: boolean; theme: ThemeType}) =>
-    props.$dim ? props.theme.borderColor : props.theme.textColor};
+  color: ${(props: {$dim: boolean; $color?: string; theme: ThemeType}) =>
+    props.$dim ? props.theme.borderColor : props.$color || props.theme.textColor};
 `;
 
-const PredictionArrow = styled.Text<{$dim: boolean; theme: ThemeType}>`
+const PredictionArrow = styled.Text<{$dim: boolean; $color?: string; theme: ThemeType}>`
   font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.sm}px;
   font-weight: 900;
   margin-right: ${(props: {theme: ThemeType}) => props.theme.spacing.xs}px;
-  color: ${(props: {$dim: boolean; theme: ThemeType}) =>
-    props.$dim ? props.theme.borderColor : props.theme.textColor};
+  color: ${(props: {$dim: boolean; $color?: string; theme: ThemeType}) =>
+    props.$dim ? props.theme.borderColor : props.$color || props.theme.textColor};
 `;
 
-const PredictionText = styled.Text<{$dim: boolean; theme: ThemeType}>`
+const PredictionText = styled.Text<{$dim: boolean; $color?: string; theme: ThemeType}>`
   font-size: ${(props: {theme: ThemeType}) => props.theme.typography.size.sm}px;
   font-weight: 800;
-  color: ${(props: {$dim: boolean; theme: ThemeType}) =>
-    props.$dim ? props.theme.borderColor : props.theme.textColor};
+  color: ${(props: {$dim: boolean; $color?: string; theme: ThemeType}) =>
+    props.$dim ? props.theme.borderColor : props.$color || props.theme.textColor};
 `;
 
 const ExpandedPredictionWrap = styled.View<{theme: ThemeType}>`

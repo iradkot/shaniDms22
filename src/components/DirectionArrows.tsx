@@ -1,5 +1,5 @@
 import React, {useMemo} from 'react';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import DropShadow from 'react-native-drop-shadow';
 import Icon from 'react-native-vector-icons/Ionicons';
 import PropTypes from 'prop-types';
@@ -58,8 +58,10 @@ interface DirectionArrowsProps {
 const DirectionArrows: React.FC<DirectionArrowsProps> = ({
   trendDirection,
   size = 20,
-  color = 'black',
+  color,
 }) => {
+  const theme = useTheme() as ThemeType;
+  const effectiveColor = color || theme.textColor;
   const iconName = useMemo(() => getIconName(trendDirection), [trendDirection]);
   const iconCount = useMemo(
     () => getIconCount(trendDirection),
@@ -73,7 +75,7 @@ const DirectionArrows: React.FC<DirectionArrowsProps> = ({
         <DropShadow
           key={index}
           style={{
-            shadowColor: color,
+            shadowColor: effectiveColor,
             shadowOffset: { width: 0, height: 0 },
             shadowOpacity: 0.5,
             shadowRadius: 3,
@@ -81,7 +83,7 @@ const DirectionArrows: React.FC<DirectionArrowsProps> = ({
           <ArrowIcon
             name={iconName}
             size={size}
-            color={color}
+            color={effectiveColor}
             rotation={rotation}
           />
         </DropShadow>
@@ -100,7 +102,6 @@ DirectionArrows.propTypes = {
 
 DirectionArrows.defaultProps = {
   size: 20,
-  color: 'black',
 };
 
 export default DirectionArrows;
