@@ -383,7 +383,7 @@ const DailyReviewScreen: React.FC = () => {
   const successChipAnim = React.useRef(new Animated.Value(0)).current;
   const [_openingMealBucket, setOpeningMealBucket] = useState<MealBucket | null>(null);
 
-  const textAlign: 'left' | 'right' = I18nManager.isRTL ? 'right' : 'left';
+  const textAlign: 'left' | 'right' = language === 'he' ? 'right' : 'left';
 
   const todayStart = useMemo(() => {
     const n = new Date();
@@ -1141,6 +1141,11 @@ const DailyReviewScreen: React.FC = () => {
           <Text style={{fontWeight: '800', color: theme.textColor, textAlign}}>{language === 'he' ? 'מדד היום' : 'Today score'}</Text>
           <Text style={{fontWeight: '800', color: theme.accentColor}}>{avgScore}/100</Text>
         </View>
+        <Text style={{marginTop: 4, fontSize: 12, color: addOpacity(theme.textColor, 0.72), textAlign}}>
+          {language === 'he'
+            ? 'ציון יומי משוקלל לפי זמן בטווח, יציבות, חשיפות לנמוכים ולגבוהים.'
+            : 'Daily weighted score based on time-in-range, stability, and low/high exposure.'}
+        </Text>
 
         {isHighDailyScore ? (
           <Animated.View
@@ -1209,16 +1214,16 @@ const DailyReviewScreen: React.FC = () => {
         </Text>
         <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.75), textAlign}}>
           {language === 'he'
-            ? `${tirDelta >= 0 ? '+' : ''}${tirDelta}% ${hasBaseline ? 'מול הייחוס השבועי' : 'מול טווח היעד'} • ${tirDelta >= 0 ? `הרווחת כ-${tirDeltaMinutes} דקות ביעד` : `איבדת כ-${tirDeltaMinutes} דקות ביעד`}`
-            : `${tirDelta >= 0 ? '+' : ''}${tirDelta}% ${hasBaseline ? 'vs baseline' : 'vs target'} • ${tirDelta >= 0 ? `~${tirDeltaMinutes} more minutes in range` : `~${tirDeltaMinutes} fewer minutes in range`}`}
+            ? `${tirDelta >= 0 ? '+' : ''}${tirDelta}% ${hasBaseline ? 'ביחס לממוצע השבועי' : 'ביחס לטווח היעד'} • ${tirDelta >= 0 ? `הרווחת כ-${tirDeltaMinutes} דקות ביעד` : `איבדת כ-${tirDeltaMinutes} דקות ביעד`}`
+            : `${tirDelta >= 0 ? '+' : ''}${tirDelta}% ${hasBaseline ? 'vs weekly average' : 'vs target'} • ${tirDelta >= 0 ? `~${tirDeltaMinutes} more minutes in range` : `~${tirDeltaMinutes} fewer minutes in range`}`}
         </Text>
 
         <View style={{marginTop: 10, gap: 8}}>
           <View style={{padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.white, 0.82), borderWidth: 1, borderColor: addOpacity(theme.belowRangeColor, 0.2)}}>
             <Text style={{fontWeight: '800', color: theme.textColor}}>
               {language === 'he'
-                ? `🧊 זמן בהיפו: ${yLowPct}%${hasBaseline ? ` (ייחוס ${wLowPct}%)` : ''}`
-                : `🧊 Low time: ${yLowPct}%${hasBaseline ? ` (baseline ${wLowPct}%)` : ''}`}
+                ? `🧊 זמן בהיפו: ${yLowPct}%${hasBaseline ? ` (ממוצע שבועי: ${wLowPct}%)` : ''}`
+                : `🧊 Low time: ${yLowPct}%${hasBaseline ? ` (weekly avg: ${wLowPct}%)` : ''}`}
             </Text>
             <Text style={{marginTop: 4, color: lowDelta < 0 ? positiveColor : lowDelta > 0 ? riskColor : addOpacity(theme.textColor, 0.75), fontWeight: '800'}}>
               {language === 'he'
@@ -1238,8 +1243,8 @@ const DailyReviewScreen: React.FC = () => {
           <View style={{padding: 10, borderRadius: 10, backgroundColor: addOpacity(theme.white, 0.82), borderWidth: 1, borderColor: addOpacity(theme.aboveRangeColor, 0.2)}}>
             <Text style={{fontWeight: '800', color: theme.textColor}}>
               {language === 'he'
-                ? `📈 זמן בגבוהים: ${yHighPct}%${hasBaseline ? ` (ייחוס ${wHighPct}%)` : ''}`
-                : `📈 High time: ${yHighPct}%${hasBaseline ? ` (baseline ${wHighPct}%)` : ''}`}
+                ? `📈 זמן בגבוהים: ${yHighPct}%${hasBaseline ? ` (ממוצע שבועי: ${wHighPct}%)` : ''}`
+                : `📈 High time: ${yHighPct}%${hasBaseline ? ` (weekly avg: ${wHighPct}%)` : ''}`}
             </Text>
             <Text style={{marginTop: 4, color: highDelta < 0 ? positiveColor : highDelta > 0 ? riskColor : addOpacity(theme.textColor, 0.75), fontWeight: '800'}}>
               {language === 'he'
