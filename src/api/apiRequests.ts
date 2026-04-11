@@ -195,14 +195,17 @@ export const fetchDeviceStatusForDateRangeUncached = async (
 export const fetchLatestBgEntry = async (): Promise<BgSample | null> => {
   try {
     const response = await nightscoutInstance.get<BgSample[]>(
-      '/api/v1/entries.json?count=10',
+      '/api/v1/entries.json?count=24',
     );
     const rows = Array.isArray(response.data) ? response.data : [];
 
-    const latestValid = rows.find((item: any) => {
-      const sgv = typeof item?.sgv === 'number' ? item.sgv : Number(item?.sgv);
-      return Number.isFinite(sgv);
-    });
+    const latestValid = rows
+      .filter((item: any) => {
+        const sgv = typeof item?.sgv === 'number' ? item.sgv : Number(item?.sgv);
+        const ts = typeof item?.date === 'number' ? item.date : Number(item?.date);
+        return Number.isFinite(sgv) && Number.isFinite(ts) && sgv > 0;
+      })
+      .sort((a: any, b: any) => Number(b?.date ?? 0) - Number(a?.date ?? 0))[0];
 
     return latestValid ?? null;
   } catch (error: any) {

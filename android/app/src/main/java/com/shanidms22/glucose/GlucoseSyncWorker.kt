@@ -53,29 +53,40 @@ class GlucoseSyncWorker(
     return getJsonArray(url, secret)
   }
 
-  private fun latestFromEntries(arr: JSONArray?): LatestBg? {
-    if (arr == null) return null
+  private data class EntryPoint(val ts: Long, val sgv: Int, val direction: String?)
+
+  private fun parseValidEntries(arr: JSONArray?): List<EntryPoint> {
+    if (arr == null) return emptyList()
+    val out = mutableListOf<EntryPoint>()
     for (i in 0 until arr.length()) {
       val row = arr.optJSONObject(i) ?: continue
       val sgv = row.optInt("sgv", Int.MIN_VALUE)
       if (sgv == Int.MIN_VALUE || sgv <= 0) continue
-
-      val date = if (row.has("date")) row.optLong("date", System.currentTimeMillis()) else System.currentTimeMillis()
-      val direction = row.optString("direction", "")
-      return LatestBg(sgv = sgv, date = date, trend = directionToSymbol(direction))
+      val ts = row.optLong("date", 0L)
+      if (ts <= 0L) continue
+      out.add(EntryPoint(ts = ts, sgv = sgv, direction = row.optString("direction", "")))
     }
-    return null
+    return out
+  }
+
+  private fun latestFromEntries(arr: JSONArray?): LatestBg? {
+    val entries = parseValidEntries(arr)
+    val latest = entries.maxByOrNull { it.ts } ?: return null
+    return LatestBg(sgv = latest.sgv, date = latest.ts, trend = directionToSymbol(latest.direction))
   }
 
   private fun entriesToSparkline(arr: JSONArray?): IntArray? {
-    if (arr == null) return null
-    val values = mutableListOf<Int>()
-    for (i in (arr.length() - 1) downTo 0) {
-      val row = arr.optJSONObject(i) ?: continue
-      val sgv = row.optInt("sgv", Int.MIN_VALUE)
-      if (sgv == Int.MIN_VALUE || sgv <= 0) continue
-      values.add(sgv)
-    }
+    val entries = parseValidEntries(arr)
+    if (entries.size < 2) return null
+
+    val latestTs = entries.maxOf { it.ts }
+    val fromTs = latestTs - 3L * 60L * 60L * 1000L
+
+    val values = entries
+      .filter { it.ts >= fromTs }
+      .sortedBy { it.ts }
+      .map { it.sgv }
+
     return if (values.size >= 2) values.toIntArray() else null
   }
 
