@@ -42,21 +42,25 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
     val projected3Int = if (projected3 != null && projected3.isFinite()) projected3.toInt() else null
     val lowInt = if (low != null && low.isFinite()) low.toInt() else null
     val highInt = if (high != null && high.isFinite()) high.toInt() else null
-    GlucoseWidgetUpdater.save(
-      reactApplicationContext,
-      value,
-      trend,
-      ts,
-      iob,
-      cob,
-      projected1Int,
-      projected2Int,
-      projected3Int,
-      lowInt,
-      highInt,
-    )
-    GlucoseWidgetUpdater.updateWidgets(reactApplicationContext)
-    GlucoseWidgetUpdater.updateNotification(reactApplicationContext)
+    try {
+      GlucoseWidgetUpdater.save(
+        reactApplicationContext,
+        value,
+        trend,
+        ts,
+        iob,
+        cob,
+        projected1Int,
+        projected2Int,
+        projected3Int,
+        lowInt,
+        highInt,
+      )
+      GlucoseWidgetUpdater.updateWidgets(reactApplicationContext)
+      GlucoseWidgetUpdater.updateNotification(reactApplicationContext)
+    } catch (_: Throwable) {
+      // Prevent native widget failures from crashing app process.
+    }
   }
 
   @ReactMethod

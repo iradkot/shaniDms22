@@ -130,41 +130,45 @@ object GlucoseWidgetUpdater {
     val widgetComponent = ComponentName(context, GlucoseWidgetProvider::class.java)
     val appWidgetIds = manager.getAppWidgetIds(widgetComponent)
     appWidgetIds.forEach { widgetId ->
-      val views = RemoteViews(context.packageName, R.layout.glucose_widget)
-      views.setTextViewText(R.id.glucose_value, value?.toString() ?: "--")
-      views.setTextViewText(R.id.glucose_trend, trend.ifBlank { "•" })
-      views.setTextViewText(
-        R.id.glucose_updated,
-        if (ts != null && ts > 0) android.text.format.DateUtils.getRelativeTimeSpanString(ts).toString() else "No data"
-      )
-      views.setTextViewText(R.id.glucose_iob, "IOB ${state.iob}U")
-      views.setTextViewText(R.id.glucose_cob, "COB ${state.cob}g")
-      val p1 = state.projected1?.toString() ?: "--"
-      val p2 = state.projected2?.toString() ?: "--"
-      val p3 = state.projected3?.toString() ?: "--"
-      views.setTextViewText(R.id.glucose_projected, "Next → ${p1} → ${p2} → ${p3}")
-      val projectedColor = when {
-        state.projected1 == null -> Color.parseColor("#B3FFFFFF")
-        state.low != null && state.projected1 < state.low -> Color.parseColor("#FF6B6B")
-        state.high != null && state.projected1 > state.high -> Color.parseColor("#FFB74D")
-        else -> Color.parseColor("#66BB6A")
-      }
-      views.setTextColor(R.id.glucose_projected, projectedColor)
+      try {
+        val views = RemoteViews(context.packageName, R.layout.glucose_widget)
+        views.setTextViewText(R.id.glucose_value, value?.toString() ?: "--")
+        views.setTextViewText(R.id.glucose_trend, trend.ifBlank { "•" })
+        views.setTextViewText(
+          R.id.glucose_updated,
+          if (ts != null && ts > 0) android.text.format.DateUtils.getRelativeTimeSpanString(ts).toString() else "No data"
+        )
+        views.setTextViewText(R.id.glucose_iob, "IOB ${state.iob}U")
+        views.setTextViewText(R.id.glucose_cob, "COB ${state.cob}g")
+        val p1 = state.projected1?.toString() ?: "--"
+        val p2 = state.projected2?.toString() ?: "--"
+        val p3 = state.projected3?.toString() ?: "--"
+        views.setTextViewText(R.id.glucose_projected, "Next → ${p1} → ${p2} → ${p3}")
+        val projectedColor = when {
+          state.projected1 == null -> Color.parseColor("#B3FFFFFF")
+          state.low != null && state.projected1 < state.low -> Color.parseColor("#FF6B6B")
+          state.high != null && state.projected1 > state.high -> Color.parseColor("#FFB74D")
+          else -> Color.parseColor("#66BB6A")
+        }
+        views.setTextColor(R.id.glucose_projected, projectedColor)
 
-      val sparkBitmap = drawSparklineBitmap(state.sparkline, state.low, state.high)
-      if (sparkBitmap != null) {
-        views.setImageViewBitmap(R.id.glucose_sparkline, sparkBitmap)
-      }
+        val sparkBitmap = drawSparklineBitmap(state.sparkline, state.low, state.high)
+        if (sparkBitmap != null) {
+          views.setImageViewBitmap(R.id.glucose_sparkline, sparkBitmap)
+        }
 
-      val launchIntent = Intent(context, MainActivity::class.java)
-      val pendingIntent = PendingIntent.getActivity(
-        context,
-        0,
-        launchIntent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-      )
-      views.setOnClickPendingIntent(R.id.glucose_widget_root, pendingIntent)
-      manager.updateAppWidget(widgetId, views)
+        val launchIntent = Intent(context, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+          context,
+          0,
+          launchIntent,
+          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        views.setOnClickPendingIntent(R.id.glucose_widget_root, pendingIntent)
+        manager.updateAppWidget(widgetId, views)
+      } catch (_: Throwable) {
+        // Prevent widget rendering issues from crashing app process.
+      }
     }
   }
 

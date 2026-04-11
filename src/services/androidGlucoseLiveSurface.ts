@@ -83,23 +83,31 @@ export function updateAndroidGlucoseLiveSurface(
   const low = typeof thresholds?.low === 'number' && Number.isFinite(thresholds.low) ? thresholds.low : undefined;
   const high = typeof thresholds?.high === 'number' && Number.isFinite(thresholds.high) ? thresholds.high : undefined;
 
-  nativeModule.updateLiveSurface(
-    value,
-    trend,
-    timestampMs,
-    iob,
-    cob,
-    projected1,
-    projected2,
-    projected3,
-    low,
-    high,
-  );
+  try {
+    nativeModule.updateLiveSurface(
+      value,
+      trend,
+      timestampMs,
+      iob,
+      cob,
+      projected1,
+      projected2,
+      projected3,
+      low,
+      high,
+    );
+  } catch (err) {
+    console.warn('androidGlucoseLiveSurface: updateLiveSurface failed', err);
+  }
 }
 
 export function setAndroidWidgetThresholds(low?: number, high?: number): void {
   if (!nativeModule?.setWidgetThresholds) return;
-  nativeModule.setWidgetThresholds(low, high);
+  try {
+    nativeModule.setWidgetThresholds(low, high);
+  } catch (err) {
+    console.warn('androidGlucoseLiveSurface: setWidgetThresholds failed', err);
+  }
 }
 
 export function configureAndroidWidgetBackgroundSync(params: {
@@ -108,9 +116,13 @@ export function configureAndroidWidgetBackgroundSync(params: {
   enabled: boolean;
 }): void {
   if (!nativeModule?.configureBackgroundSync) return;
-  nativeModule.configureBackgroundSync(
-    params.baseUrl,
-    params.apiSecretSha1,
-    params.enabled,
-  );
+  try {
+    nativeModule.configureBackgroundSync(
+      params.baseUrl,
+      params.apiSecretSha1,
+      params.enabled,
+    );
+  } catch (err) {
+    console.warn('androidGlucoseLiveSurface: configureBackgroundSync failed', err);
+  }
 }
