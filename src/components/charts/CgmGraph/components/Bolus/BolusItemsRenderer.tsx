@@ -1,18 +1,18 @@
 import React, {useContext, useMemo} from 'react';
 import {Circle, G} from 'react-native-svg';
+import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {InsulinDataEntry} from 'app/types/insulin.types';
 import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 import {getBolusMarkerYValue} from 'app/components/charts/CgmGraph/utils/bolusUtils';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 type Props = {
   insulinData: InsulinDataEntry[] | undefined;
   focusedBolusTimestamps?: string[];
 };
 
 const BolusItemsRenderer: React.FC<Props> = ({insulinData, focusedBolusTimestamps}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const [{xScale, yScale}] = useContext(GraphStyleContext);
 
   const boluses = useMemo(() => {

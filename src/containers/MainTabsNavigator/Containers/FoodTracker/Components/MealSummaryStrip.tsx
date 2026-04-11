@@ -1,8 +1,8 @@
 import React, {useMemo} from 'react';
+import {useTheme} from 'styled-components/native';
 
 import {MealEntry} from 'app/containers/MainTabsNavigator/Containers/FoodTracker/types';
 import {
-import {useAppTheme} from 'app/hooks/useAppTheme';
   SummaryRow,
   SummaryItem,
   SummaryValue,
@@ -15,7 +15,7 @@ interface MealSummaryStripProps {
 }
 
 const MealSummaryStrip: React.FC<MealSummaryStripProps> = ({meals}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
 
   const stats = useMemo(() => {
     if (!meals.length) return null;

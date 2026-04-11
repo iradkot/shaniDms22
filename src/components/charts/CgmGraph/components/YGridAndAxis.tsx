@@ -1,9 +1,9 @@
 import { G, Line, Text } from "react-native-svg";
 import React, { useContext } from "react";
 import { GraphStyleContext } from "app/components/charts/CgmGraph/contextStores/GraphStyleContext";
+import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 interface Props {
   highestBgThreshold: number;
   ticksAmount?: number;
@@ -15,7 +15,7 @@ const YGridAndAxis = ({
   showLabels = true,
 }: Props) => {
   const [{ graphWidth, graphHeight }] = useContext(GraphStyleContext);
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const ticks = Array.from({ length: ticksAmount }, (_, i) => i);
   const GridLine = ({ y }: { y: number }) => (
     <Line

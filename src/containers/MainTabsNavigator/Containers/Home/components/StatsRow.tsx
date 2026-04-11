@@ -1,11 +1,10 @@
 import React from 'react';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import {Pressable, Text, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {BgSample} from 'app/types/day_bgs.types';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {
-import {useAppTheme} from 'app/hooks/useAppTheme';
   calculateAverageAndStdDev,
   findBiggestChangesInTimeRange,
 } from 'app/utils/bg.utils';
@@ -110,7 +109,7 @@ export const StatsRow: React.FC<StatsRowProps> = ({
   activeKey,
   onNavigateToSample,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
   const data = bgData ?? [];
   if (data.length === 0) return null;

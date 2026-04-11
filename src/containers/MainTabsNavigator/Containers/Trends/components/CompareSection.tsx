@@ -1,7 +1,7 @@
-import {useAppTheme} from 'app/hooks/useAppTheme';
 // /Trends/components/CompareSection.tsx
 import React from 'react';
 import { View, Button, ActivityIndicator } from 'react-native';
+import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {
@@ -43,7 +43,7 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
   changeComparisonPeriod,
   hideComparison,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
 
   if (!currentMetrics.dailyDetails.length) return null;

@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useRef} from 'react';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import DirectionArrows from 'app/components/DirectionArrows';
 import {BgSample} from 'app/types/day_bgs.types';
 import {ThemeType} from 'app/types/theme';
@@ -12,7 +12,6 @@ import {LOAD_BARS_CONSTANTS} from 'app/utils/loadBars.utils';
 import {formatDistanceToNow} from 'date-fns';
 import {addOpacity, pickReadableTextColor} from 'app/style/styling.utils';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 const BG_DATA_CARD_CONSTANTS = {
   borderBottomWidth: 1,
   rowBorderRadius: 1,
@@ -57,7 +56,7 @@ const BgDataCard = ({
   highlightToken,
   variant = 'list',
 }: BgDataCardProps) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const glowOpacity = useRef(new Animated.Value(0)).current;
 
   const bgStartColor = useMemo(() => {

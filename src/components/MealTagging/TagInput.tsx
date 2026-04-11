@@ -1,4 +1,3 @@
-import {useAppTheme} from 'app/hooks/useAppTheme';
 /**
  * TagInput — text input with autocomplete suggestions for adding meal tags.
  *
@@ -10,7 +9,7 @@ import {useAppTheme} from 'app/hooks/useAppTheme';
  */
 import React, {useCallback, useImperativeHandle, useMemo, useState, forwardRef} from 'react';
 import {TextInput, ScrollView} from 'react-native';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import type {ThemeType} from 'app/types/theme';
@@ -32,7 +31,7 @@ interface TagInputProps {
 }
 
 const TagInput = forwardRef<TagInputHandle, TagInputProps>(({suggestions, currentTags, onAddTag}, ref) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const [text, setText] = useState('');
 
   // Expose flush so the parent can commit pending text on Save

@@ -1,11 +1,10 @@
 import React, {useMemo} from 'react';
 import {Pressable, ViewStyle} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 const FULL_SCREEN_BUTTON_CONSTANTS = {
   iconSize: 22,
   buttonSize: 36,
@@ -22,7 +21,7 @@ export type FullScreenButtonProps = {
  * Small icon button used to enter fullscreen mode.
  */
 const FullScreenButton: React.FC<FullScreenButtonProps> = ({onPress, testID, style}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
 
   const iconColor = useMemo(() => theme.textColor, [theme.textColor]);
   const backgroundColor = useMemo(

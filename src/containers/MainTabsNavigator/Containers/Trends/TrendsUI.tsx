@@ -1,9 +1,9 @@
-import {useAppTheme} from 'app/hooks/useAppTheme';
 // /Trends/TrendsUI.tsx
 
 import React from 'react';
 import Collapsable from 'app/components/Collapsable';
 import { DayDetail } from './utils/trendsCalculations';
+import {useTheme} from 'styled-components/native';
 import {addOpacity} from 'app/style/styling.utils';
 import {ThemeType} from 'app/types/theme';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
@@ -36,7 +36,7 @@ export const DayInsights: React.FC<DayInsightsProps> = ({
 }) => {
   if (!bestDayDetail && !worstDayDetail) return null;
 
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
 
   const bestMetricLabel = selectedMetric === 'tir'

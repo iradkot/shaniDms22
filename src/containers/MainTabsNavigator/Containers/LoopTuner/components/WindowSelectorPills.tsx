@@ -1,11 +1,10 @@
 import React from 'react';
 import {Pressable} from 'react-native';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 // ─────────────────────────────────────────────────────────────────────────────
 // Styled Components
 // ─────────────────────────────────────────────────────────────────────────────
@@ -57,7 +56,7 @@ export function WindowSelectorPills<T extends number>({
   selected,
   onSelect,
 }: WindowSelectorPillsProps<T>): React.ReactElement {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
 
   return (
     <Container>

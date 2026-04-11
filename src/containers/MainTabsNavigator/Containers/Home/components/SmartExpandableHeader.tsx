@@ -1,6 +1,6 @@
 import React, {useCallback, useMemo, useState} from 'react';
 import {Pressable} from 'react-native';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import DropShadow from 'react-native-drop-shadow';
 import {formatDistanceToNow} from 'date-fns';
 
@@ -11,7 +11,6 @@ import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import {LOAD_BARS_CONSTANTS} from 'app/utils/loadBars.utils';
 import {
-import {useAppTheme} from 'app/hooks/useAppTheme';
   useLatestNightscoutSnapshot,
 } from 'app/hooks/useLatestNightscoutSnapshot';
 import {isE2E} from 'app/utils/e2e';
@@ -65,7 +64,7 @@ const SmartExpandableHeader: React.FC<{
   maxIobReference: number;
   maxCobReference: number;
 }> = ({fallbackLatestBgSample, latestPrevBgSample, maxIobReference, maxCobReference}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const [expanded, setExpanded] = useState(false);
 
   const {snapshot} = useLatestNightscoutSnapshot({pollingEnabled: !expanded});

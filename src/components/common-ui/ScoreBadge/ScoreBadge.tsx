@@ -1,15 +1,15 @@
 import React from 'react';
 import {Text, View} from 'react-native';
+import {useTheme} from 'styled-components/native';
 import {addOpacity} from 'app/style/styling.utils';
 import type {ThemeType} from 'app/types/theme';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 type Props = {
   score: number;
 };
 
 const ScoreBadge: React.FC<Props> = ({score}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const isPerfect = score >= 100;
   const color = isPerfect
     ? theme.accentColor

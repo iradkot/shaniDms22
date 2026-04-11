@@ -1,12 +1,12 @@
 import React, {useCallback, useMemo, useState} from 'react';
 import {FlatList, View} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import {useTheme} from 'styled-components/native';
 
 import MealRow from 'app/containers/MainTabsNavigator/Containers/FoodTracker/Components/MealRow';
 import MealChartExpander from 'app/containers/MainTabsNavigator/Containers/FoodTracker/Components/MealChartExpander';
 
 import {
-import {useAppTheme} from 'app/hooks/useAppTheme';
   MealEntry,
   MealChartData,
   SortField,
@@ -86,7 +86,7 @@ const MealTable: React.FC<MealTableProps> = ({
   getChartDataForMeal,
   onTagPress,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const [sortField, setSortField] = useState<SortField>('timestamp');
   const [sortDir, setSortDir] = useState<SortDirection>('desc');
   const [expandedId, setExpandedId] = useState<string | null>(null);

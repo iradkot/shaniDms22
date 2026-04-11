@@ -1,5 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, BackHandler, Pressable, ScrollView, Text, View} from 'react-native';
+import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {ThemeType} from 'app/types/theme';
@@ -15,14 +16,13 @@ import {t as tr} from 'app/i18n/translations';
 import {EvidenceRequest} from '../types';
 import {Container, Title, Subtle} from '../styled';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 interface EvidenceScreenProps {
   request: EvidenceRequest;
   onBack: () => void;
 }
 
 const EvidenceScreen: React.FC<EvidenceScreenProps> = ({request, onBack}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
   const [isLoading, setIsLoading] = useState(true);
   const [errorText, setErrorText] = useState<string | null>(null);

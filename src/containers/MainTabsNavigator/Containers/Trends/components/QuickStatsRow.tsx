@@ -1,7 +1,7 @@
 import React from 'react';
 import {ActivityIndicator, Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
@@ -11,7 +11,6 @@ import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 type Props = {
   avgTddUPerDay: number | null;
   basalPct: number | null;
@@ -125,7 +124,7 @@ export const QuickStatsRow: React.FC<Props> = ({
   onPressSevereHypos,
   isSevereHyposLoading,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
 
   const avgTddRounded =

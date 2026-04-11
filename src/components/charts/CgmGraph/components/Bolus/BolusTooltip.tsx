@@ -1,5 +1,6 @@
 import React, {useContext} from 'react';
 import {Text} from 'react-native-svg';
+import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import Tooltip from 'app/components/charts/CgmGraph/components/Tooltips/Tooltip';
 import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
@@ -7,7 +8,6 @@ import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
 import SvgTooltipBox from 'app/components/charts/SvgTooltipBox';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 type Props = {
   x: number;
   y: number;
@@ -16,7 +16,7 @@ type Props = {
 };
 
 const BolusTooltip: React.FC<Props> = ({x, y, timestamp, amount}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
   const tooltipWidth = 160;

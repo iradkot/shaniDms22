@@ -1,9 +1,9 @@
-import {useAppTheme} from 'app/hooks/useAppTheme';
 // /Trends/components/OverallStatsSection.tsx
 
 import React from 'react';
 import {View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import {useTheme} from 'styled-components/native';
 
 import {
   OverallStatsGrid,
@@ -23,7 +23,7 @@ interface Props {
 }
 
 export const OverallStatsSection: React.FC<Props> = ({metrics}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
 
   if (!metrics.dailyDetails.length) return null;

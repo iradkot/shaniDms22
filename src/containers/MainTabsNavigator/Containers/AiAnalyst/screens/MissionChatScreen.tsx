@@ -1,4 +1,3 @@
-import {useAppTheme} from 'app/hooks/useAppTheme';
 /* eslint-disable react-native/no-inline-styles */
 import React, {RefObject, useMemo} from 'react';
 import {formatDistanceToNowStrict} from 'date-fns';
@@ -13,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import {Bubble, GiftedChat, IMessage} from 'react-native-gifted-chat';
+import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Markdown from 'react-native-markdown-display';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -76,7 +76,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
   scrollRef,
   markdown,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
   const isHebrew = language === 'he';
   const textAlign: 'left' | 'right' = isHebrew ? 'right' : 'left';

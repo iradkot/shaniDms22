@@ -1,11 +1,10 @@
 import React from 'react';
 import {View} from 'react-native';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 // ─────────────────────────────────────────────────────────────────────────────
 // Styled Components
 // ─────────────────────────────────────────────────────────────────────────────
@@ -113,7 +112,7 @@ export const MetricRow: React.FC<MetricRowProps> = ({
   deltaUnit,
   isPositiveGood = true,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const deltaColor = getDeltaColor(delta, isPositiveGood);
 
   return (

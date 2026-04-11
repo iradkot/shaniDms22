@@ -1,7 +1,7 @@
 import React, {useMemo} from 'react';
 import {View, Dimensions} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {addOpacity} from 'app/style/styling.utils';
 import {BgSample} from 'app/types/day_bgs.types';
@@ -13,7 +13,6 @@ import FullScreenButton from 'app/components/common-ui/FullScreenButton/FullScre
 import {pushFullScreenViewScreen} from 'app/utils/fullscreenNavigation.utils';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 const Container = styled.View``;
 
 const HeaderRow = styled.View`
@@ -63,7 +62,7 @@ const AGPSummary: React.FC<AGPSummaryProps> = ({
   testID,
   showFullScreenButton = true,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme();
   const navigation = useNavigation();
   const {agpData, isLoading, error} = useAGPData(bgData);
 

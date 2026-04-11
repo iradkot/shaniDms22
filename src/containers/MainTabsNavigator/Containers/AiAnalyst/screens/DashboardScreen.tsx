@@ -1,5 +1,6 @@
 import React from 'react';
 import {ActivityIndicator, ScrollView, Text, View} from 'react-native';
+import {useTheme} from 'styled-components/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {ThemeType} from 'app/types/theme';
@@ -10,7 +11,6 @@ import {DISCLOSURE_TEXT} from '../constants';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 import {
-import {useAppTheme} from 'app/hooks/useAppTheme';
   Container,
   Header,
   Title,
@@ -51,7 +51,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   progressText,
   errorText,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
 
   return (

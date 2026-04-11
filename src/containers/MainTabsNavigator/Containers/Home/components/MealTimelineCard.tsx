@@ -1,4 +1,3 @@
-import {useAppTheme} from 'app/hooks/useAppTheme';
 /**
  * Individual meal card for the Meal Timeline.
  *
@@ -9,7 +8,7 @@ import {useAppTheme} from 'app/hooks/useAppTheme';
  * - Food item names (if available)
  */
 import React from 'react';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import CgmGraph from 'app/components/charts/CgmGraph/CgmGraph';
 
@@ -42,7 +41,7 @@ function formatTime(ms: number): string {
 // ── Component ───────────────────────────────────────────────────────────
 
 const MealTimelineCard: React.FC<Props> = ({segment, isLatest, titleOverride, onTagPress}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
 
   const bgBeforeColor = segment.bgBefore != null
     ? theme.determineBgColorByGlucoseValue(segment.bgBefore)

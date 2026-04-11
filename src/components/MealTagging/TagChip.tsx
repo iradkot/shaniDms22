@@ -1,4 +1,3 @@
-import {useAppTheme} from 'app/hooks/useAppTheme';
 /**
  * TagChip — small pill showing a single meal tag.
  *
@@ -6,7 +5,7 @@ import {useAppTheme} from 'app/hooks/useAppTheme';
  * Optionally shows a remove button (×).
  */
 import React from 'react';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import type {ThemeType} from 'app/types/theme';
@@ -30,7 +29,7 @@ const TagChip: React.FC<TagChipProps> = ({
   onPress,
   compact,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
 
   return (
     <Wrapper

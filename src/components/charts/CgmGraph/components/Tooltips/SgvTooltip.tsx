@@ -6,13 +6,13 @@ import {BgSample} from 'app/types/day_bgs.types';
 import {ThemeType} from 'app/types/theme';
 import {determineBgColorByGlucoseValue} from 'app/style/styling.utils';
 import {addOpacity} from 'app/style/styling.utils';
+import {useTheme} from 'styled-components/native';
 import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 import {useContext} from 'react';
 import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
 import {getSvgTooltipTextLayout} from 'app/components/charts/svgTooltipLayout';
 import SvgTooltipBox from 'app/components/charts/SvgTooltipBox';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 interface SgvTooltipProps {
   x: number;
   y: number;
@@ -20,7 +20,7 @@ interface SgvTooltipProps {
 }
 
 const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
   const tooltipWidth = 160;

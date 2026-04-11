@@ -1,10 +1,9 @@
 import React from 'react';
 import {View} from 'react-native';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import {addOpacity} from 'app/style/styling.utils';
 import DropShadow from 'react-native-drop-shadow';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 const Card = styled.View<{bg: string; border: string}>`
   flex-direction: row;
   border-radius: 12px;
@@ -78,7 +77,7 @@ interface AGPKeyMetricsProps {
 }
 
 const AGPKeyMetrics: React.FC<AGPKeyMetricsProps> = ({metrics, showDividers = true}) => {
-  const theme = useAppTheme();
+  const theme = useTheme();
 
   const background = theme.white;
   const border = addOpacity(theme.borderColor, 0.9);

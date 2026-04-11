@@ -1,5 +1,5 @@
 import React, {useMemo} from 'react';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import {BgSample} from 'app/types/day_bgs.types';
@@ -11,7 +11,6 @@ import {CarbEvent} from 'app/components/charts/CgmGraph/utils/carbsUtils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 import {
-import {useAppTheme} from 'app/hooks/useAppTheme';
   formatBolusCloseEventsDetails,
   formatCarbCloseEventsDetails,
   formatIobSplitLabel,
@@ -59,7 +58,7 @@ const HomeChartsTooltip: React.FC<Props> = ({
   fullWidth = true,
   maxWidthPx,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
 
   const timeText = useMemo(() => formatDateToLocaleTimeString(anchorTimeMs), [anchorTimeMs]);

@@ -1,7 +1,7 @@
-import {useAppTheme} from 'app/hooks/useAppTheme';
 /* eslint-disable react-native/no-inline-styles */
 import React, {useMemo} from 'react';
 import {Pressable, ScrollView, Text, View} from 'react-native';
+import {useTheme} from 'styled-components/native';
 import Markdown from 'react-native-markdown-display';
 
 import {ThemeType} from 'app/types/theme';
@@ -38,7 +38,7 @@ const HistoryDetailScreen: React.FC<HistoryDetailScreenProps> = ({
   onDelete,
   onContinue,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
   const isHebrew = language === 'he';
   const textAlign: 'left' | 'right' = isHebrew ? 'right' : 'left';

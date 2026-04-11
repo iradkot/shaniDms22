@@ -3,13 +3,12 @@ import {Animated, Text, View} from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {SportItemDTO} from 'app/types/sport.types';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import {Theme} from 'app/types/theme';
 import {theme} from 'app/style/theme';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {colors} from 'app/style/colors';
 import {
-import {useAppTheme} from 'app/hooks/useAppTheme';
   formatDateToDateAndTimeString,
   formatDateToLocaleTimeString,
   getTimeInMinutes,
@@ -29,7 +28,7 @@ const SportItem: React.FC<SportItemProps> = ({
   y,
   index,
 }) => {
-  const appTheme = useAppTheme();
+  const appTheme = useTheme() as typeof theme;
   const {height} = appTheme.dimensions;
   const insets = useSafeAreaInsets();
 

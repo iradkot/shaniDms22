@@ -1,7 +1,7 @@
 import React, {useMemo, useState} from 'react';
 import {LayoutChangeEvent, Pressable, StatusBar, useWindowDimensions, View} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {ThemeType} from 'app/types/theme';
@@ -17,7 +17,6 @@ import {cgmRange} from 'app/constants/PLAN_CONFIG';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {MAIN_TAB_NAVIGATOR} from 'app/constants/SCREEN_NAMES';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 const FULL_SCREEN_CONSTANTS = {
   headerHeight: 48,
   iconSize: 22,
@@ -57,7 +56,7 @@ type FullScreenRouteParams =
     };
 
 const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigation, route}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const insets = useSafeAreaInsets();
   const {width: screenWidth, height: screenHeight} = useWindowDimensions();
 

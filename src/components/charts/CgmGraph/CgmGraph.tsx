@@ -8,12 +8,12 @@ import CGMSamplesRenderer from './components/CGMSamplesRenderer';
 import GraphDateDisplay from './components/GraphDateDisplay';
 import FoodItemsRenderer from './components/Food/FoodItemsRenderer';
 import {
-import {useAppTheme} from 'app/hooks/useAppTheme';
   GraphStyleContext,
   useGraphStyleContext,
 } from './contextStores/GraphStyleContext';
 import {useTouchContext} from './contextStores/TouchContext';
 import SgvTooltip from 'app/components/charts/CgmGraph/components/Tooltips/SgvTooltip';
+import {useTheme} from 'styled-components/native';
 import FullScreenButton from 'app/components/common-ui/FullScreenButton/FullScreenButton';
 import {useNavigation} from '@react-navigation/native';
 import {pushFullScreenViewScreen} from 'app/utils/fullscreenNavigation.utils';
@@ -77,7 +77,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   const [graphStyleContextValue, setGraphStyleContextValue] =
     useGraphStyleContext(width, height, bgSamples, xDomain, margin);
   const touchContext = useTouchContext();
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const navigation = useNavigation();
 
   const {

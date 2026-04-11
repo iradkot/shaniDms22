@@ -1,7 +1,7 @@
-import {useAppTheme} from 'app/hooks/useAppTheme';
 // /Trends/components/DataFetchStatus.tsx
 import React from 'react';
 import { View, Text, ActivityIndicator, Button } from 'react-native';
+import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import { loadingSteps } from '../Trends.constants';
@@ -31,7 +31,7 @@ export const DataFetchStatus: React.FC<Props> = ({
                                                    showLongWaitWarning,
                                                    showMaxWaitReached,
                                                  }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
 
   if (isLoading && !fetchError && !fetchCancelled) {

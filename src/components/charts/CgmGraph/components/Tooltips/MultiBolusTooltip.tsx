@@ -1,5 +1,6 @@
 import React, {useContext, useMemo} from 'react';
 import {Text} from 'react-native-svg';
+import {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {InsulinDataEntry} from 'app/types/insulin.types';
 import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
@@ -10,7 +11,6 @@ import {getSvgTooltipTextLayout} from 'app/components/charts/svgTooltipLayout';
 import SvgTooltipBox from 'app/components/charts/SvgTooltipBox';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 type Props = {
   x: number;
   y: number;
@@ -31,7 +31,7 @@ function formatCarbRow(item: FoodItemDTO | formattedFoodItemDTO): string {
 }
 
 const MultiBolusTooltip: React.FC<Props> = ({x, y, bolusEvents, carbEvents}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
   const rows = useMemo(() => {

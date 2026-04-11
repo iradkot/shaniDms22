@@ -2,7 +2,7 @@ import React, {useEffect, useMemo, useRef, useState} from 'react';
 
 import {Animated, Dimensions, InteractionManager, Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 
 import StackedHomeCharts from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
 import type {StackedHomeChartsProps} from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
@@ -14,7 +14,6 @@ import {addOpacity} from 'app/style/styling.utils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 const ChartControlsRow = styled.View`
   flex-direction: row;
   align-items: center;
@@ -108,7 +107,7 @@ export const HomeChartSection: React.FC<Props> = ({
   onPressFullScreen,
   testID,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
 
   const chartWidth = useMemo(() => Dimensions.get('window').width, []);

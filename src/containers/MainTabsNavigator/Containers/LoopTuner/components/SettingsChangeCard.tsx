@@ -1,11 +1,10 @@
 import React from 'react';
 import {View, Text} from 'react-native';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {
-import {useAppTheme} from 'app/hooks/useAppTheme';
   SettingsChangeEvent,
   SettingsChangeDetail,
   SettingsChangeType,
@@ -344,7 +343,7 @@ export const SettingsChangeCard: React.FC<SettingsChangeCardProps> = ({
   onPress,
   maxChangesToShow = 4,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const {time, amPm} = formatTime(event.timestamp);
   const [expanded, setExpanded] = React.useState(false);
 

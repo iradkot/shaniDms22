@@ -1,12 +1,12 @@
 import React, {useMemo} from 'react';
 import {View} from 'react-native';
 import Svg, {Circle, G, Line, Path, Text as SvgText} from 'react-native-svg';
+import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {OracleMatchTrace, OracleSeriesPoint} from 'app/services/oracle/oracleTypes';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 type Props = {
   width: number;
   height: number;
@@ -99,7 +99,7 @@ const OracleGhostGraph: React.FC<Props> = ({
   medianSeries,
   testID,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
 
   const margin = useMemo(
     () => ({top: 12, right: 12, bottom: 22, left: 40}),

@@ -1,12 +1,11 @@
 import React from 'react';
 import {View} from 'react-native';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {ImpactAnalysisResult} from 'app/types/loopAnalysis.types';
 import {addOpacity} from 'app/style/styling.utils';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 // ─────────────────────────────────────────────────────────────────────────────
 // Styled Components
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,7 +161,7 @@ function generateSummaryText(result: ImpactAnalysisResult): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const ImpactSummaryCard: React.FC<ImpactSummaryCardProps> = ({result}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const verdictInfo = getVerdictInfo(result.deltas.overallTrend);
   const qualityInfo = getQualityInfo(result.dataQuality.hasEnoughData);
   const summaryText = generateSummaryText(result);

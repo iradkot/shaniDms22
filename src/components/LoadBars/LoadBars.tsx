@@ -1,8 +1,7 @@
 import React, {useMemo} from 'react';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import {ThemeType} from 'app/types/theme';
 import {
-import {useAppTheme} from 'app/hooks/useAppTheme';
   formatCob,
   formatIob,
   LOAD_BARS_CONSTANTS,
@@ -37,7 +36,7 @@ const LoadBars: React.FC<Props> = ({
   maxCobReference,
   valueTextColor,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
 
   const hasSplitIob = useMemo(() => {
     const bolusOk = typeof iobBolus === 'number' && Number.isFinite(iobBolus);

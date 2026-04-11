@@ -3,11 +3,11 @@ import {View} from 'react-native';
 import {format} from 'date-fns';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import {useTheme} from 'styled-components/native';
 
 import {MealEntry} from 'app/containers/MainTabsNavigator/Containers/FoodTracker/types';
 import {MEAL_SLOT_ICON} from 'app/containers/MainTabsNavigator/Containers/FoodTracker/constants';
 import {
-import {useAppTheme} from 'app/hooks/useAppTheme';
   RowContainer,
   RowCell,
   CellText,
@@ -50,7 +50,7 @@ function absGramsColor(
 }
 
 const MealRow: React.FC<MealRowProps> = ({meal, isExpanded, onPress, onTagPress}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
   const icon = MEAL_SLOT_ICON[meal.mealSlot];
 
   const timeLabel = format(new Date(meal.timestamp), 'EEE HH:mm');

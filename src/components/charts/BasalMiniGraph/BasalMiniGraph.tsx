@@ -1,7 +1,7 @@
 import React, {useMemo} from 'react';
 import {View} from 'react-native';
 import Svg, {G, Line, Rect, Text} from 'react-native-svg';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 import * as d3 from 'd3';
 
 import {BgSample} from 'app/types/day_bgs.types';
@@ -9,7 +9,6 @@ import {InsulinDataEntry} from 'app/types/insulin.types';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 type Props = {
   width: number;
   height: number;
@@ -36,7 +35,7 @@ const BasalMiniGraph: React.FC<Props> = ({
   margin: marginOverride,
   testID,
 }) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
 
   const margin = useMemo(
     () =>

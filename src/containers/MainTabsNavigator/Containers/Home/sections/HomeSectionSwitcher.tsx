@@ -2,14 +2,13 @@ import React from 'react';
 
 import {Pressable} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import styled from 'styled-components/native';
+import styled, {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
 import {HOME_SECTIONS, type HomeSection} from 'app/containers/MainTabsNavigator/Containers/Home/homeSections';
 
-import {useAppTheme} from 'app/hooks/useAppTheme';
 const SectionSwitcherRow = styled.View.attrs({collapsable: false})`
   flex-direction: row;
   align-items: center;
@@ -62,7 +61,7 @@ type Props = {
 };
 
 export const HomeSectionSwitcher: React.FC<Props> = ({selectedSection, onToggle}) => {
-  const theme = useAppTheme();
+  const theme = useTheme() as ThemeType;
 
   return (
     <SectionSwitcherRow>
