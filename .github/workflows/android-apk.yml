@@ -69,7 +69,7 @@ jobs:
             echo "path=" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build APKs (Lite profile: arm64-v8a only)
+      - name: "Build APKs (Lite profile: arm64-v8a only)"
         working-directory: android
         env:
           ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
