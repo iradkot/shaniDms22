@@ -87,6 +87,8 @@ android {
     def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
 
     namespace "com.shanidms22"
+    def targetAbi = project.findProperty("TARGET_ABI")?.toString()?.trim()
+
     defaultConfig {
         applicationId "com.shanidms22"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -97,6 +99,20 @@ android {
         def e2eEnabled = (System.getenv("E2E") ?: "false").toBoolean()
         buildConfigField "boolean", "E2E", e2eEnabled ? "true" : "false"
     }
+
+    splits {
+        abi {
+            enable true
+            reset()
+            if (targetAbi) {
+                include(*(targetAbi.split(',').collect { it.trim() }.findAll { !it.isEmpty() }))
+            } else {
+                include 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+            }
+            universalApk false
+        }
+    }
+
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
