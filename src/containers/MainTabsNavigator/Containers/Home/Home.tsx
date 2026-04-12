@@ -321,6 +321,23 @@ const Home: React.FC = () => {
     return [new Date(chartDataExtentMs.minMs), new Date(chartDataExtentMs.maxMs)];
   }, [chartDataExtentMs.maxMs, chartDataExtentMs.minMs]);
 
+  const relative3hXDomain = useMemo<[Date, Date] | undefined>(() => {
+    if (!isShowingToday) return undefined;
+
+    const anchorMs = headerLatestBgSample?.date ?? latestBgSample?.date ?? chartDataExtentMs.maxMs;
+    const endMs = Math.min(anchorMs, chartDataExtentMs.maxMs);
+    const startMs = Math.max(chartDataExtentMs.minMs, endMs - 3 * 60 * 60 * 1000);
+
+    if (endMs <= startMs) return undefined;
+    return [new Date(startMs), new Date(endMs)];
+  }, [
+    chartDataExtentMs.maxMs,
+    chartDataExtentMs.minMs,
+    headerLatestBgSample?.date,
+    isShowingToday,
+    latestBgSample?.date,
+  ]);
+
   const {maxIobReference, maxCobReference} = useMemo(
     () => getLoadReferences(listBgData),
     [listBgData],
@@ -1168,6 +1185,8 @@ const Home: React.FC = () => {
           insulinData={insulinData}
           basalProfileData={basalProfileData}
           xDomain={fullXDomain}
+          xDomainRelative3h={relative3hXDomain}
+          isToday={isShowingToday}
           fallbackAnchorTimeMs={headerLatestBgSample?.date ?? latestBgSample?.date}
           onPressFullScreen={handleOpenStackedChartsFullScreen}
           onTooltipModelChange={handleTooltipModelChange}

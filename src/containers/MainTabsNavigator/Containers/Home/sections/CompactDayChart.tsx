@@ -31,6 +31,8 @@ type Props = {
   insulinData?: InsulinDataEntry[];
   basalProfileData?: BasalProfile;
   xDomain: StackedHomeChartsProps['xDomain'];
+  xDomainRelative3h?: StackedHomeChartsProps['xDomain'];
+  isToday?: boolean;
   fallbackAnchorTimeMs?: number;
   onPressFullScreen: () => void;
   onTooltipModelChange?: (model: StackedChartsTooltipModel) => void;
@@ -45,6 +47,8 @@ const CompactDayChart: React.FC<Props> = ({
   insulinData,
   basalProfileData,
   xDomain,
+  xDomainRelative3h,
+  isToday = false,
   fallbackAnchorTimeMs,
   onPressFullScreen,
   onTooltipModelChange,
@@ -57,10 +61,19 @@ const CompactDayChart: React.FC<Props> = ({
   const [shouldRender, setShouldRender] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [chartMode, setChartMode] = useState<'separate' | 'mixed'>('mixed');
+  const [timeRangeMode, setTimeRangeMode] = useState<'absolute' | 'relative3h'>('absolute');
+
+  const canUseRelative3h = Boolean(isToday && xDomainRelative3h);
+  const activeXDomain = timeRangeMode === 'relative3h' && canUseRelative3h ? xDomainRelative3h : xDomain;
 
   const toggleChartMode = useCallback(() => {
     setChartMode(prev => (prev === 'separate' ? 'mixed' : 'separate'));
   }, []);
+
+  const toggleTimeRangeMode = useCallback(() => {
+    if (!canUseRelative3h) return;
+    setTimeRangeMode(prev => (prev === 'absolute' ? 'relative3h' : 'absolute'));
+  }, [canUseRelative3h]);
 
   // Defer heavy chart mount until after layout settles
   useEffect(() => {
@@ -84,6 +97,26 @@ const CompactDayChart: React.FC<Props> = ({
       <HeaderRow>
         <ChartLabel>{tr(language, 'home.chartLabel')}</ChartLabel>
         <HeaderButtons>
+          {canUseRelative3h ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={language === 'he' ? 'מעבר בין כל היום ל-3 שעות אחרונות' : 'Toggle all day / last 3 hours'}
+              onPress={toggleTimeRangeMode}
+              hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+              style={{
+                borderWidth: 1,
+                borderColor: addOpacity(theme.textColor, 0.2),
+                borderRadius: 12,
+                paddingHorizontal: 8,
+                paddingVertical: 2,
+                marginRight: 2,
+              }}>
+              <ChartRangeText>
+                {timeRangeMode === 'relative3h' ? (language === 'he' ? '3ש׳' : '3h') : (language === 'he' ? 'כל היום' : 'All')}
+              </ChartRangeText>
+            </Pressable>
+          ) : null}
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={chartMode === 'separate' ? tr(language, 'home.switchMixed') : tr(language, 'home.switchSeparate')}
@@ -118,7 +151,7 @@ const CompactDayChart: React.FC<Props> = ({
             width={chartWidth}
             cgmHeight={150}
             miniChartHeight={50}
-            xDomain={xDomain}
+            xDomain={activeXDomain}
             fallbackAnchorTimeMs={fallbackAnchorTimeMs}
             showFullScreenButton={false}
             onPressFullScreen={onPressFullScreen}
@@ -156,6 +189,12 @@ const HeaderButtons = styled.View<{theme: ThemeType}>`
 const ChartLabel = styled.Text<{theme: ThemeType}>`
   font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.sm}px;
   font-weight: 800;
+  color: ${(p: {theme: ThemeType}) => p.theme.textColor};
+`;
+
+const ChartRangeText = styled.Text<{theme: ThemeType}>`
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs}px;
+  font-weight: 700;
   color: ${(p: {theme: ThemeType}) => p.theme.textColor};
 `;
 
