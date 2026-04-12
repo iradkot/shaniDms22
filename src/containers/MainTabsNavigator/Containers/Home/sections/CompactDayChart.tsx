@@ -1,12 +1,8 @@
 /**
  * Compact day chart that is always visible on the redesigned Home screen.
- *
- * Shows a full-day CGM line with meal/bolus event markers.
- * Replaces the old toggled HomeChartSection.
- * Uses the same StackedHomeCharts component but with a compact height.
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Animated, Dimensions, InteractionManager, Pressable} from 'react-native';
+import {Animated, Dimensions, InteractionManager, Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import styled, {useTheme} from 'styled-components/native';
 
@@ -23,23 +19,26 @@ import {addOpacity} from 'app/style/styling.utils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 
-// ── Props ───────────────────────────────────────────────────────────────
-
 type Props = {
   bgSamples: BgSample[];
   foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
   insulinData?: InsulinDataEntry[];
   basalProfileData?: BasalProfile;
   xDomain: StackedHomeChartsProps['xDomain'];
-  xDomainRelative3h?: StackedHomeChartsProps['xDomain'];
-  isToday?: boolean;
   fallbackAnchorTimeMs?: number;
   onPressFullScreen: () => void;
   onTooltipModelChange?: (model: StackedChartsTooltipModel) => void;
   testID?: string;
 };
 
-// ── Component ───────────────────────────────────────────────────────────
+type RangeMode = 'all' | '1h' | '3h' | '6h' | '12h';
+
+const RANGE_WINDOW_MS: Record<Exclude<RangeMode, 'all'>, number> = {
+  '1h': 1 * 60 * 60 * 1000,
+  '3h': 3 * 60 * 60 * 1000,
+  '6h': 6 * 60 * 60 * 1000,
+  '12h': 12 * 60 * 60 * 1000,
+};
 
 const CompactDayChart: React.FC<Props> = ({
   bgSamples,
@@ -47,8 +46,6 @@ const CompactDayChart: React.FC<Props> = ({
   insulinData,
   basalProfileData,
   xDomain,
-  xDomainRelative3h,
-  isToday = false,
   fallbackAnchorTimeMs,
   onPressFullScreen,
   onTooltipModelChange,
@@ -61,21 +58,12 @@ const CompactDayChart: React.FC<Props> = ({
   const [shouldRender, setShouldRender] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [chartMode, setChartMode] = useState<'separate' | 'mixed'>('mixed');
-  const [timeRangeMode, setTimeRangeMode] = useState<'absolute' | 'relative3h'>('absolute');
-
-  const canUseRelative3h = Boolean(isToday && xDomainRelative3h);
-  const activeXDomain = timeRangeMode === 'relative3h' && canUseRelative3h ? xDomainRelative3h : xDomain;
+  const [rangeMode, setRangeMode] = useState<RangeMode>('all');
 
   const toggleChartMode = useCallback(() => {
     setChartMode(prev => (prev === 'separate' ? 'mixed' : 'separate'));
   }, []);
 
-  const toggleTimeRangeMode = useCallback(() => {
-    if (!canUseRelative3h) return;
-    setTimeRangeMode(prev => (prev === 'absolute' ? 'relative3h' : 'absolute'));
-  }, [canUseRelative3h]);
-
-  // Defer heavy chart mount until after layout settles
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
       setShouldRender(true);
@@ -92,31 +80,23 @@ const CompactDayChart: React.FC<Props> = ({
     }).start();
   }, [fadeAnim, shouldRender]);
 
+  const activeXDomain = useMemo(() => {
+    if (!xDomain || rangeMode === 'all') return xDomain;
+
+    const minMs = xDomain[0].getTime();
+    const maxMs = xDomain[1].getTime();
+    const anchorMs = Math.min(fallbackAnchorTimeMs ?? maxMs, maxMs);
+    const windowMs = RANGE_WINDOW_MS[rangeMode];
+    const startMs = Math.max(minMs, anchorMs - windowMs);
+
+    return [new Date(startMs), new Date(anchorMs)] as [Date, Date];
+  }, [xDomain, rangeMode, fallbackAnchorTimeMs]);
+
   return (
     <Container>
       <HeaderRow>
         <ChartLabel>{tr(language, 'home.chartLabel')}</ChartLabel>
         <HeaderButtons>
-          {canUseRelative3h ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={language === 'he' ? 'מעבר בין כל היום ל-3 שעות אחרונות' : 'Toggle all day / last 3 hours'}
-              onPress={toggleTimeRangeMode}
-              hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
-              style={{
-                borderWidth: 1,
-                borderColor: addOpacity(theme.textColor, 0.2),
-                borderRadius: 12,
-                paddingHorizontal: 8,
-                paddingVertical: 2,
-                marginRight: 2,
-              }}>
-              <ChartRangeText>
-                {timeRangeMode === 'relative3h' ? (language === 'he' ? '3ש׳' : '3h') : (language === 'he' ? 'כל היום' : 'All')}
-              </ChartRangeText>
-            </Pressable>
-          ) : null}
-
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={chartMode === 'separate' ? tr(language, 'home.switchMixed') : tr(language, 'home.switchSeparate')}
@@ -136,6 +116,32 @@ const CompactDayChart: React.FC<Props> = ({
           </Pressable>
         </HeaderButtons>
       </HeaderRow>
+
+      <RangeRow>
+        {(['all', '1h', '3h', '6h', '12h'] as RangeMode[]).map(mode => {
+          const selected = rangeMode === mode;
+          const label =
+            mode === 'all'
+              ? (language === 'he' ? 'כל היום' : 'All')
+              : mode;
+
+          return (
+            <Pressable
+              key={mode}
+              onPress={() => setRangeMode(mode)}
+              style={{
+                paddingHorizontal: 9,
+                paddingVertical: 4,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: selected ? theme.accentColor : addOpacity(theme.textColor, 0.25),
+                backgroundColor: selected ? addOpacity(theme.accentColor, 0.12) : 'transparent',
+              }}>
+              <RangeText style={{fontWeight: selected ? '700' : '500'}}>{label}</RangeText>
+            </Pressable>
+          );
+        })}
+      </RangeRow>
 
       {!shouldRender ? (
         <PlaceholderBox>
@@ -166,8 +172,6 @@ const CompactDayChart: React.FC<Props> = ({
   );
 };
 
-// ── Styled Components ───────────────────────────────────────────────────
-
 const Container = styled.View<{theme: ThemeType}>`
   margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
 `;
@@ -192,10 +196,17 @@ const ChartLabel = styled.Text<{theme: ThemeType}>`
   color: ${(p: {theme: ThemeType}) => p.theme.textColor};
 `;
 
-const ChartRangeText = styled.Text<{theme: ThemeType}>`
-  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs}px;
-  font-weight: 700;
+const RangeRow = styled(View)<{theme: ThemeType}>`
+  flex-direction: row;
+  align-items: center;
+  gap: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+  padding-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  padding-bottom: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
+`;
+
+const RangeText = styled.Text<{theme: ThemeType}>`
   color: ${(p: {theme: ThemeType}) => p.theme.textColor};
+  font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs}px;
 `;
 
 const PlaceholderBox = styled.View<{theme: ThemeType}>`
