@@ -142,7 +142,6 @@ const SmartExpandableHeader: React.FC<{
     const endColor = !rawEndColor || (!theme.dark && isNearBlack(rawEndColor))
       ? safeRangeColor
       : rawEndColor;
-    const startColor = theme.backgroundColor;
 
     const canUsePrev = shouldUsePreviousSample({
       current: effectiveSnapshot.bg,
@@ -161,7 +160,6 @@ const SmartExpandableHeader: React.FC<{
 
     return {
       ...effectiveSnapshot,
-      startColor,
       endColor,
       delta,
       deltaAbs,
@@ -200,11 +198,7 @@ const SmartExpandableHeader: React.FC<{
       <Pressable
         testID={E2E_TEST_IDS.homeHeader.toggle}
         onPress={onToggleExpanded}>
-        <BgGradient
-          startColor={model.startColor}
-          endColor={model.endColor}
-          useAlphaEdges={false}
-          style={gradientStyle(theme)}>
+        <HeaderSurface $bgColor={model.endColor} style={gradientStyle(theme)}>
           <TimeBgSection>
             <Row>
               <DropShadow style={dropShadowStyle}>
@@ -267,7 +261,7 @@ const SmartExpandableHeader: React.FC<{
               </PredictionRow>
             )}
           </RightSection>
-        </BgGradient>
+        </HeaderSurface>
       </Pressable>
 
       {/* Keep layout stable: when expanded, show predictions on a second line (if any). */}
@@ -331,6 +325,10 @@ function gradientStyle(theme: ThemeType) {
   };
 }
 
+
+const HeaderSurface = styled.View<{$bgColor: string}>`
+  background-color: ${({$bgColor}) => $bgColor};
+`;
 
 const Container = styled.View<{theme: ThemeType}>`
   padding-left: ${(props: {theme: ThemeType}) => props.theme.spacing.md}px;
