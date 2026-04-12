@@ -4,7 +4,6 @@ import styled, {useTheme} from 'styled-components/native';
 import DropShadow from 'react-native-drop-shadow';
 import {formatDistanceToNow} from 'date-fns';
 
-import BgGradient from 'app/components/BgGradient';
 import DirectionArrows from 'app/components/DirectionArrows';
 import LoadBars from 'app/components/LoadBars/LoadBars';
 import {ThemeType} from 'app/types/theme';
