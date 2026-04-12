@@ -15,7 +15,8 @@ import {
 } from 'app/hooks/useLatestNightscoutSnapshot';
 import {isE2E} from 'app/utils/e2e';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
-import {pickReadableTextColor} from 'app/style/styling.utils';
+import {determineBgColorByGlucoseValue, pickReadableTextColor} from 'app/style/styling.utils';
+import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 
 const CONSTANTS = {
   minDeltaForGlow: 10,
@@ -42,6 +43,36 @@ function shouldUsePreviousSample(params: {
   if (!previous) return false;
   // Only compute delta if the previous sample is plausibly adjacent.
   return current.date > previous.date && current.date - previous.date <= 10 * 60 * 1000;
+}
+
+function fallbackRangeColor(sgv: number, theme: ThemeType): string {
+  const severeLow = cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number;
+  const low = cgmRange.TARGET.min;
+  const high = cgmRange.TARGET.max;
+  const severeHigh = cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] as number;
+
+  if (sgv <= severeLow) return theme.severeBelowRange;
+  if (sgv < low) return theme.belowRangeColor;
+  if (sgv > severeHigh) return theme.severeAboveRange;
+  if (sgv > high) return theme.aboveRangeColor;
+  return theme.inRangeColor;
+}
+
+function isNearBlack(color: string): boolean {
+  const c = color.trim();
+  if (c.startsWith('#')) {
+    const hex = c.replace('#', '');
+    const full = hex.length === 3 ? hex.split('').map(ch => ch + ch).join('') : hex;
+    if (full.length !== 6) return false;
+    const r = parseInt(full.slice(0, 2), 16);
+    const g = parseInt(full.slice(2, 4), 16);
+    const b = parseInt(full.slice(4, 6), 16);
+    return r < 45 && g < 45 && b < 45;
+  }
+
+  const m = c.match(/^rgba?\(\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+).*/i);
+  if (!m) return false;
+  return Number(m[1]) < 45 && Number(m[2]) < 45 && Number(m[3]) < 45;
 }
 
 /**
@@ -103,9 +134,14 @@ const SmartExpandableHeader: React.FC<{
   const model = useMemo(() => {
     if (!effectiveSnapshot) return null;
 
-    const endColor = theme.determineBgColorByGlucoseValue(
+    const rawEndColor = determineBgColorByGlucoseValue(
       effectiveSnapshot.enrichedBg.sgv,
+      theme,
     );
+    const safeRangeColor = fallbackRangeColor(effectiveSnapshot.enrichedBg.sgv, theme);
+    const endColor = !rawEndColor || (!theme.dark && isNearBlack(rawEndColor))
+      ? safeRangeColor
+      : rawEndColor;
     const startColor = theme.backgroundColor;
 
     const canUsePrev = shouldUsePreviousSample({
