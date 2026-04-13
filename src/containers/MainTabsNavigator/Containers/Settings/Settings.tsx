@@ -20,7 +20,7 @@ import {useProactiveCareSettings} from 'app/contexts/ProactiveCareSettingsContex
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import ADIcon from 'react-native-vector-icons/AntDesign';
-import {useNavigation} from '@react-navigation/native';
+import {useNavigation, useRoute} from '@react-navigation/native';
 import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {validateOpenAiApiKey} from 'app/services/llm/providers/openaiProvider';
 import {sendDailyBriefNow} from 'app/services/proactiveCare/dailyBrief';
@@ -42,6 +42,7 @@ const WIDGET_STORAGE_KEY = 'settings.widget.v1';
 
 const Settings: React.FC = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const {settings, setSetting} = useTabsSettings();
   const {settings: glucoseSettings, setSetting: setGlucoseSetting, isLoaded: glucoseLoaded} =
     useGlucoseSettings();
@@ -234,6 +235,13 @@ const Settings: React.FC = () => {
       // Best-effort persistence.
     });
   }, [uiLoaded, showDisplayedTabs, showThemePicker, showNightscout, showRanges, showNightWindow, showMealWindows, showAi, showProactiveCare]);
+
+  useEffect(() => {
+    if (route?.params?.focusSection === 'ai') {
+      setShowAi(true);
+      navigation.setParams?.({focusSection: undefined});
+    }
+  }, [route?.params?.focusSection, navigation]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -691,6 +699,30 @@ const Settings: React.FC = () => {
 
       <View>
         <SectionHeader title={tr(language, 'settings.aiAnalyst')} expanded={showAi} onToggle={() => setShowAi(v => !v)} />
+
+        {!showAi && (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setShowAi(true)}
+            style={({pressed}) => ({
+              ...rowStyle,
+              backgroundColor: pressed ? theme.borderColor : 'transparent',
+            })}
+          >
+            <View style={iconContainerStyle}>
+              <MaterialIcons
+                name={aiSettings.apiKey?.trim() ? 'verified-user' : 'key'}
+                size={theme.typography.size.lg}
+                color={aiSettings.apiKey?.trim() ? theme.inRangeColor : theme.aboveRangeColor}
+              />
+            </View>
+            <Text style={labelStyle}>
+              {aiSettings.apiKey?.trim()
+                ? (language === 'he' ? 'טוקן API מוגדר. הקש לעריכה' : 'API token configured. Tap to edit')
+                : (language === 'he' ? 'אין טוקן API. הקש כדי להוסיף' : 'No API token. Tap to add')}
+            </Text>
+          </Pressable>
+        )}
 
         {showAi && (
           <>

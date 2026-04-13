@@ -222,7 +222,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   // ====================================================================
 
   const openSettings = useCallback(() => {
-    navigation.navigate(SCREEN_NAMES.SETTINGS_TAB_SCREEN);
+    navigation.navigate(SCREEN_NAMES.SETTINGS_TAB_SCREEN, {focusSection: 'ai'});
   }, [navigation]);
 
   const refreshHistory = useCallback(async () => {
