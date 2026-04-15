@@ -106,6 +106,12 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   const [uiMessages, setUiMessages] = useState<LlmChatMessage[]>([]);
   const [llmMessages, setLlmMessages] = useState<LlmChatMessage[]>([]);
   const [sessionDataUsed, setSessionDataUsed] = useState<AiAnalystDataUsedItem[]>([]);
+  const [pendingMealImage, setPendingMealImage] = useState<{
+    base64: string;
+    mimeType: string;
+    fileName: string | null;
+    fileSize: number | null;
+  } | null>(null);
   const [input, setInput] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [progressText, setProgressText] = useState<string>('');
@@ -844,6 +850,67 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     [persistHistorySnapshot],
   );
 
+  const analyzePendingMealImage = useCallback(
+    async (promptText: string): Promise<string | null> => {
+      const image = pendingMealImage;
+      const apiKey = (aiSettings.apiKey ?? '').trim();
+      if (!image || !apiKey) return null;
+
+      const visionModel = (aiSettings.openAiModel ?? '').trim().startsWith('o')
+        ? 'gpt-4o-mini'
+        : aiSettings.openAiModel;
+
+      const payload: any = {
+        model: visionModel,
+        input: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text:
+                  language === 'he'
+                    ? `נתח את תמונת הארוחה ותן תיאור מובנה: רכיבים עיקריים, אומדן פחמימות, האם יש שומן/חלבון גבוה שמאריכים השפעה, ומה טווח השפעה סביר. בקשת המשתמש: ${promptText}`
+                    : `Analyze the meal photo and return a structured description: main components, carb estimate, whether fat/protein likely extends absorption, and likely impact window. User request: ${promptText}`,
+              },
+              {
+                type: 'input_image',
+                image_url: `data:${image.mimeType};base64,${image.base64}`,
+              },
+            ],
+          },
+        ],
+        max_output_tokens: 350,
+      };
+
+      const res = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const rawText = await res.text();
+      let rawJson: any = null;
+      try {
+        rawJson = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        rawJson = null;
+      }
+
+      if (!res.ok) {
+        const msg = rawJson?.error?.message || `Vision request failed (${res.status})`;
+        throw new Error(msg);
+      }
+
+      const out = typeof rawJson?.output_text === 'string' ? rawJson.output_text.trim() : '';
+      return out || null;
+    },
+    [pendingMealImage, aiSettings.apiKey, aiSettings.openAiModel, language],
+  );
+
   const sendFollowUp = useCallback(async () => {
     if (!provider) return;
     const trimmed = input.trim();
@@ -869,6 +936,38 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         const kpiRes = await runAiAnalystTool('getCgmSamples', {rangeDays: 1, maxSamples: 80, includeDeviceStatus: true});
         if (kpiRes?.ok) setCompactKpi(deriveCompactKpiFromCgmResult(kpiRes.result));
       } catch {}
+
+      if (pendingMealImage) {
+        try {
+          setProgressText(language === 'he' ? 'מנתח תמונת ארוחה…' : 'Analyzing meal photo…');
+          const imageAnalysis = await analyzePendingMealImage(trimmed);
+          if (imageAnalysis) {
+            workingLlmMessages = [
+              ...workingLlmMessages,
+              {
+                role: 'user',
+                content:
+                  language === 'he'
+                    ? `תוצאת ניתוח תמונה (אוטומטי):\n${imageAnalysis}`
+                    : `Image analysis result (auto):\n${imageAnalysis}`,
+              },
+            ];
+          }
+        } catch (e: any) {
+          workingLlmMessages = [
+            ...workingLlmMessages,
+            {
+              role: 'user',
+              content:
+                language === 'he'
+                  ? `הערת מערכת: לא הצלחתי לנתח את התמונה הפעם (${String(e?.message ?? 'unknown error')}). נתח לפי טקסט בלבד.`
+                  : `System note: image analysis failed this time (${String(e?.message ?? 'unknown error')}). Continue with text-only analysis.`,
+            },
+          ];
+        } finally {
+          setPendingMealImage(null);
+        }
+      }
 
       workingLlmMessages = await maybePreFetchGlycemicEvents(
         trimmed, workingLlmMessages, runId, recordDataUsed,
@@ -928,7 +1027,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     glucoseSettings, persistHistorySnapshot, recordDataUsed, beginRun,
     finaliseMission, scrollToEnd, maybePreFetchGlycemicEvents, handleFollowUpError,
     buildContextWindow, maybeInjectEvidenceTag, deriveCompactKpiFromCgmResult,
-    language, sanitizeAssistantToneAndAvailability,
+    language, sanitizeAssistantToneAndAvailability, pendingMealImage, analyzePendingMealImage,
   ]);
 
   // ====================================================================
@@ -1002,6 +1101,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         mediaType: 'photo',
         selectionLimit: 1,
         quality: 0.8,
+        includeBase64: true,
       });
 
       if (res.didCancel) return;
@@ -1009,12 +1109,26 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const uri = asset?.uri ?? '';
       const fileName = asset?.fileName ?? null;
       const fileSize = asset?.fileSize ?? null;
+      const base64 = (asset?.base64 ?? '').trim();
+      const mimeType = (asset?.type ?? 'image/jpeg').trim() || 'image/jpeg';
+
+      if (!base64) {
+        Alert.alert(
+          language === 'he' ? 'שגיאת תמונה' : 'Image error',
+          language === 'he'
+            ? 'לא הצלחתי לקרוא את קובץ התמונה מהמכשיר. נסה לבחור תמונה אחרת.'
+            : 'Could not read the image file from device storage. Please try another photo.',
+        );
+        return;
+      }
+
+      setPendingMealImage({base64, mimeType, fileName, fileSize});
 
       await addMemoryEntry({
         type: 'episode',
         tags: ['meal', 'photo_input', 'user_provided'],
         textSummary: language === 'he' ? 'המשתמש צירף תמונת ארוחה לניתוח.' : 'User attached a meal photo for analysis.',
-        facts: {uri, fileName, fileSize},
+        facts: {uri, fileName, fileSize, mimeType, hasBase64: true},
         source: 'user',
         confidence: 0.9,
         expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
