@@ -34,7 +34,7 @@ import {
 } from './settingsShared';
 import {t as tr} from 'app/i18n/translations';
 import {addOpacity} from 'app/style/styling.utils';
-import {setAndroidWidgetLiveModeEnabled} from 'app/services/androidGlucoseLiveSurface';
+import {setAndroidWidgetLiveModeEnabled, setAndroidWidgetRangeHours} from 'app/services/androidGlucoseLiveSurface';
 import {useThemeSettings} from 'app/contexts/ThemeSettingsContext';
 
 const UI_STORAGE_KEY = 'settings.ui.v1';
@@ -89,6 +89,7 @@ const Settings: React.FC = () => {
   const [dailyBriefStatus, setDailyBriefStatus] = useState<string | null>(null);
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [androidLiveMode, setAndroidLiveMode] = useState(true);
+  const [androidWidgetRangeHours, setAndroidWidgetRangeHoursState] = useState<1 | 3>(3);
 
   const openAiModelOptions = useMemo(
     () => [
@@ -253,18 +254,25 @@ const Settings: React.FC = () => {
         if (!isMounted) return;
         if (!raw) {
           setAndroidLiveMode(true);
+          setAndroidWidgetRangeHoursState(3);
           setAndroidWidgetLiveModeEnabled(true);
+          setAndroidWidgetRangeHours(3);
           return;
         }
 
-        const parsed = JSON.parse(raw) as Partial<{liveMode: boolean}>;
+        const parsed = JSON.parse(raw) as Partial<{liveMode: boolean; rangeHours: number}>;
         const liveMode = typeof parsed.liveMode === 'boolean' ? parsed.liveMode : true;
+        const rangeHours = parsed.rangeHours === 1 ? 1 : 3;
         setAndroidLiveMode(liveMode);
+        setAndroidWidgetRangeHoursState(rangeHours);
         setAndroidWidgetLiveModeEnabled(liveMode);
+        setAndroidWidgetRangeHours(rangeHours);
       } catch {
         if (!isMounted) return;
         setAndroidLiveMode(true);
+        setAndroidWidgetRangeHoursState(3);
         setAndroidWidgetLiveModeEnabled(true);
+        setAndroidWidgetRangeHours(3);
       }
     };
 
@@ -301,7 +309,15 @@ const Settings: React.FC = () => {
   const setAndroidLiveModeAndPersist = (enabled: boolean) => {
     setAndroidLiveMode(enabled);
     setAndroidWidgetLiveModeEnabled(enabled);
-    AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify({liveMode: enabled})).catch(() => {
+    AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify({liveMode: enabled, rangeHours: androidWidgetRangeHours})).catch(() => {
+      // Best-effort persistence.
+    });
+  };
+
+  const setAndroidWidgetRangeAndPersist = (hours: 1 | 3) => {
+    setAndroidWidgetRangeHoursState(hours);
+    setAndroidWidgetRangeHours(hours);
+    AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify({liveMode: androidLiveMode, rangeHours: hours})).catch(() => {
       // Best-effort persistence.
     });
   };
@@ -1143,6 +1159,40 @@ const Settings: React.FC = () => {
               </Text>
             </View>
             <Switch value={androidLiveMode} onValueChange={setAndroidLiveModeAndPersist} />
+          </View>
+
+          <View style={rowStyle}>
+            <View style={iconContainerStyle}>
+              <MaterialIcons name="timeline" size={theme.typography.size.xl} color={theme.textColor} />
+            </View>
+            <View style={{flex: 1, paddingRight: theme.spacing.sm}}>
+              <Text style={labelStyle}>{language === 'he' ? 'טווח גרף בווידג׳ט' : 'Widget chart range'}</Text>
+              <Text style={{color: theme.textColor, opacity: 0.72, fontSize: theme.typography.size.xs}}>
+                {language === 'he' ? 'בחר 1ש׳ או 3ש׳ לפי מה שנוח לך לראות.' : 'Choose 1h or 3h for the sparkline view.'}
+              </Text>
+            </View>
+            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+              {[1, 3].map(hours => {
+                const selected = androidWidgetRangeHours === hours;
+                return (
+                  <Pressable
+                    key={String(hours)}
+                    onPress={() => setAndroidWidgetRangeAndPersist(hours as 1 | 3)}
+                    style={({pressed}) => ({
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      marginLeft: theme.spacing.xs,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: selected ? theme.textColor : theme.borderColor,
+                      backgroundColor: selected ? addOpacity(theme.textColor, 0.12) : (pressed ? addOpacity(theme.borderColor, 0.4) : theme.white),
+                    })}
+                  >
+                    <Text style={{color: theme.textColor, fontWeight: selected ? '700' : '500'}}>{hours}h</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </View>
       )}

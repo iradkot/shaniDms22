@@ -20,7 +20,8 @@ class GlucoseSyncWorker(
 
     return try {
       val secret = prefs.getString(KEY_API_SECRET_SHA1, null)
-      val entries = fetchRecentEntries(baseUrl, secret)
+      val sparklineHours = prefs.getInt(KEY_SPARKLINE_HOURS, 3).coerceIn(1, 12)
+      val entries = fetchRecentEntries(baseUrl, secret, sparklineHours)
       val latest = latestFromEntries(entries)
 
       if (latest != null) {
@@ -37,7 +38,7 @@ class GlucoseSyncWorker(
           load?.projected3,
           null,
           null,
-          entriesToSparkline(entries),
+          entriesToSparkline(entries, sparklineHours),
         )
         GlucoseWidgetUpdater.updateWidgets(applicationContext)
         GlucoseWidgetUpdater.updateNotification(applicationContext)
@@ -49,8 +50,10 @@ class GlucoseSyncWorker(
     }
   }
 
-  private fun fetchRecentEntries(baseUrl: String, secret: String?): JSONArray? {
-    val url = "${baseUrl.trimEnd('/')}/api/v1/entries.json?count=36"
+  private fun fetchRecentEntries(baseUrl: String, secret: String?, sparklineHours: Int): JSONArray? {
+    val safeHours = sparklineHours.coerceIn(1, 12)
+    val count = (safeHours * 12 + 6).coerceIn(24, 180)
+    val url = "${baseUrl.trimEnd('/')}/api/v1/entries.json?count=${count}"
     return getJsonArray(url, secret)
   }
 
@@ -76,12 +79,13 @@ class GlucoseSyncWorker(
     return LatestBg(sgv = latest.sgv, date = latest.ts, trend = directionToSymbol(latest.direction))
   }
 
-  private fun entriesToSparkline(arr: JSONArray?): IntArray? {
+  private fun entriesToSparkline(arr: JSONArray?, sparklineHours: Int): IntArray? {
     val entries = parseValidEntries(arr)
     if (entries.size < 2) return null
 
     val latestTs = entries.maxOf { it.ts }
-    val fromTs = latestTs - 3L * 60L * 60L * 1000L
+    val safeHours = sparklineHours.coerceIn(1, 12)
+    val fromTs = latestTs - safeHours.toLong() * 60L * 60L * 1000L
 
     val values = entries
       .filter { it.ts >= fromTs }
@@ -167,6 +171,7 @@ class GlucoseSyncWorker(
     const val KEY_API_SECRET_SHA1 = "api_secret_sha1"
     const val KEY_ENABLED = "enabled"
     const val KEY_LIVE_MODE = "live_mode"
+    const val KEY_SPARKLINE_HOURS = "sparkline_hours"
   }
 }
 

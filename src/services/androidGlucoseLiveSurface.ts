@@ -19,6 +19,7 @@ type GlucoseNativeModule = {
   setWidgetThresholds: (low: number, high: number) => void;
   configureBackgroundSync: (baseUrl?: string, apiSecretSha1?: string, enabled?: boolean) => void;
   setLiveModeEnabled: (enabled: boolean) => void;
+  setWidgetRangeHours?: (hours: number) => void;
 };
 
 type GlucoseWidgetSnapshot = {
@@ -137,5 +138,15 @@ export function setAndroidWidgetLiveModeEnabled(enabled: boolean): void {
     nativeModule.setLiveModeEnabled(enabled);
   } catch (err) {
     console.warn('androidGlucoseLiveSurface: setLiveModeEnabled failed', err);
+  }
+}
+
+export function setAndroidWidgetRangeHours(hours: number): void {
+  if (!nativeModule?.setWidgetRangeHours) return;
+  try {
+    const clamped = Math.max(1, Math.min(12, Math.round(hours)));
+    nativeModule.setWidgetRangeHours(clamped);
+  } catch (err) {
+    console.warn('androidGlucoseLiveSurface: setWidgetRangeHours failed', err);
   }
 }

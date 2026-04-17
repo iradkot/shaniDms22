@@ -1,5 +1,6 @@
 package com.shanidms22.glucose
 
+import android.content.Context
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
@@ -76,5 +77,17 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
   @ReactMethod
   fun setLiveModeEnabled(enabled: Boolean) {
     GlucoseSyncScheduler.setLiveModeEnabled(reactApplicationContext, enabled)
+  }
+
+  @ReactMethod
+  fun setWidgetRangeHours(hours: Double) {
+    val intHours = hours.toInt().coerceIn(1, 12)
+    val prefs = reactApplicationContext.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
+    prefs.edit().putInt(GlucoseSyncWorker.KEY_SPARKLINE_HOURS, intHours).apply()
+    try {
+      GlucoseSyncScheduler.enqueueImmediate(reactApplicationContext)
+    } catch (_: Throwable) {
+      // Best effort.
+    }
   }
 }
