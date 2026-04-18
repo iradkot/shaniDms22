@@ -34,7 +34,7 @@ import {
 } from './settingsShared';
 import {t as tr} from 'app/i18n/translations';
 import {addOpacity} from 'app/style/styling.utils';
-import {setAndroidWidgetLiveModeEnabled, setAndroidWidgetRangeHours} from 'app/services/androidGlucoseLiveSurface';
+import {setAndroidWidgetChartStyle, setAndroidWidgetLiveModeEnabled, setAndroidWidgetRangeHours} from 'app/services/androidGlucoseLiveSurface';
 import {useThemeSettings} from 'app/contexts/ThemeSettingsContext';
 
 const UI_STORAGE_KEY = 'settings.ui.v1';
@@ -90,6 +90,7 @@ const Settings: React.FC = () => {
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [androidLiveMode, setAndroidLiveMode] = useState(true);
   const [androidWidgetRangeHours, setAndroidWidgetRangeHoursState] = useState<1 | 3>(3);
+  const [androidWidgetChartStyle, setAndroidWidgetChartStyleState] = useState<'line' | 'points'>('line');
 
   const openAiModelOptions = useMemo(
     () => [
@@ -255,24 +256,31 @@ const Settings: React.FC = () => {
         if (!raw) {
           setAndroidLiveMode(true);
           setAndroidWidgetRangeHoursState(3);
+          setAndroidWidgetChartStyleState('line');
           setAndroidWidgetLiveModeEnabled(true);
           setAndroidWidgetRangeHours(3);
+          setAndroidWidgetChartStyle('line');
           return;
         }
 
-        const parsed = JSON.parse(raw) as Partial<{liveMode: boolean; rangeHours: number}>;
+        const parsed = JSON.parse(raw) as Partial<{liveMode: boolean; rangeHours: number; chartStyle: 'line' | 'points'}>;
         const liveMode = typeof parsed.liveMode === 'boolean' ? parsed.liveMode : true;
         const rangeHours = parsed.rangeHours === 1 ? 1 : 3;
+        const chartStyle = parsed.chartStyle === 'points' ? 'points' : 'line';
         setAndroidLiveMode(liveMode);
         setAndroidWidgetRangeHoursState(rangeHours);
+        setAndroidWidgetChartStyleState(chartStyle);
         setAndroidWidgetLiveModeEnabled(liveMode);
         setAndroidWidgetRangeHours(rangeHours);
+        setAndroidWidgetChartStyle(chartStyle);
       } catch {
         if (!isMounted) return;
         setAndroidLiveMode(true);
         setAndroidWidgetRangeHoursState(3);
+        setAndroidWidgetChartStyleState('line');
         setAndroidWidgetLiveModeEnabled(true);
         setAndroidWidgetRangeHours(3);
+        setAndroidWidgetChartStyle('line');
       }
     };
 
@@ -309,7 +317,10 @@ const Settings: React.FC = () => {
   const setAndroidLiveModeAndPersist = (enabled: boolean) => {
     setAndroidLiveMode(enabled);
     setAndroidWidgetLiveModeEnabled(enabled);
-    AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify({liveMode: enabled, rangeHours: androidWidgetRangeHours})).catch(() => {
+    AsyncStorage.setItem(
+      WIDGET_STORAGE_KEY,
+      JSON.stringify({liveMode: enabled, rangeHours: androidWidgetRangeHours, chartStyle: androidWidgetChartStyle}),
+    ).catch(() => {
       // Best-effort persistence.
     });
   };
@@ -317,7 +328,21 @@ const Settings: React.FC = () => {
   const setAndroidWidgetRangeAndPersist = (hours: 1 | 3) => {
     setAndroidWidgetRangeHoursState(hours);
     setAndroidWidgetRangeHours(hours);
-    AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify({liveMode: androidLiveMode, rangeHours: hours})).catch(() => {
+    AsyncStorage.setItem(
+      WIDGET_STORAGE_KEY,
+      JSON.stringify({liveMode: androidLiveMode, rangeHours: hours, chartStyle: androidWidgetChartStyle}),
+    ).catch(() => {
+      // Best-effort persistence.
+    });
+  };
+
+  const setAndroidWidgetChartStyleAndPersist = (style: 'line' | 'points') => {
+    setAndroidWidgetChartStyleState(style);
+    setAndroidWidgetChartStyle(style);
+    AsyncStorage.setItem(
+      WIDGET_STORAGE_KEY,
+      JSON.stringify({liveMode: androidLiveMode, rangeHours: androidWidgetRangeHours, chartStyle: style}),
+    ).catch(() => {
       // Best-effort persistence.
     });
   };
@@ -1189,6 +1214,43 @@ const Settings: React.FC = () => {
                     })}
                   >
                     <Text style={{color: theme.textColor, fontWeight: selected ? '700' : '500'}}>{hours}h</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={rowStyle}>
+            <View style={iconContainerStyle}>
+              <MaterialIcons name="scatter-plot" size={theme.typography.size.xl} color={theme.textColor} />
+            </View>
+            <View style={{flex: 1, paddingRight: theme.spacing.sm}}>
+              <Text style={labelStyle}>{language === 'he' ? 'סגנון גרף בווידג׳ט' : 'Widget chart style'}</Text>
+              <Text style={{color: theme.textColor, opacity: 0.72, fontSize: theme.typography.size.xs}}>
+                {language === 'he' ? 'קו רציף או נקודות בצבעי סוכר.' : 'Continuous line or glucose-colored points.'}
+              </Text>
+            </View>
+            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+              {[
+                {id: 'line' as const, label: language === 'he' ? 'קו' : 'Line'},
+                {id: 'points' as const, label: language === 'he' ? 'נק׳' : 'Dots'},
+              ].map(opt => {
+                const selected = androidWidgetChartStyle === opt.id;
+                return (
+                  <Pressable
+                    key={opt.id}
+                    onPress={() => setAndroidWidgetChartStyleAndPersist(opt.id)}
+                    style={({pressed}) => ({
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      marginLeft: theme.spacing.xs,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: selected ? theme.textColor : theme.borderColor,
+                      backgroundColor: selected ? addOpacity(theme.textColor, 0.12) : (pressed ? addOpacity(theme.borderColor, 0.4) : theme.white),
+                    })}
+                  >
+                    <Text style={{color: theme.textColor, fontWeight: selected ? '700' : '500'}}>{opt.label}</Text>
                   </Pressable>
                 );
               })}

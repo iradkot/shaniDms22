@@ -35,6 +35,7 @@ object GlucoseWidgetUpdater {
   private const val KEY_LOW = "low"
   private const val KEY_HIGH = "high"
   private const val KEY_SPARKLINE = "sparkline_csv"
+  private const val KEY_SPARKLINE_STYLE = "sparkline_style"
   private const val CHANNEL_ID = "glucose_live"
   private const val NOTIFICATION_ID = 220022
 
@@ -88,6 +89,15 @@ object GlucoseWidgetUpdater {
     updateWidgets(context)
   }
 
+  fun setSparklineStyle(context: Context, style: String?) {
+    val normalized = when ((style ?: "").trim().lowercase()) {
+      "points" -> "points"
+      else -> "line"
+    }
+    prefs(context).edit().putString(KEY_SPARKLINE_STYLE, normalized).apply()
+    updateWidgets(context)
+  }
+
   private data class WidgetState(
     val value: Int?,
     val trend: String,
@@ -100,6 +110,7 @@ object GlucoseWidgetUpdater {
     val low: Int?,
     val high: Int?,
     val sparkline: List<Int>,
+    val sparklineStyle: String,
   )
 
   private fun read(context: Context): WidgetState {
@@ -119,8 +130,9 @@ object GlucoseWidgetUpdater {
       .split(',')
       .mapNotNull { it.trim().toIntOrNull() }
       .takeLast(48)
+    val sparklineStyle = (p.getString(KEY_SPARKLINE_STYLE, "line") ?: "line").lowercase()
 
-    return WidgetState(value, trend, ts, iob, cob, projected1, projected2, projected3, low, high, sparkline)
+    return WidgetState(value, trend, ts, iob, cob, projected1, projected2, projected3, low, high, sparkline, sparklineStyle)
   }
 
   fun updateWidgets(context: Context) {
@@ -161,7 +173,15 @@ object GlucoseWidgetUpdater {
         }
         views.setTextColor(R.id.glucose_projected, projectedColor)
 
-        val sparkBitmap = drawSparklineBitmap(state.sparkline, state.low, state.high)
+        val syncPrefs = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
+        val sparklineHours = syncPrefs.getInt(GlucoseSyncWorker.KEY_SPARKLINE_HOURS, 3).coerceIn(1, 12)
+        val sparkBitmap = drawSparklineBitmap(
+          state.sparkline,
+          state.low,
+          state.high,
+          sparklineHours,
+          state.sparklineStyle,
+        )
         if (sparkBitmap != null) {
           views.setImageViewBitmap(R.id.glucose_sparkline, sparkBitmap)
         } else {
@@ -183,13 +203,22 @@ object GlucoseWidgetUpdater {
     }
   }
 
-  private fun drawSparklineBitmap(values: List<Int>, low: Int?, high: Int?): Bitmap? {
+  private fun drawSparklineBitmap(
+    values: List<Int>,
+    low: Int?,
+    high: Int?,
+    hours: Int,
+    style: String,
+  ): Bitmap? {
     if (values.size < 2) return null
 
-    val width = 360
-    val height = 74
+    val width = 420
+    val height = 96
     val padX = 4f
-    val padY = 6f
+    val padTop = 6f
+    val axisGap = 6f
+    val axisTextSize = 18f
+    val padBottom = axisTextSize + axisGap + 2f
 
     val minV = values.minOrNull() ?: return null
     val maxV = values.maxOrNull() ?: return null
@@ -197,7 +226,7 @@ object GlucoseWidgetUpdater {
 
     fun yFor(v: Int): Float {
       val ratio = (v - minV).toFloat() / spread.toFloat()
-      return (height - padY) - ratio * (height - padY * 2)
+      return (height - padBottom) - ratio * ((height - padBottom) - padTop)
     }
 
     val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -209,8 +238,34 @@ object GlucoseWidgetUpdater {
       style = Paint.Style.STROKE
     }
 
+    val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.parseColor("#55FFFFFF")
+      strokeWidth = 1.2f
+      style = Paint.Style.STROKE
+    }
+
+    val axisTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.parseColor("#AAFFFFFF")
+      textSize = axisTextSize
+      textAlign = Paint.Align.CENTER
+    }
+
     if (low != null) canvas.drawLine(0f, yFor(low), width.toFloat(), yFor(low), gridPaint)
     if (high != null) canvas.drawLine(0f, yFor(high), width.toFloat(), yFor(high), gridPaint)
+
+    val axisY = height - padBottom + axisGap
+    canvas.drawLine(padX, axisY, width - padX, axisY, axisPaint)
+
+    val safeHours = hours.coerceIn(1, 12)
+    val tickCount = if (safeHours <= 1) 2 else 4
+    for (i in 0 until tickCount) {
+      val t = i.toFloat() / (tickCount - 1).toFloat()
+      val x = padX + t * (width - padX * 2)
+      canvas.drawLine(x, axisY - 3f, x, axisY + 3f, axisPaint)
+      val hAgo = ((1f - t) * safeHours).toInt()
+      val label = if (hAgo <= 0) "now" else "-${hAgo}h"
+      canvas.drawText(label, x, height - 3f, axisTextPaint)
+    }
 
     val path = Path()
     values.forEachIndexed { i, v ->
@@ -220,14 +275,38 @@ object GlucoseWidgetUpdater {
     }
 
     val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = Color.parseColor("#99E3F2FD")
+      color = Color.parseColor("#A0E3F2FD")
       strokeWidth = 3.4f
       style = Paint.Style.STROKE
       strokeCap = Paint.Cap.ROUND
       strokeJoin = Paint.Join.ROUND
     }
 
-    canvas.drawPath(path, linePaint)
+    if (style != "points") {
+      canvas.drawPath(path, linePaint)
+    }
+
+    val pointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      style = Paint.Style.FILL
+    }
+    values.forEachIndexed { i, v ->
+      val x = padX + (i.toFloat() / (values.size - 1).toFloat()) * (width - padX * 2)
+      val y = yFor(v)
+      pointPaint.color = when {
+        low != null && v < low -> Color.parseColor("#FF6B6B")
+        high != null && v > high -> Color.parseColor("#FFB74D")
+        else -> Color.parseColor("#66BB6A")
+      }
+
+      if (style == "points") {
+        val radius = if (i == values.lastIndex) 4.2f else 3.2f
+        canvas.drawCircle(x, y, radius, pointPaint)
+      } else if (i == values.lastIndex || i == 0 || (values.size > 12 && i % 4 == 0)) {
+        val radius = if (i == values.lastIndex) 3.6f else 2.6f
+        canvas.drawCircle(x, y, radius, pointPaint)
+      }
+    }
+
     return bmp
   }
 

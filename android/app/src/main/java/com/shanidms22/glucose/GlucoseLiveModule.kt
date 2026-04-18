@@ -90,4 +90,9 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
       // Best effort.
     }
   }
+
+  @ReactMethod
+  fun setWidgetChartStyle(style: String?) {
+    GlucoseWidgetUpdater.setSparklineStyle(reactApplicationContext, style)
+  }
 }

@@ -20,6 +20,7 @@ type GlucoseNativeModule = {
   configureBackgroundSync: (baseUrl?: string, apiSecretSha1?: string, enabled?: boolean) => void;
   setLiveModeEnabled: (enabled: boolean) => void;
   setWidgetRangeHours?: (hours: number) => void;
+  setWidgetChartStyle?: (style: string) => void;
 };
 
 type GlucoseWidgetSnapshot = {
@@ -148,5 +149,14 @@ export function setAndroidWidgetRangeHours(hours: number): void {
     nativeModule.setWidgetRangeHours(clamped);
   } catch (err) {
     console.warn('androidGlucoseLiveSurface: setWidgetRangeHours failed', err);
+  }
+}
+
+export function setAndroidWidgetChartStyle(style: 'line' | 'points'): void {
+  if (!nativeModule?.setWidgetChartStyle) return;
+  try {
+    nativeModule.setWidgetChartStyle(style === 'points' ? 'points' : 'line');
+  } catch (err) {
+    console.warn('androidGlucoseLiveSurface: setWidgetChartStyle failed', err);
   }
 }
