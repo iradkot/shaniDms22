@@ -208,7 +208,7 @@ object GlucoseWidgetUpdater {
     low: Int?,
     high: Int?,
     hours: Int,
-    style: String,
+    chartStyle: String,
   ): Bitmap? {
     if (values.size < 2) return null
 
@@ -282,7 +282,7 @@ object GlucoseWidgetUpdater {
       strokeJoin = Paint.Join.ROUND
     }
 
-    if (style != "points") {
+    if (chartStyle != "points") {
       canvas.drawPath(path, linePaint)
     }
 
@@ -298,7 +298,7 @@ object GlucoseWidgetUpdater {
         else -> Color.parseColor("#66BB6A")
       }
 
-      if (style == "points") {
+      if (chartStyle == "points") {
         val radius = if (i == values.lastIndex) 4.2f else 3.2f
         canvas.drawCircle(x, y, radius, pointPaint)
       } else if (i == values.lastIndex || i == 0 || (values.size > 12 && i % 4 == 0)) {
