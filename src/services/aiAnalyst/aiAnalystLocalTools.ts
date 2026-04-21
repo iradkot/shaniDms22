@@ -14,6 +14,7 @@ import {
   mapNightscoutTreatmentsToCarbFoodItems,
   mapNightscoutTreatmentsToInsulinDataEntries,
 } from 'app/utils/nightscoutTreatments.utils';
+import {computeAbsorption} from 'app/utils/mealAbsorption.utils';
 
 import {extractHypoEvents} from 'app/containers/MainTabsNavigator/Containers/Trends/utils/hypoInvestigation.utils';
 import {BgSample} from 'app/types/day_bgs.types';
@@ -1351,20 +1352,6 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           return 'snack';
         };
 
-        const findCobAtTime = (targetTs: number, tolerance: number = 30 * 60 * 1000): number | null => {
-          let best: any = null;
-          let bestDist = Infinity;
-          for (const s of enrichedBg) {
-            if ((s as any).cob == null) continue;
-            const dist = Math.abs(s.date - targetTs);
-            if (dist < bestDist && dist <= tolerance) {
-              best = s;
-              bestDist = dist;
-            }
-          }
-          return best ? (best as any).cob : null;
-        };
-
         const filteredCarbs = mealType === 'all'
           ? carbItems
           : carbItems.filter(c => classifyMeal(c.timestamp) === mealType);
@@ -1397,14 +1384,11 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               if (validCount) tirScore = Math.round(percentages.target);
             }
 
-            // Absorption
-            const cobRemaining = findCobAtTime(ct.timestamp + TIR_WINDOW);
-            const absorbed = cobRemaining != null
-              ? Math.max(0, ct.carbs - Math.min(cobRemaining, ct.carbs))
-              : null;
-            const absorptionPct = absorbed != null && ct.carbs > 0
-              ? Math.round((absorbed / ct.carbs) * 100)
-              : null;
+            // Absorption (shared single-source logic)
+            const absorption = computeAbsorption(ct.carbs, enrichedBg as BgSample[], ct.timestamp);
+            const absorbed = absorption.absorbed;
+            const absorptionPct = absorption.absorptionPct;
+            const cobRemaining = absorption.cobRemaining;
 
             // Estimation accuracy
             let estimationAccuracy: string | null = null;
