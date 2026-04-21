@@ -2,7 +2,9 @@ import {LlmProvider} from './llmTypes';
 import {OpenAIProvider} from './providers/openaiProvider';
 import {AiSettings} from 'app/contexts/AiSettingsContext';
 
-export function createLlmProvider(settings: AiSettings): LlmProvider {
+type LlmProviderSettings = Pick<AiSettings, 'provider' | 'apiKey'>;
+
+export function createLlmProvider(settings: LlmProviderSettings): LlmProvider {
   if (settings.provider === 'openai') {
     return new OpenAIProvider({apiKey: settings.apiKey});
   }

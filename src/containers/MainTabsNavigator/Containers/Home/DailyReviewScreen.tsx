@@ -533,7 +533,12 @@ const DailyReviewScreen: React.FC = () => {
       try {
         await regenerateDailyBrief({
           glucose: glucoseSettings,
-          ai: {enabled: aiSettings.enabled, apiKey: aiSettings.apiKey, model: aiSettings.openAiModel},
+          ai: {
+            enabled: aiSettings.enabled,
+            apiKey: aiSettings.apiKey,
+            model: aiSettings.openAiModel,
+            personality: aiSettings.personality,
+          },
           notify: false,
         });
         latestBrief = await getLatestDailyBrief();
@@ -556,7 +561,7 @@ const DailyReviewScreen: React.FC = () => {
       setWhyLine(null);
       setActionSource('fallback');
     }
-  }, [aiSettings.apiKey, aiSettings.enabled, aiSettings.openAiModel, glucoseSettings, prevDayStart, todayStart, wStart, yStart]);
+  }, [aiSettings.apiKey, aiSettings.enabled, aiSettings.openAiModel, aiSettings.personality, glucoseSettings, prevDayStart, todayStart, wStart, yStart]);
 
   useEffect(() => {
     let mounted = true;
@@ -591,7 +596,12 @@ const DailyReviewScreen: React.FC = () => {
       setRefreshingAction(true);
       await regenerateDailyBrief({
         glucose: glucoseSettings,
-        ai: {enabled: aiSettings.enabled, apiKey: aiSettings.apiKey, model: aiSettings.openAiModel},
+        ai: {
+          enabled: aiSettings.enabled,
+          apiKey: aiSettings.apiKey,
+          model: aiSettings.openAiModel,
+          personality: aiSettings.personality,
+        },
         notify: false,
       });
       await loadData();

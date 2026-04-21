@@ -1,12 +1,31 @@
 export type SharedAiContextInput = {
   language?: string;
   patientProfileSummary?: string | null;
+  personality?: 'tachles' | 'nice' | 'buddha';
   clinicalFlags?: {
     pregnancy?: boolean;
     pediatric?: boolean;
     highRiskHypo?: boolean;
   } | null;
 };
+
+function personalityLine(personality?: 'tachles' | 'nice' | 'buddha', language?: string): string {
+  const p = personality ?? 'nice';
+  const he = (language ?? '').toLowerCase() === 'he';
+  if (p === 'tachles') {
+    return he
+      ? 'persona_style: tachles (דיבור קצר ולעניין, ישיר, בלי בלבולי שכל)'
+      : 'persona_style: tachles (short, direct, no fluff)';
+  }
+  if (p === 'buddha') {
+    return he
+      ? 'persona_style: buddha (רגוע, מקבל, שלו, אך עדיין פרקטי ובטוח רפואית)'
+      : 'persona_style: buddha (calm, accepting, gentle tone, still practical and safety-first)';
+  }
+  return he
+    ? 'persona_style: nice (מעודד, נעים, אמפתי ומעשי)'
+    : 'persona_style: nice (encouraging, kind, empathic, practical)';
+}
 
 function languageLine(language?: string): string {
   return (language ?? '').toLowerCase() === 'he'
@@ -26,6 +45,7 @@ export function buildSharedAiContextBlock(input: SharedAiContextInput): string {
   return [
     '=== SHARED_AI_CONTEXT ===',
     languageLine(input.language),
+    personalityLine(input.personality, input.language),
     `clinical_flags: ${activeFlags.length ? activeFlags.join(', ') : 'none'}`,
     `patient_profile_summary: ${profile || 'none provided'}`,
     'Apply this context consistently across reasoning and recommendations.',

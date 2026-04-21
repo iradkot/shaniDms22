@@ -785,6 +785,43 @@ const Settings: React.FC = () => {
               </Text>
             </View>
 
+            <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg}}>
+              <Text style={{color: theme.textColor, fontSize: theme.typography.size.md, fontWeight: '600'}}>
+                {language === 'he' ? 'אופי הסוכן החכם' : 'AI agent personality'}
+              </Text>
+              <Text style={{color: theme.textColor, opacity: 0.75, fontSize: theme.typography.size.sm, paddingTop: theme.spacing.xs}}>
+                {language === 'he' ? 'ישפיע על הטון ב-Daily Review, בצ׳אט ובמסכים חכמים נוספים' : 'Affects tone in Daily Review, chat, and other smart assistant flows'}
+              </Text>
+            </View>
+
+            {[
+              {id: 'tachles', label: language === 'he' ? 'סוכן תכלס' : 'Tachles agent'},
+              {id: 'nice', label: language === 'he' ? 'סוכן נחמד' : 'Nice agent'},
+              {id: 'buddha', label: language === 'he' ? 'סוכן בודהה' : 'Buddha agent'},
+            ] as const).map(opt => {
+              const selected = aiSettings.personality === opt.id;
+              return (
+                <Pressable
+                  key={opt.id}
+                  accessibilityRole="button"
+                  onPress={() => setAiSetting('personality', opt.id)}
+                  style={({pressed}) => ({
+                    ...rowStyle,
+                    backgroundColor: pressed ? theme.borderColor : 'transparent',
+                  })}
+                >
+                  <View style={iconContainerStyle}>
+                    <MaterialIcons
+                      name={selected ? 'radio-button-checked' : 'radio-button-unchecked'}
+                      size={theme.typography.size.lg}
+                      color={theme.textColor}
+                    />
+                  </View>
+                  <Text style={labelStyle}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
+
             <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md}}>
               <Text style={{color: theme.textColor, fontWeight: '600', marginBottom: theme.spacing.xs}}>{tr(language, 'settings.openAiApiKey')}</Text>
               <TextInput

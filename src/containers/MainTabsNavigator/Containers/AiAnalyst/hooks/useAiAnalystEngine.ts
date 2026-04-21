@@ -401,7 +401,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const {finalText, llmMessages: updatedMessages} = await runLlmToolLoop({
         provider,
         model: aiSettings.openAiModel,
-        systemPrompt: buildSystemPrompt(null, glucoseSettings, language),
+        systemPrompt: buildSystemPrompt(null, glucoseSettings, language, aiSettings.personality),
         initialMessages: baseLlmMessages,
         maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
         maxOutputTokens: maxOutputTokensForModel(aiSettings.openAiModel, DEFAULT_MAX_OUTPUT_TOKENS),
@@ -440,6 +440,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   }, [
     provider,
     aiSettings.openAiModel,
+    aiSettings.personality,
     glucoseSettings,
     language,
     initMission,
@@ -521,7 +522,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } finally {
       finaliseMission(runId);
     }
-  }, [provider, glucoseSettings.severeHypo, aiSettings.openAiModel, initMission, handleMissionError, finaliseMission, scrollToEnd, sanitizeAssistantToneAndAvailability]);
+}, [provider, glucoseSettings.severeHypo, aiSettings.openAiModel, aiSettings.personality, initMission, handleMissionError, finaliseMission, scrollToEnd, sanitizeAssistantToneAndAvailability]);
 
   const startUserBehavior = useCallback(async () => {
     if (!provider) return;
@@ -560,7 +561,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
       setLlmMessages(baseLlmMessages);
 
-      const systemPrompt = buildSystemPrompt('userBehavior', glucoseSettings, language);
+      const systemPrompt = buildSystemPrompt('userBehavior', glucoseSettings, language, aiSettings.personality);
 
       const res = await provider.sendChat({
         model: aiSettings.openAiModel,
@@ -594,7 +595,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } finally {
       finaliseMission(runId);
     }
-  }, [provider, aiSettings.openAiModel, glucoseSettings, language, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd, deriveCompactKpiFromCgmResult, sanitizeAssistantToneAndAvailability]);
+}, [provider, aiSettings.openAiModel, aiSettings.personality, glucoseSettings, language, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd, deriveCompactKpiFromCgmResult, sanitizeAssistantToneAndAvailability]);
 
   const startLoopSettingsAdvisor = useCallback(async () => {
     if (!provider) return;
@@ -629,7 +630,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
       setLlmMessages(baseLlmMessages);
 
-      const systemPrompt = buildSystemPrompt('loopSettings', glucoseSettings, language);
+      const systemPrompt = buildSystemPrompt('loopSettings', glucoseSettings, language, aiSettings.personality);
 
       const res = await provider.sendChat({
         model: aiSettings.openAiModel,
@@ -663,7 +664,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } finally {
       finaliseMission(runId);
     }
-  }, [provider, aiSettings.openAiModel, glucoseSettings, language, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd, sanitizeAssistantToneAndAvailability]);
+}, [provider, aiSettings.openAiModel, aiSettings.personality, glucoseSettings, language, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd, sanitizeAssistantToneAndAvailability]);
 
   // ====================================================================
   // Follow-up (shared across all missions)
@@ -865,7 +866,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         language === 'he'
           ? `נתח את תמונת הארוחה ותן תיאור מובנה: רכיבים עיקריים, אומדן פחמימות, האם יש שומן/חלבון גבוה שמאריכים השפעה, ומה טווח השפעה סביר. בקשת המשתמש: ${promptText}`
           : `Analyze the meal photo and return a structured description: main components, carb estimate, whether fat/protein likely extends absorption, and likely impact window. User request: ${promptText}`,
-        {language},
+        {language, personality: aiSettings.personality},
       );
 
       const payload: any = {
@@ -913,7 +914,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const out = typeof rawJson?.output_text === 'string' ? rawJson.output_text.trim() : '';
       return out || null;
     },
-    [pendingMealImage, aiSettings.apiKey, aiSettings.openAiModel, language],
+    [pendingMealImage, aiSettings.apiKey, aiSettings.openAiModel, aiSettings.personality, language],
   );
 
   const sendFollowUp = useCallback(async () => {
@@ -984,7 +985,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         aiSettings.openAiModel,
         analystMode === 'loopSettings' ? LOOP_SETTINGS_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS,
       );
-      const systemPrompt = buildSystemPrompt(analystMode, glucoseSettings, language);
+      const systemPrompt = buildSystemPrompt(analystMode, glucoseSettings, language, aiSettings.personality);
 
       const contextWindowMessages = buildContextWindow(workingLlmMessages);
 
@@ -1028,7 +1029,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       finaliseMission(runId);
     }
   }, [
-    provider, input, llmMessages, aiSettings.openAiModel, analystMode,
+    provider, input, llmMessages, aiSettings.openAiModel, aiSettings.personality, analystMode,
     glucoseSettings, persistHistorySnapshot, recordDataUsed, beginRun,
     finaliseMission, scrollToEnd, maybePreFetchGlycemicEvents, handleFollowUpError,
     buildContextWindow, maybeInjectEvidenceTag, deriveCompactKpiFromCgmResult,

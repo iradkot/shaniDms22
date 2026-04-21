@@ -28,6 +28,7 @@ export type DailyBriefAiOptions = {
   enabled: boolean;
   apiKey?: string;
   model?: string;
+  personality?: 'tachles' | 'nice' | 'buddha';
 };
 
 type StoredBrief = {
@@ -800,14 +801,13 @@ async function maybeGenerateLlmSections(params: {
 
   const model = (ai?.model ?? 'gpt-5.4').trim() || 'gpt-5.4';
   const provider = createLlmProvider({
-    enabled: Boolean(ai?.enabled),
     provider: 'openai',
     apiKey,
-    openAiModel: model,
   });
 
   const instruction = withSharedAiContext(buildDailyBriefSystemInstruction(lang), {
     language: lang,
+    personality: ai?.personality,
     patientProfileSummary: profile ? JSON.stringify(profile) : null,
   });
 

@@ -768,10 +768,8 @@ const Home: React.FC = () => {
 
       const model = (aiSettings.openAiModel ?? 'gpt-5.4').trim() || 'gpt-5.4';
       const provider = createLlmProvider({
-        enabled: aiSettings.enabled,
         provider: aiSettings.provider,
         apiKey,
-        openAiModel: model,
       });
 
       const response = await provider.sendChat({
@@ -787,6 +785,7 @@ const Home: React.FC = () => {
                 : 'You are a practical, cautious diabetes coach. Give a general recommendation for right now (2-4 sentences): sentence 1 current state, sentence 2 what changed recently (last 90m/4h), sentence 3 what to do in the next hour. Do not focus on bolus unless data suggests it is truly important. Do not provide exact insulin dosing. If stable, explicitly say continue as-is with monitoring. Return plain text only, no Markdown.',
               {
                 language,
+                personality: aiSettings.personality,
                 patientProfileSummary: typeof patientMemory === 'string' ? patientMemory.slice(0, 400) : null,
               },
             ),
@@ -855,6 +854,7 @@ const Home: React.FC = () => {
     aiSettings.apiKey,
     aiSettings.enabled,
     aiSettings.openAiModel,
+    aiSettings.personality,
     insulinData,
     isRefreshingRecommendation,
     isShowingToday,

@@ -50,6 +50,7 @@ export function buildSystemPrompt(
   analystMode: AnalystMode | null,
   glucoseSettings: GlucoseSettings,
   language?: string,
+  personality?: 'tachles' | 'nice' | 'buddha',
 ): string {
   let base: string;
 
@@ -66,5 +67,5 @@ export function buildSystemPrompt(
     base = AI_ANALYST_SYSTEM_PROMPT + '\n' + DEFAULT_TOOL_SYSTEM_PROMPT + EVIDENCE_LINK_INSTRUCTION;
   }
 
-  return withSharedAiContext(withAppLanguagePolicy(base, language ?? 'en'), {language});
+  return withSharedAiContext(withAppLanguagePolicy(base, language ?? 'en'), {language, personality});
 }

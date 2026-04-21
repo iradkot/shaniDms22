@@ -364,6 +364,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
 
       const systemInstruction = withSharedAiContext(buildLoopAssistSystemInstruction(language), {
         language,
+        personality: aiSettings.personality,
         patientProfileSummary: profile ? JSON.stringify(profile) : null,
       });
 

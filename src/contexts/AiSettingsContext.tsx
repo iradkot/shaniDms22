@@ -2,12 +2,14 @@ import React, {createContext, useCallback, useContext, useEffect, useMemo, useSt
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type LlmProviderKind = 'openai';
+export type AiAgentPersonality = 'tachles' | 'nice' | 'buddha';
 
 export type AiSettings = {
   enabled: boolean;
   provider: LlmProviderKind;
   apiKey: string;
   openAiModel: string;
+  personality: AiAgentPersonality;
 };
 
 type AiSettingsContextValue = {
@@ -26,6 +28,7 @@ const DEFAULT_SETTINGS: AiSettings = {
   provider: 'openai',
   apiKey: '',
   openAiModel: LATEST_OPENAI_MODEL,
+  personality: 'nice',
 };
 
 const AiSettingsContext = createContext<AiSettingsContextValue>({
@@ -59,6 +62,10 @@ export const AiSettingsProvider = ({children}: {children: React.ReactNode}) => {
           ...prev,
           ...parsed,
           openAiModel: LATEST_OPENAI_MODEL,
+          personality:
+            parsed.personality === 'tachles' || parsed.personality === 'nice' || parsed.personality === 'buddha'
+              ? parsed.personality
+              : prev.personality,
         }));
       } catch (e) {
         // Best-effort: keep defaults.
