@@ -27,6 +27,27 @@ function personalityLine(personality?: 'tachles' | 'nice' | 'buddha', language?:
     : 'persona_style: nice (encouraging, kind, empathic, practical)';
 }
 
+function personalityGuidelines(personality?: 'tachles' | 'nice' | 'buddha', language?: string): string {
+  const p = personality ?? 'nice';
+  const he = (language ?? '').toLowerCase() === 'he';
+
+  if (p === 'tachles') {
+    return he
+      ? 'persona_guidelines: מקסימום 2-4 משפטים קצרים, בלי ריכוך מיותר, בלי חזרות, מסקנה ברורה + צעד פרקטי אחד.'
+      : 'persona_guidelines: keep to 2-4 short sentences, no fluff, no repetition, clear conclusion + one practical next step.';
+  }
+
+  if (p === 'buddha') {
+    return he
+      ? 'persona_guidelines: טון רגוע ומקבל, קצב איטי ונקי מלחץ, לא שיפוטי, ולסיים בהכוונה עדינה ומעשית.'
+      : 'persona_guidelines: calm and accepting tone, low-pressure pacing, non-judgmental wording, end with gentle practical guidance.';
+  }
+
+  return he
+    ? 'persona_guidelines: טון חם ומעודד, אמפתי אך ממוקד, להסביר בקצרה למה ואז מה לעשות עכשיו.'
+    : 'persona_guidelines: warm and encouraging tone, empathic but focused, briefly explain why and what to do now.';
+}
+
 function languageLine(language?: string): string {
   return (language ?? '').toLowerCase() === 'he'
     ? 'User app language is Hebrew. Output MUST be in natural Hebrew.'
@@ -46,6 +67,7 @@ export function buildSharedAiContextBlock(input: SharedAiContextInput): string {
     '=== SHARED_AI_CONTEXT ===',
     languageLine(input.language),
     personalityLine(input.personality, input.language),
+    personalityGuidelines(input.personality, input.language),
     `clinical_flags: ${activeFlags.length ? activeFlags.join(', ') : 'none'}`,
     `patient_profile_summary: ${profile || 'none provided'}`,
     'Apply this context consistently across reasoning and recommendations.',
