@@ -52,14 +52,16 @@ const Settings: React.FC = () => {
   const {language, setLanguage} = useAppLanguage();
   const {themeId, setThemeId} = useThemeSettings();
 
-  const [showDisplayedTabs, setShowDisplayedTabs] = useState(true);
-  const [showThemePicker, setShowThemePicker] = useState(true);
+  const [showDisplayedTabs, setShowDisplayedTabs] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
   const [showNightscout, setShowNightscout] = useState(false);
   const [showRanges, setShowRanges] = useState(false);
   const [showNightWindow, setShowNightWindow] = useState(false);
   const [showMealWindows, setShowMealWindows] = useState(false);
   const [showAi, setShowAi] = useState(false);
   const [showProactiveCare, setShowProactiveCare] = useState(false);
+  const [showLanguage, setShowLanguage] = useState(false);
+  const [showAndroidWidget, setShowAndroidWidget] = useState(false);
   const [uiLoaded, setUiLoaded] = useState(false);
   const [memoryStats, setMemoryStats] = useState<{total: number; byType: {profile: number; episode: number; chat_summary: number}; latestUpdatedAt: number | null} | null>(null);
   const [memoryBusy, setMemoryBusy] = useState(false);
@@ -103,6 +105,12 @@ const Settings: React.FC = () => {
     ],
     [],
   );
+
+  const personalityLabel = useMemo(() => {
+    if (aiSettings.personality === 'tachles') return language === 'he' ? 'תכלס' : 'Tachles';
+    if (aiSettings.personality === 'buddha') return language === 'he' ? 'בודהה' : 'Buddha';
+    return language === 'he' ? 'נחמד' : 'Nice';
+  }, [aiSettings.personality, language]);
 
   useEffect(() => {
     if (!glucoseLoaded) return;
@@ -178,6 +186,8 @@ const Settings: React.FC = () => {
           showMealWindows: boolean;
           showAi: boolean;
           showProactiveCare: boolean;
+          showLanguage: boolean;
+          showAndroidWidget: boolean;
         }>;
 
         if (typeof parsed.showDisplayedTabs === 'boolean') {
@@ -203,6 +213,12 @@ const Settings: React.FC = () => {
         }
         if (typeof parsed.showProactiveCare === 'boolean') {
           setShowProactiveCare(parsed.showProactiveCare);
+        }
+        if (typeof parsed.showLanguage === 'boolean') {
+          setShowLanguage(parsed.showLanguage);
+        }
+        if (typeof parsed.showAndroidWidget === 'boolean') {
+          setShowAndroidWidget(parsed.showAndroidWidget);
         }
       } catch (e) {
         // Best-effort: keep defaults.
@@ -232,11 +248,13 @@ const Settings: React.FC = () => {
         showMealWindows,
         showAi,
         showProactiveCare,
+        showLanguage,
+        showAndroidWidget,
       }),
     ).catch(() => {
       // Best-effort persistence.
     });
-  }, [uiLoaded, showDisplayedTabs, showThemePicker, showNightscout, showRanges, showNightWindow, showMealWindows, showAi, showProactiveCare]);
+  }, [uiLoaded, showDisplayedTabs, showThemePicker, showNightscout, showRanges, showNightWindow, showMealWindows, showAi, showProactiveCare, showLanguage, showAndroidWidget]);
 
   useEffect(() => {
     if (route?.params?.focusSection === 'ai') {
@@ -596,7 +614,7 @@ const Settings: React.FC = () => {
 
       <View>
         <SectionHeader
-          title={tr(language, 'settings.displayedTabs')}
+          title={language === 'he' ? 'טאבים מוצגים' : tr(language, 'settings.displayedTabs')}
           expanded={showDisplayedTabs}
           onToggle={() => setShowDisplayedTabs(v => !v)}
         />
@@ -739,7 +757,7 @@ const Settings: React.FC = () => {
       </View>
 
       <View>
-        <SectionHeader title={tr(language, 'settings.aiAnalyst')} expanded={showAi} onToggle={() => setShowAi(v => !v)} />
+        <SectionHeader title={language === 'he' ? 'סוכן חכם (AI)' : tr(language, 'settings.aiAnalyst')} expanded={showAi} onToggle={() => setShowAi(v => !v)} />
 
         {!showAi && (
           <Pressable
@@ -757,11 +775,16 @@ const Settings: React.FC = () => {
                 color={aiSettings.apiKey?.trim() ? theme.inRangeColor : theme.aboveRangeColor}
               />
             </View>
-            <Text style={labelStyle}>
-              {aiSettings.apiKey?.trim()
-                ? (language === 'he' ? 'טוקן API מוגדר. הקש לעריכה' : 'API token configured. Tap to edit')
-                : (language === 'he' ? 'אין טוקן API. הקש כדי להוסיף' : 'No API token. Tap to add')}
-            </Text>
+            <View style={{flex: 1}}>
+              <Text style={labelStyle}>
+                {aiSettings.apiKey?.trim()
+                  ? (language === 'he' ? 'טוקן API מוגדר. הקש לעריכה' : 'API token configured. Tap to edit')
+                  : (language === 'he' ? 'אין טוקן API. הקש כדי להוסיף' : 'No API token. Tap to add')}
+              </Text>
+              <Text style={{color: theme.textColor, opacity: 0.68, fontSize: theme.typography.size.xs, marginTop: 4}}>
+                {language === 'he' ? `סטייל נוכחי: ${personalityLabel}` : `Current style: ${personalityLabel}`}
+              </Text>
+            </View>
           </Pressable>
         )}
 
@@ -1038,11 +1061,14 @@ const Settings: React.FC = () => {
       </View>
 
       <View>
-        <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.sm}}>
-          <Text style={{color: theme.textColor, fontSize: theme.typography.size.md, fontWeight: '700'}}>{tr(language, 'settings.language')}</Text>
-        </View>
-        <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md}}>
-          <View style={{flexDirection: 'row', gap: theme.spacing.sm}}>
+        <SectionHeader
+          title={language === 'he' ? 'שפה ונראות' : 'Language & display'}
+          expanded={showLanguage}
+          onToggle={() => setShowLanguage(v => !v)}
+        />
+        {showLanguage && (
+          <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.md}}>
+            <View style={{flexDirection: 'row', gap: theme.spacing.sm}}>
             <Pressable
               accessibilityRole="button"
               onPress={() => setLanguage('en')}
@@ -1073,8 +1099,9 @@ const Settings: React.FC = () => {
             >
               <Text style={{color: theme.textColor, fontWeight: '700'}}>{tr(language, 'settings.languageHebrew')}</Text>
             </Pressable>
+            </View>
           </View>
-        </View>
+        )}
       </View>
 
       <View>
@@ -1203,11 +1230,13 @@ const Settings: React.FC = () => {
 
       {Platform.OS === 'android' && (
         <View>
-          <View style={{paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.xs}}>
-            <Text style={{color: theme.textColor, fontSize: theme.typography.size.md, fontWeight: '700'}}>
-              {language === 'he' ? 'ווידג׳ט אנדרואיד' : 'Android Widget'}
-            </Text>
-          </View>
+          <SectionHeader
+            title={language === 'he' ? 'ווידג׳ט אנדרואיד' : 'Android Widget'}
+            expanded={showAndroidWidget}
+            onToggle={() => setShowAndroidWidget(v => !v)}
+          />
+          {showAndroidWidget && (
+            <>
           <View style={rowStyle}>
             <View style={iconContainerStyle}>
               <MaterialIcons name="bolt" size={theme.typography.size.xl} color={theme.textColor} />
@@ -1293,6 +1322,8 @@ const Settings: React.FC = () => {
               })}
             </View>
           </View>
+            </>
+          )}
         </View>
       )}
 
