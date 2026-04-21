@@ -794,7 +794,7 @@ const Settings: React.FC = () => {
               </Text>
             </View>
 
-            {[
+            {([
               {id: 'tachles', label: language === 'he' ? 'סוכן תכלס' : 'Tachles agent'},
               {id: 'nice', label: language === 'he' ? 'סוכן נחמד' : 'Nice agent'},
               {id: 'buddha', label: language === 'he' ? 'סוכן בודהה' : 'Buddha agent'},
