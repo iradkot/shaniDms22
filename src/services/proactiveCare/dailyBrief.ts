@@ -5,7 +5,7 @@ import {fetchBgDataForDateRangeUncached, fetchTreatmentsForDateRangeUncached} fr
 import {GlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {getStoredAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr, Lang} from 'app/i18n/translations';
-import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
+import {createLlmProvider} from 'app/services/llm/llmClient';
 import {computeRank} from 'app/services/proactiveCare/streakRank';
 
 const CHANNEL_ID = 'daily-briefs';
@@ -797,8 +797,13 @@ async function maybeGenerateLlmSections(params: {
 
   if (!ai?.enabled || !apiKey) return fallback;
 
-  const provider = new OpenAIProvider({apiKey});
   const model = (ai?.model ?? 'gpt-5.4').trim() || 'gpt-5.4';
+  const provider = createLlmProvider({
+    enabled: Boolean(ai?.enabled),
+    provider: 'openai',
+    apiKey,
+    openAiModel: model,
+  });
 
   const instruction = buildDailyBriefSystemInstruction(lang);
 

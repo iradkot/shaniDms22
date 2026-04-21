@@ -41,7 +41,7 @@ import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
 import {detectLoopAdjustmentTrend, LoopTrendSignal} from 'app/services/loopAssist/loopAdjustmentAssist';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
-import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
+import {createLlmProvider} from 'app/services/llm/llmClient';
 import {t as tr} from 'app/i18n/translations';
 import {
   addMemoryEntry,
@@ -765,8 +765,13 @@ const Home: React.FC = () => {
         notes: ['prefers concise practical recommendations', 'prefers context-aware guidance over generic bolus focus'],
       });
 
-      const provider = new OpenAIProvider({apiKey});
       const model = (aiSettings.openAiModel ?? 'gpt-5.4').trim() || 'gpt-5.4';
+      const provider = createLlmProvider({
+        enabled: aiSettings.enabled,
+        provider: aiSettings.provider,
+        apiKey,
+        openAiModel: model,
+      });
 
       const response = await provider.sendChat({
         model,
