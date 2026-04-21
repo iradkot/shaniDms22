@@ -16,6 +16,7 @@ export {buildGlucoseThresholdsBlock} from './glucoseThresholds';
 
 import {GlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {withAppLanguagePolicy} from 'app/services/llm/llmClient';
+import {withSharedAiContext} from 'app/services/llm/sharedAiContext';
 import {AnalystMode} from '../../types';
 
 import {AI_ANALYST_SYSTEM_PROMPT} from './baseAnalyst';
@@ -65,5 +66,5 @@ export function buildSystemPrompt(
     base = AI_ANALYST_SYSTEM_PROMPT + '\n' + DEFAULT_TOOL_SYSTEM_PROMPT + EVIDENCE_LINK_INSTRUCTION;
   }
 
-  return withAppLanguagePolicy(base, language ?? 'en');
+  return withSharedAiContext(withAppLanguagePolicy(base, language ?? 'en'), {language});
 }

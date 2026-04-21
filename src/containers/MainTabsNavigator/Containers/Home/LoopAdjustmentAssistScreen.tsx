@@ -11,6 +11,7 @@ import {addOpacity} from 'app/style/styling.utils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {createLlmProvider} from 'app/services/llm/llmClient';
+import {withSharedAiContext} from 'app/services/llm/sharedAiContext';
 import {sendJsonWithAdaptiveContext} from 'app/services/llm/robustJson';
 import {collectPagedTextFromLlm} from 'app/services/llm/pagingProtocol';
 import {
@@ -361,7 +362,10 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
         profile,
       });
 
-      const systemInstruction = buildLoopAssistSystemInstruction(language);
+      const systemInstruction = withSharedAiContext(buildLoopAssistSystemInstruction(language), {
+        language,
+        patientProfileSummary: profile ? JSON.stringify(profile) : null,
+      });
 
       const apiKey = (aiSettings.apiKey ?? '').trim();
       if (!aiSettings.enabled) {

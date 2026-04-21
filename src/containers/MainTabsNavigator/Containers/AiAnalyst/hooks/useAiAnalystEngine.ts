@@ -10,6 +10,7 @@ import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
+import {withSharedAiContext} from 'app/services/llm/sharedAiContext';
 
 import {AI_ANALYST_SYSTEM_PROMPT} from 'app/services/llm/systemPrompts';
 import {createLlmProvider} from 'app/services/llm/llmClient';
@@ -860,6 +861,13 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         ? 'gpt-4o-mini'
         : aiSettings.openAiModel;
 
+      const imageInstruction = withSharedAiContext(
+        language === 'he'
+          ? `נתח את תמונת הארוחה ותן תיאור מובנה: רכיבים עיקריים, אומדן פחמימות, האם יש שומן/חלבון גבוה שמאריכים השפעה, ומה טווח השפעה סביר. בקשת המשתמש: ${promptText}`
+          : `Analyze the meal photo and return a structured description: main components, carb estimate, whether fat/protein likely extends absorption, and likely impact window. User request: ${promptText}`,
+        {language},
+      );
+
       const payload: any = {
         model: visionModel,
         input: [
@@ -868,10 +876,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
             content: [
               {
                 type: 'input_text',
-                text:
-                  language === 'he'
-                    ? `נתח את תמונת הארוחה ותן תיאור מובנה: רכיבים עיקריים, אומדן פחמימות, האם יש שומן/חלבון גבוה שמאריכים השפעה, ומה טווח השפעה סביר. בקשת המשתמש: ${promptText}`
-                    : `Analyze the meal photo and return a structured description: main components, carb estimate, whether fat/protein likely extends absorption, and likely impact window. User request: ${promptText}`,
+                text: imageInstruction,
               },
               {
                 type: 'input_image',

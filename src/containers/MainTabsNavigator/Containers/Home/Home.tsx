@@ -42,6 +42,7 @@ import {detectLoopAdjustmentTrend, LoopTrendSignal} from 'app/services/loopAssis
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {createLlmProvider} from 'app/services/llm/llmClient';
+import {withSharedAiContext} from 'app/services/llm/sharedAiContext';
 import {t as tr} from 'app/i18n/translations';
 import {
   addMemoryEntry,
@@ -780,10 +781,15 @@ const Home: React.FC = () => {
         messages: [
           {
             role: 'system',
-            content:
+            content: withSharedAiContext(
               language === 'he'
                 ? 'אתה מאמן סוכרת פרקטי וזהיר. תן המלצה כללית לרגע זה (2-4 משפטים): משפט 1 מה המצב עכשיו, משפט 2 מה השתנה לאחרונה (90 דקות/4 שעות), משפט 3 מה לעשות בשעה הקרובה. אל תתמקד בבולוס אלא אם הנתונים מצביעים שזה קריטי. אל תתן מינוני אינסולין מדויקים. אם המצב יציב, אמור להמשיך כרגיל עם מעקב. כתוב טקסט רגיל בלבד, בלי Markdown.'
                 : 'You are a practical, cautious diabetes coach. Give a general recommendation for right now (2-4 sentences): sentence 1 current state, sentence 2 what changed recently (last 90m/4h), sentence 3 what to do in the next hour. Do not focus on bolus unless data suggests it is truly important. Do not provide exact insulin dosing. If stable, explicitly say continue as-is with monitoring. Return plain text only, no Markdown.',
+              {
+                language,
+                patientProfileSummary: typeof patientMemory === 'string' ? patientMemory.slice(0, 400) : null,
+              },
+            ),
           },
           {
             role: 'user',

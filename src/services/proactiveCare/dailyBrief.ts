@@ -6,6 +6,7 @@ import {GlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {getStoredAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr, Lang} from 'app/i18n/translations';
 import {createLlmProvider} from 'app/services/llm/llmClient';
+import {withSharedAiContext} from 'app/services/llm/sharedAiContext';
 import {computeRank} from 'app/services/proactiveCare/streakRank';
 
 const CHANNEL_ID = 'daily-briefs';
@@ -805,7 +806,10 @@ async function maybeGenerateLlmSections(params: {
     openAiModel: model,
   });
 
-  const instruction = buildDailyBriefSystemInstruction(lang);
+  const instruction = withSharedAiContext(buildDailyBriefSystemInstruction(lang), {
+    language: lang,
+    patientProfileSummary: profile ? JSON.stringify(profile) : null,
+  });
 
   const llmYesterday = {
     tir: base.stats.yesterday.tir,
