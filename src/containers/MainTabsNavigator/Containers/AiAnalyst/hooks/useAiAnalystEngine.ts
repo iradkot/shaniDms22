@@ -112,6 +112,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     mimeType: string;
     fileName: string | null;
     fileSize: number | null;
+    uri?: string | null;
   } | null>(null);
   const [input, setInput] = useState('');
   const [isBusy, setIsBusy] = useState(false);
@@ -858,9 +859,8 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const apiKey = (aiSettings.apiKey ?? '').trim();
       if (!image || !apiKey) return null;
 
-      const visionModel = (aiSettings.openAiModel ?? '').trim().startsWith('o')
-        ? 'gpt-4o-mini'
-        : aiSettings.openAiModel;
+      // Keep image analysis on a stable multimodal model regardless of main chat model.
+      const visionModel = 'gpt-4o-mini';
 
       const imageInstruction = withSharedAiContext(
         language === 'he'
@@ -944,6 +944,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       } catch {}
 
       if (pendingMealImage) {
+        let clearPendingImage = false;
         try {
           setProgressText(language === 'he' ? 'מנתח תמונת ארוחה…' : 'Analyzing meal photo…');
           const imageAnalysis = await analyzePendingMealImage(trimmed);
@@ -958,8 +959,15 @@ export function useAiAnalystEngine(): AiAnalystEngine {
                     : `Image analysis result (auto):\n${imageAnalysis}`,
               },
             ];
+            clearPendingImage = true;
           }
         } catch (e: any) {
+          const errText = String(e?.message ?? 'unknown error');
+          setErrorText(
+            language === 'he'
+              ? `ניתוח התמונה נכשל (${errText}). אפשר ללחוץ שוב שליחה, בלי להעלות את התמונה מחדש.`
+              : `Image analysis failed (${errText}). You can press Send again without re-attaching the photo.`,
+          );
           workingLlmMessages = [
             ...workingLlmMessages,
             {
@@ -971,7 +979,9 @@ export function useAiAnalystEngine(): AiAnalystEngine {
             },
           ];
         } finally {
-          setPendingMealImage(null);
+          if (clearPendingImage) {
+            setPendingMealImage(null);
+          }
         }
       }
 
@@ -1101,6 +1111,37 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     [historyItems, scrollToEnd],
   );
 
+  const imageAssetToBase64 = useCallback(async (asset: any): Promise<{base64: string; mimeType: string} | null> => {
+    const inlineBase64 = String(asset?.base64 ?? '').trim();
+    const fallbackMime = (asset?.type ?? 'image/jpeg').trim() || 'image/jpeg';
+    if (inlineBase64) {
+      return {base64: inlineBase64, mimeType: fallbackMime};
+    }
+
+    const uri = String(asset?.uri ?? '').trim();
+    if (!uri) return null;
+
+    try {
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('file_reader_failed'));
+        reader.onloadend = () => resolve(String(reader.result ?? ''));
+        reader.readAsDataURL(blob);
+      });
+
+      const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/i);
+      if (!match) return null;
+      return {
+        mimeType: (match[1] || fallbackMime).trim(),
+        base64: (match[2] || '').trim(),
+      };
+    } catch {
+      return null;
+    }
+  }, []);
+
   const onAttachMealImage = useCallback(async () => {
     try {
       const res = await launchImageLibrary({
@@ -1115,8 +1156,9 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const uri = asset?.uri ?? '';
       const fileName = asset?.fileName ?? null;
       const fileSize = asset?.fileSize ?? null;
-      const base64 = (asset?.base64 ?? '').trim();
-      const mimeType = (asset?.type ?? 'image/jpeg').trim() || 'image/jpeg';
+      const prepared = await imageAssetToBase64(asset);
+      const base64 = (prepared?.base64 ?? '').trim();
+      const mimeType = (prepared?.mimeType ?? asset?.type ?? 'image/jpeg').trim() || 'image/jpeg';
 
       if (!base64) {
         Alert.alert(
@@ -1128,7 +1170,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         return;
       }
 
-      setPendingMealImage({base64, mimeType, fileName, fileSize});
+      setPendingMealImage({base64, mimeType, fileName, fileSize, uri});
 
       await addMemoryEntry({
         type: 'episode',
@@ -1148,7 +1190,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } catch {
       // no-op
     }
-  }, [language]);
+  }, [language, imageAssetToBase64]);
 
   const onAssistantFeedback = useCallback(
     async ({content, helpful}: {content: string; helpful: boolean}) => {
