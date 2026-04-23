@@ -815,8 +815,26 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       out = `I pulled your data and prepared the requested view.\n\n${out}`.replace(/\n{3,}/g, '\n\n').trim();
     }
 
+    // Guardrail: prevent dumping raw tool JSON/sample arrays in chat output.
+    const lines = out.split('\n');
+    const rawLinePattern = /^\s*"?(tMs|mgdl|iobU|cobG|samples|dataUsed)"?\s*:/;
+    const jsonScaffoldPattern = /^\s*[\[\]{}],?\s*$/;
+    let removed = 0;
+    const kept = lines.filter(line => {
+      const isRaw = rawLinePattern.test(line) || jsonScaffoldPattern.test(line);
+      if (isRaw) removed += 1;
+      return !isRaw;
+    });
+
+    if (removed >= 12) {
+      out = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      out += language === 'he'
+        ? '\n\nהערה: הסרתי פלט RAW ארוך של דגימות כדי לשמור על תשובה קריאה.'
+        : '\n\nNote: long raw sample output was hidden to keep this answer readable.';
+    }
+
     return out;
-  }, []);
+  }, [language]);
 
   /** Follow-up error handler (rolls back user message for retry). */
   const handleFollowUpError = useCallback(
