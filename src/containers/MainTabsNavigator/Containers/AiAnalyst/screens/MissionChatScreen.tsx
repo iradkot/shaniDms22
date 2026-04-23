@@ -173,6 +173,31 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
     }
   };
 
+  const sanitizeVisibleChatText = (text: string): string => {
+    const inputText = String(text ?? '');
+    if (!inputText.trim()) return inputText;
+
+    const lines = inputText.split('\n');
+    const rawLinePattern = /^\s*"?(tMs|mgdl|iobU|cobG|startTime|endTime|timestamp|amount|rate|duration|type)"?\s*:/;
+    const jsonScaffoldPattern = /^\s*[\[\]{}],?\s*$/;
+
+    let removed = 0;
+    const kept = lines.filter(line => {
+      const isRaw = rawLinePattern.test(line) || jsonScaffoldPattern.test(line);
+      if (isRaw) removed += 1;
+      return !isRaw;
+    });
+
+    if (removed < 10) return inputText;
+
+    const cleaned = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    const suffix = isHebrew
+      ? '\n\n(הוסתר פלט נתונים גולמי ארוך כדי לשמור על קריאות)'
+      : '\n\n(Long raw data output hidden for readability)';
+
+    return `${cleaned || (isHebrew ? 'הוסתר פלט נתונים גולמי ארוך.' : 'Long raw data output hidden.')}${suffix}`;
+  };
+
   const renderAssistantContent = (text: string) => {
     const parts: Array<{type: 'md' | 'code'; content: string; lang?: string}> = [];
     const re = /```([a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g;
@@ -359,7 +384,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                   }}
                   renderMessageText={messageProps => {
                     const raw = messageProps.currentMessage?.text ?? '';
-                    const visibleText = stripEvidenceTags(raw);
+                    const visibleText = sanitizeVisibleChatText(stripEvidenceTags(raw));
                     if (isAssistant) {
                       return renderAssistantContent(visibleText);
                     }
@@ -374,7 +399,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
                       return null;
                     }
                     const raw = messageProps.currentMessage?.text ?? '';
-                    const visibleText = stripEvidenceTags(raw);
+                    const visibleText = sanitizeVisibleChatText(stripEvidenceTags(raw));
                     const evidenceLinks = extractEvidenceLinks(raw);
                     return (
                       <View style={{marginTop: 6}}>
