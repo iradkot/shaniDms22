@@ -377,7 +377,7 @@ const LoopAdjustmentAssistScreen: React.FC<any> = ({route}) => {
       }
 
       const provider = createLlmProvider(aiSettings);
-      const model = (aiSettings.openAiModel ?? 'gpt-5.4').trim() || 'gpt-5.4';
+      const model = (aiSettings.openAiModel ?? 'gpt-5.5').trim() || 'gpt-5.5';
 
       const analysisInstruction = [
         'Create a comprehensive clinical reasoning memo from the payload.',

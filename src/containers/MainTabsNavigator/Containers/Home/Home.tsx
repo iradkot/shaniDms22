@@ -766,7 +766,7 @@ const Home: React.FC = () => {
         notes: ['prefers concise practical recommendations', 'prefers context-aware guidance over generic bolus focus'],
       });
 
-      const model = (aiSettings.openAiModel ?? 'gpt-5.4').trim() || 'gpt-5.4';
+      const model = (aiSettings.openAiModel ?? 'gpt-5.5').trim() || 'gpt-5.5';
       const provider = createLlmProvider({
         provider: aiSettings.provider,
         apiKey,

@@ -799,7 +799,7 @@ async function maybeGenerateLlmSections(params: {
 
   if (!ai?.enabled || !apiKey) return fallback;
 
-  const model = (ai?.model ?? 'gpt-5.4').trim() || 'gpt-5.4';
+  const model = (ai?.model ?? 'gpt-5.5').trim() || 'gpt-5.5';
   const provider = createLlmProvider({
     provider: 'openai',
     apiKey,

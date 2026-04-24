@@ -21,7 +21,7 @@ type AiSettingsContextValue = {
 
 const STORAGE_KEY = 'ai.settings.v1';
 
-const LATEST_OPENAI_MODEL = 'gpt-5.4';
+const LATEST_OPENAI_MODEL = 'gpt-5.5';
 
 const DEFAULT_SETTINGS: AiSettings = {
   enabled: true,
