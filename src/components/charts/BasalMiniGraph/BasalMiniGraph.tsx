@@ -5,15 +5,17 @@ import styled, {useTheme} from 'styled-components/native';
 import * as d3 from 'd3';
 
 import {BgSample} from 'app/types/day_bgs.types';
-import {InsulinDataEntry} from 'app/types/insulin.types';
+import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+import {buildBasalDeliveryTimeline} from 'app/utils/insulin.utils/basalDeliveryTimeline';
 
 type Props = {
   width: number;
   height: number;
   bgSamples: BgSample[];
   insulinData?: InsulinDataEntry[];
+  basalProfileData?: BasalProfile;
   xDomain?: [Date, Date] | null;
   cursorTimeMs?: number | null;
   margin?: {top: number; right: number; bottom: number; left: number};
@@ -30,6 +32,7 @@ const BasalMiniGraph: React.FC<Props> = ({
   height,
   bgSamples,
   insulinData,
+  basalProfileData,
   xDomain,
   cursorTimeMs,
   margin: marginOverride,
@@ -64,60 +67,23 @@ const BasalMiniGraph: React.FC<Props> = ({
     [graphWidth, xDomainResolved],
   );
 
-  const tempBasalSegments = useMemo(() => {
-    type Segment = {startMs: number; endMs: number; rate: number};
-
-    const entries = (insulinData ?? [])
-      .filter(e => e.type === 'tempBasal')
-      .map(e => {
-        const startMs =
-          (e.startTime ? Date.parse(e.startTime) : NaN) ||
-          (e.timestamp ? Date.parse(e.timestamp) : NaN);
-        const endMsRaw = e.endTime ? Date.parse(e.endTime) : NaN;
-        const endMsFromDuration =
-          Number.isFinite(startMs) && typeof e.duration === 'number' && Number.isFinite(e.duration)
-            ? startMs + e.duration * 60_000
-            : NaN;
-        const endMs = Number.isFinite(endMsRaw) ? endMsRaw : endMsFromDuration;
-        const rate = typeof e.rate === 'number' && Number.isFinite(e.rate) ? e.rate : 0;
-        return {
-          startMs,
-          endMs,
-          rate: Math.max(0, rate),
-        };
-      })
-      .filter(e => Number.isFinite(e.startMs))
-      .sort((a, b) => a.startMs - b.startMs);
-
-    if (!entries.length) return [] as Segment[];
-
+  const basalSegments = useMemo(() => {
     const [domainStart, domainEnd] = xDomainResolved;
-    const domainStartMs = domainStart.getTime();
-    const domainEndMs = domainEnd.getTime();
-
-    // Fill missing end times with next segment start, or chart end.
-    const out: Segment[] = [];
-    for (let i = 0; i < entries.length; i++) {
-      const current = entries[i];
-      const next = entries[i + 1];
-      const fallbackEnd = next?.startMs ?? domainEndMs;
-      const resolvedEnd = Number.isFinite(current.endMs) ? current.endMs : fallbackEnd;
-
-      const startMs = Math.max(domainStartMs, current.startMs);
-      const endMs = Math.min(domainEndMs, resolvedEnd);
-      if (!(endMs > startMs)) continue;
-      out.push({startMs, endMs, rate: current.rate});
-    }
-    return out;
-  }, [insulinData, xDomainResolved]);
+    return buildBasalDeliveryTimeline({
+      basalProfile: basalProfileData ?? [],
+      insulinData,
+      startDate: domainStart,
+      endDate: domainEnd,
+    });
+  }, [basalProfileData, insulinData, xDomainResolved]);
 
   const maxRate = useMemo(() => {
     let max = 0;
-    for (const seg of tempBasalSegments) {
+    for (const seg of basalSegments) {
       if (seg.rate > max) max = seg.rate;
     }
     return Math.max(0.5, max * 1.1);
-  }, [tempBasalSegments]);
+  }, [basalSegments]);
 
   const yScaleBasal = useMemo(
     () => d3.scaleLinear().domain([0, maxRate]).range([graphHeight, 0]),
@@ -198,8 +164,8 @@ const BasalMiniGraph: React.FC<Props> = ({
             );
           })}
 
-          {/* Temp basal segments */}
-          {tempBasalSegments.map(seg => {
+          {/* Effective basal delivery: scheduled profile with temporary overrides. */}
+          {basalSegments.map(seg => {
             const x1 = xScale(new Date(seg.startMs));
             const x2 = xScale(new Date(seg.endMs));
             const w = Math.max(1, x2 - x1);
@@ -213,7 +179,7 @@ const BasalMiniGraph: React.FC<Props> = ({
                 height={Math.max(1, graphHeight - yTop)}
                 rx={2}
                 fill={theme.colors.insulinSecondary}
-                opacity={0.3}
+                opacity={seg.source === 'scheduled' ? 0.2 : 0.42}
               />
             );
           })}

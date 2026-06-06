@@ -15,9 +15,10 @@ import styled, {useTheme} from 'styled-components/native';
 import * as d3 from 'd3';
 
 import type {BgSample} from 'app/types/day_bgs.types';
-import type {InsulinDataEntry} from 'app/types/insulin.types';
+import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import type {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+import {buildBasalDeliveryTimeline} from 'app/utils/insulin.utils/basalDeliveryTimeline';
 
 // ── Props ───────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ type Props = {
   height: number;
   bgSamples: BgSample[];
   insulinData?: InsulinDataEntry[];
+  basalProfileData?: BasalProfile;
   xDomain?: [Date, Date] | null;
   cursorTimeMs?: number | null;
   margin?: {top: number; right: number; bottom: number; left: number};
@@ -46,6 +48,7 @@ const MixedMiniChart: React.FC<Props> = ({
   height,
   bgSamples,
   insulinData,
+  basalProfileData,
   xDomain,
   cursorTimeMs,
   margin: marginOverride,
@@ -78,45 +81,14 @@ const MixedMiniChart: React.FC<Props> = ({
   // ── Basal segments ──────────────────────────────────────────────────
 
   const basalSegments = useMemo(() => {
-    type Segment = {startMs: number; endMs: number; rate: number};
-    const entries = (insulinData ?? [])
-      .filter(e => e.type === 'tempBasal')
-      .map(e => {
-        const startMs =
-          (e.startTime ? Date.parse(e.startTime) : NaN) ||
-          (e.timestamp ? Date.parse(e.timestamp) : NaN);
-        const endMsRaw = e.endTime ? Date.parse(e.endTime) : NaN;
-        const endMsFromDuration =
-          Number.isFinite(startMs) && typeof e.duration === 'number' && Number.isFinite(e.duration)
-            ? startMs + e.duration * 60_000
-            : NaN;
-        const endMs = Number.isFinite(endMsRaw) ? endMsRaw : endMsFromDuration;
-        const rate = typeof e.rate === 'number' && Number.isFinite(e.rate) ? e.rate : 0;
-        return {startMs, endMs, rate: Math.max(0, rate)};
-      })
-      .filter(e => Number.isFinite(e.startMs))
-      .sort((a, b) => a.startMs - b.startMs);
-
-    if (!entries.length) return [] as Segment[];
-
     const [domainStart, domainEnd] = xDomainResolved;
-    const domainStartMs = domainStart.getTime();
-    const domainEndMs = domainEnd.getTime();
-
-    const out: Segment[] = [];
-    for (let i = 0; i < entries.length; i++) {
-      const current = entries[i];
-      const next = entries[i + 1];
-      const fallbackEnd = next?.startMs ?? domainEndMs;
-      const resolvedEnd = Number.isFinite(current.endMs) ? current.endMs : fallbackEnd;
-
-      const startMs = Math.max(domainStartMs, current.startMs);
-      const endMs = Math.min(domainEndMs, resolvedEnd);
-      if (!(endMs > startMs)) continue;
-      out.push({startMs, endMs, rate: current.rate});
-    }
-    return out;
-  }, [insulinData, xDomainResolved]);
+    return buildBasalDeliveryTimeline({
+      basalProfile: basalProfileData ?? [],
+      insulinData,
+      startDate: domainStart,
+      endDate: domainEnd,
+    });
+  }, [basalProfileData, insulinData, xDomainResolved]);
 
   const maxBasalRate = useMemo(() => {
     let max = 0;
@@ -351,7 +323,10 @@ const MixedMiniChart: React.FC<Props> = ({
                 y={graphHeight - barHeight}
                 width={Math.max(1, x2 - x1)}
                 height={barHeight}
-                fill={addOpacity(basalColor, 0.2)}
+                fill={addOpacity(
+                  basalColor,
+                  seg.source === 'scheduled' ? 0.2 : 0.35,
+                )}
               />
             );
           })}

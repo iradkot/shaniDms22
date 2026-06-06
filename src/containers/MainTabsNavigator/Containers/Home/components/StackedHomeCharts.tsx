@@ -422,6 +422,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
           <MixedMiniChart
             bgSamples={bgSamples}
             insulinData={insulinData}
+            basalProfileData={basalProfileData}
             width={width}
             height={miniChartHeight * 2.5}
             xDomain={xDomain}
@@ -438,6 +439,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
             <BasalMiniGraph
               bgSamples={bgSamples}
               insulinData={insulinData}
+              basalProfileData={basalProfileData}
               width={width}
               height={miniChartHeight}
               xDomain={xDomain}
