@@ -114,15 +114,23 @@ const MixedMiniChart: React.FC<Props> = ({
   }, [bgSamples, xDomainResolved]);
   const iobPoints = loadSeries.iobPoints;
 
-  const maxIob = useMemo(() => {
+  const iobDomain = useMemo(() => {
+    let min = 0;
     let max = 0;
-    for (const p of iobPoints) if (p.y > max) max = p.y;
-    return Math.max(0.1, max * 1.1);
+    for (const p of iobPoints) {
+      if (p.y < min) min = p.y;
+      if (p.y > max) max = p.y;
+    }
+    const padding = Math.max(0.1, (max - min) * 0.1);
+    return [
+      min < 0 ? min - padding : 0,
+      max > 0 ? max + padding : 0.1,
+    ] as [number, number];
   }, [iobPoints]);
 
   const yScaleIob = useMemo(
-    () => d3.scaleLinear().domain([0, maxIob]).range([graphHeight, 0]),
-    [graphHeight, maxIob],
+    () => d3.scaleLinear().domain(iobDomain).range([graphHeight, 0]),
+    [graphHeight, iobDomain],
   );
 
   const iobAreaPath = useMemo(() => {
@@ -130,11 +138,11 @@ const MixedMiniChart: React.FC<Props> = ({
     const area = d3
       .area<{x: number; y: number}>()
       .x(d => xScale(new Date(d.x)))
-      .y0(graphHeight)
+      .y0(yScaleIob(0))
       .y1(d => yScaleIob(d.y))
       .curve(d3.curveMonotoneX);
     return area(iobPoints) || null;
-  }, [iobPoints, xScale, yScaleIob, graphHeight]);
+  }, [iobPoints, xScale, yScaleIob]);
 
   const iobLinePath = useMemo(() => {
     if (!iobPoints.length) return null;

@@ -81,6 +81,32 @@ describe('basal delivery timeline', () => {
     expect(sumBasalDelivery(segments)).toBeCloseTo(2.75, 6);
   });
 
+  it('uses a zero-duration temp basal event to cancel the previous override', () => {
+    const insulinData: InsulinDataEntry[] = [
+      {
+        type: 'tempBasal',
+        rate: 2,
+        duration: 120,
+        timestamp: localDate(1, 10).toISOString(),
+      },
+      {
+        type: 'tempBasal',
+        rate: 0,
+        duration: 0,
+        timestamp: localDate(1, 11).toISOString(),
+      },
+    ];
+
+    const segments = buildBasalDeliveryTimeline({
+      basalProfile: profile,
+      insulinData,
+      startDate: localDate(1, 10),
+      endDate: localDate(1, 12),
+    });
+
+    expect(sumBasalDelivery(segments)).toBeCloseTo(3, 6);
+  });
+
   it('clips overrides and boluses to the requested range', () => {
     const insulinData: InsulinDataEntry[] = [
       {
@@ -102,5 +128,23 @@ describe('basal delivery timeline', () => {
 
     expect(totals.totalBasal).toBeCloseTo(3, 6);
     expect(totals.totalBolus).toBe(2);
+  });
+
+  it('excludes invalid, non-positive, and undated boluses from totals', () => {
+    const insulinData: InsulinDataEntry[] = [
+      {type: 'bolus', amount: 2},
+      {type: 'bolus', amount: -1, timestamp: localDate(1, 10).toISOString()},
+      {type: 'bolus', amount: Number.NaN, timestamp: localDate(1, 10).toISOString()},
+      {type: 'bolus', amount: 1.5, timestamp: localDate(1, 10).toISOString()},
+    ];
+
+    const totals = calculateTotalInsulin(
+      insulinData,
+      [],
+      localDate(1, 9),
+      localDate(1, 11),
+    );
+
+    expect(totals.totalBolus).toBe(1.5);
   });
 });

@@ -6,11 +6,16 @@ const MAX_MATCH_DISTANCE_MS = 10 * 60 * 1000;
 
 const SORT_ORDER_CHECK_COUNT = 2;
 
-function clampNonNegative(value: unknown): number | undefined {
+function finiteNumber(value: unknown): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return undefined;
   }
-  return Math.max(0, value);
+  return value;
+}
+
+function clampNonNegative(value: unknown): number | undefined {
+  const finite = finiteNumber(value);
+  return finite == null ? undefined : Math.max(0, finite);
 }
 
 /**
@@ -54,7 +59,7 @@ export function getDeviceStatusTimestampMs(
 /**
  * Extracts load values (IOB/COB) from a deviceStatus entry.
  *
- * - Clamps negative values to 0
+ * - Preserves signed IOB values; negative basal IOB is meaningful
  * - Supports Loop payloads under `loop`, OpenAPS under `openaps`, and top-level fallbacks
  */
 export function extractLoad(entry: DeviceStatusEntry): {
@@ -65,17 +70,17 @@ export function extractLoad(entry: DeviceStatusEntry): {
 } {
   // Total IOB
   const iob =
-    clampNonNegative(entry.loop?.iob?.iob) ??
-    clampNonNegative(entry.openaps?.iob?.iob) ??
-    clampNonNegative(entry.iob);
+    finiteNumber(entry.loop?.iob?.iob) ??
+    finiteNumber(entry.openaps?.iob?.iob) ??
+    finiteNumber(entry.iob);
 
   // Split IOB (if provided by source)
   const iobBolus =
-    clampNonNegative(entry.loop?.iob?.bolusIob) ??
-    clampNonNegative(entry.openaps?.iob?.bolusiob);
+    finiteNumber(entry.loop?.iob?.bolusIob) ??
+    finiteNumber(entry.openaps?.iob?.bolusiob);
   const iobBasal =
-    clampNonNegative(entry.loop?.iob?.basalIob) ??
-    clampNonNegative(entry.openaps?.iob?.basaliob);
+    finiteNumber(entry.loop?.iob?.basalIob) ??
+    finiteNumber(entry.openaps?.iob?.basaliob);
 
   // COB
   const cob =
@@ -96,7 +101,7 @@ export function extractLoad(entry: DeviceStatusEntry): {
     (typeof iobBasal === 'number' ? iobBasal : 0);
 
   return {
-    iob: typeof iob === 'number' ? iob : total > 0 ? total : undefined,
+    iob: typeof iob === 'number' ? iob : total !== 0 ? total : undefined,
     iobBolus,
     iobBasal,
     cob,

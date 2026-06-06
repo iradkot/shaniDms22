@@ -12,7 +12,7 @@ export interface BgSample {
 
   /**
    * Optional load context (from Loop/OpenAPS device status).
-   * Values are clamped to >= 0 when visualized.
+   * IOB may be negative when basal delivery is below the scheduled profile.
    */
   iob?: number;
   iobBolus?: number;

@@ -3,12 +3,13 @@ import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
 import {
   InsulinDataEntry,
   ProfileDataType,
-  TempBasalInsulinDataEntry
-} from "app/types/insulin.types";
+  TempBasalInsulinDataEntry,
+} from 'app/types/insulin.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {BgSample} from 'app/types/day_bgs.types';
 import {bgSortFunction} from 'app/utils/bg.utils';
 import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
+import {mapNightscoutTreatmentsToInsulinDataEntries} from 'app/utils/nightscoutTreatments.utils';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const DEFAULT_BG_COUNT = 1000;
@@ -305,11 +306,13 @@ export const fetchBgDataForDate = async (date: Date): Promise<BgSample[]> => {
 
 export const getInsulinData = async (
   date: Date,
-): Promise<TempBasalInsulinDataEntry[]> => {
+): Promise<InsulinDataEntry[]> => {
   const {formattedStartDate, formattedEndDate} =
     getFormattedStartEndOfDay(date);
-  const maxCount = 1000;
-  return `/api/v1/treatments?find[created_at][$gte]=${formattedStartDate}&find[created_at][$lte]=${formattedEndDate}&count=${maxCount}`;
+  const response = await nightscoutInstance.get<any[]>(
+    `/api/v1/treatments?find[created_at][$gte]=${formattedStartDate}&find[created_at][$lte]=${formattedEndDate}&count=${DEFAULT_TREATMENTS_COUNT}`,
+  );
+  return mapNightscoutTreatmentsToInsulinDataEntries(response.data);
 };
 
 export const getInsulinDataFromNightscout = async (
@@ -366,35 +369,7 @@ export const fetchInsulinDataForDateRange = async (
 
   try {
     const response = await nightscoutInstance.get<any[]>(apiUrl);
-    const treatments = response.data;
-
-    const insulinData: InsulinDataEntry[] = treatments
-      .map(t => {
-        // Identify bolus events
-        if (
-          t.insulin && // Ensure there's an insulin amount
-          ['Bolus', 'Meal Bolus', 'Correction Bolus', 'Combo Bolus'].includes(t.eventType)
-        ) {
-          return {
-            type: 'bolus',
-            amount: t.insulin || t.amount || 0,
-            timestamp: t.created_at,
-          };
-        } else if (t.eventType === 'Temp Basal') {
-          return {
-            type: 'tempBasal',
-            rate: t.rate || 0,
-            duration: t.duration || 0, // Duration in minutes
-            timestamp: t.created_at,
-          };
-        } else {
-          return null; // Ignore other types
-        }
-      })
-      .filter(Boolean) as InsulinDataEntry[];
-
-
-    return insulinData;
+    return mapNightscoutTreatmentsToInsulinDataEntries(response.data);
   } catch (error) {
     console.error('Error fetching insulin data:', error);
     throw error;

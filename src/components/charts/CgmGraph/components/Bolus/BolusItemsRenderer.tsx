@@ -21,7 +21,14 @@ const BolusItemsRenderer: React.FC<Props> = ({insulinData, focusedBolusTimestamp
     }
 
     return insulinData
-      .filter(entry => entry.type === 'bolus' && !!entry.timestamp && typeof entry.amount === 'number')
+      .filter(
+        entry =>
+          entry.type === 'bolus' &&
+          !!entry.timestamp &&
+          typeof entry.amount === 'number' &&
+          Number.isFinite(entry.amount) &&
+          entry.amount > 0,
+      )
       .map(entry => ({
         id: `${entry.timestamp}-${entry.amount ?? 0}`,
         timestamp: new Date(entry.timestamp as string),

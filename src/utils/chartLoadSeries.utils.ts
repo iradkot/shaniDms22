@@ -16,6 +16,10 @@ function finiteNonNegative(value: unknown): number | null {
     : null;
 }
 
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 export function buildChartLoadSeries(
   bgSamples: BgSample[],
   xDomain: [Date, Date],
@@ -34,9 +38,9 @@ export function buildChartLoadSeries(
     const x = sample.date;
     if (!Number.isFinite(x) || x < startMs || x > endMs) continue;
 
-    const explicitTotal = finiteNonNegative(sample.iob);
-    const bolus = finiteNonNegative(sample.iobBolus);
-    const basal = finiteNonNegative(sample.iobBasal);
+    const explicitTotal = finiteNumber(sample.iob);
+    const bolus = finiteNumber(sample.iobBolus);
+    const basal = finiteNumber(sample.iobBasal);
     const splitTotal = bolus != null && basal != null ? bolus + basal : null;
     const total = explicitTotal ?? splitTotal;
 
@@ -44,10 +48,14 @@ export function buildChartLoadSeries(
       iobPoints.push({x, y: total});
     }
 
-    if (bolus != null && basal != null) {
+    if (
+      bolus != null &&
+      basal != null &&
+      (bolus + basal !== 0 || total == null || total === 0)
+    ) {
       const sourceTotal = bolus + basal;
       const displayTotal = total ?? sourceTotal;
-      const scale = sourceTotal > 0 ? displayTotal / sourceTotal : 1;
+      const scale = sourceTotal !== 0 ? displayTotal / sourceTotal : 1;
       splitIobPoints.push({
         x,
         bolus: bolus * scale,

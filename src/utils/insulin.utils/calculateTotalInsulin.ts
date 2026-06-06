@@ -24,13 +24,20 @@ export const calculateTotalInsulin = (
   const totalBolusInsulin = insulinData.reduce((total, entry) => {
     if (entry.type !== 'bolus') return total;
     const timestampMs = entry.timestamp ? Date.parse(entry.timestamp) : NaN;
+    const amount =
+      typeof entry.amount === 'number' && Number.isFinite(entry.amount)
+        ? entry.amount
+        : NaN;
     if (
-      Number.isFinite(timestampMs) &&
-      (timestampMs < startMs || timestampMs >= endMs)
+      !Number.isFinite(timestampMs) ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      timestampMs < startMs ||
+      timestampMs >= endMs
     ) {
       return total;
     }
-    return total + (entry.amount ?? 0);
+    return total + amount;
   }, 0);
 
   return {totalBasal, totalBolus: totalBolusInsulin};

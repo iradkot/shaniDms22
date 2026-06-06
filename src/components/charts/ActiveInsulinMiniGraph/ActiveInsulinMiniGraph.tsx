@@ -87,17 +87,23 @@ const ActiveInsulinMiniGraph: React.FC<Props> = ({
     return findNearestLoadPoint(iobPoints, cursorTimeMs);
   }, [cursorTimeMs, iobPoints]);
 
-  const yMax = useMemo(() => {
+  const yDomain = useMemo(() => {
+    let min = 0;
     let max = 0;
     for (const p of iobPoints) {
+      if (p.y < min) min = p.y;
       if (p.y > max) max = p.y;
     }
-    return Math.max(1, max * 1.1);
+    const padding = Math.max(0.1, (max - min) * 0.1);
+    return [
+      min < 0 ? min - padding : 0,
+      max > 0 ? max + padding : 1,
+    ] as [number, number];
   }, [iobPoints]);
 
   const yScale = useMemo(
-    () => d3.scaleLinear().domain([0, yMax]).range([graphHeight, 0]),
-    [graphHeight, yMax],
+    () => d3.scaleLinear().domain(yDomain).range([graphHeight, 0]),
+    [graphHeight, yDomain],
   );
 
   const iobPath = useMemo(() => {
@@ -192,7 +198,7 @@ const ActiveInsulinMiniGraph: React.FC<Props> = ({
 
           {gridTicks.map((t, idx) => {
             const y = graphHeight * t;
-            const v = yMax * (1 - t);
+            const v = yDomain[1] - (yDomain[1] - yDomain[0]) * t;
             return (
               <Text
                 key={`yL-${idx}`}
