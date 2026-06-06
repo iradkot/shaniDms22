@@ -6,6 +6,10 @@ import * as d3 from 'd3';
 
 import {BgSample} from 'app/types/day_bgs.types';
 import {ThemeType} from 'app/types/theme';
+import {
+  buildChartLoadSeries,
+  findNearestLoadPoint,
+} from 'app/utils/chartLoadSeries.utils';
 
 type Props = {
   width: number;
@@ -61,20 +65,7 @@ const CobMiniGraph: React.FC<Props> = ({
   );
 
   const cobPoints = useMemo(() => {
-    const points: Array<{x: number; y: number}> = [];
-    for (const s of bgSamples ?? []) {
-      const ts = typeof s.date === 'number' ? s.date : Date.parse(String(s.date));
-      if (!Number.isFinite(ts)) continue;
-      if (typeof s.cob !== 'number' || !Number.isFinite(s.cob)) continue;
-      points.push({x: ts, y: Math.max(0, s.cob)});
-    }
-
-    points.sort((a, b) => a.x - b.x);
-
-    const [domainStart, domainEnd] = xDomainResolved;
-    const startMs = domainStart.getTime();
-    const endMs = domainEnd.getTime();
-    return points.filter(p => p.x >= startMs && p.x <= endMs);
+    return buildChartLoadSeries(bgSamples, xDomainResolved).cobPoints;
   }, [bgSamples, xDomainResolved]);
 
   const yMax = useMemo(() => {
@@ -102,20 +93,7 @@ const CobMiniGraph: React.FC<Props> = ({
   }, [cobPoints, xScale, yScale]);
 
   const cursorValue = useMemo(() => {
-    if (!cobPoints.length) return null;
-    if (cursorTimeMs == null) return cobPoints[cobPoints.length - 1];
-
-    // Nearest point (fast enough for our small series).
-    let best = cobPoints[0];
-    let bestDist = Math.abs(best.x - cursorTimeMs);
-    for (const p of cobPoints) {
-      const d = Math.abs(p.x - cursorTimeMs);
-      if (d < bestDist) {
-        best = p;
-        bestDist = d;
-      }
-    }
-    return best;
+    return findNearestLoadPoint(cobPoints, cursorTimeMs);
   }, [cobPoints, cursorTimeMs]);
 
   const latestPoint = useMemo(() => {

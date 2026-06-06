@@ -121,14 +121,18 @@ export function useStackedChartsTooltipModel(input: StackedChartsTooltipInput): 
       const touchTimeMs = chartsTooltip.touchTimeMs;
 
       const closestBolus = insulinData?.length ? findClosestBolus(touchTimeMs, insulinData) : null;
-      if (closestBolus?.timestamp) {
-        const t = Date.parse(closestBolus.timestamp);
-        if (Number.isFinite(t)) return t;
-      }
-
       const closestCarb = foodItems?.length ? findClosestCarbEvent(touchTimeMs, foodItems) : null;
-      if (closestCarb?.timestamp != null) {
-        return closestCarb.timestamp;
+      const bolusTimeMs = closestBolus?.timestamp
+        ? Date.parse(closestBolus.timestamp)
+        : NaN;
+      const carbTimeMs = closestCarb?.timestamp ?? NaN;
+      const candidates = [bolusTimeMs, carbTimeMs].filter(Number.isFinite);
+      if (candidates.length) {
+        return candidates.reduce((closest, candidate) =>
+          Math.abs(candidate - touchTimeMs) < Math.abs(closest - touchTimeMs)
+            ? candidate
+            : closest,
+        );
       }
 
       return touchTimeMs;

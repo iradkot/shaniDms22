@@ -334,11 +334,11 @@ export const getInsulinDataFromNightscout = async (
 export const getUserProfileFromNightscout = async (
   date: string,
 ): Promise<ProfileDataType> => {
-  // Date conversion if needed
-  const formattedDate = date.split('T')[0]; // Assuming you need just the date part in YYYY-MM-DD format
-
-  // Constructing the API URL with the formatted date
-  const apiUrl = `/api/v1/profiles?find[startDate][$lt]=${formattedDate}T23:59:59.999Z&find[startDate][$gt]=${formattedDate}T00:00:00.000Z&sort[startDate]=-1&count=10`;
+  const asOfMs = Date.parse(date);
+  const asOfIso = Number.isFinite(asOfMs)
+    ? new Date(asOfMs).toISOString()
+    : new Date().toISOString();
+  const apiUrl = `/api/v1/profiles?find[startDate][$lte]=${asOfIso}&sort[startDate]=-1&count=1`;
   console.log(`Fetching basal profile data from Nightscout: ${apiUrl}`);
 
   try {

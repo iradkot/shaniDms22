@@ -19,6 +19,10 @@ import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import type {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {buildBasalDeliveryTimeline} from 'app/utils/insulin.utils/basalDeliveryTimeline';
+import {
+  buildChartLoadSeries,
+  findNearestLoadPoint,
+} from 'app/utils/chartLoadSeries.utils';
 
 // ── Props ───────────────────────────────────────────────────────────────
 
@@ -105,25 +109,10 @@ const MixedMiniChart: React.FC<Props> = ({
 
   // ── Active insulin (IOB) series ─────────────────────────────────────
 
-  const iobPoints = useMemo(() => {
-    const pts: Array<{x: number; y: number}> = [];
-    for (const s of bgSamples ?? []) {
-      const ts = typeof s.date === 'number' ? s.date : Date.parse(String(s.date));
-      if (!Number.isFinite(ts)) continue;
-      let iob: number | null = null;
-      if (typeof s.iob === 'number') {
-        iob = s.iob;
-      } else if (typeof s.iobBolus === 'number' || typeof s.iobBasal === 'number') {
-        iob = ((s.iobBolus as number) || 0) + ((s.iobBasal as number) || 0);
-      }
-      if (iob != null && Number.isFinite(iob)) {
-        pts.push({x: ts, y: Math.max(0, iob)});
-      }
-    }
-    pts.sort((a, b) => a.x - b.x);
-    const [s, e] = xDomainResolved;
-    return pts.filter(p => p.x >= s.getTime() && p.x <= e.getTime());
+  const loadSeries = useMemo(() => {
+    return buildChartLoadSeries(bgSamples, xDomainResolved);
   }, [bgSamples, xDomainResolved]);
+  const iobPoints = loadSeries.iobPoints;
 
   const maxIob = useMemo(() => {
     let max = 0;
@@ -159,18 +148,7 @@ const MixedMiniChart: React.FC<Props> = ({
 
   // ── COB series ──────────────────────────────────────────────────────
 
-  const cobPoints = useMemo(() => {
-    const pts: Array<{x: number; y: number}> = [];
-    for (const s of bgSamples ?? []) {
-      const ts = typeof s.date === 'number' ? s.date : Date.parse(String(s.date));
-      if (!Number.isFinite(ts)) continue;
-      if (typeof s.cob !== 'number' || !Number.isFinite(s.cob)) continue;
-      pts.push({x: ts, y: Math.max(0, s.cob)});
-    }
-    pts.sort((a, b) => a.x - b.x);
-    const [s, e] = xDomainResolved;
-    return pts.filter(p => p.x >= s.getTime() && p.x <= e.getTime());
-  }, [bgSamples, xDomainResolved]);
+  const cobPoints = loadSeries.cobPoints;
 
   const maxCob = useMemo(() => {
     let max = 0;
@@ -213,26 +191,8 @@ const MixedMiniChart: React.FC<Props> = ({
     return xScale(new Date(cursorTimeMs));
   }, [cursorTimeMs, xDomainResolved, xScale]);
 
-  const findNearest = (
-    points: Array<{x: number; y: number}>,
-    targetMs: number | null | undefined,
-  ) => {
-    if (!points.length) return null;
-    if (targetMs == null) return points[points.length - 1];
-    let best = points[0];
-    let bestDist = Math.abs(best.x - targetMs);
-    for (const p of points) {
-      const d = Math.abs(p.x - targetMs);
-      if (d < bestDist) {
-        best = p;
-        bestDist = d;
-      }
-    }
-    return best;
-  };
-
-  const iobCursor = findNearest(iobPoints, cursorTimeMs);
-  const cobCursor = findNearest(cobPoints, cursorTimeMs);
+  const iobCursor = findNearestLoadPoint(iobPoints, cursorTimeMs);
+  const cobCursor = findNearestLoadPoint(cobPoints, cursorTimeMs);
 
   // Basal cursor value
   const basalCursorRate = useMemo(() => {

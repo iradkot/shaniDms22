@@ -7,6 +7,10 @@ import * as d3 from 'd3';
 import {BgSample} from 'app/types/day_bgs.types';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+import {
+  buildChartLoadSeries,
+  findNearestLoadPoint,
+} from 'app/utils/chartLoadSeries.utils';
 
 type Props = {
   width: number;
@@ -61,48 +65,10 @@ const ActiveInsulinMiniGraph: React.FC<Props> = ({
   );
 
   const iobSeries = useMemo(() => {
-    const total: Array<{x: number; y: number}> = [];
-    const split: Array<{x: number; bolus: number; basal: number; total: number}> = [];
-
-    for (const s of bgSamples ?? []) {
-      const ts = typeof s.date === 'number' ? s.date : Date.parse(String(s.date));
-      if (!Number.isFinite(ts)) continue;
-
-      const hasSplit =
-        typeof s.iobBolus === 'number' ||
-        typeof s.iobBasal === 'number';
-
-      // Total IOB (preferred when explicitly provided)
-      let totalRaw: number | null = null;
-      if (typeof s.iob === 'number') {
-        totalRaw = s.iob;
-      } else if (hasSplit) {
-        totalRaw = (typeof s.iobBolus === 'number' ? s.iobBolus : 0) +
-          (typeof s.iobBasal === 'number' ? s.iobBasal : 0);
-      }
-      if (totalRaw != null && Number.isFinite(totalRaw)) {
-        total.push({x: ts, y: Math.max(0, totalRaw)});
-      }
-
-      if (hasSplit) {
-        const bolus = typeof s.iobBolus === 'number' && Number.isFinite(s.iobBolus) ? Math.max(0, s.iobBolus) : 0;
-        const basal = typeof s.iobBasal === 'number' && Number.isFinite(s.iobBasal) ? Math.max(0, s.iobBasal) : 0;
-        const sum = bolus + basal;
-        if (Number.isFinite(sum)) {
-          split.push({x: ts, bolus, basal, total: sum});
-        }
-      }
-    }
-
-    total.sort((a, b) => a.x - b.x);
-    split.sort((a, b) => a.x - b.x);
-
-    const [domainStart, domainEnd] = xDomainResolved;
-    const startMs = domainStart.getTime();
-    const endMs = domainEnd.getTime();
+    const series = buildChartLoadSeries(bgSamples, xDomainResolved);
     return {
-      total: total.filter(p => p.x >= startMs && p.x <= endMs),
-      split: split.filter(p => p.x >= startMs && p.x <= endMs),
+      total: series.iobPoints,
+      split: series.splitIobPoints,
     };
   }, [bgSamples, xDomainResolved]);
 
@@ -117,20 +83,8 @@ const ActiveInsulinMiniGraph: React.FC<Props> = ({
   }, [iobPoints]);
 
   const cursorPoint = useMemo(() => {
-    if (!iobPoints.length) return null;
     if (cursorTimeMs == null) return null;
-
-    // Nearest point (fast enough for our small series).
-    let best = iobPoints[0];
-    let bestDist = Math.abs(best.x - cursorTimeMs);
-    for (const p of iobPoints) {
-      const d = Math.abs(p.x - cursorTimeMs);
-      if (d < bestDist) {
-        best = p;
-        bestDist = d;
-      }
-    }
-    return best;
+    return findNearestLoadPoint(iobPoints, cursorTimeMs);
   }, [cursorTimeMs, iobPoints]);
 
   const yMax = useMemo(() => {

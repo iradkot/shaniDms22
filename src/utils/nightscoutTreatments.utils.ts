@@ -2,6 +2,21 @@ import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {FoodItemDTO} from 'app/types/food.types';
 import {parseTagsFromNotes} from 'app/services/mealTagService';
 
+function insulinEntryStartMs(entry: InsulinDataEntry): number {
+  const raw = entry.startTime ?? entry.timestamp;
+  return raw ? Date.parse(raw) : NaN;
+}
+
+function insulinEntryEndMs(entry: InsulinDataEntry, startMs: number): number {
+  if (entry.endTime) {
+    const explicitEnd = Date.parse(entry.endTime);
+    if (Number.isFinite(explicitEnd)) return explicitEnd;
+  }
+  return typeof entry.duration === 'number' && Number.isFinite(entry.duration)
+    ? startMs + Math.max(0, entry.duration) * 60_000
+    : startMs;
+}
+
 export function mapNightscoutTreatmentsToInsulinDataEntries(
   treatments: any[] | null | undefined,
 ): InsulinDataEntry[] {
@@ -68,6 +83,36 @@ export function mapNightscoutTreatmentsToCarbFoodItems(
       } satisfies FoodItemDTO;
     })
     .filter(Boolean) as FoodItemDTO[];
+}
+
+export function filterInsulinDataToRange(
+  insulinData: InsulinDataEntry[],
+  startMs: number,
+  endMs: number,
+): InsulinDataEntry[] {
+  return insulinData.filter(entry => {
+    const entryStartMs = insulinEntryStartMs(entry);
+    if (!Number.isFinite(entryStartMs)) return false;
+    if (entry.type === 'bolus') {
+      return entryStartMs >= startMs && entryStartMs <= endMs;
+    }
+    const entryEndMs = insulinEntryEndMs(entry, entryStartMs);
+    return entryStartMs <= endMs && entryEndMs > startMs;
+  });
+}
+
+export function filterFoodItemsToRange(
+  foodItems: FoodItemDTO[],
+  startMs: number,
+  endMs: number,
+): FoodItemDTO[] {
+  return foodItems.filter(
+    item =>
+      typeof item.timestamp === 'number' &&
+      Number.isFinite(item.timestamp) &&
+      item.timestamp >= startMs &&
+      item.timestamp <= endMs,
+  );
 }
 
 export function extractBasalProfileFromNightscoutProfileData(

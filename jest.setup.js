@@ -101,12 +101,34 @@ jest.mock('d3', () => {
     return gen;
   };
 
+  const area = () => {
+    let xAccessor = d => d[0];
+    let y1Accessor = d => d[1];
+    const gen = points => {
+      if (!Array.isArray(points) || points.length === 0) return null;
+      const p0 = points[0];
+      return `M${toNumber(xAccessor(p0))} ${toNumber(y1Accessor(p0))}`;
+    };
+    gen.x = fn => {
+      xAccessor = fn;
+      return gen;
+    };
+    gen.y0 = () => gen;
+    gen.y1 = fn => {
+      y1Accessor = fn;
+      return gen;
+    };
+    gen.curve = () => gen;
+    return gen;
+  };
+
   return {
     interpolateRgb: () => () => '#000000',
     extent,
     scaleTime: makeScale,
     scaleLinear: makeScale,
     line,
+    area,
     curveMonotoneX: {},
   };
 });

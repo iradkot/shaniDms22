@@ -40,7 +40,10 @@ export function getLoadReferences(bgData: BgSample[]): {
   let maxCob = 0;
 
   for (const sample of bgData) {
-    const iob = clampNonNegative(sample.iob ?? 0);
+    const splitIob =
+      clampNonNegative(sample.iobBolus ?? 0) +
+      clampNonNegative(sample.iobBasal ?? 0);
+    const iob = clampNonNegative(sample.iob ?? splitIob);
     const cob = clampNonNegative(sample.cob ?? 0);
     if (iob > maxIob) maxIob = iob;
     if (cob > maxCob) maxCob = cob;

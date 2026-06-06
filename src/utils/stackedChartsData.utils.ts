@@ -10,9 +10,13 @@ import {
 import {mergeDeviceStatusIntoBgSamples} from 'app/utils/mergeDeviceStatusIntoBgSamples.utils';
 import {
   extractBasalProfileFromNightscoutProfileData,
+  filterFoodItemsToRange,
+  filterInsulinDataToRange,
   mapNightscoutTreatmentsToCarbFoodItems,
   mapNightscoutTreatmentsToInsulinDataEntries,
 } from 'app/utils/nightscoutTreatments.utils';
+
+const TREATMENT_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 export type StackedChartsData = {
   bgSamples: BgSample[];
@@ -184,11 +188,19 @@ export async function fetchStackedChartsDataForRange(params: {
   if (includeTreatments) {
     try {
       const treatments = await fetchTreatmentsForDateRangeUncached(
-        new Date(safeStartMs),
+        new Date(safeStartMs - TREATMENT_LOOKBACK_MS),
         new Date(safeEndMs),
       );
-      result.insulinData = mapNightscoutTreatmentsToInsulinDataEntries(treatments);
-      result.foodItems = mapNightscoutTreatmentsToCarbFoodItems(treatments);
+      result.insulinData = filterInsulinDataToRange(
+        mapNightscoutTreatmentsToInsulinDataEntries(treatments),
+        safeStartMs,
+        safeEndMs,
+      );
+      result.foodItems = filterFoodItemsToRange(
+        mapNightscoutTreatmentsToCarbFoodItems(treatments),
+        safeStartMs,
+        safeEndMs,
+      );
     } catch (e) {
       result.insulinData = [];
       result.foodItems = [];

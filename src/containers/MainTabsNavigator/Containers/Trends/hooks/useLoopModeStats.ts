@@ -154,7 +154,7 @@ export function computeLoopModeStats({
   start: Date;
   end: Date;
   bgData: BgSample[];
-  events: Array<{timestamp: number; mode: LoopMode}>;
+  events: Array<{timestamp: number; mode: LoopMode; basalMode?: BasalMode}>;
 }): LoopModeStats {
   const startMs = start.getTime();
   const endMs = end.getTime();
@@ -195,6 +195,14 @@ export function computeLoopModeStats({
   let openMinutes = 0;
   let closedMinutes = 0;
   let unknownMinutes = 0;
+  let currentBasalMode: BasalMode = 'unknown';
+  let basalCursor = startMs;
+  let tempBasalMinutes = 0;
+  let suspendedMinutes = 0;
+  let plannedBasalMinutes = 0;
+
+  const priorBasal = events.filter(e => e.timestamp <= startMs).slice(-1)[0];
+  if (priorBasal?.basalMode) currentBasalMode = priorBasal.basalMode;
 
   for (const e of events) {
     if (e.timestamp <= startMs || e.timestamp >= endMs) {
@@ -209,12 +217,30 @@ export function computeLoopModeStats({
 
     currentMode = e.mode;
     cursor = e.timestamp;
+
+    const basalDeltaMin = Math.max(
+      0,
+      Math.round((e.timestamp - basalCursor) / 60000),
+    );
+    if (currentBasalMode === 'temp') tempBasalMinutes += basalDeltaMin;
+    else if (currentBasalMode === 'suspended') suspendedMinutes += basalDeltaMin;
+    else if (currentBasalMode === 'planned') plannedBasalMinutes += basalDeltaMin;
+    currentBasalMode = e.basalMode ?? 'unknown';
+    basalCursor = e.timestamp;
   }
 
   const tailMin = Math.max(0, Math.round((endMs - cursor) / 60000));
   if (currentMode === 'open') openMinutes += tailMin;
   else if (currentMode === 'closed') closedMinutes += tailMin;
   else unknownMinutes += tailMin;
+
+  const basalTailMin = Math.max(
+    0,
+    Math.round((endMs - basalCursor) / 60000),
+  );
+  if (currentBasalMode === 'temp') tempBasalMinutes += basalTailMin;
+  else if (currentBasalMode === 'suspended') suspendedMinutes += basalTailMin;
+  else if (currentBasalMode === 'planned') plannedBasalMinutes += basalTailMin;
 
   const modeAt = (ts: number): LoopMode => {
     let m: LoopMode = 'unknown';
@@ -238,12 +264,12 @@ export function computeLoopModeStats({
     closedAvgBg: avg(closedSamples),
     openTirPct: tir(openSamples),
     closedTirPct: tir(closedSamples),
-    tempBasalMinutes: 0,
-    suspendedMinutes: 0,
-    plannedBasalMinutes: 0,
-    tempBasalPct: 0,
-    suspendedPct: 0,
-    plannedBasalPct: 0,
+    tempBasalMinutes,
+    suspendedMinutes,
+    plannedBasalMinutes,
+    tempBasalPct: (tempBasalMinutes / totalMinutes) * 100,
+    suspendedPct: (suspendedMinutes / totalMinutes) * 100,
+    plannedBasalPct: (plannedBasalMinutes / totalMinutes) * 100,
     diagnostics: {
       eventsFetched: events.length,
       eventsClassified: events.filter(e => e.mode !== 'unknown').length,

@@ -8,6 +8,8 @@ import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {FoodItemDTO} from 'app/types/food.types';
 import {
   extractBasalProfileFromNightscoutProfileData,
+  filterFoodItemsToRange,
+  filterInsulinDataToRange,
   mapNightscoutTreatmentsToCarbFoodItems,
   mapNightscoutTreatmentsToInsulinDataEntries,
 } from 'app/utils/nightscoutTreatments.utils';
@@ -27,14 +29,23 @@ export const useInsulinData = (date: Date) => {
       endOfDay.setHours(23, 59, 59, 999);
 
       const [treatments, profileData] = await Promise.all([
-        fetchTreatmentsForDateRangeUncached(startOfDay, endOfDay),
+        fetchTreatmentsForDateRangeUncached(
+          new Date(startOfDay.getTime() - 24 * 60 * 60 * 1000),
+          endOfDay,
+        ),
         getUserProfileFromNightscout(date.toISOString()),
       ]);
 
-      const nextInsulinData: InsulinDataEntry[] =
-        mapNightscoutTreatmentsToInsulinDataEntries(treatments);
-      const nextCarbTreatments: FoodItemDTO[] =
-        mapNightscoutTreatmentsToCarbFoodItems(treatments);
+      const nextInsulinData: InsulinDataEntry[] = filterInsulinDataToRange(
+        mapNightscoutTreatmentsToInsulinDataEntries(treatments),
+        startOfDay.getTime(),
+        endOfDay.getTime(),
+      );
+      const nextCarbTreatments: FoodItemDTO[] = filterFoodItemsToRange(
+        mapNightscoutTreatmentsToCarbFoodItems(treatments),
+        startOfDay.getTime(),
+        endOfDay.getTime(),
+      );
 
       setInsulinData(nextInsulinData);
       setCarbTreatments(nextCarbTreatments);
