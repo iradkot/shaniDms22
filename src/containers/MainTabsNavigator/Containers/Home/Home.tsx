@@ -143,6 +143,43 @@ const StatsToggleText = styled.Text<{theme: ThemeType}>`
   margin-left: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
 `;
 
+const RecommendationsToggleRow = styled.Pressable<{theme: ThemeType}>`
+  flex-direction: row;
+  align-items: center;
+  padding: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  margin-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
+  border-radius: ${(p: {theme: ThemeType}) => p.theme.borderRadius + 2}px;
+  border-width: 1px;
+  border-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.accentColor, 0.35)};
+  background-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.accentColor, 0.08)};
+`;
+
+const RecommendationsToggleTitle = styled.Text<{theme: ThemeType}>`
+  flex: 1;
+  font-size: 15px;
+  font-weight: 800;
+  color: ${(p: {theme: ThemeType}) => p.theme.textColor};
+  margin-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+`;
+
+const RecommendationsCountBadge = styled.View<{theme: ThemeType}>`
+  min-width: 26px;
+  height: 26px;
+  padding-horizontal: 7px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background-color: ${(p: {theme: ThemeType}) => p.theme.accentColor};
+  margin-right: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
+`;
+
+const RecommendationsCountText = styled.Text<{theme: ThemeType}>`
+  color: ${(p: {theme: ThemeType}) => p.theme.white};
+  font-size: 12px;
+  font-weight: 800;
+`;
+
 const DailySummaryAlert = styled.Pressable<{theme: ThemeType}>`
   margin-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
   margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
@@ -494,6 +531,7 @@ const Home: React.FC = () => {
   }, [isShowingToday, liveBgSample, liveSnapshot?.predictions]);
 
   const [showTodayRecommendation, setShowTodayRecommendation] = useState(true);
+  const [showRecommendations, setShowRecommendations] = useState(false);
   const [isRefreshingRecommendation, setIsRefreshingRecommendation] = useState(false);
   const [aiRecommendationBody, setAiRecommendationBody] = useState<string | null>(null);
   const [recommendationGeneratedAt, setRecommendationGeneratedAt] = useState<number>(Date.now());
@@ -855,6 +893,7 @@ const Home: React.FC = () => {
     aiSettings.enabled,
     aiSettings.openAiModel,
     aiSettings.personality,
+    aiSettings.provider,
     insulinData,
     isRefreshingRecommendation,
     isShowingToday,
@@ -969,6 +1008,13 @@ const Home: React.FC = () => {
     };
   }, [isShowingToday]);
 
+  const recommendationAlertCount = [
+    showDailySummaryAlert || !isShowingToday,
+    isShowingToday && Boolean(loopTrendSignal?.detected),
+    isShowingToday && Boolean(loopAssistStatus),
+    isShowingToday && Boolean(todayRecommendation),
+  ].filter(Boolean).length;
+
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
       <ScrollView
@@ -993,158 +1039,272 @@ const Home: React.FC = () => {
           onRefreshBgData={getUpdatedBgData}
         />
 
-        {showDailySummaryAlert ? (
-          <DailySummaryAlert
-            onPress={async () => {
-              if (pendingSummaryDate) {
-                await AsyncStorage.setItem(DAILY_SUMMARY_SEEN_KEY, pendingSummaryDate);
-              }
-              setShowDailySummaryAlert(false);
-              (navigation as any).navigate(DAILY_REVIEW_SCREEN);
-            }}
-          >
-            <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 15}}>{tr(language, 'home.yesterdaySummaryReadyTitle')}</Text>
-            <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.78)}}>{tr(language, 'home.yesterdaySummaryReadyBody')}</Text>
-            <Text style={{marginTop: 8, color: theme.accentColor, fontWeight: '700'}}>{tr(language, 'home.viewYesterdaySummary')}</Text>
-          </DailySummaryAlert>
-        ) : !isShowingToday ? (
-          <DailySummaryAlert onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
-            <Text style={{fontWeight: '700', color: theme.textColor, fontSize: 14}}>{tr(language, 'home.openDailySummary')}</Text>
-          </DailySummaryAlert>
+        {recommendationAlertCount > 0 ? (
+          <RecommendationsToggleRow
+            accessibilityRole="button"
+            accessibilityState={{expanded: showRecommendations}}
+            accessibilityLabel={`${tr(language, 'home.recommendationsAndAlerts')}: ${recommendationAlertCount}`}
+            onPress={() => setShowRecommendations(prev => !prev)}>
+            <Icon name="bell-outline" size={20} color={theme.accentColor} />
+            <RecommendationsToggleTitle>{tr(language, 'home.recommendationsAndAlerts')}</RecommendationsToggleTitle>
+            <RecommendationsCountBadge>
+              <RecommendationsCountText>{recommendationAlertCount}</RecommendationsCountText>
+            </RecommendationsCountBadge>
+            <Icon name={showRecommendations ? 'chevron-up' : 'chevron-down'} size={20} color={addOpacity(theme.textColor, 0.6)} />
+          </RecommendationsToggleRow>
         ) : null}
 
-        {isShowingToday && loopTrendSignal?.detected ? (
-          <DailySummaryAlert
-            onPress={() =>
-              (navigation as any).navigate(LOOP_ADJUSTMENT_ASSIST_SCREEN, {
-                trend: loopTrendSignal,
-                status: loopAssistStatus,
-                source: 'home-nudge',
-              })
-            }
-          >
-            <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 15}}>
-              {language === 'he' ? 'זיהינו מגמה עקבית שכדאי לחקור יחד' : 'We detected a stable pattern worth exploring together'}
-            </Text>
-            <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.78)}}>
-              {language === 'he' ? loopTrendSignal.summaryHe : loopTrendSignal.summaryEn}
-            </Text>
-            <Text style={{marginTop: 8, color: theme.accentColor, fontWeight: '700'}}>
-              {language === 'he' ? 'פתח סייע התאמת לופ' : 'Open Loop Tuning Assist'}
-            </Text>
-          </DailySummaryAlert>
-        ) : null}
-
-        {isShowingToday && loopAssistStatus ? (
-          <DailySummaryAlert
-            onPress={() =>
-              (navigation as any).navigate(LOOP_ADJUSTMENT_ASSIST_SCREEN, {
-                trend: loopTrendSignal,
-                status: loopAssistStatus,
-                source: 'home-status-center',
-              })
-            }
-          >
-            <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 15}}>
-              {language === 'he' ? 'מרכז סטטוס התאמת לופ' : 'Loop Tuning Status Center'}
-            </Text>
-            <Text style={{marginTop: 4, color: addOpacity(theme.textColor, 0.78)}}>
-              {loopAssistStatus.status === 'running'
-                ? (language === 'he' ? 'בהכנה: החישוב רץ ברקע. נעדכן כשההמלצה מוכנה.' : 'In progress: analysis is running in background. We will notify when ready.')
-                : loopAssistStatus.status === 'ready'
-                ? (language === 'he' ? 'מוכן: יש המלצה שמורה במכשיר, אפשר לפתוח עכשיו.' : 'Ready: a recommendation is saved on device and ready to view.')
-                : (language === 'he' ? 'נכשל: החישוב האחרון נכשל. אפשר לפתוח ולייצא לוג שגיאה.' : 'Failed: the last run failed. Open to export full error log.')}
-            </Text>
-            <Text style={{marginTop: 8, color: theme.accentColor, fontWeight: '700'}}>
-              {language === 'he' ? 'פתח מרכז סטטוס לופ' : 'Open Loop Status Center'}
-            </Text>
-          </DailySummaryAlert>
-        ) : null}
-
-        {isShowingToday && todayRecommendation ? (
-          <TodayRecommendationCard>
-            <TodayRecommendationHeader onPress={() => setShowTodayRecommendation(prev => !prev)}>
-              <Text style={{fontWeight: '800', color: theme.textColor, fontSize: 15}}>
-                {tr(language, 'home.todayRecommendationTitle')}
-              </Text>
-              <Icon
-                name={showTodayRecommendation ? 'chevron-up' : 'chevron-down'}
-                size={18}
-                color={addOpacity(theme.textColor, 0.6)}
-              />
-            </TodayRecommendationHeader>
-            {showTodayRecommendation ? (
-              <TodayRecommendationBody>
-                <Text style={{fontWeight: '700', color: theme.textColor}}>{todayRecommendation.title}</Text>
-
-                {aiRecommendationBody ? (
-                  <>
-                    <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.82)}}>
-                      {aiRecommendationBody}
-                    </Text>
-                    {todayRecommendation.details ? (
-                      <Text style={{marginTop: 8, color: addOpacity(theme.textColor, 0.68), fontSize: 12}}>
-                        {todayRecommendation.details}
-                      </Text>
-                    ) : null}
-                    <View style={{marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-                      <Text style={{fontSize: 12, color: addOpacity(theme.textColor, 0.62)}}>
-                        {tr(language, 'home.recommendationUpdatedAt', {time: recommendationTimeLabel})}
-                      </Text>
-                      <Pressable onPress={handleRefreshRecommendation} disabled={isRefreshingRecommendation}>
-                        <Text style={{fontSize: 12, fontWeight: '700', color: theme.accentColor}}>
-                          {isRefreshingRecommendation
-                            ? tr(language, 'home.recommendationRefreshing')
-                            : tr(language, 'home.recommendationRefresh')}
-                        </Text>
-                      </Pressable>
-                    </View>
-                    <Pressable
-                      style={{marginTop: 10}}
-                      onPress={() =>
-                        (navigation as any).navigate(AI_ANALYST_TAB_SCREEN, {
-                          homeRecommendationContext: recommendationContextPrompt,
-                        })
-                      }>
-                      <Text style={{fontSize: 13, fontWeight: '700', color: theme.accentColor}}>
-                        {tr(language, 'home.recommendationStartChat')}
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={{marginTop: 8}}
-                      onPress={() =>
-                        (navigation as any).navigate(AI_ANALYST_TAB_SCREEN, {
-                          homeRecommendationContext: mealRecommendationContextPrompt,
-                        })
-                      }>
-                      <Text style={{fontSize: 13, fontWeight: '700', color: theme.accentColor}}>
-                        {language === 'he' ? 'המלצה לארוחה' : 'Meal recommendation'}
-                      </Text>
-                    </Pressable>
-                  </>
-                ) : (
-                  <>
-                    <Text style={{marginTop: 6, color: addOpacity(theme.textColor, 0.72)}}>
-                      {hasLoadedSavedRecommendation
-                        ? tr(language, 'home.recommendationNotRequestedYet')
-                        : tr(language, 'home.recommendationLoading')}
-                    </Text>
-                    <Pressable
-                      style={{marginTop: 10}}
-                      onPress={handleRefreshRecommendation}
-                      disabled={isRefreshingRecommendation || !hasLoadedSavedRecommendation}>
-                      <Text style={{fontSize: 13, fontWeight: '700', color: theme.accentColor}}>
-                        {isRefreshingRecommendation
-                          ? tr(language, 'home.recommendationRefreshing')
-                          : tr(language, 'home.recommendationRequest')}
-                      </Text>
-                    </Pressable>
-                  </>
-                )}
-              </TodayRecommendationBody>
+        {showRecommendations && recommendationAlertCount > 0 ? (
+          <>
+            {showDailySummaryAlert ? (
+              <DailySummaryAlert
+                onPress={async () => {
+                  if (pendingSummaryDate) {
+                    await AsyncStorage.setItem(DAILY_SUMMARY_SEEN_KEY, pendingSummaryDate);
+                  }
+                  setShowDailySummaryAlert(false);
+                  (navigation as any).navigate(DAILY_REVIEW_SCREEN);
+                }}>
+                <Text
+                  style={{
+                    fontWeight: '800',
+                    color: theme.textColor,
+                    fontSize: 15,
+                  }}>
+                  {tr(language, 'home.yesterdaySummaryReadyTitle')}
+                </Text>
+                <Text
+                  style={{
+                    marginTop: 4,
+                    color: addOpacity(theme.textColor, 0.78),
+                  }}>
+                  {tr(language, 'home.yesterdaySummaryReadyBody')}
+                </Text>
+                <Text
+                  style={{
+                    marginTop: 8,
+                    color: theme.accentColor,
+                    fontWeight: '700',
+                  }}>
+                  {tr(language, 'home.viewYesterdaySummary')}
+                </Text>
+              </DailySummaryAlert>
+            ) : !isShowingToday ? (
+              <DailySummaryAlert onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
+                <Text
+                  style={{
+                    fontWeight: '700',
+                    color: theme.textColor,
+                    fontSize: 14,
+                  }}>
+                  {tr(language, 'home.openDailySummary')}
+                </Text>
+              </DailySummaryAlert>
             ) : null}
-          </TodayRecommendationCard>
+
+            {isShowingToday && loopTrendSignal?.detected ? (
+              <DailySummaryAlert
+                onPress={() =>
+                  (navigation as any).navigate(LOOP_ADJUSTMENT_ASSIST_SCREEN, {
+                    trend: loopTrendSignal,
+                    status: loopAssistStatus,
+                    source: 'home-nudge',
+                  })
+                }>
+                <Text
+                  style={{
+                    fontWeight: '800',
+                    color: theme.textColor,
+                    fontSize: 15,
+                  }}>
+                  {language === 'he' ? 'זיהינו מגמה עקבית שכדאי לחקור יחד' : 'We detected a stable pattern worth exploring together'}
+                </Text>
+                <Text
+                  style={{
+                    marginTop: 4,
+                    color: addOpacity(theme.textColor, 0.78),
+                  }}>
+                  {language === 'he' ? loopTrendSignal.summaryHe : loopTrendSignal.summaryEn}
+                </Text>
+                <Text
+                  style={{
+                    marginTop: 8,
+                    color: theme.accentColor,
+                    fontWeight: '700',
+                  }}>
+                  {language === 'he' ? 'פתח סייע התאמת לופ' : 'Open Loop Tuning Assist'}
+                </Text>
+              </DailySummaryAlert>
+            ) : null}
+
+            {isShowingToday && loopAssistStatus ? (
+              <DailySummaryAlert
+                onPress={() =>
+                  (navigation as any).navigate(LOOP_ADJUSTMENT_ASSIST_SCREEN, {
+                    trend: loopTrendSignal,
+                    status: loopAssistStatus,
+                    source: 'home-status-center',
+                  })
+                }>
+                <Text
+                  style={{
+                    fontWeight: '800',
+                    color: theme.textColor,
+                    fontSize: 15,
+                  }}>
+                  {language === 'he' ? 'מרכז סטטוס התאמת לופ' : 'Loop Tuning Status Center'}
+                </Text>
+                <Text
+                  style={{
+                    marginTop: 4,
+                    color: addOpacity(theme.textColor, 0.78),
+                  }}>
+                  {loopAssistStatus.status === 'running'
+                    ? language === 'he'
+                      ? 'בהכנה: החישוב רץ ברקע. נעדכן כשההמלצה מוכנה.'
+                      : 'In progress: analysis is running in background. We will notify when ready.'
+                    : loopAssistStatus.status === 'ready'
+                    ? language === 'he'
+                      ? 'מוכן: יש המלצה שמורה במכשיר, אפשר לפתוח עכשיו.'
+                      : 'Ready: a recommendation is saved on device and ready to view.'
+                    : language === 'he'
+                    ? 'נכשל: החישוב האחרון נכשל. אפשר לפתוח ולייצא לוג שגיאה.'
+                    : 'Failed: the last run failed. Open to export full error log.'}
+                </Text>
+                <Text
+                  style={{
+                    marginTop: 8,
+                    color: theme.accentColor,
+                    fontWeight: '700',
+                  }}>
+                  {language === 'he' ? 'פתח מרכז סטטוס לופ' : 'Open Loop Status Center'}
+                </Text>
+              </DailySummaryAlert>
+            ) : null}
+
+            {isShowingToday && todayRecommendation ? (
+              <TodayRecommendationCard>
+                <TodayRecommendationHeader onPress={() => setShowTodayRecommendation(prev => !prev)}>
+                  <Text
+                    style={{
+                      fontWeight: '800',
+                      color: theme.textColor,
+                      fontSize: 15,
+                    }}>
+                    {tr(language, 'home.todayRecommendationTitle')}
+                  </Text>
+                  <Icon name={showTodayRecommendation ? 'chevron-up' : 'chevron-down'} size={18} color={addOpacity(theme.textColor, 0.6)} />
+                </TodayRecommendationHeader>
+                {showTodayRecommendation ? (
+                  <TodayRecommendationBody>
+                    <Text style={{fontWeight: '700', color: theme.textColor}}>{todayRecommendation.title}</Text>
+
+                    {aiRecommendationBody ? (
+                      <>
+                        <Text
+                          style={{
+                            marginTop: 6,
+                            color: addOpacity(theme.textColor, 0.82),
+                          }}>
+                          {aiRecommendationBody}
+                        </Text>
+                        {todayRecommendation.details ? (
+                          <Text
+                            style={{
+                              marginTop: 8,
+                              color: addOpacity(theme.textColor, 0.68),
+                              fontSize: 12,
+                            }}>
+                            {todayRecommendation.details}
+                          </Text>
+                        ) : null}
+                        <View
+                          style={{
+                            marginTop: 10,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: addOpacity(theme.textColor, 0.62),
+                            }}>
+                            {tr(language, 'home.recommendationUpdatedAt', {
+                              time: recommendationTimeLabel,
+                            })}
+                          </Text>
+                          <Pressable onPress={handleRefreshRecommendation} disabled={isRefreshingRecommendation}>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: '700',
+                                color: theme.accentColor,
+                              }}>
+                              {isRefreshingRecommendation ? tr(language, 'home.recommendationRefreshing') : tr(language, 'home.recommendationRefresh')}
+                            </Text>
+                          </Pressable>
+                        </View>
+                        <Pressable
+                          style={{marginTop: 10}}
+                          onPress={() =>
+                            (navigation as any).navigate(AI_ANALYST_TAB_SCREEN, {
+                              homeRecommendationContext: recommendationContextPrompt,
+                            })
+                          }>
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              fontWeight: '700',
+                              color: theme.accentColor,
+                            }}>
+                            {tr(language, 'home.recommendationStartChat')}
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={{marginTop: 8}}
+                          onPress={() =>
+                            (navigation as any).navigate(AI_ANALYST_TAB_SCREEN, {
+                              homeRecommendationContext: mealRecommendationContextPrompt,
+                            })
+                          }>
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              fontWeight: '700',
+                              color: theme.accentColor,
+                            }}>
+                            {language === 'he' ? 'המלצה לארוחה' : 'Meal recommendation'}
+                          </Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <>
+                        <Text
+                          style={{
+                            marginTop: 6,
+                            color: addOpacity(theme.textColor, 0.72),
+                          }}>
+                          {hasLoadedSavedRecommendation ? tr(language, 'home.recommendationNotRequestedYet') : tr(language, 'home.recommendationLoading')}
+                        </Text>
+                        <Pressable style={{marginTop: 10}} onPress={handleRefreshRecommendation} disabled={isRefreshingRecommendation || !hasLoadedSavedRecommendation}>
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              fontWeight: '700',
+                              color: theme.accentColor,
+                            }}>
+                            {isRefreshingRecommendation ? tr(language, 'home.recommendationRefreshing') : tr(language, 'home.recommendationRequest')}
+                          </Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </TodayRecommendationBody>
+                ) : null}
+              </TodayRecommendationCard>
+            ) : null}
+          </>
         ) : null}
 
         {/* 2. Collapsible detailed stats (BG + Insulin) — at top for quick access */}
@@ -1250,4 +1410,3 @@ const Home: React.FC = () => {
 };
 
 export default Home;
-
