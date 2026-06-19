@@ -7,6 +7,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
+import {computeInsulinStats} from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinDataCalculations';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import {ThemeType} from 'app/types/theme';
 import {useNavigation} from '@react-navigation/native';
@@ -40,6 +41,7 @@ import {AI_ANALYST_TAB_SCREEN, DAILY_REVIEW_SCREEN, LOOP_ADJUSTMENT_ASSIST_SCREE
 import {getLatestDailyBrief} from 'app/services/proactiveCare/dailyBrief';
 import {detectLoopAdjustmentTrend, LoopTrendSignal} from 'app/services/loopAssist/loopAdjustmentAssist';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
+import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {createLlmProvider} from 'app/services/llm/llmClient';
 import {withSharedAiContext} from 'app/services/llm/sharedAiContext';
@@ -55,7 +57,7 @@ const HOME_RECOMMENDATION_STORAGE_KEY = 'home:todayRecommendation:v1';
 const LOOP_ASSIST_STATUS_KEY = 'loopAssist:status:v1';
 
 function normalizeRecommendationText(input: string): string {
-  if (!input) return '';
+  if (!input) {return '';}
   return input
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/__([^_]+)__/g, '$1')
@@ -219,7 +221,72 @@ const Home: React.FC = () => {
   const navigation = useNavigation();
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
+  const {settings: glucoseSettings} = useGlucoseSettings();
   const {settings: aiSettings} = useAiSettings();
+  const recommendationStyles = useMemo(() => ({
+    alertTitleStrong: {
+      fontWeight: '800' as const,
+      color: theme.textColor,
+      fontSize: 15,
+    },
+    alertTitle: {
+      fontWeight: '700' as const,
+      color: theme.textColor,
+      fontSize: 14,
+    },
+    alertBody: {
+      marginTop: 4,
+      color: addOpacity(theme.textColor, 0.78),
+    },
+    alertAction: {
+      marginTop: 8,
+      color: theme.accentColor,
+      fontWeight: '700' as const,
+    },
+    recommendationTitle: {
+      fontWeight: '700' as const,
+      color: theme.textColor,
+    },
+    recommendationBody: {
+      marginTop: 6,
+      color: addOpacity(theme.textColor, 0.82),
+    },
+    recommendationDetails: {
+      marginTop: 8,
+      color: addOpacity(theme.textColor, 0.68),
+      fontSize: 12,
+    },
+    recommendationMetaRow: {
+      marginTop: 10,
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'space-between' as const,
+    },
+    recommendationMetaText: {
+      fontSize: 12,
+      color: addOpacity(theme.textColor, 0.62),
+    },
+    recommendationMetaAction: {
+      fontSize: 12,
+      fontWeight: '700' as const,
+      color: theme.accentColor,
+    },
+    recommendationLink: {
+      fontSize: 13,
+      fontWeight: '700' as const,
+      color: theme.accentColor,
+    },
+    recommendationChatAction: {
+      marginTop: 10,
+    },
+    recommendationMealAction: {
+      marginTop: 8,
+    },
+    recommendationEmpty: {
+      marginTop: 6,
+      color: addOpacity(theme.textColor, 0.72),
+    },
+  }), [theme.accentColor, theme.textColor]);
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [tooltipModel, setTooltipModel] = useState<StackedChartsTooltipModel | null>(null);
@@ -277,8 +344,8 @@ const Home: React.FC = () => {
   const chartFoodItems = useMemo(() => {
     const a = foodItems ?? [];
     const b = carbTreatments ?? [];
-    if (!a.length) return b;
-    if (!b.length) return a;
+    if (!a.length) {return b;}
+    if (!b.length) {return a;}
     return [...a, ...b];
   }, [foodItems, carbTreatments]);
 
@@ -312,21 +379,21 @@ const Home: React.FC = () => {
   }, [bgData, debouncedCurrentDate]);
 
   const headerLatestBgSample = useMemo(() => {
-    if (latestBgSample) return latestBgSample;
-    if (!isE2E) return latestBgSample;
-    if (!listBgData.length) return undefined;
+    if (latestBgSample) {return latestBgSample;}
+    if (!isE2E) {return latestBgSample;}
+    if (!listBgData.length) {return undefined;}
 
     let best = listBgData[0];
     for (const sample of listBgData) {
-      if (sample.date > best.date) best = sample;
+      if (sample.date > best.date) {best = sample;}
     }
     return best;
   }, [latestBgSample, listBgData]);
 
   const headerLatestPrevBgSample = useMemo(() => {
-    if (latestPrevBgSample) return latestPrevBgSample;
-    if (!isE2E) return latestPrevBgSample;
-    if (listBgData.length < 2) return undefined;
+    if (latestPrevBgSample) {return latestPrevBgSample;}
+    if (!isE2E) {return latestPrevBgSample;}
+    if (listBgData.length < 2) {return undefined;}
 
     let best = listBgData[0];
     let second = listBgData[1];
@@ -447,7 +514,7 @@ const Home: React.FC = () => {
   }, []);
 
   const tagSheetCurrentTags = useMemo(() => {
-    if (!tagSheetSegment) return [];
+    if (!tagSheetSegment) {return [];}
     const ids = tagSheetSegment.mealIds.length > 0
       ? tagSheetSegment.mealIds
       : [tagSheetSegment.id];
@@ -456,7 +523,7 @@ const Home: React.FC = () => {
   }, [tagSheetSegment, tagMap]);
 
   const tagSheetLabel = useMemo(() => {
-    if (!tagSheetSegment) return '';
+    if (!tagSheetSegment) {return '';}
     return `${tagSheetSegment.label} · ${format(new Date(tagSheetSegment.startMs), 'HH:mm')}`;
   }, [tagSheetSegment]);
 
@@ -470,10 +537,10 @@ const Home: React.FC = () => {
     const persistMealEpisodes = async () => {
       const recentMeals = taggedSegments.slice(-8);
       for (const meal of recentMeals) {
-        if (!mounted) return;
+        if (!mounted) {return;}
         const key = `meal:${format(new Date(meal.startMs), 'yyyy-MM-dd')}:${meal.id}`;
         const isNew = await markEpisodeKeyIfNew(key);
-        if (!isNew) continue;
+        if (!isNew) {continue;}
 
         const response = summarizeMealResponse(meal, listBgData);
         await addMemoryEntry({
@@ -516,19 +583,9 @@ const Home: React.FC = () => {
   });
 
   const liveBgSample = useMemo(() => {
-    if (liveSnapshot?.enrichedBg) return liveSnapshot.enrichedBg;
+    if (liveSnapshot?.enrichedBg) {return liveSnapshot.enrichedBg;}
     return headerLatestBgSample ?? undefined;
   }, [liveSnapshot, headerLatestBgSample]);
-
-  useEffect(() => {
-    if (!isShowingToday) return;
-    if (!liveBgSample) return;
-
-    updateAndroidGlucoseLiveSurface({
-      enrichedBg: liveBgSample,
-      predictions: liveSnapshot?.predictions,
-    });
-  }, [isShowingToday, liveBgSample, liveSnapshot?.predictions]);
 
   const [showTodayRecommendation, setShowTodayRecommendation] = useState(true);
   const [showRecommendations, setShowRecommendations] = useState(false);
@@ -546,7 +603,7 @@ const Home: React.FC = () => {
   const todayYmd = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
 
   const todayRecommendation = useMemo(() => {
-    if (!isShowingToday) return null;
+    if (!isShowingToday) {return null;}
 
     const bg = liveBgSample?.sgv;
     const dir = liveBgSample?.direction;
@@ -660,7 +717,7 @@ const Home: React.FC = () => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(HOME_RECOMMENDATION_STORAGE_KEY);
-        if (!mounted) return;
+        if (!mounted) {return;}
         if (!raw) {
           setHasLoadedSavedRecommendation(true);
           return;
@@ -675,7 +732,7 @@ const Home: React.FC = () => {
       } catch {
         // ignore
       } finally {
-        if (mounted) setHasLoadedSavedRecommendation(true);
+        if (mounted) {setHasLoadedSavedRecommendation(true);}
       }
     })();
 
@@ -685,7 +742,7 @@ const Home: React.FC = () => {
   }, [todayYmd]);
 
   const recommendationContextPrompt = useMemo(() => {
-    if (!todayRecommendation) return '';
+    if (!todayRecommendation) {return '';}
     const payload = {
       generatedAt: new Date(recommendationGeneratedAt).toISOString(),
       title: todayRecommendation.title,
@@ -774,7 +831,7 @@ const Home: React.FC = () => {
   }, [language, recommendationGeneratedAt]);
 
   const handleRefreshRecommendation = useCallback(async () => {
-    if (!todayRecommendation || isRefreshingRecommendation) return;
+    if (!todayRecommendation || isRefreshingRecommendation) {return;}
     setIsRefreshingRecommendation(true);
 
     try {
@@ -922,6 +979,38 @@ const Home: React.FC = () => {
     return d;
   }, [debouncedCurrentDate]);
 
+  const widgetInsulinStats = useMemo(
+    () => computeInsulinStats(insulinData, basalProfileData, startOfDay, endOfDay),
+    [basalProfileData, endOfDay, insulinData, startOfDay],
+  );
+
+  useEffect(() => {
+    if (!isShowingToday) {
+      return;
+    }
+    if (!liveBgSample) {
+      return;
+    }
+
+    updateAndroidGlucoseLiveSurface({
+      enrichedBg: liveBgSample,
+      predictions: liveSnapshot?.predictions,
+      recentBgSamples: listBgData,
+      insulinStats: widgetInsulinStats,
+    }, {
+      low: glucoseSettings.hypo,
+      high: glucoseSettings.hyper,
+    });
+  }, [
+    glucoseSettings.hyper,
+    glucoseSettings.hypo,
+    isShowingToday,
+    listBgData,
+    liveBgSample,
+    liveSnapshot?.predictions,
+    widgetInsulinStats,
+  ]);
+
   const [showDailySummaryAlert, setShowDailySummaryAlert] = useState(false);
   const [pendingSummaryDate, setPendingSummaryDate] = useState<string | null>(null);
   const [loopTrendSignal, setLoopTrendSignal] = useState<LoopTrendSignal | null>(null);
@@ -936,7 +1025,7 @@ const Home: React.FC = () => {
         const latestBrief = await getLatestDailyBrief();
         const seenDate = await AsyncStorage.getItem(DAILY_SUMMARY_SEEN_KEY);
 
-        if (!mounted) return;
+        if (!mounted) {return;}
 
         const hasBrief = !!latestBrief?.body;
         setPendingSummaryDate(summaryDate);
@@ -961,7 +1050,7 @@ const Home: React.FC = () => {
     const loadLoopAssistStatus = async () => {
       try {
         const raw = await AsyncStorage.getItem(LOOP_ASSIST_STATUS_KEY);
-        if (!mounted) return;
+        if (!mounted) {return;}
         if (!raw) {
           setLoopAssistStatus(null);
           return;
@@ -973,7 +1062,7 @@ const Home: React.FC = () => {
           setLoopAssistStatus(null);
         }
       } catch {
-        if (mounted) setLoopAssistStatus(null);
+        if (mounted) {setLoopAssistStatus(null);}
       }
     };
 
@@ -992,10 +1081,10 @@ const Home: React.FC = () => {
     const runTrendDetect = async () => {
       try {
         const signal = await detectLoopAdjustmentTrend({daysWindow: 5});
-        if (!mounted) return;
+        if (!mounted) {return;}
         setLoopTrendSignal(signal);
       } catch {
-        if (mounted) setLoopTrendSignal(null);
+        if (mounted) {setLoopTrendSignal(null);}
       }
     };
 
@@ -1065,38 +1154,19 @@ const Home: React.FC = () => {
                   setShowDailySummaryAlert(false);
                   (navigation as any).navigate(DAILY_REVIEW_SCREEN);
                 }}>
-                <Text
-                  style={{
-                    fontWeight: '800',
-                    color: theme.textColor,
-                    fontSize: 15,
-                  }}>
+                <Text style={recommendationStyles.alertTitleStrong}>
                   {tr(language, 'home.yesterdaySummaryReadyTitle')}
                 </Text>
-                <Text
-                  style={{
-                    marginTop: 4,
-                    color: addOpacity(theme.textColor, 0.78),
-                  }}>
+                <Text style={recommendationStyles.alertBody}>
                   {tr(language, 'home.yesterdaySummaryReadyBody')}
                 </Text>
-                <Text
-                  style={{
-                    marginTop: 8,
-                    color: theme.accentColor,
-                    fontWeight: '700',
-                  }}>
+                <Text style={recommendationStyles.alertAction}>
                   {tr(language, 'home.viewYesterdaySummary')}
                 </Text>
               </DailySummaryAlert>
             ) : !isShowingToday ? (
               <DailySummaryAlert onPress={() => (navigation as any).navigate(DAILY_REVIEW_SCREEN)}>
-                <Text
-                  style={{
-                    fontWeight: '700',
-                    color: theme.textColor,
-                    fontSize: 14,
-                  }}>
+                <Text style={recommendationStyles.alertTitle}>
                   {tr(language, 'home.openDailySummary')}
                 </Text>
               </DailySummaryAlert>
@@ -1111,27 +1181,13 @@ const Home: React.FC = () => {
                     source: 'home-nudge',
                   })
                 }>
-                <Text
-                  style={{
-                    fontWeight: '800',
-                    color: theme.textColor,
-                    fontSize: 15,
-                  }}>
+                <Text style={recommendationStyles.alertTitleStrong}>
                   {language === 'he' ? 'זיהינו מגמה עקבית שכדאי לחקור יחד' : 'We detected a stable pattern worth exploring together'}
                 </Text>
-                <Text
-                  style={{
-                    marginTop: 4,
-                    color: addOpacity(theme.textColor, 0.78),
-                  }}>
+                <Text style={recommendationStyles.alertBody}>
                   {language === 'he' ? loopTrendSignal.summaryHe : loopTrendSignal.summaryEn}
                 </Text>
-                <Text
-                  style={{
-                    marginTop: 8,
-                    color: theme.accentColor,
-                    fontWeight: '700',
-                  }}>
+                <Text style={recommendationStyles.alertAction}>
                   {language === 'he' ? 'פתח סייע התאמת לופ' : 'Open Loop Tuning Assist'}
                 </Text>
               </DailySummaryAlert>
@@ -1146,19 +1202,10 @@ const Home: React.FC = () => {
                     source: 'home-status-center',
                   })
                 }>
-                <Text
-                  style={{
-                    fontWeight: '800',
-                    color: theme.textColor,
-                    fontSize: 15,
-                  }}>
+                <Text style={recommendationStyles.alertTitleStrong}>
                   {language === 'he' ? 'מרכז סטטוס התאמת לופ' : 'Loop Tuning Status Center'}
                 </Text>
-                <Text
-                  style={{
-                    marginTop: 4,
-                    color: addOpacity(theme.textColor, 0.78),
-                  }}>
+                <Text style={recommendationStyles.alertBody}>
                   {loopAssistStatus.status === 'running'
                     ? language === 'he'
                       ? 'בהכנה: החישוב רץ ברקע. נעדכן כשההמלצה מוכנה.'
@@ -1171,12 +1218,7 @@ const Home: React.FC = () => {
                     ? 'נכשל: החישוב האחרון נכשל. אפשר לפתוח ולייצא לוג שגיאה.'
                     : 'Failed: the last run failed. Open to export full error log.'}
                 </Text>
-                <Text
-                  style={{
-                    marginTop: 8,
-                    color: theme.accentColor,
-                    fontWeight: '700',
-                  }}>
+                <Text style={recommendationStyles.alertAction}>
                   {language === 'he' ? 'פתח מרכז סטטוס לופ' : 'Open Loop Status Center'}
                 </Text>
               </DailySummaryAlert>
@@ -1185,116 +1227,71 @@ const Home: React.FC = () => {
             {isShowingToday && todayRecommendation ? (
               <TodayRecommendationCard>
                 <TodayRecommendationHeader onPress={() => setShowTodayRecommendation(prev => !prev)}>
-                  <Text
-                    style={{
-                      fontWeight: '800',
-                      color: theme.textColor,
-                      fontSize: 15,
-                    }}>
+                  <Text style={recommendationStyles.alertTitleStrong}>
                     {tr(language, 'home.todayRecommendationTitle')}
                   </Text>
                   <Icon name={showTodayRecommendation ? 'chevron-up' : 'chevron-down'} size={18} color={addOpacity(theme.textColor, 0.6)} />
                 </TodayRecommendationHeader>
                 {showTodayRecommendation ? (
                   <TodayRecommendationBody>
-                    <Text style={{fontWeight: '700', color: theme.textColor}}>{todayRecommendation.title}</Text>
+                    <Text style={recommendationStyles.recommendationTitle}>{todayRecommendation.title}</Text>
 
                     {aiRecommendationBody ? (
                       <>
-                        <Text
-                          style={{
-                            marginTop: 6,
-                            color: addOpacity(theme.textColor, 0.82),
-                          }}>
+                        <Text style={recommendationStyles.recommendationBody}>
                           {aiRecommendationBody}
                         </Text>
                         {todayRecommendation.details ? (
-                          <Text
-                            style={{
-                              marginTop: 8,
-                              color: addOpacity(theme.textColor, 0.68),
-                              fontSize: 12,
-                            }}>
+                          <Text style={recommendationStyles.recommendationDetails}>
                             {todayRecommendation.details}
                           </Text>
                         ) : null}
-                        <View
-                          style={{
-                            marginTop: 10,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                          }}>
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              color: addOpacity(theme.textColor, 0.62),
-                            }}>
+                        <View style={recommendationStyles.recommendationMetaRow}>
+                          <Text style={recommendationStyles.recommendationMetaText}>
                             {tr(language, 'home.recommendationUpdatedAt', {
                               time: recommendationTimeLabel,
                             })}
                           </Text>
                           <Pressable onPress={handleRefreshRecommendation} disabled={isRefreshingRecommendation}>
-                            <Text
-                              style={{
-                                fontSize: 12,
-                                fontWeight: '700',
-                                color: theme.accentColor,
-                              }}>
+                            <Text style={recommendationStyles.recommendationMetaAction}>
                               {isRefreshingRecommendation ? tr(language, 'home.recommendationRefreshing') : tr(language, 'home.recommendationRefresh')}
                             </Text>
                           </Pressable>
                         </View>
                         <Pressable
-                          style={{marginTop: 10}}
+                          style={recommendationStyles.recommendationChatAction}
                           onPress={() =>
                             (navigation as any).navigate(AI_ANALYST_TAB_SCREEN, {
                               homeRecommendationContext: recommendationContextPrompt,
                             })
                           }>
-                          <Text
-                            style={{
-                              fontSize: 13,
-                              fontWeight: '700',
-                              color: theme.accentColor,
-                            }}>
+                          <Text style={recommendationStyles.recommendationLink}>
                             {tr(language, 'home.recommendationStartChat')}
                           </Text>
                         </Pressable>
 
                         <Pressable
-                          style={{marginTop: 8}}
+                          style={recommendationStyles.recommendationMealAction}
                           onPress={() =>
                             (navigation as any).navigate(AI_ANALYST_TAB_SCREEN, {
                               homeRecommendationContext: mealRecommendationContextPrompt,
                             })
                           }>
-                          <Text
-                            style={{
-                              fontSize: 13,
-                              fontWeight: '700',
-                              color: theme.accentColor,
-                            }}>
+                          <Text style={recommendationStyles.recommendationLink}>
                             {language === 'he' ? 'המלצה לארוחה' : 'Meal recommendation'}
                           </Text>
                         </Pressable>
                       </>
                     ) : (
                       <>
-                        <Text
-                          style={{
-                            marginTop: 6,
-                            color: addOpacity(theme.textColor, 0.72),
-                          }}>
+                        <Text style={recommendationStyles.recommendationEmpty}>
                           {hasLoadedSavedRecommendation ? tr(language, 'home.recommendationNotRequestedYet') : tr(language, 'home.recommendationLoading')}
                         </Text>
-                        <Pressable style={{marginTop: 10}} onPress={handleRefreshRecommendation} disabled={isRefreshingRecommendation || !hasLoadedSavedRecommendation}>
-                          <Text
-                            style={{
-                              fontSize: 13,
-                              fontWeight: '700',
-                              color: theme.accentColor,
-                            }}>
+                        <Pressable
+                          style={recommendationStyles.recommendationChatAction}
+                          onPress={handleRefreshRecommendation}
+                          disabled={isRefreshingRecommendation || !hasLoadedSavedRecommendation}>
+                          <Text style={recommendationStyles.recommendationLink}>
                             {isRefreshingRecommendation ? tr(language, 'home.recommendationRefreshing') : tr(language, 'home.recommendationRequest')}
                           </Text>
                         </Pressable>

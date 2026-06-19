@@ -17,6 +17,11 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
     timestampMs: Double,
     iob: Double,
     cob: Double,
+    totalBasal: Double,
+    totalBolus: Double,
+    basalBolusRatio: Double,
+    totalInsulin: Double,
+    tir: Double,
     projected1: Double,
     projected2: Double,
     projected3: Double,
@@ -24,8 +29,13 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
     high: Double,
   ) {
     val ts = timestampMs.toLong()
-    val iobSafe = iob.takeIf { it.isFinite() && it >= 0 }
+    val iobSafe = iob.takeIf { it.isFinite() && it > -900 }
     val cobSafe = cob.takeIf { it.isFinite() && it >= 0 }
+    val totalBasalSafe = totalBasal.takeIf { it.isFinite() && it >= 0 }
+    val totalBolusSafe = totalBolus.takeIf { it.isFinite() && it >= 0 }
+    val basalBolusRatioSafe = basalBolusRatio.takeIf { it.isFinite() && it >= 0 }
+    val totalInsulinSafe = totalInsulin.takeIf { it.isFinite() && it >= 0 }
+    val tirInt = tir.takeIf { it.isFinite() && it >= 0 && it <= 100 }?.toInt()
     val projected1Int = projected1.takeIf { it.isFinite() && it > 0 }?.toInt()
     val projected2Int = projected2.takeIf { it.isFinite() && it > 0 }?.toInt()
     val projected3Int = projected3.takeIf { it.isFinite() && it > 0 }?.toInt()
@@ -39,6 +49,11 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
         ts,
         iobSafe,
         cobSafe,
+        totalBasalSafe,
+        totalBolusSafe,
+        basalBolusRatioSafe,
+        totalInsulinSafe,
+        tirInt,
         projected1Int,
         projected2Int,
         projected3Int,

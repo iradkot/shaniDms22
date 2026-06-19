@@ -29,6 +29,11 @@ object GlucoseWidgetUpdater {
   private const val KEY_TIMESTAMP = "timestamp"
   private const val KEY_IOB = "iob"
   private const val KEY_COB = "cob"
+  private const val KEY_TOTAL_BASAL = "total_basal"
+  private const val KEY_TOTAL_BOLUS = "total_bolus"
+  private const val KEY_BASAL_BOLUS_RATIO = "basal_bolus_ratio"
+  private const val KEY_TOTAL_INSULIN = "total_insulin"
+  private const val KEY_TIR = "tir"
   private const val KEY_PROJECTED1 = "projected1"
   private const val KEY_PROJECTED2 = "projected2"
   private const val KEY_PROJECTED3 = "projected3"
@@ -48,6 +53,11 @@ object GlucoseWidgetUpdater {
     timestamp: Long,
     iob: Double?,
     cob: Double?,
+    totalBasal: Double?,
+    totalBolus: Double?,
+    basalBolusRatio: Double?,
+    totalInsulin: Double?,
+    tir: Int?,
     projected1: Int?,
     projected2: Int?,
     projected3: Int?,
@@ -63,11 +73,16 @@ object GlucoseWidgetUpdater {
 
     if (iob != null && iob.isFinite()) e.putString(KEY_IOB, String.format("%.1f", iob)) else e.remove(KEY_IOB)
     if (cob != null && cob.isFinite()) e.putString(KEY_COB, String.format("%.0f", cob)) else e.remove(KEY_COB)
+    if (totalBasal != null && totalBasal.isFinite()) e.putString(KEY_TOTAL_BASAL, String.format("%.2f", totalBasal))
+    if (totalBolus != null && totalBolus.isFinite()) e.putString(KEY_TOTAL_BOLUS, String.format("%.2f", totalBolus))
+    if (basalBolusRatio != null && basalBolusRatio.isFinite()) e.putString(KEY_BASAL_BOLUS_RATIO, String.format("%.0f", basalBolusRatio * 100.0))
+    if (totalInsulin != null && totalInsulin.isFinite()) e.putString(KEY_TOTAL_INSULIN, String.format("%.1f", totalInsulin))
+    if (tir != null && tir in 0..100) e.putString(KEY_TIR, tir.toString()) else e.remove(KEY_TIR)
     if (projected1 != null) e.putInt(KEY_PROJECTED1, projected1) else e.remove(KEY_PROJECTED1)
     if (projected2 != null) e.putInt(KEY_PROJECTED2, projected2) else e.remove(KEY_PROJECTED2)
     if (projected3 != null) e.putInt(KEY_PROJECTED3, projected3) else e.remove(KEY_PROJECTED3)
-    if (low != null) e.putInt(KEY_LOW, low) else e.remove(KEY_LOW)
-    if (high != null) e.putInt(KEY_HIGH, high) else e.remove(KEY_HIGH)
+    if (low != null) e.putInt(KEY_LOW, low)
+    if (high != null) e.putInt(KEY_HIGH, high)
     if (sparklinePoints != null && sparklinePoints.isNotEmpty()) {
       e.putString(KEY_SPARKLINE, sparklinePoints.takeLast(48).joinToString(","))
     }
@@ -89,6 +104,13 @@ object GlucoseWidgetUpdater {
     updateWidgets(context)
   }
 
+  fun getRangeThresholds(context: Context): Pair<Int, Int> {
+    val p = prefs(context)
+    val low = if (p.contains(KEY_LOW)) p.getInt(KEY_LOW, 70) else 70
+    val high = if (p.contains(KEY_HIGH)) p.getInt(KEY_HIGH, 180) else 180
+    return Pair(low, high)
+  }
+
   fun setSparklineStyle(context: Context, style: String?) {
     val normalized = when ((style ?: "").trim().lowercase()) {
       "points" -> "points"
@@ -104,6 +126,11 @@ object GlucoseWidgetUpdater {
     val ts: Long?,
     val iob: String,
     val cob: String,
+    val totalBasal: String,
+    val totalBolus: String,
+    val basalBolusRatio: String,
+    val totalInsulin: String,
+    val tir: String,
     val projected1: Int?,
     val projected2: Int?,
     val projected3: Int?,
@@ -121,6 +148,11 @@ object GlucoseWidgetUpdater {
     val ts = if (p.contains(KEY_TIMESTAMP)) p.getLong(KEY_TIMESTAMP, 0L) else null
     val iob = p.getString(KEY_IOB, "--") ?: "--"
     val cob = p.getString(KEY_COB, "--") ?: "--"
+    val totalBasal = p.getString(KEY_TOTAL_BASAL, "--") ?: "--"
+    val totalBolus = p.getString(KEY_TOTAL_BOLUS, "--") ?: "--"
+    val basalBolusRatio = p.getString(KEY_BASAL_BOLUS_RATIO, "--") ?: "--"
+    val totalInsulin = p.getString(KEY_TOTAL_INSULIN, "--") ?: "--"
+    val tir = p.getString(KEY_TIR, "--") ?: "--"
     val projected1 = if (p.contains(KEY_PROJECTED1)) p.getInt(KEY_PROJECTED1, 0) else null
     val projected2 = if (p.contains(KEY_PROJECTED2)) p.getInt(KEY_PROJECTED2, 0) else null
     val projected3 = if (p.contains(KEY_PROJECTED3)) p.getInt(KEY_PROJECTED3, 0) else null
@@ -132,7 +164,7 @@ object GlucoseWidgetUpdater {
       .takeLast(48)
     val sparklineStyle = (p.getString(KEY_SPARKLINE_STYLE, "line") ?: "line").lowercase()
 
-    return WidgetState(value, trend, ts, iob, cob, projected1, projected2, projected3, low, high, sparkline, sparklineStyle)
+    return WidgetState(value, trend, ts, iob, cob, totalBasal, totalBolus, basalBolusRatio, totalInsulin, tir, projected1, projected2, projected3, low, high, sparkline, sparklineStyle)
   }
 
   fun updateWidgets(context: Context) {
@@ -159,8 +191,11 @@ object GlucoseWidgetUpdater {
           views.setViewVisibility(R.id.glucose_updated_chrono, View.GONE)
           views.setTextViewText(R.id.glucose_updated, "No data")
         }
-        views.setTextViewText(R.id.glucose_iob, "IOB ${state.iob}U")
-        views.setTextViewText(R.id.glucose_cob, "COB ${state.cob}g")
+        views.setTextViewText(R.id.glucose_basal, "Basal ${state.totalBasal}U")
+        views.setTextViewText(R.id.glucose_bolus, "Bolus ${state.totalBolus}U")
+        views.setTextViewText(R.id.glucose_ratio, "Ratio ${state.basalBolusRatio}%")
+        views.setTextViewText(R.id.glucose_total_insulin, "Total ${state.totalInsulin}U")
+        views.setTextViewText(R.id.glucose_tir, "TIR ${state.tir}%")
         val p1 = state.projected1?.toString() ?: "--"
         val p2 = state.projected2?.toString() ?: "--"
         val p3 = state.projected3?.toString() ?: "--"
