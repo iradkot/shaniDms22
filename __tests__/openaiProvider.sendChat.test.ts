@@ -190,6 +190,52 @@ describe('OpenAIProvider.sendChat', () => {
     expect(secondBody.temperature).toBeUndefined();
   });
 
+  it('retries without temperature when a chat model only supports the default temperature value', async () => {
+    const provider = new OpenAIProvider({apiKey: 'sk-test'});
+
+    const fetchMock = jest
+      .fn()
+      .mockImplementationOnce(async (_url: string, _opts: any) =>
+        makeResponse({
+          ok: false,
+          status: 400,
+          body: {
+            error: {
+              message: "Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.",
+            },
+          },
+        }),
+      )
+      .mockImplementationOnce(async (_url: string, _opts: any) =>
+        makeResponse({
+          ok: true,
+          status: 200,
+          body: {
+            choices: [{message: {content: 'ok'}}],
+          },
+        }),
+      );
+
+    global.fetch = fetchMock as any;
+
+    const res = await provider.sendChat({
+      model: 'gpt-5.5',
+      messages: [{role: 'user', content: 'hi'}],
+      temperature: 0.2,
+      maxOutputTokens: 50,
+    });
+
+    expect(res.content).toBe('ok');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toMatch(/\/v1\/chat\/completions$/);
+
+    const firstBody = JSON.parse((fetchMock.mock.calls[0]?.[1] as any).body);
+    const secondBody = JSON.parse((fetchMock.mock.calls[1]?.[1] as any).body);
+
+    expect(firstBody.temperature).toBe(0.2);
+    expect(secondBody.temperature).toBeUndefined();
+  });
+
   it('returns partial content when Responses status is incomplete but output_text exists', async () => {
     const provider = new OpenAIProvider({apiKey: 'sk-test'});
 

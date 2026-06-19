@@ -119,12 +119,24 @@ export class OpenAIProvider implements LlmProvider {
     type UnsupportedParamResponses = 'max_output_tokens' | 'temperature';
     type UnsupportedParamChat = 'max_tokens' | 'max_completion_tokens' | 'temperature';
 
+    const extractOpenAiUnsupportedParamName = (msg: string): string => {
+      const unsupportedParam = msg.match(/unsupported\s+parameter\s*:\s*['"]([^'"]+)['"]/i);
+      if (unsupportedParam?.[1]) return unsupportedParam[1].trim();
+
+      const unsupportedValue = msg.match(/unsupported\s+value\s*:\s*['"]([^'"]+)['"]/i);
+      if (unsupportedValue?.[1]) return unsupportedValue[1].trim();
+
+      return '';
+    };
+
+    const isOpenAiUnsupportedParamOrValue = (msg: string): boolean =>
+      /unsupported\s+(parameter|value)/i.test(msg);
+
     const extractUnsupportedParamResponses = (msg: string): UnsupportedParamResponses | null => {
-      if (!/unsupported parameter/i.test(msg)) return null;
+      if (!isOpenAiUnsupportedParamOrValue(msg)) return null;
 
       // Prefer the explicit "Unsupported parameter: 'X'" name when present.
-      const m = msg.match(/unsupported\s+parameter\s*:\s*['"]([^'"]+)['"]/i);
-      const explicit = (m?.[1] ?? '').trim();
+      const explicit = extractOpenAiUnsupportedParamName(msg);
       if (explicit === 'max_output_tokens' || explicit === 'temperature') {
         return explicit;
       }
@@ -136,11 +148,10 @@ export class OpenAIProvider implements LlmProvider {
     };
 
     const extractUnsupportedParamChat = (msg: string): UnsupportedParamChat | null => {
-      if (!/unsupported parameter/i.test(msg)) return null;
+      if (!isOpenAiUnsupportedParamOrValue(msg)) return null;
 
       // Prefer the explicit "Unsupported parameter: 'X'" name when present.
-      const m = msg.match(/unsupported\s+parameter\s*:\s*['"]([^'"]+)['"]/i);
-      const explicit = (m?.[1] ?? '').trim();
+      const explicit = extractOpenAiUnsupportedParamName(msg);
       if (explicit === 'max_tokens' || explicit === 'max_completion_tokens' || explicit === 'temperature') {
         return explicit;
       }
