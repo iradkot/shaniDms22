@@ -11,7 +11,7 @@ class GlucoseBootReceiver : BroadcastReceiver() {
       Intent.ACTION_MY_PACKAGE_REPLACED,
       "android.intent.action.QUICKBOOT_POWERON" -> {
         GlucoseSyncScheduler.scheduleFromPrefs(context)
-        GlucoseSyncScheduler.enqueueImmediate(context)
+        GlucoseSyncScheduler.requestImmediateRefresh(context)
         GlucoseWidgetUpdater.updateWidgets(context)
       }
     }

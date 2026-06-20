@@ -13,7 +13,7 @@ class GlucoseGraphWidgetProvider : AppWidgetProvider() {
   ) {
     super.onUpdate(context, appWidgetManager, appWidgetIds)
     GlucoseSyncScheduler.scheduleFromPrefs(context)
-    GlucoseSyncScheduler.enqueueImmediate(context)
+    GlucoseSyncScheduler.requestImmediateRefresh(context)
     GlucoseWidgetUpdater.updateWidgets(context)
   }
 
@@ -30,7 +30,7 @@ class GlucoseGraphWidgetProvider : AppWidgetProvider() {
   override fun onEnabled(context: Context) {
     super.onEnabled(context)
     GlucoseSyncScheduler.scheduleFromPrefs(context)
-    GlucoseSyncScheduler.enqueueImmediate(context)
+    GlucoseSyncScheduler.requestImmediateRefresh(context)
     GlucoseWidgetUpdater.updateWidgets(context)
   }
 

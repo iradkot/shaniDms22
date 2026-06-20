@@ -100,7 +100,7 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
     val prefs = reactApplicationContext.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
     prefs.edit().putInt(GlucoseSyncWorker.KEY_SPARKLINE_HOURS, intHours).apply()
     try {
-      GlucoseSyncScheduler.enqueueImmediate(reactApplicationContext)
+      GlucoseSyncScheduler.requestImmediateRefresh(reactApplicationContext)
     } catch (_: Throwable) {
       // Best effort.
     }

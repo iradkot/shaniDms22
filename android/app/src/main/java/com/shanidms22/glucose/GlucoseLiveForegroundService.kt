@@ -22,7 +22,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.json.JSONArray
 
 class GlucoseLiveForegroundService : Service() {
   private val serviceJob: Job = SupervisorJob()
@@ -118,51 +117,7 @@ class GlucoseLiveForegroundService : Service() {
     }
 
     private fun syncOnce(context: Context) {
-      val prefs = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
-      val enabled = prefs.getBoolean(GlucoseSyncWorker.KEY_ENABLED, false)
-      val baseUrl = prefs.getString(GlucoseSyncWorker.KEY_BASE_URL, null)?.trim().orEmpty()
-      if (!enabled || baseUrl.isBlank()) return
-
-      val secret = prefs.getString(GlucoseSyncWorker.KEY_API_SECRET_SHA1, null)
-      val entries = fetchRecentEntries(baseUrl, secret)
-      val latest = latestFromEntries(entries) ?: return
-      val load = fetchLatestWidgetLoad(baseUrl, secret)
-      val insulinStats = fetchLatestWidgetInsulinStats(baseUrl, secret)
-      val (low, high) = GlucoseWidgetUpdater.getRangeThresholds(context)
-
-      GlucoseWidgetUpdater.save(
-        context,
-        latest.sgv,
-        latest.trend,
-        latest.date,
-        load?.iob,
-        load?.cob,
-        insulinStats?.totalBasal,
-        insulinStats?.totalBolus,
-        insulinStats?.basalBolusRatio,
-        insulinStats?.totalInsulin,
-        calculateWidgetTir(entries, LIVE_WINDOW_HOURS, low, high),
-        load?.projected1,
-        load?.projected2,
-        load?.projected3,
-        null,
-        null,
-        entriesToSparkline(entries),
-        preserveInsulinStats = true,
-      )
-      GlucoseWidgetUpdater.updateWidgets(context)
-      GlucoseWidgetUpdater.updateNotification(context)
+      GlucoseWidgetSync.syncOnce(context)
     }
-
-    private fun fetchRecentEntries(baseUrl: String, secret: String?): JSONArray? {
-      val url = "${baseUrl.trimEnd('/')}/api/v1/entries.json?count=36"
-      return fetchWidgetJsonArray(url, secret)
-    }
-
-    private fun latestFromEntries(arr: JSONArray?) = latestWidgetBgFromEntries(arr)
-
-    private fun entriesToSparkline(arr: JSONArray?) = widgetEntriesToSparkline(arr, LIVE_WINDOW_HOURS)
-
-    private const val LIVE_WINDOW_HOURS = 3
   }
 }

@@ -37,30 +37,45 @@
       android:textStyle="bold"
       android:textColor="#111827" />
 
-    <TextView
-      android:id="@+id/glucose_graph_updated"
+    <LinearLayout
       android:layout_width="0dp"
       android:layout_height="wrap_content"
       android:layout_marginStart="12dp"
       android:layout_weight="1"
-      android:gravity="end"
-      android:text="No data"
-      android:textSize="11sp"
-      android:textStyle="bold"
-      android:textColor="#B3111827" />
+      android:orientation="vertical"
+      android:gravity="end">
 
-    <Chronometer
-      android:id="@+id/glucose_graph_updated_chrono"
-      android:layout_width="0dp"
-      android:layout_height="wrap_content"
-      android:layout_marginStart="12dp"
-      android:layout_weight="1"
-      android:gravity="end"
-      android:visibility="gone"
-      android:textSize="11sp"
-      android:textStyle="bold"
-      android:textColor="#B3111827"
-      android:format="%s ago" />
+      <TextView
+        android:id="@+id/glucose_graph_load"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:text="IOB --U · COB --g"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:textColor="#CC111827" />
+
+      <TextView
+        android:id="@+id/glucose_graph_updated"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:text="No data"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:textColor="#B3111827" />
+
+      <Chronometer
+        android:id="@+id/glucose_graph_updated_chrono"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:visibility="gone"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:textColor="#B3111827"
+        android:format="%s ago" />
+    </LinearLayout>
   </LinearLayout>
 
   <ImageView

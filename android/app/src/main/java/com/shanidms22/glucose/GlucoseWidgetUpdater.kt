@@ -206,6 +206,7 @@ object GlucoseWidgetUpdater {
     val views = RemoteViews(context.packageName, R.layout.glucose_widget)
     views.setTextViewText(R.id.glucose_value, state.value?.toString() ?: "--")
     views.setTextViewText(R.id.glucose_trend, state.trend.ifBlank { "•" })
+    views.setTextViewText(R.id.glucose_load, buildLoadText(state))
     bindUpdatedTime(views, R.id.glucose_updated, R.id.glucose_updated_chrono, state.ts)
     views.setTextViewText(R.id.glucose_basal, "${state.totalBasal} U\nBasal")
     views.setTextViewText(R.id.glucose_bolus, "${state.totalBolus} U\nBolus")
@@ -231,6 +232,7 @@ object GlucoseWidgetUpdater {
     val views = RemoteViews(context.packageName, R.layout.glucose_graph_widget)
     views.setTextViewText(R.id.glucose_graph_value, state.value?.toString() ?: "--")
     views.setTextViewText(R.id.glucose_graph_trend, state.trend.ifBlank { "•" })
+    views.setTextViewText(R.id.glucose_graph_load, buildLoadText(state))
     bindUpdatedTime(views, R.id.glucose_graph_updated, R.id.glucose_graph_updated_chrono, state.ts)
 
     val syncPrefs = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
@@ -249,6 +251,8 @@ object GlucoseWidgetUpdater {
     views.setOnClickPendingIntent(R.id.glucose_graph_widget_root, buildLaunchPendingIntent(context, 1))
     return views
   }
+
+  private fun buildLoadText(state: WidgetState): String = "IOB ${state.iob}U · COB ${state.cob}g"
 
   private fun bindUpdatedTime(views: RemoteViews, textViewId: Int, chronometerId: Int, ts: Long?) {
     if (ts != null && ts > 0) {

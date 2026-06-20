@@ -44,7 +44,7 @@ object GlucoseSyncScheduler {
 
     applyModeFromPrefs(context)
     if (enabled && !baseUrl.isNullOrBlank()) {
-      enqueueImmediate(context)
+      requestImmediateRefresh(context)
     } else {
       cancelRefreshAlarm(context)
     }
@@ -57,7 +57,7 @@ object GlucoseSyncScheduler {
       .apply()
 
     applyModeFromPrefs(context)
-    if (enabled) enqueueImmediate(context)
+    if (enabled) requestImmediateRefresh(context)
   }
 
   fun scheduleFromPrefs(context: Context) {
@@ -115,6 +115,11 @@ object GlucoseSyncScheduler {
       ExistingWorkPolicy.REPLACE,
       immediate,
     )
+  }
+
+  fun requestImmediateRefresh(context: Context) {
+    enqueueImmediate(context)
+    GlucoseWidgetSync.syncAsync(context)
   }
 
   fun cancel(context: Context) {

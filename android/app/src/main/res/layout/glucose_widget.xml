@@ -53,6 +53,15 @@
       </LinearLayout>
 
       <TextView
+        android:id="@+id/glucose_load"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="IOB --U · COB --g"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:textColor="#CC111827" />
+
+      <TextView
         android:id="@+id/glucose_updated"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
