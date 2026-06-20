@@ -25,7 +25,10 @@ import CombinedBgBolusTooltip from 'app/components/charts/CgmGraph/components/To
 import CombinedBgMultiBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/CombinedBgMultiBolusTooltip';
 import {addOpacity} from 'app/style/styling.utils';
 
-import type {CgmGraphProps} from './CgmGraph.types';
+import type {
+  CgmGraphProps,
+  CGMGraphExternalTooltipPayload,
+} from './CgmGraph.types';
 import {useCgmGraphTooltipModel} from './hooks/useCgmGraphTooltipModel';
 import {
   buildExternalTooltipPayloadFromLocationX,
@@ -62,6 +65,8 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   const hasSamples = !!bgSamples?.length;
 
   const containerRef = useRef<View>(null);
+  const lastExternalTooltipPayloadRef =
+    useRef<CGMGraphExternalTooltipPayload | null>(null);
 
   const isCompactMealVariant =
     variant === 'compactMeal' ||
@@ -163,6 +168,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
         return;
       }
 
+      lastExternalTooltipPayloadRef.current = payload;
       onTooltipChange(payload);
     },
     [
@@ -217,12 +223,22 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
     }
 
     handleTouchEnd();
+    lastExternalTooltipPayloadRef.current = null;
     onTooltipChange(null);
   }, [handleTouchEnd, onTooltipChange, tooltipMode]);
 
   const handleTouchCancelWithTooltip = useCallback(() => {
+    if (tooltipMode !== 'external' || !onTooltipChange) {
+      handleTouchEnd();
+      return;
+    }
+
     handleTouchEnd();
-  }, [handleTouchEnd]);
+    const lastPayload = lastExternalTooltipPayloadRef.current;
+    if (lastPayload) {
+      onTooltipChange({...lastPayload, autoHide: true});
+    }
+  }, [handleTouchEnd, onTooltipChange, tooltipMode]);
 
   const focusX =
     tooltipMode === 'external' && cgmAnchorTimeMs != null

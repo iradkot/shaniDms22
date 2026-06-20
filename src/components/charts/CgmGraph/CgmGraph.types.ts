@@ -2,7 +2,12 @@ import {BgSample} from 'app/types/day_bgs.types';
 import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import {InsulinDataEntry} from 'app/types/insulin.types';
 
-export type ChartMargin = {top: number; right: number; bottom: number; left: number};
+export type ChartMargin = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
 
 /**
  * Payload emitted by `CgmGraph` when `tooltipMode="external"`.
@@ -17,9 +22,19 @@ export type ChartMargin = {top: number; right: number; bottom: number; left: num
 export type CGMGraphExternalTooltipPayload = {
   touchTimeMs: number;
   anchorTimeMs: number;
+
+  /**
+   * Marks a preserved selection that should clear itself if no release event
+   * arrives. Active touch updates intentionally do not auto-hide.
+   */
+  autoHide?: boolean;
 };
 
-export type CgmGraphVariant = 'default' | 'compactMeal' | 'compactMealLight' | 'compactMealDark';
+export type CgmGraphVariant =
+  | 'default'
+  | 'compactMeal'
+  | 'compactMealLight'
+  | 'compactMealDark';
 
 export interface CgmGraphProps {
   bgSamples: BgSample[];

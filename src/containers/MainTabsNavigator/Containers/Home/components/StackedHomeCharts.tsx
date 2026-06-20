@@ -180,18 +180,22 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
       tooltipTimerRef.current = null;
     }
   }, []);
+  const scheduleTooltipAutoHide = React.useCallback(() => {
+    clearTooltipTimer();
+    tooltipTimerRef.current = setTimeout(() => {
+      setChartsTooltip(null);
+      tooltipTimerRef.current = null;
+    }, 4000);
+  }, [clearTooltipTimer]);
   const handleTooltipChange = React.useCallback(
     (payload: CGMGraphExternalTooltipPayload | null) => {
       clearTooltipTimer();
       setChartsTooltip(payload);
-      if (payload != null) {
-        tooltipTimerRef.current = setTimeout(
-          () => setChartsTooltip(null),
-          4000,
-        );
+      if (payload?.autoHide) {
+        scheduleTooltipAutoHide();
       }
     },
-    [clearTooltipTimer],
+    [clearTooltipTimer, scheduleTooltipAutoHide],
   );
   React.useEffect(() => clearTooltipTimer, [clearTooltipTimer]);
 
@@ -267,8 +271,22 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
       fullWidth: tooltipFullWidth,
       maxWidthPx: tooltipMaxWidthPx,
     };
-    // Shallow key check to avoid excessive re-renders
-    const key = `${model.visible}-${model.anchorTimeMs}`;
+    // Keep the external renderer fresh without emitting on every array identity churn.
+    const key = [
+      model.visible,
+      model.anchorTimeMs,
+      model.bgSample?.date ?? 'no-bg',
+      model.bgSample?.sgv ?? 'no-sgv',
+      model.activeInsulinU ?? 'no-iob',
+      model.activeInsulinBolusU ?? 'no-bolus-iob',
+      model.activeInsulinBasalU ?? 'no-basal-iob',
+      model.cobG ?? 'no-cob',
+      model.basalRateUhr ?? 'no-basal-rate',
+      model.bolusSummary.count,
+      model.bolusSummary.totalU,
+      model.carbsSummary.count,
+      model.carbsSummary.totalG,
+    ].join('|');
     if (key !== prevModelRef.current) {
       prevModelRef.current = key;
       onTooltipModelChange(model);
@@ -373,8 +391,11 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
   const handleMiniTouchCancel = useCallback(() => {
     // Keep the last selection visible when ScrollView or another responder takes over.
-    // The tooltip auto-hide timer still clears stale selections if no release arrives.
-  }, []);
+    // If no release arrives afterwards, clear it as a stale selection.
+    if (chartsTooltip) {
+      scheduleTooltipAutoHide();
+    }
+  }, [chartsTooltip, scheduleTooltipAutoHide]);
 
   return (
     <View testID={testID}>
