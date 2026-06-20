@@ -1,6 +1,5 @@
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
-import {StyleSheet} from 'react-native';
 import {ThemeProvider} from 'styled-components/native';
 
 import StackedHomeCharts from '../src/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
@@ -9,16 +8,20 @@ import {theme} from '../src/style/theme';
 let mockTouchTimeMs = 0;
 
 jest.mock('app/components/charts/CgmGraph/CgmGraph', () => {
-  const React = require('react');
+  const MockReact = require('react');
   const {View} = require('react-native');
 
   return function MockCgmGraph(props: any) {
-    React.useEffect(() => {
-      props.onTooltipChange?.({touchTimeMs: mockTouchTimeMs, anchorTimeMs: mockTouchTimeMs});
-      return () => props.onTooltipChange?.(null);
-    }, [props.onTooltipChange]);
+    const {onTooltipChange} = props;
+    MockReact.useEffect(() => {
+      onTooltipChange?.({
+        touchTimeMs: mockTouchTimeMs,
+        anchorTimeMs: mockTouchTimeMs,
+      });
+      return () => onTooltipChange?.(null);
+    }, [onTooltipChange]);
 
-    return React.createElement(View, {testID: 'mock.cgmGraph'});
+    return MockReact.createElement(View, {testID: 'mock.cgmGraph'});
   };
 });
 
@@ -36,7 +39,17 @@ describe('StackedHomeCharts tooltip docking', () => {
         <ThemeProvider theme={theme}>
           <StackedHomeCharts
             testID="stacked"
-            bgSamples={[{sgv: 110, date: start, dateString: new Date(start).toISOString(), trend: 0, direction: 'Flat', device: 'mock', type: 'sgv'} as any]}
+            bgSamples={[
+              {
+                sgv: 110,
+                date: start,
+                dateString: new Date(start).toISOString(),
+                trend: 0,
+                direction: 'Flat',
+                device: 'mock',
+                type: 'sgv',
+              } as any,
+            ]}
             foodItems={null}
             insulinData={[]}
             width={400}
@@ -53,9 +66,8 @@ describe('StackedHomeCharts tooltip docking', () => {
     });
 
     const dock = tree!.root.findByProps({testID: 'stacked.tooltipDock'});
-    const style = StyleSheet.flatten(dock.props.style);
 
-    expect(style.justifyContent).toBe('flex-start');
+    expect(dock.props.$align).toBe('left');
 
     await act(async () => tree!.unmount());
   });
@@ -73,7 +85,17 @@ describe('StackedHomeCharts tooltip docking', () => {
         <ThemeProvider theme={theme}>
           <StackedHomeCharts
             testID="stacked"
-            bgSamples={[{sgv: 110, date: start, dateString: new Date(start).toISOString(), trend: 0, direction: 'Flat', device: 'mock', type: 'sgv'} as any]}
+            bgSamples={[
+              {
+                sgv: 110,
+                date: start,
+                dateString: new Date(start).toISOString(),
+                trend: 0,
+                direction: 'Flat',
+                device: 'mock',
+                type: 'sgv',
+              } as any,
+            ]}
             foodItems={null}
             insulinData={[]}
             width={400}
@@ -90,9 +112,8 @@ describe('StackedHomeCharts tooltip docking', () => {
     });
 
     const dock = tree!.root.findByProps({testID: 'stacked.tooltipDock'});
-    const style = StyleSheet.flatten(dock.props.style);
 
-    expect(style.justifyContent).toBe('flex-end');
+    expect(dock.props.$align).toBe('right');
 
     await act(async () => tree!.unmount());
   });

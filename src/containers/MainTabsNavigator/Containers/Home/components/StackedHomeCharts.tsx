@@ -14,6 +14,7 @@ import CobMiniGraph from 'app/components/charts/CobMiniGraph/CobMiniGraph';
 import MixedMiniChart from 'app/components/charts/MixedMiniChart/MixedMiniChart';
 import HomeChartsTooltip from 'app/containers/MainTabsNavigator/Containers/Home/components/HomeChartsTooltip';
 import {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
+import {buildExternalTooltipPayloadFromLocationX} from 'app/components/charts/CgmGraph/utils/externalTooltipTouch.utils';
 import {useStackedChartsTooltipModel} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useStackedChartsTooltipModel';
 import {useBasalRateAtTime} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useBasalRateAtTime';
 import {useBgTooltipDerivedMetrics} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useBgTooltipDerivedMetrics';
@@ -166,10 +167,13 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
   const theme = useTheme() as ThemeType;
 
-  const [chartsTooltip, setChartsTooltip] = useState<CGMGraphExternalTooltipPayload | null>(null);
+  const [chartsTooltip, setChartsTooltip] =
+    useState<CGMGraphExternalTooltipPayload | null>(null);
 
   // Auto-hide tooltip after 4 s of no updates (safety net for stuck touch events).
-  const tooltipTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tooltipTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const clearTooltipTimer = React.useCallback(() => {
     if (tooltipTimerRef.current) {
       clearTimeout(tooltipTimerRef.current);
@@ -181,7 +185,10 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
       clearTooltipTimer();
       setChartsTooltip(payload);
       if (payload != null) {
-        tooltipTimerRef.current = setTimeout(() => setChartsTooltip(null), 4000);
+        tooltipTimerRef.current = setTimeout(
+          () => setChartsTooltip(null),
+          4000,
+        );
       }
     },
     [clearTooltipTimer],
@@ -241,7 +248,9 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   // ── Emit tooltip model to parent when placement is 'none' ─────────
   const prevModelRef = useRef<string>('');
   React.useEffect(() => {
-    if (!onTooltipModelChange) return;
+    if (!onTooltipModelChange) {
+      return;
+    }
     const model: StackedChartsTooltipModel = {
       visible: shouldShowTooltip,
       anchorTimeMs: cgmAnchorTimeMs,
@@ -265,11 +274,21 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
       onTooltipModelChange(model);
     }
   }, [
-    onTooltipModelChange, shouldShowTooltip, cgmAnchorTimeMs,
-    tooltipBgSample, activeInsulinU, activeInsulinBolusU,
-    activeInsulinBasalU, cobG, basalRateUhr,
-    bolusSummary, carbsSummary, tooltipBolusEvents, tooltipCarbEvents,
-    tooltipFullWidth, tooltipMaxWidthPx,
+    onTooltipModelChange,
+    shouldShowTooltip,
+    cgmAnchorTimeMs,
+    tooltipBgSample,
+    activeInsulinU,
+    activeInsulinBolusU,
+    activeInsulinBasalU,
+    cobG,
+    basalRateUhr,
+    bolusSummary,
+    carbsSummary,
+    tooltipBolusEvents,
+    tooltipCarbEvents,
+    tooltipFullWidth,
+    tooltipMaxWidthPx,
   ]);
 
   // Whether to render the tooltip inside this component
@@ -280,86 +299,120 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   // View that translates touch x → time and forwards to the tooltip system.
 
   const miniChartXScale = useMemo(() => {
-    const resolvedDomain = xDomain ?? (() => {
-      const extent = d3.extent(bgSamples, s => new Date(s.date));
-      if (extent[0] && extent[1]) return extent as [Date, Date];
-      const now = new Date();
-      return [now, now] as [Date, Date];
-    })();
-    const plotWidth = Math.max(1, width - stackedChartsMargin.left - stackedChartsMargin.right);
+    const resolvedDomain =
+      xDomain ??
+      (() => {
+        const extent = d3.extent(bgSamples, s => new Date(s.date));
+        if (extent[0] && extent[1]) {
+          return extent as [Date, Date];
+        }
+        const now = new Date();
+        return [now, now] as [Date, Date];
+      })();
+    const plotWidth = Math.max(
+      1,
+      width - stackedChartsMargin.left - stackedChartsMargin.right,
+    );
     return d3.scaleTime().domain(resolvedDomain).range([0, plotWidth]);
-  }, [bgSamples, stackedChartsMargin.left, stackedChartsMargin.right, width, xDomain]);
+  }, [
+    bgSamples,
+    stackedChartsMargin.left,
+    stackedChartsMargin.right,
+    width,
+    xDomain,
+  ]);
 
-  const miniTouchToTime = useCallback(
-    (evt: GestureResponderEvent): number | null => {
+  const buildMiniTooltipPayload = useCallback(
+    (evt: GestureResponderEvent): CGMGraphExternalTooltipPayload | null => {
       const rawX = evt.nativeEvent.locationX;
-      if (typeof rawX !== 'number' || !Number.isFinite(rawX)) return null;
-      const plotWidth = Math.max(1, width - stackedChartsMargin.left - stackedChartsMargin.right);
-      const localX = Math.max(0, Math.min(rawX - stackedChartsMargin.left, plotWidth));
-      const t = miniChartXScale.invert(localX).getTime();
-      return Number.isFinite(t) ? t : null;
+      if (typeof rawX !== 'number' || !Number.isFinite(rawX)) {
+        return null;
+      }
+      const plotWidth = Math.max(
+        1,
+        width - stackedChartsMargin.left - stackedChartsMargin.right,
+      );
+      return buildExternalTooltipPayloadFromLocationX({
+        rawX,
+        plotMarginLeft: stackedChartsMargin.left,
+        plotWidth,
+        xScale: miniChartXScale,
+      });
     },
-    [miniChartXScale, stackedChartsMargin.left, stackedChartsMargin.right, width],
+    [
+      miniChartXScale,
+      stackedChartsMargin.left,
+      stackedChartsMargin.right,
+      width,
+    ],
   );
 
   const handleMiniTouchStart = useCallback(
     (evt: GestureResponderEvent) => {
-      const timeMs = miniTouchToTime(evt);
-      if (timeMs != null) handleTooltipChange({touchTimeMs: timeMs, anchorTimeMs: timeMs});
+      const payload = buildMiniTooltipPayload(evt);
+      if (payload) {
+        handleTooltipChange(payload);
+      }
     },
-    [miniTouchToTime, handleTooltipChange],
+    [buildMiniTooltipPayload, handleTooltipChange],
   );
 
   const handleMiniTouchMove = useCallback(
     (evt: GestureResponderEvent) => {
-      const timeMs = miniTouchToTime(evt);
-      if (timeMs != null) handleTooltipChange({touchTimeMs: timeMs, anchorTimeMs: timeMs});
+      const payload = buildMiniTooltipPayload(evt);
+      if (payload) {
+        handleTooltipChange(payload);
+      }
     },
-    [miniTouchToTime, handleTooltipChange],
+    [buildMiniTooltipPayload, handleTooltipChange],
   );
 
   const handleMiniTouchEnd = useCallback(() => {
     handleTooltipChange(null);
   }, [handleTooltipChange]);
 
+  const handleMiniTouchCancel = useCallback(() => {
+    // Keep the last selection visible when ScrollView or another responder takes over.
+    // The tooltip auto-hide timer still clears stale selections if no release arrives.
+  }, []);
+
   return (
     <View testID={testID}>
       {/* 'top' placement: tooltip in normal flow ABOVE the chart stack */}
-      {renderTooltipInternally && tooltipPlacement === 'top' && shouldShowTooltip ? (
-        <TooltipDock
-          testID={tooltipDockTestID}
-          style={{justifyContent: resolvedTooltipAlign === 'right' ? 'flex-end' : 'flex-start'}}
-        >
+      {renderTooltipInternally &&
+      tooltipPlacement === 'top' &&
+      shouldShowTooltip ? (
+        <TooltipDock testID={tooltipDockTestID} $align={resolvedTooltipAlign}>
           <HomeChartsTooltip
-                anchorTimeMs={cgmAnchorTimeMs}
-                bgSample={tooltipBgSample}
-                activeInsulinU={activeInsulinU}
-                activeInsulinBolusU={activeInsulinBolusU}
-                activeInsulinBasalU={activeInsulinBasalU}
-                cobG={cobG}
-                basalRateUhr={basalRateUhr}
-                bolusSummary={bolusSummary}
-                carbsSummary={carbsSummary}
-                bolusEvents={tooltipBolusEvents}
-                carbEvents={tooltipCarbEvents}
-                fullWidth={tooltipFullWidth}
-                maxWidthPx={tooltipMaxWidthPx}
-              />
-            </TooltipDock>
-        ) : null}
+            anchorTimeMs={cgmAnchorTimeMs}
+            bgSample={tooltipBgSample}
+            activeInsulinU={activeInsulinU}
+            activeInsulinBolusU={activeInsulinBolusU}
+            activeInsulinBasalU={activeInsulinBasalU}
+            cobG={cobG}
+            basalRateUhr={basalRateUhr}
+            bolusSummary={bolusSummary}
+            carbsSummary={carbsSummary}
+            bolusEvents={tooltipBolusEvents}
+            carbEvents={tooltipCarbEvents}
+            fullWidth={tooltipFullWidth}
+            maxWidthPx={tooltipMaxWidthPx}
+          />
+        </TooltipDock>
+      ) : null}
 
       <ChartStack>
         {/* 'above' / 'inside' placement: absolute overlay inside ChartStack */}
-        {renderTooltipInternally && tooltipPlacement !== 'top' && shouldShowTooltip ? (
+        {renderTooltipInternally &&
+        tooltipPlacement !== 'top' &&
+        shouldShowTooltip ? (
           <ChartTooltipOverlay
             $placement={tooltipPlacement === 'inside' ? 'inside' : 'above'}
             pointerEvents="none"
-            testID={tooltipOverlayTestID}
-          >
+            testID={tooltipOverlayTestID}>
             <TooltipDock
               testID={tooltipDockTestID}
-              style={{justifyContent: resolvedTooltipAlign === 'right' ? 'flex-end' : 'flex-start'}}
-            >
+              $align={resolvedTooltipAlign}>
               <HomeChartsTooltip
                 anchorTimeMs={cgmAnchorTimeMs}
                 bgSample={tooltipBgSample}
@@ -386,8 +439,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
               onPress={onPressFullScreen}
               accessibilityRole="button"
               accessibilityLabel="Full screen"
-              hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
-            >
+              hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
               <Icon name="fullscreen" size={20} color={theme.textColor} />
             </FullScreenButton>
           </FullScreenButtonOverlay>
@@ -416,8 +468,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
         onResponderGrant={handleMiniTouchStart}
         onResponderMove={handleMiniTouchMove}
         onResponderRelease={handleMiniTouchEnd}
-        onResponderTerminate={handleMiniTouchEnd}
-      >
+        onResponderTerminate={handleMiniTouchCancel}>
         {chartMode === 'mixed' ? (
           <MixedMiniChart
             bgSamples={bgSamples}
@@ -500,9 +551,11 @@ const ChartTooltipOverlay = styled.View<{$placement: 'above' | 'inside'}>`
   elevation: 20;
 `;
 
-const TooltipDock = styled.View`
+const TooltipDock = styled.View<{$align: 'left' | 'right'}>`
   width: 100%;
   flex-direction: row;
+  justify-content: ${({$align}: {$align: 'left' | 'right'}) =>
+    $align === 'right' ? 'flex-end' : 'flex-start'};
 `;
 
 const FullScreenButtonOverlay = styled.View`
@@ -519,9 +572,11 @@ const FullScreenButton = styled(Pressable)`
   border-radius: 20px;
   align-items: center;
   justify-content: center;
-  background-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.white, 0.9)};
+  background-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.white, 0.9)};
   border-width: 1px;
-  border-color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.12)};
+  border-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.12)};
 `;
 
 export default StackedHomeCharts;

@@ -1,4 +1,4 @@
-import React, {useMemo, useRef} from 'react';
+import React, {useCallback, useMemo, useRef} from 'react';
 import {View} from 'react-native';
 import Svg, {ClipPath, Defs, G, Line, Rect} from 'react-native-svg';
 import styled from 'styled-components/native';
@@ -25,11 +25,11 @@ import CombinedBgBolusTooltip from 'app/components/charts/CgmGraph/components/To
 import CombinedBgMultiBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/CombinedBgMultiBolusTooltip';
 import {addOpacity} from 'app/style/styling.utils';
 
-import type {CgmGraphProps, CGMGraphExternalTooltipPayload} from './CgmGraph.types';
+import type {CgmGraphProps} from './CgmGraph.types';
 import {useCgmGraphTooltipModel} from './hooks/useCgmGraphTooltipModel';
 import {
+  buildExternalTooltipPayloadFromLocationX,
   clamp,
-  computeTouchTimeMsFromLocationX,
 } from './utils/externalTooltipTouch.utils';
 
 export type {CGMGraphExternalTooltipPayload} from './CgmGraph.types';
@@ -59,16 +59,14 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   onTooltipChange,
   cursorTimeMs,
 }) => {
-  if (!bgSamples || bgSamples.length === 0) {
-    // For E2E we still want a stable anchor in the view hierarchy.
-    // Rendering an empty container avoids flakiness when an account has no CGM data.
-    return testID ? <View style={{width, height}} testID={testID} /> : null;
-  }
+  const hasSamples = !!bgSamples?.length;
 
   const containerRef = useRef<View>(null);
 
   const isCompactMealVariant =
-    variant === 'compactMeal' || variant === 'compactMealLight' || variant === 'compactMealDark';
+    variant === 'compactMeal' ||
+    variant === 'compactMealLight' ||
+    variant === 'compactMealDark';
 
   const resolvedShowYLabels = isCompactMealVariant ? false : showYLabels;
   const resolvedYTicksAmount = isCompactMealVariant ? 4 : yTicksAmount;
@@ -88,13 +86,20 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
     handleTouchEnd,
   } = touchContext;
 
-  const graphStyleProviderValue = useMemo(
-    () => [graphStyleContextValue, setGraphStyleContextValue] as const,
+  const graphStyleProviderValue = useMemo<
+    React.ContextType<typeof GraphStyleContext>
+  >(
+    () => [graphStyleContextValue, setGraphStyleContextValue],
     [graphStyleContextValue, setGraphStyleContextValue],
   );
 
-  const xTouchPositionRaw = touchPosition.x - graphStyleContextValue.margin.left;
-  const yTouchPosition = touchPosition.y - graphStyleContextValue.margin.top;
+  const xTouchPositionRaw =
+    touchPosition.x - graphStyleContextValue.margin.left;
+  const yTouchPosition = clamp(
+    touchPosition.y - graphStyleContextValue.margin.top,
+    0,
+    Math.max(0, graphStyleContextValue.graphHeight),
+  );
 
   const xTouchPosition = clamp(
     xTouchPositionRaw,
@@ -142,59 +147,82 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
       pushFullScreenViewScreen({navigation, payload: fullScreenPayload});
     };
   }, [fullScreenPayload, navigation]);
-  const handleTouchStartWithTooltip = useMemo(() => {
-    if (tooltipMode !== 'external' || !onTooltipChange) {
-      return handleTouchStart;
-    }
+  const emitExternalTooltipFromEvent = useCallback(
+    (event: any) => {
+      if (tooltipMode !== 'external' || !onTooltipChange) {
+        return;
+      }
 
-    return (event: any) => {
+      const payload = buildExternalTooltipPayloadFromLocationX({
+        rawX: event?.nativeEvent?.locationX,
+        plotMarginLeft: graphStyleContextValue.margin.left,
+        plotWidth: graphStyleContextValue.graphWidth,
+        xScale: graphStyleContextValue.xScale,
+      });
+      if (!payload) {
+        return;
+      }
+
+      onTooltipChange(payload);
+    },
+    [
+      graphStyleContextValue.graphWidth,
+      graphStyleContextValue.margin.left,
+      graphStyleContextValue.xScale,
+      onTooltipChange,
+      tooltipMode,
+    ],
+  );
+
+  const handleTouchStartWithTooltip = useCallback(
+    (event: any) => {
+      if (tooltipMode !== 'external' || !onTooltipChange) {
+        handleTouchStart(event);
+        return;
+      }
+
       handleTouchStart(event);
+      emitExternalTooltipFromEvent(event);
+    },
+    [
+      emitExternalTooltipFromEvent,
+      handleTouchStart,
+      onTooltipChange,
+      tooltipMode,
+    ],
+  );
 
-      const rawX = event?.nativeEvent?.locationX;
-      const t = computeTouchTimeMsFromLocationX({
-        rawX,
-        plotMarginLeft: graphStyleContextValue.margin.left,
-        plotWidth: graphStyleContextValue.graphWidth,
-        xScale: graphStyleContextValue.xScale,
-      });
-      if (t == null) return;
+  const handleTouchMoveWithTooltip = useCallback(
+    (event: any) => {
+      if (tooltipMode !== 'external' || !onTooltipChange) {
+        handleTouchMove(event);
+        return;
+      }
 
-      // In external mode we emit the raw touch time; the parent can snap it.
-      onTooltipChange({touchTimeMs: t, anchorTimeMs: t});
-    };
-  }, [graphStyleContextValue.graphWidth, graphStyleContextValue.margin.left, graphStyleContextValue.xScale, handleTouchStart, onTooltipChange, tooltipMode]);
-
-  const handleTouchMoveWithTooltip = useMemo(() => {
-    if (tooltipMode !== 'external' || !onTooltipChange) {
-      return handleTouchMove;
-    }
-
-    return (event: any) => {
       handleTouchMove(event);
+      emitExternalTooltipFromEvent(event);
+    },
+    [
+      emitExternalTooltipFromEvent,
+      handleTouchMove,
+      onTooltipChange,
+      tooltipMode,
+    ],
+  );
 
-      const rawX = event?.nativeEvent?.locationX;
-      const t = computeTouchTimeMsFromLocationX({
-        rawX,
-        plotMarginLeft: graphStyleContextValue.margin.left,
-        plotWidth: graphStyleContextValue.graphWidth,
-        xScale: graphStyleContextValue.xScale,
-      });
-      if (t == null) return;
-
-      onTooltipChange({touchTimeMs: t, anchorTimeMs: t});
-    };
-  }, [graphStyleContextValue.graphWidth, graphStyleContextValue.margin.left, graphStyleContextValue.xScale, handleTouchMove, onTooltipChange, tooltipMode]);
-
-  const handleTouchEndWithTooltip = useMemo(() => {
+  const handleTouchEndWithTooltip = useCallback(() => {
     if (tooltipMode !== 'external' || !onTooltipChange) {
-      return handleTouchEnd;
+      handleTouchEnd();
+      return;
     }
 
-    return () => {
-      handleTouchEnd();
-      onTooltipChange(null);
-    };
+    handleTouchEnd();
+    onTooltipChange(null);
   }, [handleTouchEnd, onTooltipChange, tooltipMode]);
+
+  const handleTouchCancelWithTooltip = useCallback(() => {
+    handleTouchEnd();
+  }, [handleTouchEnd]);
 
   const focusX =
     tooltipMode === 'external' && cgmAnchorTimeMs != null
@@ -202,30 +230,62 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
       : xTouchPosition;
 
   const shouldShowFocus =
-    resolvedInteractive && isTouchActive && (tooltipMode === 'external' || closestBgSample || tooltipBolusEvents.length > 0);
+    resolvedInteractive &&
+    (tooltipMode === 'external' ? cgmAnchorTimeMs != null : isTouchActive) &&
+    (tooltipMode === 'external' ||
+      closestBgSample ||
+      tooltipBolusEvents.length > 0);
+
+  if (!hasSamples) {
+    // For E2E we still want a stable anchor in the view hierarchy.
+    // Rendering an empty container avoids flakiness when an account has no CGM data.
+    return testID ? <View style={{width, height}} testID={testID} /> : null;
+  }
 
   return (
     <GraphStyleContext.Provider value={graphStyleProviderValue}>
-      <GraphContainer ref={containerRef} style={{width, height}} testID={testID}>
+      <GraphContainer
+        ref={containerRef}
+        style={{width, height}}
+        testID={testID}>
         <StyledSvg
-          onTouchStart={resolvedInteractive ? handleTouchStartWithTooltip : undefined}
-          onTouchMove={resolvedInteractive ? handleTouchMoveWithTooltip : undefined}
-          onTouchEnd={resolvedInteractive ? handleTouchEndWithTooltip : undefined}
-          onTouchCancel={resolvedInteractive ? handleTouchEndWithTooltip : undefined}
+          onTouchStart={
+            resolvedInteractive ? handleTouchStartWithTooltip : undefined
+          }
+          onTouchMove={
+            resolvedInteractive ? handleTouchMoveWithTooltip : undefined
+          }
+          onTouchEnd={
+            resolvedInteractive ? handleTouchEndWithTooltip : undefined
+          }
+          onTouchCancel={
+            resolvedInteractive ? handleTouchCancelWithTooltip : undefined
+          }
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}>
           <Defs>
             <ClipPath id="cgmPlotClip">
-              <Rect x={0} y={0} width={graphStyleContextValue.graphWidth} height={graphStyleContextValue.graphHeight} />
+              <Rect
+                x={0}
+                y={0}
+                width={graphStyleContextValue.graphWidth}
+                height={graphStyleContextValue.graphHeight}
+              />
             </ClipPath>
           </Defs>
 
           <G
             x={graphStyleContextValue.margin?.left}
             y={graphStyleContextValue.margin?.top}>
-            <XGridAndAxis xTickLabelFormatter={xTickLabelFormatter ?? undefined} />
-            <YGridAndAxis highestBgThreshold={300} ticksAmount={resolvedYTicksAmount} showLabels={resolvedShowYLabels} />
+            <XGridAndAxis
+              xTickLabelFormatter={xTickLabelFormatter ?? undefined}
+            />
+            <YGridAndAxis
+              highestBgThreshold={300}
+              ticksAmount={resolvedYTicksAmount}
+              showLabels={resolvedShowYLabels}
+            />
             {showDateLabels ? <GraphDateDisplay /> : null}
 
             <G clipPath="url(#cgmPlotClip)">

@@ -34,8 +34,16 @@ export type CgmGraphTooltipModel = {
    */
   eventsAnchorTimeMs: number | null;
 
-  tooltipBolusEvents: Array<InsulinDataEntry & {type: 'bolus'; amount: number; timestamp: string}>;
-  tooltipCarbEvents: Array<(FoodItemDTO | formattedFoodItemDTO) & {id: string; timestamp: number; carbs: number}>;
+  tooltipBolusEvents: Array<
+    InsulinDataEntry & {type: 'bolus'; amount: number; timestamp: string}
+  >;
+  tooltipCarbEvents: Array<
+    (FoodItemDTO | formattedFoodItemDTO) & {
+      id: string;
+      timestamp: number;
+      carbs: number;
+    }
+  >;
 
   focusedFoodItemIds: string[];
   focusedBolusTimestamps: string[];
@@ -47,6 +55,28 @@ export type CgmGraphTooltipModel = {
 
   shouldUseExternalCursor: boolean;
 };
+
+export function resolveCgmTooltipInteractionTime(params: {
+  tooltipMode: CgmGraphTooltipMode;
+  cursorTimeMs?: number | null;
+  isTouchActive: boolean;
+  touchTimeMs: number | null;
+}) {
+  const {tooltipMode, cursorTimeMs, isTouchActive, touchTimeMs} = params;
+  const shouldUseExternalCursor =
+    tooltipMode === 'external' && cursorTimeMs != null;
+  const activeTimeMs = shouldUseExternalCursor
+    ? cursorTimeMs
+    : isTouchActive
+    ? touchTimeMs
+    : null;
+
+  return {
+    activeTimeMs,
+    isInteractionActive: activeTimeMs != null,
+    shouldUseExternalCursor,
+  };
+}
 
 /**
  * Builds all derived tooltip state for `CgmGraph`.
@@ -76,80 +106,122 @@ export function useCgmGraphTooltipModel(params: {
     touchTimeMs,
   } = params;
 
-  const shouldUseExternalCursor = tooltipMode === 'external' && cursorTimeMs != null;
+  const {activeTimeMs, isInteractionActive, shouldUseExternalCursor} =
+    resolveCgmTooltipInteractionTime({
+      tooltipMode,
+      cursorTimeMs,
+      isTouchActive,
+      touchTimeMs,
+    });
 
   const closestBgSample = useMemo(() => {
-    return isTouchActive && touchTimeMs != null
-      ? findClosestBgSample(touchTimeMs, bgSamples)
+    return isInteractionActive
+      ? findClosestBgSample(activeTimeMs as number, bgSamples)
       : null;
-  }, [bgSamples, isTouchActive, touchTimeMs]);
+  }, [activeTimeMs, bgSamples, isInteractionActive]);
 
   const closestBolus = useMemo(() => {
     // In external mode, cursor snapping/windowing is expected to be driven by the parent.
-    if (shouldUseExternalCursor) return null;
-    if (!isTouchActive || touchTimeMs == null) return null;
-    if (!insulinData?.length) return null;
+    if (shouldUseExternalCursor) {
+      return null;
+    }
+    if (!isTouchActive || touchTimeMs == null) {
+      return null;
+    }
+    if (!insulinData?.length) {
+      return null;
+    }
     return findClosestBolus(touchTimeMs, insulinData);
   }, [insulinData, isTouchActive, shouldUseExternalCursor, touchTimeMs]);
 
   const closestCarb = useMemo(() => {
-    if (shouldUseExternalCursor) return null;
-    if (!isTouchActive || touchTimeMs == null) return null;
-    if (!foodItems?.length) return null;
+    if (shouldUseExternalCursor) {
+      return null;
+    }
+    if (!isTouchActive || touchTimeMs == null) {
+      return null;
+    }
+    if (!foodItems?.length) {
+      return null;
+    }
     return findClosestCarbEvent(touchTimeMs, foodItems);
   }, [foodItems, isTouchActive, shouldUseExternalCursor, touchTimeMs]);
 
   const cgmAnchorTimeMs = useMemo(() => {
-    if (!isTouchActive) return null;
-    if (touchTimeMs == null) return null;
-
     if (shouldUseExternalCursor) {
       return cursorTimeMs as number;
     }
 
-    return touchTimeMs;
-  }, [cursorTimeMs, isTouchActive, shouldUseExternalCursor, touchTimeMs]);
+    return isInteractionActive ? touchTimeMs : null;
+  }, [cursorTimeMs, isInteractionActive, shouldUseExternalCursor, touchTimeMs]);
 
   const eventsAnchorTimeMs = useMemo(() => {
-    if (!isTouchActive) return null;
-    if (touchTimeMs == null) return null;
-
     if (shouldUseExternalCursor) {
       return cursorTimeMs as number;
+    }
+    if (!isInteractionActive || touchTimeMs == null) {
+      return null;
     }
 
     if (closestBolus?.timestamp != null) {
       const t = new Date(closestBolus.timestamp).getTime();
-      if (Number.isFinite(t)) return t;
+      if (Number.isFinite(t)) {
+        return t;
+      }
     }
     if (closestCarb?.timestamp != null) {
       return closestCarb.timestamp;
     }
 
     return touchTimeMs;
-  }, [closestBolus?.timestamp, closestCarb?.timestamp, cursorTimeMs, isTouchActive, shouldUseExternalCursor, touchTimeMs]);
+  }, [
+    closestBolus?.timestamp,
+    closestCarb?.timestamp,
+    cursorTimeMs,
+    isInteractionActive,
+    shouldUseExternalCursor,
+    touchTimeMs,
+  ]);
 
   const tooltipBolusEvents = useMemo(() => {
-    if (!isTouchActive) return [];
-    if (eventsAnchorTimeMs == null) return [];
-    if (!insulinData?.length) return [];
+    if (!isInteractionActive) {
+      return [];
+    }
+    if (eventsAnchorTimeMs == null) {
+      return [];
+    }
+    if (!insulinData?.length) {
+      return [];
+    }
 
     return findBolusEventsInTooltipWindow({
       anchorTimeMs: eventsAnchorTimeMs,
       insulinData,
     });
-  }, [eventsAnchorTimeMs, insulinData, isTouchActive]);
+  }, [eventsAnchorTimeMs, insulinData, isInteractionActive]);
 
   const tooltipCarbEvents = useMemo(() => {
-    if (!isTouchActive) return [];
-    if (!foodItems?.length) return [];
-    if (eventsAnchorTimeMs == null) return [];
+    if (!isInteractionActive) {
+      return [];
+    }
+    if (!foodItems?.length) {
+      return [];
+    }
+    if (eventsAnchorTimeMs == null) {
+      return [];
+    }
 
-    return findCarbEventsInTooltipWindow({anchorTimeMs: eventsAnchorTimeMs, foodItems});
-  }, [eventsAnchorTimeMs, foodItems, isTouchActive]);
+    return findCarbEventsInTooltipWindow({
+      anchorTimeMs: eventsAnchorTimeMs,
+      foodItems,
+    });
+  }, [eventsAnchorTimeMs, foodItems, isInteractionActive]);
 
   // Avoid prop identity churn during touch-move renders.
-  const focusedFoodItemIds = useMemo(() => tooltipCarbEvents.map(c => c.id), [tooltipCarbEvents]);
+  const focusedFoodItemIds = useMemo(
+    () => tooltipCarbEvents.map(c => c.id),
+    [tooltipCarbEvents],
+  );
   const focusedBolusTimestamps = useMemo(
     () => tooltipBolusEvents.map(b => b.timestamp),
     [tooltipBolusEvents],
