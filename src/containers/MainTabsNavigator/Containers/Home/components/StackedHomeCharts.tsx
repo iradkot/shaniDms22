@@ -1,29 +1,27 @@
-import React, {useCallback, useMemo, useRef, useState} from 'react';
+import React, {useMemo, useRef} from 'react';
 
-import {type GestureResponderEvent, Pressable, View} from 'react-native';
+import {Pressable, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import styled, {useTheme} from 'styled-components/native';
-import * as d3 from 'd3';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 
 import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
-import type {CGMGraphExternalTooltipPayload} from 'app/components/charts/CgmGraph/CgmGraph';
 import BasalMiniGraph from 'app/components/charts/BasalMiniGraph/BasalMiniGraph';
 import ActiveInsulinMiniGraph from 'app/components/charts/ActiveInsulinMiniGraph/ActiveInsulinMiniGraph';
 import CobMiniGraph from 'app/components/charts/CobMiniGraph/CobMiniGraph';
 import MixedMiniChart from 'app/components/charts/MixedMiniChart/MixedMiniChart';
 import HomeChartsTooltip from 'app/containers/MainTabsNavigator/Containers/Home/components/HomeChartsTooltip';
-import {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
-import {buildExternalTooltipPayloadFromLocationX} from 'app/components/charts/CgmGraph/utils/externalTooltipTouch.utils';
+import type {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 import {useStackedChartsTooltipModel} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useStackedChartsTooltipModel';
 import {useBasalRateAtTime} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useBasalRateAtTime';
 import {useBgTooltipDerivedMetrics} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useBgTooltipDerivedMetrics';
 import {useTooltipEventsSummary} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useTooltipEventsSummary';
+import {useStackedChartsTouchTooltip} from 'app/containers/MainTabsNavigator/Containers/Home/components/hooks/useStackedChartsTouchTooltip';
 
-import {BgSample} from 'app/types/day_bgs.types';
-import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
-import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
-import {ThemeType} from 'app/types/theme';
+import type {BgSample} from 'app/types/day_bgs.types';
+import type {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
+import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
+import type {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 
 /** Tooltip state exposed to parent when `tooltipPlacement="none"`. */
@@ -167,38 +165,6 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
   const theme = useTheme() as ThemeType;
 
-  const [chartsTooltip, setChartsTooltip] =
-    useState<CGMGraphExternalTooltipPayload | null>(null);
-
-  // Auto-hide tooltip after 4 s of no updates (safety net for stuck touch events).
-  const tooltipTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const clearTooltipTimer = React.useCallback(() => {
-    if (tooltipTimerRef.current) {
-      clearTimeout(tooltipTimerRef.current);
-      tooltipTimerRef.current = null;
-    }
-  }, []);
-  const scheduleTooltipAutoHide = React.useCallback(() => {
-    clearTooltipTimer();
-    tooltipTimerRef.current = setTimeout(() => {
-      setChartsTooltip(null);
-      tooltipTimerRef.current = null;
-    }, 4000);
-  }, [clearTooltipTimer]);
-  const handleTooltipChange = React.useCallback(
-    (payload: CGMGraphExternalTooltipPayload | null) => {
-      clearTooltipTimer();
-      setChartsTooltip(payload);
-      if (payload?.autoHide) {
-        scheduleTooltipAutoHide();
-      }
-    },
-    [clearTooltipTimer, scheduleTooltipAutoHide],
-  );
-  React.useEffect(() => clearTooltipTimer, [clearTooltipTimer]);
-
   const stackedChartsMargin = useMemo<ChartMargin>(
     () =>
       marginOverride ?? {
@@ -209,6 +175,17 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
       },
     [marginOverride],
   );
+
+  const {
+    chartsTooltip,
+    handleTooltipChange,
+    touchHandlers: stackedTouchHandlers,
+  } = useStackedChartsTouchTooltip({
+    bgSamples,
+    width,
+    margin: stackedChartsMargin,
+    xDomain,
+  });
 
   const {
     shouldShowTooltip,
@@ -312,98 +289,6 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
   // Whether to render the tooltip inside this component
   const renderTooltipInternally = tooltipPlacement !== 'none';
-
-  // ── Parent-level touch forwarding ──────────────────────────────────
-  // The stacked view observes touches without taking responder ownership, so
-  // ScrollView keeps scrolling while the shared cursor/tooltip keeps updating.
-
-  const stackedChartsXScale = useMemo(() => {
-    const resolvedDomain =
-      xDomain ??
-      (() => {
-        const extent = d3.extent(bgSamples, s => new Date(s.date));
-        if (extent[0] && extent[1]) {
-          return extent as [Date, Date];
-        }
-        const now = new Date();
-        return [now, now] as [Date, Date];
-      })();
-    const plotWidth = Math.max(
-      1,
-      width - stackedChartsMargin.left - stackedChartsMargin.right,
-    );
-    return d3.scaleTime().domain(resolvedDomain).range([0, plotWidth]);
-  }, [
-    bgSamples,
-    stackedChartsMargin.left,
-    stackedChartsMargin.right,
-    width,
-    xDomain,
-  ]);
-
-  const buildStackedTooltipPayload = useCallback(
-    (evt: GestureResponderEvent): CGMGraphExternalTooltipPayload | null => {
-      const rawX = evt.nativeEvent.locationX;
-      if (typeof rawX !== 'number' || !Number.isFinite(rawX)) {
-        return null;
-      }
-      const plotWidth = Math.max(
-        1,
-        width - stackedChartsMargin.left - stackedChartsMargin.right,
-      );
-      return buildExternalTooltipPayloadFromLocationX({
-        rawX,
-        plotMarginLeft: stackedChartsMargin.left,
-        plotWidth,
-        xScale: stackedChartsXScale,
-      });
-    },
-    [
-      stackedChartsXScale,
-      stackedChartsMargin.left,
-      stackedChartsMargin.right,
-      width,
-    ],
-  );
-
-  const handleStackedTouchStart = useCallback(
-    (evt: GestureResponderEvent) => {
-      const payload = buildStackedTooltipPayload(evt);
-      if (payload) {
-        handleTooltipChange(payload);
-      }
-    },
-    [buildStackedTooltipPayload, handleTooltipChange],
-  );
-
-  const handleStackedTouchMove = useCallback(
-    (evt: GestureResponderEvent) => {
-      const payload = buildStackedTooltipPayload(evt);
-      if (payload) {
-        handleTooltipChange(payload);
-      }
-    },
-    [buildStackedTooltipPayload, handleTooltipChange],
-  );
-
-  const handleStackedTouchEnd = useCallback(() => {
-    handleTooltipChange(null);
-  }, [handleTooltipChange]);
-
-  const handleStackedTouchCancel = useCallback(() => {
-    // Keep the last selection visible when ScrollView or another responder takes over.
-    // If no release arrives afterwards, clear it as a stale selection.
-    if (chartsTooltip) {
-      scheduleTooltipAutoHide();
-    }
-  }, [chartsTooltip, scheduleTooltipAutoHide]);
-
-  const stackedTouchHandlers = {
-    onTouchStart: handleStackedTouchStart,
-    onTouchMove: handleStackedTouchMove,
-    onTouchEnd: handleStackedTouchEnd,
-    onTouchCancel: handleStackedTouchCancel,
-  };
 
   return (
     <View testID={testID}>
