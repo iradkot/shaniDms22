@@ -12,6 +12,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.os.Bundle
 import android.os.Build
 import android.os.SystemClock
 import android.view.View
@@ -184,7 +185,7 @@ object GlucoseWidgetUpdater {
 
     graphWidgetIds.forEach { widgetId ->
       try {
-        val views = buildGraphViews(context, state)
+        val views = buildGraphViews(context, state, manager.getAppWidgetOptions(widgetId))
         manager.updateAppWidget(widgetId, views)
       } catch (_: Throwable) {
         // Prevent widget rendering issues from crashing app process.
@@ -224,7 +225,7 @@ object GlucoseWidgetUpdater {
     return views
   }
 
-  private fun buildGraphViews(context: Context, state: WidgetState): RemoteViews {
+  private fun buildGraphViews(context: Context, state: WidgetState, widgetOptions: Bundle?): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.glucose_graph_widget)
     views.setTextViewText(R.id.glucose_graph_value, state.value?.toString() ?: "--")
     views.setTextViewText(R.id.glucose_graph_trend, state.trend.ifBlank { "•" })
@@ -232,12 +233,15 @@ object GlucoseWidgetUpdater {
 
     val syncPrefs = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
     val sparklineHours = syncPrefs.getInt(GlucoseSyncWorker.KEY_SPARKLINE_HOURS, 3).coerceIn(1, 12)
+    val (sparkWidth, sparkHeight) = graphBitmapSize(context, widgetOptions)
     val sparkBitmap = drawSparklineBitmap(
       state.sparkline,
       state.low,
       state.high,
       sparklineHours,
       state.sparklineStyle,
+      sparkWidth,
+      sparkHeight,
     )
     views.setImageViewBitmap(R.id.glucose_graph_sparkline, sparkBitmap)
     views.setOnClickPendingIntent(R.id.glucose_graph_widget_root, buildLaunchPendingIntent(context, 1))
@@ -274,15 +278,15 @@ object GlucoseWidgetUpdater {
     high: Int?,
     hours: Int,
     chartStyle: String,
+    width: Int,
+    height: Int,
   ): Bitmap? {
     if (values.size < 2) return null
 
-    val width = 420
-    val height = 96
-    val padX = 4f
-    val padTop = 6f
+    val padX = 8f
+    val padTop = 10f
     val axisGap = 6f
-    val axisTextSize = 18f
+    val axisTextSize = 15f
     val padBottom = axisTextSize + axisGap + 2f
 
     val minV = values.minOrNull() ?: return null
@@ -329,6 +333,11 @@ object GlucoseWidgetUpdater {
       canvas.drawLine(x, axisY - 3f, x, axisY + 3f, axisPaint)
       val hAgo = ((1f - t) * safeHours).toInt()
       val label = if (hAgo <= 0) "now" else "-${hAgo}h"
+      axisTextPaint.textAlign = when (i) {
+        0 -> Paint.Align.LEFT
+        tickCount - 1 -> Paint.Align.RIGHT
+        else -> Paint.Align.CENTER
+      }
       canvas.drawText(label, x, height - 3f, axisTextPaint)
     }
 
@@ -373,6 +382,32 @@ object GlucoseWidgetUpdater {
     }
 
     return bmp
+  }
+
+  private fun graphBitmapSize(context: Context, widgetOptions: Bundle?): Pair<Int, Int> {
+    val density = context.resources.displayMetrics.density
+    val optionWidthDp = widgetOptions
+      ?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0)
+      ?.takeIf { it > 0 }
+    val optionHeightDp = widgetOptions
+      ?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)
+      ?.takeIf { it > 0 }
+
+    if (optionWidthDp == null || optionHeightDp == null) {
+      return Pair(480, 180)
+    }
+
+    val horizontalPaddingDp = 16
+    val verticalChromeDp = 74
+    val widthPx = ((optionWidthDp - horizontalPaddingDp).coerceAtLeast(160) * density)
+      .toInt()
+      .coerceIn(360, 640)
+    val imageHeightDp = (optionHeightDp - verticalChromeDp).coerceAtLeast(72)
+    val heightPx = (imageHeightDp * density)
+      .toInt()
+      .coerceIn(140, 240)
+
+    return Pair(widthPx, heightPx)
   }
 
   fun updateNotification(context: Context) {

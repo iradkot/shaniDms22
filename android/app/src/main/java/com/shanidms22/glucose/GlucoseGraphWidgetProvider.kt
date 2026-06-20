@@ -3,6 +3,7 @@ package com.shanidms22.glucose
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.os.Bundle
 
 class GlucoseGraphWidgetProvider : AppWidgetProvider() {
   override fun onUpdate(
@@ -13,6 +14,16 @@ class GlucoseGraphWidgetProvider : AppWidgetProvider() {
     super.onUpdate(context, appWidgetManager, appWidgetIds)
     GlucoseSyncScheduler.scheduleFromPrefs(context)
     GlucoseSyncScheduler.enqueueImmediate(context)
+    GlucoseWidgetUpdater.updateWidgets(context)
+  }
+
+  override fun onAppWidgetOptionsChanged(
+    context: Context,
+    appWidgetManager: AppWidgetManager,
+    appWidgetId: Int,
+    newOptions: Bundle,
+  ) {
+    super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
     GlucoseWidgetUpdater.updateWidgets(context)
   }
 
