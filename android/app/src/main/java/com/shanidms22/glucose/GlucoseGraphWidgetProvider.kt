@@ -4,7 +4,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 
-class GlucoseWidgetProvider : AppWidgetProvider() {
+class GlucoseGraphWidgetProvider : AppWidgetProvider() {
   override fun onUpdate(
     context: Context,
     appWidgetManager: AppWidgetManager,

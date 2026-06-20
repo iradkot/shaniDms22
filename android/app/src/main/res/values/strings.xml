@@ -3,5 +3,8 @@
     <string name="glucose_channel_name">Live Glucose</string>
     <string name="glucose_channel_description">Persistent lock-screen glucose status</string>
     <string name="glucose_notification_title">Current glucose</string>
-    <string name="glucose_widget_description">Live glucose widget</string>
+    <string name="glucose_widget_name">Glucose summary</string>
+    <string name="glucose_graph_widget_name">Glucose graph</string>
+    <string name="glucose_widget_description">Live glucose summary widget</string>
+    <string name="glucose_graph_widget_description">Live glucose graph widget</string>
 </resources>

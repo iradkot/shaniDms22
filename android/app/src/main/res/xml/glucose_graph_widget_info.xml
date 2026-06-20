@@ -7,7 +7,7 @@
   android:targetCellWidth="3"
   android:targetCellHeight="2"
   android:updatePeriodMillis="1800000"
-  android:initialLayout="@layout/glucose_widget"
+  android:initialLayout="@layout/glucose_graph_widget"
   android:resizeMode="horizontal|vertical"
   android:widgetCategory="home_screen"
-  android:description="@string/glucose_widget_description" />
+  android:description="@string/glucose_graph_widget_description" />

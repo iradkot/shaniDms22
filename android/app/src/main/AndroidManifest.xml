@@ -19,6 +19,7 @@
       android:supportsRtl="true">
       <receiver
         android:name=".glucose.GlucoseWidgetProvider"
+        android:label="@string/glucose_widget_name"
         android:exported="false">
         <intent-filter>
           <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -26,6 +27,18 @@
         <meta-data
           android:name="android.appwidget.provider"
           android:resource="@xml/glucose_widget_info" />
+      </receiver>
+
+      <receiver
+        android:name=".glucose.GlucoseGraphWidgetProvider"
+        android:label="@string/glucose_graph_widget_name"
+        android:exported="false">
+        <intent-filter>
+          <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent-filter>
+        <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/glucose_graph_widget_info" />
       </receiver>
 
       <receiver

@@ -73,10 +73,10 @@ object GlucoseWidgetUpdater {
 
     if (iob != null && iob.isFinite()) e.putString(KEY_IOB, String.format("%.1f", iob)) else e.remove(KEY_IOB)
     if (cob != null && cob.isFinite()) e.putString(KEY_COB, String.format("%.0f", cob)) else e.remove(KEY_COB)
-    if (totalBasal != null && totalBasal.isFinite()) e.putString(KEY_TOTAL_BASAL, String.format("%.2f", totalBasal))
-    if (totalBolus != null && totalBolus.isFinite()) e.putString(KEY_TOTAL_BOLUS, String.format("%.2f", totalBolus))
-    if (basalBolusRatio != null && basalBolusRatio.isFinite()) e.putString(KEY_BASAL_BOLUS_RATIO, String.format("%.0f", basalBolusRatio * 100.0))
-    if (totalInsulin != null && totalInsulin.isFinite()) e.putString(KEY_TOTAL_INSULIN, String.format("%.1f", totalInsulin))
+    if (totalBasal != null && totalBasal.isFinite()) e.putString(KEY_TOTAL_BASAL, String.format("%.2f", totalBasal)) else e.remove(KEY_TOTAL_BASAL)
+    if (totalBolus != null && totalBolus.isFinite()) e.putString(KEY_TOTAL_BOLUS, String.format("%.2f", totalBolus)) else e.remove(KEY_TOTAL_BOLUS)
+    if (basalBolusRatio != null && basalBolusRatio.isFinite()) e.putString(KEY_BASAL_BOLUS_RATIO, String.format("%.0f", basalBolusRatio * 100.0)) else e.remove(KEY_BASAL_BOLUS_RATIO)
+    if (totalInsulin != null && totalInsulin.isFinite()) e.putString(KEY_TOTAL_INSULIN, String.format("%.1f", totalInsulin)) else e.remove(KEY_TOTAL_INSULIN)
     if (tir != null && tir in 0..100) e.putString(KEY_TIR, tir.toString()) else e.remove(KEY_TIR)
     if (projected1 != null) e.putInt(KEY_PROJECTED1, projected1) else e.remove(KEY_PROJECTED1)
     if (projected2 != null) e.putInt(KEY_PROJECTED2, projected2) else e.remove(KEY_PROJECTED2)
@@ -169,73 +169,103 @@ object GlucoseWidgetUpdater {
 
   fun updateWidgets(context: Context) {
     val state = read(context)
-    val value = state.value
-    val trend = state.trend
-    val ts = state.ts
     val manager = AppWidgetManager.getInstance(context)
-    val widgetComponent = ComponentName(context, GlucoseWidgetProvider::class.java)
-    val appWidgetIds = manager.getAppWidgetIds(widgetComponent)
-    appWidgetIds.forEach { widgetId ->
+    val summaryWidgetIds = manager.getAppWidgetIds(ComponentName(context, GlucoseWidgetProvider::class.java))
+    val graphWidgetIds = manager.getAppWidgetIds(ComponentName(context, GlucoseGraphWidgetProvider::class.java))
+
+    summaryWidgetIds.forEach { widgetId ->
       try {
-        val views = RemoteViews(context.packageName, R.layout.glucose_widget)
-        views.setTextViewText(R.id.glucose_value, value?.toString() ?: "--")
-        views.setTextViewText(R.id.glucose_trend, trend.ifBlank { "•" })
-        if (ts != null && ts > 0) {
-          val ageMs = (System.currentTimeMillis() - ts).coerceAtLeast(0L)
-          val chronoBase = SystemClock.elapsedRealtime() - ageMs
-          views.setViewVisibility(R.id.glucose_updated, View.GONE)
-          views.setViewVisibility(R.id.glucose_updated_chrono, View.VISIBLE)
-          views.setChronometer(R.id.glucose_updated_chrono, chronoBase, "%s ago", true)
-        } else {
-          views.setViewVisibility(R.id.glucose_updated, View.VISIBLE)
-          views.setViewVisibility(R.id.glucose_updated_chrono, View.GONE)
-          views.setTextViewText(R.id.glucose_updated, "No data")
-        }
-        views.setTextViewText(R.id.glucose_basal, "Basal ${state.totalBasal}U")
-        views.setTextViewText(R.id.glucose_bolus, "Bolus ${state.totalBolus}U")
-        views.setTextViewText(R.id.glucose_ratio, "Ratio ${state.basalBolusRatio}%")
-        views.setTextViewText(R.id.glucose_total_insulin, "Total ${state.totalInsulin}U")
-        views.setTextViewText(R.id.glucose_tir, "TIR ${state.tir}%")
-        val p1 = state.projected1?.toString() ?: "--"
-        val p2 = state.projected2?.toString() ?: "--"
-        val p3 = state.projected3?.toString() ?: "--"
-        views.setTextViewText(R.id.glucose_projected, "Next → ${p1} → ${p2} → ${p3}")
-        val projectedColor = when {
-          state.projected1 == null -> Color.parseColor("#B3FFFFFF")
-          state.low != null && state.projected1 < state.low -> Color.parseColor("#FF6B6B")
-          state.high != null && state.projected1 > state.high -> Color.parseColor("#FFB74D")
-          else -> Color.parseColor("#66BB6A")
-        }
-        views.setTextColor(R.id.glucose_projected, projectedColor)
-
-        val syncPrefs = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
-        val sparklineHours = syncPrefs.getInt(GlucoseSyncWorker.KEY_SPARKLINE_HOURS, 3).coerceIn(1, 12)
-        val sparkBitmap = drawSparklineBitmap(
-          state.sparkline,
-          state.low,
-          state.high,
-          sparklineHours,
-          state.sparklineStyle,
-        )
-        if (sparkBitmap != null) {
-          views.setImageViewBitmap(R.id.glucose_sparkline, sparkBitmap)
-        } else {
-          views.setImageViewBitmap(R.id.glucose_sparkline, null)
-        }
-
-        val launchIntent = Intent(context, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-          context,
-          0,
-          launchIntent,
-          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        views.setOnClickPendingIntent(R.id.glucose_widget_root, pendingIntent)
+        val views = buildSummaryViews(context, state)
         manager.updateAppWidget(widgetId, views)
       } catch (_: Throwable) {
         // Prevent widget rendering issues from crashing app process.
       }
     }
+
+    graphWidgetIds.forEach { widgetId ->
+      try {
+        val views = buildGraphViews(context, state)
+        manager.updateAppWidget(widgetId, views)
+      } catch (_: Throwable) {
+        // Prevent widget rendering issues from crashing app process.
+      }
+    }
+  }
+
+  fun hasActiveWidgets(context: Context): Boolean {
+    val manager = AppWidgetManager.getInstance(context)
+    val summaryWidgetIds = manager.getAppWidgetIds(ComponentName(context, GlucoseWidgetProvider::class.java))
+    val graphWidgetIds = manager.getAppWidgetIds(ComponentName(context, GlucoseGraphWidgetProvider::class.java))
+    return summaryWidgetIds.isNotEmpty() || graphWidgetIds.isNotEmpty()
+  }
+
+  private fun buildSummaryViews(context: Context, state: WidgetState): RemoteViews {
+    val views = RemoteViews(context.packageName, R.layout.glucose_widget)
+    views.setTextViewText(R.id.glucose_value, state.value?.toString() ?: "--")
+    views.setTextViewText(R.id.glucose_trend, state.trend.ifBlank { "•" })
+    bindUpdatedTime(views, R.id.glucose_updated, R.id.glucose_updated_chrono, state.ts)
+    views.setTextViewText(R.id.glucose_basal, "${state.totalBasal} U\nBasal")
+    views.setTextViewText(R.id.glucose_bolus, "${state.totalBolus} U\nBolus")
+    views.setTextViewText(R.id.glucose_ratio, "Basal/Bolus ${state.basalBolusRatio}%")
+    views.setTextViewText(R.id.glucose_total_insulin, "${state.totalInsulin} U\nTotal")
+    views.setTextViewText(R.id.glucose_tir, "${state.tir}%\nTIR")
+    val p1 = state.projected1?.toString() ?: "--"
+    val p2 = state.projected2?.toString() ?: "--"
+    val p3 = state.projected3?.toString() ?: "--"
+    views.setTextViewText(R.id.glucose_projected, "Next\n${p1}  →  ${p2}  →  ${p3}")
+    val projectedColor = when {
+      state.projected1 == null -> Color.parseColor("#99111827")
+      state.low != null && state.projected1 < state.low -> Color.parseColor("#7F1D1D")
+      state.high != null && state.projected1 > state.high -> Color.parseColor("#7C2D12")
+      else -> Color.parseColor("#111827")
+    }
+    views.setTextColor(R.id.glucose_projected, projectedColor)
+    views.setOnClickPendingIntent(R.id.glucose_widget_root, buildLaunchPendingIntent(context, 0))
+    return views
+  }
+
+  private fun buildGraphViews(context: Context, state: WidgetState): RemoteViews {
+    val views = RemoteViews(context.packageName, R.layout.glucose_graph_widget)
+    views.setTextViewText(R.id.glucose_graph_value, state.value?.toString() ?: "--")
+    views.setTextViewText(R.id.glucose_graph_trend, state.trend.ifBlank { "•" })
+    bindUpdatedTime(views, R.id.glucose_graph_updated, R.id.glucose_graph_updated_chrono, state.ts)
+
+    val syncPrefs = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
+    val sparklineHours = syncPrefs.getInt(GlucoseSyncWorker.KEY_SPARKLINE_HOURS, 3).coerceIn(1, 12)
+    val sparkBitmap = drawSparklineBitmap(
+      state.sparkline,
+      state.low,
+      state.high,
+      sparklineHours,
+      state.sparklineStyle,
+    )
+    views.setImageViewBitmap(R.id.glucose_graph_sparkline, sparkBitmap)
+    views.setOnClickPendingIntent(R.id.glucose_graph_widget_root, buildLaunchPendingIntent(context, 1))
+    return views
+  }
+
+  private fun bindUpdatedTime(views: RemoteViews, textViewId: Int, chronometerId: Int, ts: Long?) {
+    if (ts != null && ts > 0) {
+      val ageMs = (System.currentTimeMillis() - ts).coerceAtLeast(0L)
+      val chronoBase = SystemClock.elapsedRealtime() - ageMs
+      views.setViewVisibility(textViewId, View.GONE)
+      views.setViewVisibility(chronometerId, View.VISIBLE)
+      views.setChronometer(chronometerId, chronoBase, "%s ago", true)
+    } else {
+      views.setViewVisibility(textViewId, View.VISIBLE)
+      views.setViewVisibility(chronometerId, View.GONE)
+      views.setTextViewText(textViewId, "No data")
+    }
+  }
+
+  private fun buildLaunchPendingIntent(context: Context, requestCode: Int): PendingIntent {
+    val launchIntent = Intent(context, MainActivity::class.java)
+    return PendingIntent.getActivity(
+      context,
+      requestCode,
+      launchIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
   }
 
   private fun drawSparklineBitmap(
