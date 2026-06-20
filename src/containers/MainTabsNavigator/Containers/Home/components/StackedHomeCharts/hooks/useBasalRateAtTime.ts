@@ -16,8 +16,12 @@ export function useBasalRateAtTime(params: {
   const {enabled, timeMs, insulinData, basalProfileData} = params;
 
   return useMemo(() => {
-    if (!enabled) return null;
-    if (timeMs == null || !Number.isFinite(timeMs)) return null;
+    if (!enabled) {
+      return null;
+    }
+    if (timeMs == null || !Number.isFinite(timeMs)) {
+      return null;
+    }
 
     return getEffectiveBasalRateAt({
       basalProfile: basalProfileData ?? [],

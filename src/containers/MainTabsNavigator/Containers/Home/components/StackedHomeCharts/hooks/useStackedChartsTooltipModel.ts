@@ -5,8 +5,14 @@ import type {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import type {InsulinDataEntry} from 'app/types/insulin.types';
 
 import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
-import {findBolusEventsInTooltipWindow, findClosestBolus} from 'app/components/charts/CgmGraph/utils/bolusUtils';
-import {findCarbEventsInTooltipWindow, findClosestCarbEvent} from 'app/components/charts/CgmGraph/utils/carbsUtils';
+import {
+  findBolusEventsInTooltipWindow,
+  findClosestBolus,
+} from 'app/components/charts/CgmGraph/utils/bolusUtils';
+import {
+  findCarbEventsInTooltipWindow,
+  findClosestCarbEvent,
+} from 'app/components/charts/CgmGraph/utils/carbsUtils';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
@@ -62,8 +68,16 @@ export type StackedChartsTooltipModel = {
 
   tooltipBgSample: BgSample | null;
 
-  tooltipBolusEvents: Array<InsulinDataEntry & {type: 'bolus'; amount: number; timestamp: string}>;
-  tooltipCarbEvents: Array<(FoodItemDTO | formattedFoodItemDTO) & {id: string; timestamp: number; carbs: number}>;
+  tooltipBolusEvents: Array<
+    InsulinDataEntry & {type: 'bolus'; amount: number; timestamp: string}
+  >;
+  tooltipCarbEvents: Array<
+    (FoodItemDTO | formattedFoodItemDTO) & {
+      id: string;
+      timestamp: number;
+      carbs: number;
+    }
+  >;
 };
 
 /**
@@ -74,7 +88,9 @@ export type StackedChartsTooltipModel = {
  * - Users must be able to scrub every CGM sample (no snapping to events).
  * - We still want to cluster nearby boluses/carbs (snapping is allowed for event windowing only).
  */
-export function useStackedChartsTooltipModel(input: StackedChartsTooltipInput): StackedChartsTooltipModel {
+export function useStackedChartsTooltipModel(
+  input: StackedChartsTooltipInput,
+): StackedChartsTooltipModel {
   const {
     chartsTooltip,
     bgSamples,
@@ -91,14 +107,19 @@ export function useStackedChartsTooltipModel(input: StackedChartsTooltipInput): 
   const shouldShowTooltip = chartsTooltip != null;
 
   const fallbackAnchorResolvedMs = useMemo(() => {
-    return typeof fallbackAnchorTimeMs === 'number' && Number.isFinite(fallbackAnchorTimeMs)
+    return typeof fallbackAnchorTimeMs === 'number' &&
+      Number.isFinite(fallbackAnchorTimeMs)
       ? fallbackAnchorTimeMs
       : null;
   }, [fallbackAnchorTimeMs]);
 
   const latestBgTimeMs = useMemo(() => {
-    if (fallbackAnchorResolvedMs != null) return fallbackAnchorResolvedMs;
-    if (!bgSamples?.length) return Date.now();
+    if (fallbackAnchorResolvedMs != null) {
+      return fallbackAnchorResolvedMs;
+    }
+    if (!bgSamples?.length) {
+      return Date.now();
+    }
     let best = bgSamples[0]?.date ?? Date.now();
     for (const s of bgSamples) {
       if (typeof s?.date === 'number' && s.date > best) {
@@ -112,7 +133,9 @@ export function useStackedChartsTooltipModel(input: StackedChartsTooltipInput): 
     if (chartsTooltip?.touchTimeMs != null) {
       return chartsTooltip.touchTimeMs;
     }
-    if (fallbackAnchorResolvedMs != null) return fallbackAnchorResolvedMs;
+    if (fallbackAnchorResolvedMs != null) {
+      return fallbackAnchorResolvedMs;
+    }
     return latestBgTimeMs;
   }, [chartsTooltip?.touchTimeMs, fallbackAnchorResolvedMs, latestBgTimeMs]);
 
@@ -120,8 +143,12 @@ export function useStackedChartsTooltipModel(input: StackedChartsTooltipInput): 
     if (chartsTooltip?.touchTimeMs != null) {
       const touchTimeMs = chartsTooltip.touchTimeMs;
 
-      const closestBolus = insulinData?.length ? findClosestBolus(touchTimeMs, insulinData) : null;
-      const closestCarb = foodItems?.length ? findClosestCarbEvent(touchTimeMs, foodItems) : null;
+      const closestBolus = insulinData?.length
+        ? findClosestBolus(touchTimeMs, insulinData)
+        : null;
+      const closestCarb = foodItems?.length
+        ? findClosestCarbEvent(touchTimeMs, foodItems)
+        : null;
       const bolusTimeMs = closestBolus?.timestamp
         ? Date.parse(closestBolus.timestamp)
         : NaN;
@@ -146,38 +173,73 @@ export function useStackedChartsTooltipModel(input: StackedChartsTooltipInput): 
   }, [cgmAnchorTimeMs, shouldShowTooltip]);
 
   const resolvedTooltipAlign = useMemo<'left' | 'right'>(() => {
-    if (tooltipAlign !== 'auto') return tooltipAlign;
-    if (!shouldShowTooltip || cursorTimeMs == null) return 'right';
+    if (tooltipAlign !== 'auto') {
+      return tooltipAlign;
+    }
+    if (!shouldShowTooltip || cursorTimeMs == null) {
+      return 'right';
+    }
 
     const graphWidth = Math.max(1, width - marginLeft - marginRight);
 
     const startMs = xDomain?.[0] ? xDomain[0].getTime() : NaN;
     const endMs = xDomain?.[1] ? xDomain[1].getTime() : NaN;
-    const spanMs = Number.isFinite(startMs) && Number.isFinite(endMs) ? endMs - startMs : NaN;
-    if (!(spanMs > 0)) return 'right';
+    const spanMs =
+      Number.isFinite(startMs) && Number.isFinite(endMs)
+        ? endMs - startMs
+        : NaN;
+    if (!(spanMs > 0)) {
+      return 'right';
+    }
 
     const t = clamp01((cursorTimeMs - startMs) / spanMs);
     const cursorX = t * graphWidth;
 
     return cursorX > graphWidth / 2 ? 'left' : 'right';
-  }, [cursorTimeMs, marginLeft, marginRight, shouldShowTooltip, tooltipAlign, width, xDomain]);
+  }, [
+    cursorTimeMs,
+    marginLeft,
+    marginRight,
+    shouldShowTooltip,
+    tooltipAlign,
+    width,
+    xDomain,
+  ]);
 
   const tooltipBgSample = useMemo(() => {
-    if (!shouldShowTooltip) return null;
-    if (!bgSamples?.length) return null;
+    if (!shouldShowTooltip) {
+      return null;
+    }
+    if (!bgSamples?.length) {
+      return null;
+    }
     return findClosestBgSample(cgmAnchorTimeMs, bgSamples);
   }, [bgSamples, cgmAnchorTimeMs, shouldShowTooltip]);
 
   const tooltipBolusEvents = useMemo(() => {
-    if (!shouldShowTooltip) return [];
-    if (!insulinData?.length) return [];
-    return findBolusEventsInTooltipWindow({anchorTimeMs: eventsAnchorTimeMs, insulinData});
+    if (!shouldShowTooltip) {
+      return [];
+    }
+    if (!insulinData?.length) {
+      return [];
+    }
+    return findBolusEventsInTooltipWindow({
+      anchorTimeMs: eventsAnchorTimeMs,
+      insulinData,
+    });
   }, [eventsAnchorTimeMs, insulinData, shouldShowTooltip]);
 
   const tooltipCarbEvents = useMemo(() => {
-    if (!shouldShowTooltip) return [];
-    if (!foodItems?.length) return [];
-    return findCarbEventsInTooltipWindow({anchorTimeMs: eventsAnchorTimeMs, foodItems});
+    if (!shouldShowTooltip) {
+      return [];
+    }
+    if (!foodItems?.length) {
+      return [];
+    }
+    return findCarbEventsInTooltipWindow({
+      anchorTimeMs: eventsAnchorTimeMs,
+      foodItems,
+    });
   }, [eventsAnchorTimeMs, foodItems, shouldShowTooltip]);
 
   return {
