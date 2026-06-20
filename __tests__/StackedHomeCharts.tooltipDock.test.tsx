@@ -117,4 +117,57 @@ describe('StackedHomeCharts tooltip docking', () => {
 
     await act(async () => tree!.unmount());
   });
+
+  it('observes mini-chart touches without taking over scroll responder ownership', async () => {
+    const start = Date.UTC(2026, 0, 7, 0, 0, 0);
+    const end = start + 1000;
+
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(
+        <ThemeProvider theme={theme}>
+          <StackedHomeCharts
+            testID="stacked"
+            bgSamples={[
+              {
+                sgv: 110,
+                date: start,
+                dateString: new Date(start).toISOString(),
+                trend: 0,
+                direction: 'Flat',
+                device: 'mock',
+                type: 'sgv',
+              } as any,
+            ]}
+            foodItems={null}
+            insulinData={[]}
+            width={400}
+            cgmHeight={240}
+            miniChartHeight={80}
+            xDomain={[new Date(start), new Date(end)]}
+            showFullScreenButton={false}
+            tooltipPlacement="inside"
+          />
+        </ThemeProvider>,
+      );
+    });
+
+    const responderOwners = tree!.root.findAll(
+      node =>
+        typeof node.props.onStartShouldSetResponder === 'function' ||
+        typeof node.props.onMoveShouldSetResponder === 'function',
+    );
+    const touchObservers = tree!.root.findAll(
+      node =>
+        typeof node.props.onTouchStart === 'function' &&
+        typeof node.props.onTouchMove === 'function' &&
+        typeof node.props.onTouchCancel === 'function',
+    );
+
+    expect(responderOwners).toHaveLength(0);
+    expect(touchObservers.length).toBeGreaterThan(0);
+
+    await act(async () => tree!.unmount());
+  });
 });

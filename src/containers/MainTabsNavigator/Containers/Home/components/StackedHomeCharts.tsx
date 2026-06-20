@@ -461,14 +461,12 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
         />
       </ChartStack>
 
-      {/* Mini charts area — wrapped in a touch-responsive View */}
+      {/* Mini charts area — observe touch without taking over ScrollView's responder. */}
       <View
-        onStartShouldSetResponder={() => true}
-        onMoveShouldSetResponder={() => true}
-        onResponderGrant={handleMiniTouchStart}
-        onResponderMove={handleMiniTouchMove}
-        onResponderRelease={handleMiniTouchEnd}
-        onResponderTerminate={handleMiniTouchCancel}>
+        onTouchStart={handleMiniTouchStart}
+        onTouchMove={handleMiniTouchMove}
+        onTouchEnd={handleMiniTouchEnd}
+        onTouchCancel={handleMiniTouchCancel}>
         {chartMode === 'mixed' ? (
           <MixedMiniChart
             bgSamples={bgSamples}
