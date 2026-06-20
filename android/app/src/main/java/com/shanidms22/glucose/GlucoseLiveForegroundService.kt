@@ -127,6 +127,7 @@ class GlucoseLiveForegroundService : Service() {
       val entries = fetchRecentEntries(baseUrl, secret)
       val latest = latestFromEntries(entries) ?: return
       val load = fetchLatestWidgetLoad(baseUrl, secret)
+      val insulinStats = fetchLatestWidgetInsulinStats(baseUrl, secret)
       val (low, high) = GlucoseWidgetUpdater.getRangeThresholds(context)
 
       GlucoseWidgetUpdater.save(
@@ -136,10 +137,10 @@ class GlucoseLiveForegroundService : Service() {
         latest.date,
         load?.iob,
         load?.cob,
-        null,
-        null,
-        null,
-        null,
+        insulinStats?.totalBasal,
+        insulinStats?.totalBolus,
+        insulinStats?.basalBolusRatio,
+        insulinStats?.totalInsulin,
         calculateWidgetTir(entries, LIVE_WINDOW_HOURS, low, high),
         load?.projected1,
         load?.projected2,
@@ -147,6 +148,7 @@ class GlucoseLiveForegroundService : Service() {
         null,
         null,
         entriesToSparkline(entries),
+        preserveInsulinStats = true,
       )
       GlucoseWidgetUpdater.updateWidgets(context)
       GlucoseWidgetUpdater.updateNotification(context)

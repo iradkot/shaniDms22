@@ -24,6 +24,7 @@ class GlucoseSyncWorker(
 
       if (latest != null) {
         val load = fetchLatestWidgetLoad(baseUrl, secret)
+        val insulinStats = fetchLatestWidgetInsulinStats(baseUrl, secret)
         val (low, high) = GlucoseWidgetUpdater.getRangeThresholds(applicationContext)
         GlucoseWidgetUpdater.save(
           applicationContext,
@@ -32,10 +33,10 @@ class GlucoseSyncWorker(
           latest.date,
           load?.iob,
           load?.cob,
-          null,
-          null,
-          null,
-          null,
+          insulinStats?.totalBasal,
+          insulinStats?.totalBolus,
+          insulinStats?.basalBolusRatio,
+          insulinStats?.totalInsulin,
           calculateWidgetTir(entries, sparklineHours, low, high),
           load?.projected1,
           load?.projected2,
@@ -43,6 +44,7 @@ class GlucoseSyncWorker(
           null,
           null,
           entriesToSparkline(entries, sparklineHours),
+          preserveInsulinStats = true,
         )
         GlucoseWidgetUpdater.updateWidgets(applicationContext)
         GlucoseWidgetUpdater.updateNotification(applicationContext)

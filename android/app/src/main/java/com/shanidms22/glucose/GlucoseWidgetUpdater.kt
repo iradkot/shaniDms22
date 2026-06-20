@@ -66,6 +66,7 @@ object GlucoseWidgetUpdater {
     low: Int?,
     high: Int?,
     sparklinePoints: IntArray? = null,
+    preserveInsulinStats: Boolean = false,
   ) {
     val e = prefs(context)
       .edit()
@@ -75,10 +76,10 @@ object GlucoseWidgetUpdater {
 
     if (iob != null && iob.isFinite()) e.putString(KEY_IOB, String.format("%.1f", iob)) else e.remove(KEY_IOB)
     if (cob != null && cob.isFinite()) e.putString(KEY_COB, String.format("%.0f", cob)) else e.remove(KEY_COB)
-    if (totalBasal != null && totalBasal.isFinite()) e.putString(KEY_TOTAL_BASAL, String.format("%.2f", totalBasal)) else e.remove(KEY_TOTAL_BASAL)
-    if (totalBolus != null && totalBolus.isFinite()) e.putString(KEY_TOTAL_BOLUS, String.format("%.2f", totalBolus)) else e.remove(KEY_TOTAL_BOLUS)
-    if (basalBolusRatio != null && basalBolusRatio.isFinite()) e.putString(KEY_BASAL_BOLUS_RATIO, String.format("%.0f", basalBolusRatio * 100.0)) else e.remove(KEY_BASAL_BOLUS_RATIO)
-    if (totalInsulin != null && totalInsulin.isFinite()) e.putString(KEY_TOTAL_INSULIN, String.format("%.1f", totalInsulin)) else e.remove(KEY_TOTAL_INSULIN)
+    if (totalBasal != null && totalBasal.isFinite()) e.putString(KEY_TOTAL_BASAL, String.format("%.2f", totalBasal)) else if (!preserveInsulinStats) e.remove(KEY_TOTAL_BASAL)
+    if (totalBolus != null && totalBolus.isFinite()) e.putString(KEY_TOTAL_BOLUS, String.format("%.2f", totalBolus)) else if (!preserveInsulinStats) e.remove(KEY_TOTAL_BOLUS)
+    if (basalBolusRatio != null && basalBolusRatio.isFinite()) e.putString(KEY_BASAL_BOLUS_RATIO, String.format("%.0f", basalBolusRatio * 100.0)) else if (!preserveInsulinStats) e.remove(KEY_BASAL_BOLUS_RATIO)
+    if (totalInsulin != null && totalInsulin.isFinite()) e.putString(KEY_TOTAL_INSULIN, String.format("%.1f", totalInsulin)) else if (!preserveInsulinStats) e.remove(KEY_TOTAL_INSULIN)
     if (tir != null && tir in 0..100) e.putString(KEY_TIR, tir.toString()) else e.remove(KEY_TIR)
     if (projected1 != null) e.putInt(KEY_PROJECTED1, projected1) else e.remove(KEY_PROJECTED1)
     if (projected2 != null) e.putInt(KEY_PROJECTED2, projected2) else e.remove(KEY_PROJECTED2)
