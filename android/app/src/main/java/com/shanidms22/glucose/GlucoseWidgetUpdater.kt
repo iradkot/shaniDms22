@@ -12,6 +12,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.os.Bundle
 import android.os.Build
 import android.os.SystemClock
@@ -283,101 +284,171 @@ object GlucoseWidgetUpdater {
   ): Bitmap? {
     if (values.size < 2) return null
 
-    val padX = 8f
-    val padTop = 10f
-    val axisGap = 6f
-    val axisTextSize = 15f
-    val padBottom = axisTextSize + axisGap + 2f
+    val labelTextSize = 13f
+    val timeTextSize = 14f
+    val padLeft = 30f
+    val padRight = 10f
+    val padTop = 8f
+    val padBottom = timeTextSize + 12f
+    val plotLeft = padLeft
+    val plotRight = width - padRight
+    val plotTop = padTop
+    val plotBottom = height - padBottom
+    val plotWidth = (plotRight - plotLeft).coerceAtLeast(1f)
+    val plotHeight = (plotBottom - plotTop).coerceAtLeast(1f)
 
     val minV = values.minOrNull() ?: return null
     val maxV = values.maxOrNull() ?: return null
-    val spread = max(12, maxV - minV)
+    val rawMin = minOf(minV, low ?: minV, high ?: minV)
+    val rawMax = maxOf(maxV, low ?: maxV, high ?: maxV)
+    var domainMin = (rawMin - 18).coerceAtLeast(40)
+    var domainMax = (rawMax + 18).coerceAtMost(320)
+    if (domainMax - domainMin < 80) {
+      val center = ((domainMax + domainMin) / 2f).toInt()
+      domainMin = (center - 40).coerceAtLeast(40)
+      domainMax = (center + 40).coerceAtMost(320)
+    }
+    val spread = max(1, domainMax - domainMin)
 
     fun yFor(v: Int): Float {
-      val ratio = (v - minV).toFloat() / spread.toFloat()
-      return (height - padBottom) - ratio * ((height - padBottom) - padTop)
+      val ratio = ((v - domainMin).toFloat() / spread.toFloat()).coerceIn(0f, 1f)
+      return plotBottom - ratio * plotHeight
+    }
+
+    fun xFor(i: Int): Float {
+      return plotLeft + (i.toFloat() / (values.size - 1).toFloat()) * plotWidth
+    }
+
+    fun glucoseColor(v: Int): Int {
+      return when {
+        low != null && v < low -> Color.parseColor("#F87171")
+        high != null && v > high -> Color.parseColor("#F59E0B")
+        else -> Color.parseColor("#66BB6A")
+      }
     }
 
     val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
 
+    val targetFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.parseColor("#2266BB6A")
+      style = Paint.Style.FILL
+    }
+
     val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = Color.parseColor("#33FFFFFF")
+      color = Color.parseColor("#22FFFFFF")
+      strokeWidth = 1.1f
+      style = Paint.Style.STROKE
+    }
+
+    val thresholdPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.parseColor("#5566BB6A")
       strokeWidth = 1.4f
       style = Paint.Style.STROKE
     }
 
-    val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = Color.parseColor("#55FFFFFF")
-      strokeWidth = 1.2f
-      style = Paint.Style.STROKE
+    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.parseColor("#AEE5E7EB")
+      textSize = labelTextSize
+      textAlign = Paint.Align.RIGHT
     }
 
-    val axisTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = Color.parseColor("#AAFFFFFF")
-      textSize = axisTextSize
-      textAlign = Paint.Align.CENTER
+    if (low != null && high != null && high > low) {
+      val yHigh = yFor(high)
+      val yLow = yFor(low)
+      canvas.drawRoundRect(
+        RectF(plotLeft, yHigh, plotRight, yLow),
+        8f,
+        8f,
+        targetFillPaint,
+      )
     }
 
-    if (low != null) canvas.drawLine(0f, yFor(low), width.toFloat(), yFor(low), gridPaint)
-    if (high != null) canvas.drawLine(0f, yFor(high), width.toFloat(), yFor(high), gridPaint)
+    for (i in 1..2) {
+      val y = plotTop + (plotHeight * i / 3f)
+      canvas.drawLine(plotLeft, y, plotRight, y, gridPaint)
+    }
 
-    val axisY = height - padBottom + axisGap
-    canvas.drawLine(padX, axisY, width - padX, axisY, axisPaint)
+    if (low != null) {
+      val y = yFor(low)
+      canvas.drawLine(plotLeft, y, plotRight, y, thresholdPaint)
+      canvas.drawText(low.toString(), plotLeft - 5f, y + 4f, textPaint)
+    }
+    if (high != null) {
+      val y = yFor(high)
+      canvas.drawLine(plotLeft, y, plotRight, y, thresholdPaint)
+      canvas.drawText(high.toString(), plotLeft - 5f, y + 4f, textPaint)
+    }
 
     val safeHours = hours.coerceIn(1, 12)
-    val tickCount = if (safeHours <= 1) 2 else 4
+    val tickCount = 3
+    textPaint.textSize = timeTextSize
+    textPaint.color = Color.parseColor("#99E5E7EB")
     for (i in 0 until tickCount) {
       val t = i.toFloat() / (tickCount - 1).toFloat()
-      val x = padX + t * (width - padX * 2)
-      canvas.drawLine(x, axisY - 3f, x, axisY + 3f, axisPaint)
+      val x = plotLeft + t * plotWidth
+      canvas.drawLine(x, plotBottom, x, plotBottom + 4f, gridPaint)
       val hAgo = ((1f - t) * safeHours).toInt()
       val label = if (hAgo <= 0) "now" else "-${hAgo}h"
-      axisTextPaint.textAlign = when (i) {
+      textPaint.textAlign = when (i) {
         0 -> Paint.Align.LEFT
         tickCount - 1 -> Paint.Align.RIGHT
         else -> Paint.Align.CENTER
       }
-      canvas.drawText(label, x, height - 3f, axisTextPaint)
+      canvas.drawText(label, x, height - 3f, textPaint)
     }
 
     val path = Path()
     values.forEachIndexed { i, v ->
-      val x = padX + (i.toFloat() / (values.size - 1).toFloat()) * (width - padX * 2)
+      val x = xFor(i)
       val y = yFor(v)
       if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
     }
 
-    val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = Color.parseColor("#A0E3F2FD")
-      strokeWidth = 3.4f
+    val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.parseColor("#3366BB6A")
+      strokeWidth = 7.5f
       style = Paint.Style.STROKE
       strokeCap = Paint.Cap.ROUND
       strokeJoin = Paint.Join.ROUND
     }
 
     if (chartStyle != "points") {
-      canvas.drawPath(path, linePaint)
+      canvas.drawPath(path, glowPaint)
+      val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeWidth = 3.6f
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+      }
+      values.windowed(2).forEachIndexed { i, pair ->
+        linePaint.color = glucoseColor((pair[0] + pair[1]) / 2)
+        canvas.drawLine(xFor(i), yFor(pair[0]), xFor(i + 1), yFor(pair[1]), linePaint)
+      }
     }
 
     val pointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
       style = Paint.Style.FILL
     }
+    val pointRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.parseColor("#EEFFFFFF")
+      style = Paint.Style.STROKE
+      strokeWidth = 2.2f
+    }
     values.forEachIndexed { i, v ->
-      val x = padX + (i.toFloat() / (values.size - 1).toFloat()) * (width - padX * 2)
+      val x = xFor(i)
       val y = yFor(v)
-      pointPaint.color = when {
-        low != null && v < low -> Color.parseColor("#FF6B6B")
-        high != null && v > high -> Color.parseColor("#FFB74D")
-        else -> Color.parseColor("#66BB6A")
-      }
+      pointPaint.color = glucoseColor(v)
 
       if (chartStyle == "points") {
-        val radius = if (i == values.lastIndex) 4.2f else 3.2f
+        val radius = if (i == values.lastIndex) 4.6f else 3.1f
         canvas.drawCircle(x, y, radius, pointPaint)
-      } else if (i == values.lastIndex || i == 0 || (values.size > 12 && i % 4 == 0)) {
-        val radius = if (i == values.lastIndex) 3.6f else 2.6f
+      } else if (i == values.lastIndex || (values.size > 12 && i % 6 == 0)) {
+        val radius = if (i == values.lastIndex) 4.4f else 2.5f
         canvas.drawCircle(x, y, radius, pointPaint)
+        if (i == values.lastIndex) {
+          canvas.drawCircle(x, y, radius + 2.3f, pointRingPaint)
+        }
       }
     }
 
