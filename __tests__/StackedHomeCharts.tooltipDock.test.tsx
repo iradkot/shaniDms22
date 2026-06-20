@@ -7,6 +7,8 @@ import {theme} from '../src/style/theme';
 
 let mockTouchTimeMs = 0;
 let mockTooltipAutoHide = false;
+let mockEmitTooltipOnMount = true;
+let lastMockCgmGraphProps: any = null;
 
 jest.mock('app/components/charts/CgmGraph/CgmGraph', () => {
   const MockReact = require('react');
@@ -14,7 +16,11 @@ jest.mock('app/components/charts/CgmGraph/CgmGraph', () => {
 
   return function MockCgmGraph(props: any) {
     const {onTooltipChange} = props;
+    lastMockCgmGraphProps = props;
     MockReact.useEffect(() => {
+      if (!mockEmitTooltipOnMount) {
+        return;
+      }
       onTooltipChange?.({
         touchTimeMs: mockTouchTimeMs,
         anchorTimeMs: mockTouchTimeMs,
@@ -30,6 +36,8 @@ jest.mock('app/components/charts/CgmGraph/CgmGraph', () => {
 describe('StackedHomeCharts tooltip docking', () => {
   beforeEach(() => {
     mockTooltipAutoHide = false;
+    mockEmitTooltipOnMount = true;
+    lastMockCgmGraphProps = null;
   });
 
   afterEach(() => {
@@ -177,6 +185,64 @@ describe('StackedHomeCharts tooltip docking', () => {
 
     expect(responderOwners).toHaveLength(0);
     expect(touchObservers.length).toBeGreaterThan(0);
+
+    await act(async () => tree!.unmount());
+  });
+
+  it('drives the main CGM tooltip from the parent touch observer', async () => {
+    const start = Date.UTC(2026, 0, 7, 0, 0, 0);
+    const end = start + 1000;
+    mockEmitTooltipOnMount = false;
+
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(
+        <ThemeProvider theme={theme}>
+          <StackedHomeCharts
+            testID="stacked"
+            bgSamples={[
+              {
+                sgv: 110,
+                date: start,
+                dateString: new Date(start).toISOString(),
+                trend: 0,
+                direction: 'Flat',
+                device: 'mock',
+                type: 'sgv',
+              } as any,
+            ]}
+            foodItems={null}
+            insulinData={[]}
+            width={400}
+            cgmHeight={240}
+            miniChartHeight={80}
+            xDomain={[new Date(start), new Date(end)]}
+            showFullScreenButton={false}
+            tooltipPlacement="inside"
+          />
+        </ThemeProvider>,
+      );
+    });
+
+    expect(lastMockCgmGraphProps?.handleTouchEvents).toBe(false);
+    expect(
+      tree!.root.findAllByProps({testID: 'stacked.tooltipDock'}),
+    ).toHaveLength(0);
+
+    const cgmTouchArea = tree!.root.findByProps({
+      testID: 'stacked.cgmTouchArea',
+    });
+
+    await act(async () => {
+      cgmTouchArea.props.onTouchStart({
+        nativeEvent: {locationX: 200},
+      });
+    });
+
+    expect(
+      tree!.root.findAllByProps({testID: 'stacked.tooltipDock'}).length,
+    ).toBeGreaterThan(0);
 
     await act(async () => tree!.unmount());
   });

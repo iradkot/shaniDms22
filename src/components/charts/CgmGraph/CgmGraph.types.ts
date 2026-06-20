@@ -76,6 +76,14 @@ export interface CgmGraphProps {
   interactive?: boolean;
 
   /**
+   * Whether the chart should attach its own touch handlers.
+   *
+   * Parent-driven stacked chart views can set this to false and feed
+   * `cursorTimeMs` themselves so the chart does not compete with ScrollView.
+   */
+  handleTouchEvents?: boolean;
+
+  /**
    * Optional E2E selector.
    *
    * We keep this optional so the chart can be reused in lists/cards without forcing unique IDs.

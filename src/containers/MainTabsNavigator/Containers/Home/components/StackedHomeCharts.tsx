@@ -248,6 +248,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
   const tooltipOverlayTestID = testID ? `${testID}.tooltipOverlay` : undefined;
   const tooltipDockTestID = testID ? `${testID}.tooltipDock` : undefined;
+  const cgmTouchAreaTestID = testID ? `${testID}.cgmTouchArea` : undefined;
 
   // ── Emit tooltip model to parent when placement is 'none' ─────────
   const prevModelRef = useRef<string>('');
@@ -312,11 +313,11 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   // Whether to render the tooltip inside this component
   const renderTooltipInternally = tooltipPlacement !== 'none';
 
-  // ── Touch forwarding for mini charts ───────────────────────────────
-  // Mini charts don't have their own touch handlers, so we wrap them in a
-  // View that translates touch x → time and forwards to the tooltip system.
+  // ── Parent-level touch forwarding ──────────────────────────────────
+  // The stacked view observes touches without taking responder ownership, so
+  // ScrollView keeps scrolling while the shared cursor/tooltip keeps updating.
 
-  const miniChartXScale = useMemo(() => {
+  const stackedChartsXScale = useMemo(() => {
     const resolvedDomain =
       xDomain ??
       (() => {
@@ -340,7 +341,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     xDomain,
   ]);
 
-  const buildMiniTooltipPayload = useCallback(
+  const buildStackedTooltipPayload = useCallback(
     (evt: GestureResponderEvent): CGMGraphExternalTooltipPayload | null => {
       const rawX = evt.nativeEvent.locationX;
       if (typeof rawX !== 'number' || !Number.isFinite(rawX)) {
@@ -354,48 +355,55 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
         rawX,
         plotMarginLeft: stackedChartsMargin.left,
         plotWidth,
-        xScale: miniChartXScale,
+        xScale: stackedChartsXScale,
       });
     },
     [
-      miniChartXScale,
+      stackedChartsXScale,
       stackedChartsMargin.left,
       stackedChartsMargin.right,
       width,
     ],
   );
 
-  const handleMiniTouchStart = useCallback(
+  const handleStackedTouchStart = useCallback(
     (evt: GestureResponderEvent) => {
-      const payload = buildMiniTooltipPayload(evt);
+      const payload = buildStackedTooltipPayload(evt);
       if (payload) {
         handleTooltipChange(payload);
       }
     },
-    [buildMiniTooltipPayload, handleTooltipChange],
+    [buildStackedTooltipPayload, handleTooltipChange],
   );
 
-  const handleMiniTouchMove = useCallback(
+  const handleStackedTouchMove = useCallback(
     (evt: GestureResponderEvent) => {
-      const payload = buildMiniTooltipPayload(evt);
+      const payload = buildStackedTooltipPayload(evt);
       if (payload) {
         handleTooltipChange(payload);
       }
     },
-    [buildMiniTooltipPayload, handleTooltipChange],
+    [buildStackedTooltipPayload, handleTooltipChange],
   );
 
-  const handleMiniTouchEnd = useCallback(() => {
+  const handleStackedTouchEnd = useCallback(() => {
     handleTooltipChange(null);
   }, [handleTooltipChange]);
 
-  const handleMiniTouchCancel = useCallback(() => {
+  const handleStackedTouchCancel = useCallback(() => {
     // Keep the last selection visible when ScrollView or another responder takes over.
     // If no release arrives afterwards, clear it as a stale selection.
     if (chartsTooltip) {
       scheduleTooltipAutoHide();
     }
   }, [chartsTooltip, scheduleTooltipAutoHide]);
+
+  const stackedTouchHandlers = {
+    onTouchStart: handleStackedTouchStart,
+    onTouchMove: handleStackedTouchMove,
+    onTouchEnd: handleStackedTouchEnd,
+    onTouchCancel: handleStackedTouchCancel,
+  };
 
   return (
     <View testID={testID}>
@@ -422,7 +430,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
         </TooltipDock>
       ) : null}
 
-      <ChartStack>
+      <ChartStack testID={cgmTouchAreaTestID} {...stackedTouchHandlers}>
         {/* 'above' / 'inside' placement: absolute overlay inside ChartStack */}
         {renderTooltipInternally &&
         tooltipPlacement !== 'top' &&
@@ -478,16 +486,13 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
           showFullScreenButton={false}
           tooltipMode="external"
           onTooltipChange={handleTooltipChange}
+          handleTouchEvents={false}
           cursorTimeMs={cursorTimeMs}
         />
       </ChartStack>
 
       {/* Mini charts area — observe touch without taking over ScrollView's responder. */}
-      <View
-        onTouchStart={handleMiniTouchStart}
-        onTouchMove={handleMiniTouchMove}
-        onTouchEnd={handleMiniTouchEnd}
-        onTouchCancel={handleMiniTouchCancel}>
+      <View {...stackedTouchHandlers}>
         {chartMode === 'mixed' ? (
           <MixedMiniChart
             bgSamples={bgSamples}

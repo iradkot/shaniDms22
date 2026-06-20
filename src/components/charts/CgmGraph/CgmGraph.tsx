@@ -56,6 +56,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   showYLabels = true,
   yTicksAmount = 6,
   interactive = true,
+  handleTouchEvents = true,
   testID,
   showFullScreenButton = true,
   tooltipMode = 'internal',
@@ -76,6 +77,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   const resolvedShowYLabels = isCompactMealVariant ? false : showYLabels;
   const resolvedYTicksAmount = isCompactMealVariant ? 4 : yTicksAmount;
   const resolvedInteractive = isCompactMealVariant ? false : interactive;
+  const shouldHandleTouchEvents = resolvedInteractive && handleTouchEvents;
 
   const [graphStyleContextValue, setGraphStyleContextValue] =
     useGraphStyleContext(width, height, bgSamples, xDomain, margin);
@@ -266,16 +268,16 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
         testID={testID}>
         <StyledSvg
           onTouchStart={
-            resolvedInteractive ? handleTouchStartWithTooltip : undefined
+            shouldHandleTouchEvents ? handleTouchStartWithTooltip : undefined
           }
           onTouchMove={
-            resolvedInteractive ? handleTouchMoveWithTooltip : undefined
+            shouldHandleTouchEvents ? handleTouchMoveWithTooltip : undefined
           }
           onTouchEnd={
-            resolvedInteractive ? handleTouchEndWithTooltip : undefined
+            shouldHandleTouchEvents ? handleTouchEndWithTooltip : undefined
           }
           onTouchCancel={
-            resolvedInteractive ? handleTouchCancelWithTooltip : undefined
+            shouldHandleTouchEvents ? handleTouchCancelWithTooltip : undefined
           }
           width={width}
           height={height}
