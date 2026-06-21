@@ -311,6 +311,75 @@ describe('StackedHomeCharts tooltip docking', () => {
     await act(async () => tree!.unmount());
   });
 
+  it('continues tracking tooltip x from page touch moves after ScrollView takeover', async () => {
+    const start = Date.UTC(2026, 0, 7, 0, 0, 0);
+    const end = start + 1000;
+    mockEmitTooltipOnMount = false;
+
+    const onTouchSessionChange = jest.fn();
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(
+        <ThemeProvider theme={theme}>
+          <StackedHomeCharts
+            testID="stacked"
+            bgSamples={[
+              {
+                sgv: 110,
+                date: start,
+                dateString: new Date(start).toISOString(),
+                trend: 0,
+                direction: 'Flat',
+                device: 'mock',
+                type: 'sgv',
+              } as any,
+            ]}
+            foodItems={null}
+            insulinData={[]}
+            width={400}
+            cgmHeight={240}
+            miniChartHeight={80}
+            xDomain={[new Date(start), new Date(end)]}
+            showFullScreenButton={false}
+            tooltipPlacement="inside"
+            tooltipAlign="auto"
+            tooltipFullWidth={false}
+            onTouchSessionChange={onTouchSessionChange}
+          />
+        </ThemeProvider>,
+      );
+    });
+
+    const cgmTouchArea = tree!.root.findByProps({
+      testID: 'stacked.cgmTouchArea',
+    });
+
+    act(() => {
+      cgmTouchArea.props.onTouchStart({
+        nativeEvent: {locationX: 117, pageX: 117},
+      });
+      cgmTouchArea.props.onTouchCancel();
+    });
+
+    expect(tree!.root.findByProps({testID: 'stacked.tooltipDock'}).props.$align).toBe('right');
+
+    const activeSessions = onTouchSessionChange.mock.calls
+      .map(([session]) => session)
+      .filter(Boolean);
+    const activeSession = activeSessions[activeSessions.length - 1];
+
+    act(() => {
+      activeSession.handlePageTouchMove({
+        nativeEvent: {pageX: 318},
+      });
+    });
+
+    expect(tree!.root.findByProps({testID: 'stacked.tooltipDock'}).props.$align).toBe('left');
+
+    await act(async () => tree!.unmount());
+  });
+
   it('keeps active touch tooltip visible while the finger is held still', async () => {
     jest.useFakeTimers();
 

@@ -47,6 +47,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     tooltipMaxWidthPx,
     chartMode = 'separate',
     onTooltipModelChange,
+    onTouchSessionChange,
   } = props;
 
   const theme = useTheme() as ThemeType;
@@ -71,6 +72,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     width,
     margin: stackedChartsMargin,
     xDomain,
+    onTouchSessionChange,
   });
 
   const {

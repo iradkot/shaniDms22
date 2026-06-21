@@ -6,6 +6,7 @@ import type {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/Gra
 import type {CGMGraphExternalTooltipPayload} from 'app/components/charts/CgmGraph/CgmGraph';
 import {buildExternalTooltipPayloadFromLocationX} from 'app/components/charts/CgmGraph/utils/externalTooltipTouch.utils';
 import type {BgSample} from 'app/types/day_bgs.types';
+import type {StackedChartsTouchSession} from '../StackedHomeCharts.types';
 
 type UseStackedChartsTouchTooltipParams = {
   bgSamples: BgSample[];
@@ -13,6 +14,7 @@ type UseStackedChartsTouchTooltipParams = {
   margin: ChartMargin;
   xDomain?: [Date, Date] | null;
   autoHideMs?: number;
+  onTouchSessionChange?: (session: StackedChartsTouchSession | null) => void;
 };
 
 export function useStackedChartsTouchTooltip({
@@ -21,12 +23,14 @@ export function useStackedChartsTouchTooltip({
   margin,
   xDomain,
   autoHideMs = 4000,
+  onTouchSessionChange,
 }: UseStackedChartsTouchTooltipParams) {
   const [chartsTooltip, setChartsTooltip] =
     useState<CGMGraphExternalTooltipPayload | null>(null);
 
   const lastPayloadRef =
     useRef<CGMGraphExternalTooltipPayload | null>(null);
+  const touchSurfacePageXRef = useRef<number | null>(null);
   const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -40,6 +44,7 @@ export function useStackedChartsTouchTooltip({
 
   const clearTooltipState = useCallback(() => {
     lastPayloadRef.current = null;
+    touchSurfacePageXRef.current = null;
     setChartsTooltip(null);
   }, []);
 
@@ -115,19 +120,54 @@ export function useStackedChartsTouchTooltip({
     [margin.left, margin.right, width, xScale],
   );
 
-  const handleTouchPoint = useCallback(
+  const buildTooltipPayloadFromPageX = useCallback(
+    (pageX: number): CGMGraphExternalTooltipPayload | null => {
+      const surfacePageX = touchSurfacePageXRef.current;
+      if (surfacePageX == null) {
+        return null;
+      }
+
+      return buildExternalTooltipPayloadFromLocationX({
+        rawX: pageX - surfacePageX,
+        plotMarginLeft: margin.left,
+        plotWidth: Math.max(1, width - margin.left - margin.right),
+        xScale,
+      });
+    },
+    [margin.left, margin.right, width, xScale],
+  );
+
+  const rememberTouchSurface = useCallback((evt: GestureResponderEvent) => {
+    const {locationX, pageX} = evt.nativeEvent;
+    if (
+      typeof locationX === 'number' &&
+      Number.isFinite(locationX) &&
+      typeof pageX === 'number' &&
+      Number.isFinite(pageX)
+    ) {
+      touchSurfacePageXRef.current = pageX - locationX;
+    }
+  }, []);
+
+  const handlePageTouchMove = useCallback(
     (evt: GestureResponderEvent) => {
-      const payload = buildTooltipPayload(evt);
+      const pageX = evt.nativeEvent.pageX;
+      if (typeof pageX !== 'number' || !Number.isFinite(pageX)) {
+        return;
+      }
+
+      const payload = buildTooltipPayloadFromPageX(pageX);
       if (payload) {
         handleTooltipChange(payload);
       }
     },
-    [buildTooltipPayload, handleTooltipChange],
+    [buildTooltipPayloadFromPageX, handleTooltipChange],
   );
 
   const handleTouchEnd = useCallback(() => {
+    onTouchSessionChange?.(null);
     handleTooltipChange(null);
-  }, [handleTooltipChange]);
+  }, [handleTooltipChange, onTouchSessionChange]);
 
   const handleTouchCancel = useCallback(() => {
     // Keep the last selection visible when ScrollView or another responder
@@ -139,6 +179,41 @@ export function useStackedChartsTouchTooltip({
     }
   }, [scheduleTooltipAutoHide, setActiveTooltip]);
 
+  const handlePageTouchCancel = useCallback(() => {
+    onTouchSessionChange?.(null);
+    handleTouchCancel();
+  }, [handleTouchCancel, onTouchSessionChange]);
+
+  const registerTouchSession = useCallback(() => {
+    onTouchSessionChange?.({
+      handlePageTouchMove,
+      handlePageTouchEnd: handleTouchEnd,
+      handlePageTouchCancel,
+    });
+  }, [
+    handlePageTouchCancel,
+    handlePageTouchMove,
+    handleTouchEnd,
+    onTouchSessionChange,
+  ]);
+
+  const handleTouchPoint = useCallback(
+    (evt: GestureResponderEvent) => {
+      rememberTouchSurface(evt);
+      const payload = buildTooltipPayload(evt);
+      if (payload) {
+        handleTooltipChange(payload);
+        registerTouchSession();
+      }
+    },
+    [
+      buildTooltipPayload,
+      handleTooltipChange,
+      registerTouchSession,
+      rememberTouchSurface,
+    ],
+  );
+
   const touchHandlers = useMemo(
     () => ({
       onTouchStart: handleTouchPoint,
@@ -148,6 +223,25 @@ export function useStackedChartsTouchTooltip({
     }),
     [handleTouchCancel, handleTouchEnd, handleTouchPoint],
   );
+
+  useEffect(() => {
+    if (!chartsTooltip) {
+      onTouchSessionChange?.(null);
+      return;
+    }
+
+    onTouchSessionChange?.({
+      handlePageTouchMove,
+      handlePageTouchEnd: handleTouchEnd,
+      handlePageTouchCancel,
+    });
+  }, [
+    chartsTooltip,
+    handlePageTouchCancel,
+    handlePageTouchMove,
+    handleTouchEnd,
+    onTouchSessionChange,
+  ]);
 
   return {
     chartsTooltip,

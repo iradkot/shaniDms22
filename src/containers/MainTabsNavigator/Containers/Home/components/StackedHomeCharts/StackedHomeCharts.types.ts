@@ -1,4 +1,5 @@
 import type {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
+import type {GestureResponderEvent} from 'react-native';
 import type {BgSample} from 'app/types/day_bgs.types';
 import type {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
@@ -19,6 +20,12 @@ export type StackedChartsTooltipModel = {
   carbEvents: any[];
   fullWidth: boolean;
   maxWidthPx?: number;
+};
+
+export type StackedChartsTouchSession = {
+  handlePageTouchMove: (event: GestureResponderEvent) => void;
+  handlePageTouchEnd: () => void;
+  handlePageTouchCancel: () => void;
 };
 
 export type StackedHomeChartsProps = {
@@ -117,4 +124,12 @@ export type StackedHomeChartsProps = {
    * Use with `tooltipPlacement="none"` to render the tooltip externally.
    */
   onTooltipModelChange?: (model: StackedChartsTooltipModel) => void;
+
+  /**
+   * Registers a page-level touch session while a chart touch is active.
+   *
+   * Home uses this to keep updating the tooltip after ScrollView takes over
+   * vertical scrolling and the chart receives touch cancel.
+   */
+  onTouchSessionChange?: (session: StackedChartsTouchSession | null) => void;
 };

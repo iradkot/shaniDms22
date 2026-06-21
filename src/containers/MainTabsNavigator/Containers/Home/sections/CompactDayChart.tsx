@@ -10,6 +10,7 @@ import StackedHomeCharts from 'app/containers/MainTabsNavigator/Containers/Home/
 import type {
   StackedHomeChartsProps,
   StackedChartsTooltipModel,
+  StackedChartsTouchSession,
 } from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
 import type {BgSample} from 'app/types/day_bgs.types';
 import type {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
@@ -28,6 +29,7 @@ type Props = {
   fallbackAnchorTimeMs?: number;
   onPressFullScreen: () => void;
   onTooltipModelChange?: (model: StackedChartsTooltipModel) => void;
+  onTouchSessionChange?: (session: StackedChartsTouchSession | null) => void;
   testID?: string;
 };
 
@@ -49,6 +51,7 @@ const CompactDayChart: React.FC<Props> = ({
   fallbackAnchorTimeMs,
   onPressFullScreen,
   onTooltipModelChange,
+  onTouchSessionChange,
   testID,
 }) => {
   const theme = useTheme() as ThemeType;
@@ -72,7 +75,9 @@ const CompactDayChart: React.FC<Props> = ({
   }, []);
 
   useEffect(() => {
-    if (!shouldRender) return;
+    if (!shouldRender) {
+      return;
+    }
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 200,
@@ -81,7 +86,9 @@ const CompactDayChart: React.FC<Props> = ({
   }, [fadeAnim, shouldRender]);
 
   const activeXDomain = useMemo(() => {
-    if (!xDomain || rangeMode === 'all') return xDomain;
+    if (!xDomain || rangeMode === 'all') {
+      return xDomain;
+    }
 
     const minMs = xDomain[0].getTime();
     const maxMs = xDomain[1].getTime();
@@ -126,19 +133,13 @@ const CompactDayChart: React.FC<Props> = ({
               : mode;
 
           return (
-            <Pressable
+            <RangeButton
               key={mode}
+              $selected={selected}
               onPress={() => setRangeMode(mode)}
-              style={{
-                paddingHorizontal: 9,
-                paddingVertical: 4,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: selected ? theme.accentColor : addOpacity(theme.textColor, 0.25),
-                backgroundColor: selected ? addOpacity(theme.accentColor, 0.12) : 'transparent',
-              }}>
-              <RangeText style={{fontWeight: selected ? '700' : '500'}}>{label}</RangeText>
-            </Pressable>
+            >
+              <RangeText $selected={selected}>{label}</RangeText>
+            </RangeButton>
           );
         })}
       </RangeRow>
@@ -164,6 +165,7 @@ const CompactDayChart: React.FC<Props> = ({
             tooltipPlacement="none"
             chartMode={chartMode}
             onTooltipModelChange={onTooltipModelChange}
+            onTouchSessionChange={onTouchSessionChange}
             testID={testID}
           />
         </Animated.View>
@@ -204,9 +206,21 @@ const RangeRow = styled(View)<{theme: ThemeType}>`
   padding-bottom: ${(p: {theme: ThemeType}) => p.theme.spacing.xs}px;
 `;
 
-const RangeText = styled.Text<{theme: ThemeType}>`
+const RangeButton = styled(Pressable)<{$selected: boolean; theme: ThemeType}>`
+  padding-horizontal: 9px;
+  padding-vertical: 4px;
+  border-radius: 12px;
+  border-width: 1px;
+  border-color: ${(p: {$selected: boolean; theme: ThemeType}) =>
+    p.$selected ? p.theme.accentColor : addOpacity(p.theme.textColor, 0.25)};
+  background-color: ${(p: {$selected: boolean; theme: ThemeType}) =>
+    p.$selected ? addOpacity(p.theme.accentColor, 0.12) : 'transparent'};
+`;
+
+const RangeText = styled.Text<{$selected: boolean; theme: ThemeType}>`
   color: ${(p: {theme: ThemeType}) => p.theme.textColor};
   font-size: ${(p: {theme: ThemeType}) => p.theme.typography.size.xs}px;
+  font-weight: ${(p: {$selected: boolean}) => (p.$selected ? '700' : '500')};
 `;
 
 const PlaceholderBox = styled.View<{theme: ThemeType}>`
