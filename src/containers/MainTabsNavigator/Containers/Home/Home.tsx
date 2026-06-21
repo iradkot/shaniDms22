@@ -293,6 +293,7 @@ const Home: React.FC = () => {
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [tooltipModel, setTooltipModel] = useState<StackedChartsTooltipModel | null>(null);
+  const [isChartTouchSessionActive, setIsChartTouchSessionActive] = useState(false);
   const chartTouchSessionRef = React.useRef<StackedChartsTouchSession | null>(null);
 
   const handleTooltipModelChange = useCallback((model: StackedChartsTooltipModel) => {
@@ -302,6 +303,7 @@ const Home: React.FC = () => {
   const handleChartTouchSessionChange = useCallback(
     (session: StackedChartsTouchSession | null) => {
       chartTouchSessionRef.current = session;
+      setIsChartTouchSessionActive(session != null);
     },
     [],
   );
@@ -313,11 +315,13 @@ const Home: React.FC = () => {
   const handleScrollTouchEnd = useCallback(() => {
     chartTouchSessionRef.current?.handlePageTouchEnd();
     chartTouchSessionRef.current = null;
+    setIsChartTouchSessionActive(false);
   }, []);
 
   const handleScrollTouchCancel = useCallback(() => {
     chartTouchSessionRef.current?.handlePageTouchCancel();
     chartTouchSessionRef.current = null;
+    setIsChartTouchSessionActive(false);
   }, []);
 
   const isShowingToday = useMemo(() => {
@@ -1133,6 +1137,7 @@ const Home: React.FC = () => {
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        scrollEnabled={!isChartTouchSessionActive}
         onTouchMove={handleScrollTouchMove}
         onTouchEnd={handleScrollTouchEnd}
         onTouchCancel={handleScrollTouchCancel}
