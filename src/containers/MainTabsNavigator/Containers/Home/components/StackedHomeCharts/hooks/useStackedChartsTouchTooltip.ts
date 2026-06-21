@@ -88,6 +88,11 @@ export function useStackedChartsTouchTooltip({
 
   useEffect(() => clearTooltipTimer, [clearTooltipTimer]);
 
+  const plotWidth = useMemo(
+    () => Math.max(1, width - margin.left - margin.right),
+    [margin.left, margin.right, width],
+  );
+
   const xScale = useMemo(() => {
     const resolvedDomain =
       xDomain ??
@@ -99,13 +104,11 @@ export function useStackedChartsTouchTooltip({
         const now = new Date();
         return [now, now] as [Date, Date];
       })();
-    const plotWidth = Math.max(1, width - margin.left - margin.right);
     return d3.scaleTime().domain(resolvedDomain).range([0, plotWidth]);
-  }, [bgSamples, margin.left, margin.right, width, xDomain]);
+  }, [bgSamples, plotWidth, xDomain]);
 
-  const buildTooltipPayload = useCallback(
-    (evt: GestureResponderEvent): CGMGraphExternalTooltipPayload | null => {
-      const rawX = evt.nativeEvent.locationX;
+  const buildTooltipPayloadFromRawX = useCallback(
+    (rawX: number): CGMGraphExternalTooltipPayload | null => {
       if (typeof rawX !== 'number' || !Number.isFinite(rawX)) {
         return null;
       }
@@ -113,11 +116,18 @@ export function useStackedChartsTouchTooltip({
       return buildExternalTooltipPayloadFromLocationX({
         rawX,
         plotMarginLeft: margin.left,
-        plotWidth: Math.max(1, width - margin.left - margin.right),
+        plotWidth,
         xScale,
       });
     },
-    [margin.left, margin.right, width, xScale],
+    [margin.left, plotWidth, xScale],
+  );
+
+  const buildTooltipPayload = useCallback(
+    (evt: GestureResponderEvent): CGMGraphExternalTooltipPayload | null => {
+      return buildTooltipPayloadFromRawX(evt.nativeEvent.locationX);
+    },
+    [buildTooltipPayloadFromRawX],
   );
 
   const buildTooltipPayloadFromPageX = useCallback(
@@ -127,14 +137,9 @@ export function useStackedChartsTouchTooltip({
         return null;
       }
 
-      return buildExternalTooltipPayloadFromLocationX({
-        rawX: pageX - surfacePageX,
-        plotMarginLeft: margin.left,
-        plotWidth: Math.max(1, width - margin.left - margin.right),
-        xScale,
-      });
+      return buildTooltipPayloadFromRawX(pageX - surfacePageX);
     },
-    [margin.left, margin.right, width, xScale],
+    [buildTooltipPayloadFromRawX],
   );
 
   const rememberTouchSurface = useCallback((evt: GestureResponderEvent) => {
@@ -184,18 +189,18 @@ export function useStackedChartsTouchTooltip({
     handleTouchCancel();
   }, [handleTouchCancel, onTouchSessionChange]);
 
-  const registerTouchSession = useCallback(() => {
-    onTouchSessionChange?.({
+  const pageTouchSession = useMemo<StackedChartsTouchSession>(
+    () => ({
       handlePageTouchMove,
       handlePageTouchEnd: handleTouchEnd,
       handlePageTouchCancel,
-    });
-  }, [
-    handlePageTouchCancel,
-    handlePageTouchMove,
-    handleTouchEnd,
-    onTouchSessionChange,
-  ]);
+    }),
+    [handlePageTouchCancel, handlePageTouchMove, handleTouchEnd],
+  );
+
+  const registerTouchSession = useCallback(() => {
+    onTouchSessionChange?.(pageTouchSession);
+  }, [onTouchSessionChange, pageTouchSession]);
 
   const handleTouchPoint = useCallback(
     (evt: GestureResponderEvent) => {
@@ -230,18 +235,8 @@ export function useStackedChartsTouchTooltip({
       return;
     }
 
-    onTouchSessionChange?.({
-      handlePageTouchMove,
-      handlePageTouchEnd: handleTouchEnd,
-      handlePageTouchCancel,
-    });
-  }, [
-    chartsTooltip,
-    handlePageTouchCancel,
-    handlePageTouchMove,
-    handleTouchEnd,
-    onTouchSessionChange,
-  ]);
+    onTouchSessionChange?.(pageTouchSession);
+  }, [chartsTooltip, onTouchSessionChange, pageTouchSession]);
 
   return {
     chartsTooltip,

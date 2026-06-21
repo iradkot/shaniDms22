@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {RefreshControl, ScrollView, View, Text, Pressable, type GestureResponderEvent} from 'react-native';
+import {RefreshControl, ScrollView, View, Text, Pressable} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import styled, {useTheme} from 'styled-components/native';
@@ -30,10 +30,8 @@ import CompactDayChart from 'app/containers/MainTabsNavigator/Containers/Home/se
 import PreMealCard from 'app/containers/MainTabsNavigator/Containers/Home/components/PreMealCard';
 import MealTimeline from 'app/containers/MainTabsNavigator/Containers/Home/components/MealTimeline';
 import HomeChartsTooltip from 'app/containers/MainTabsNavigator/Containers/Home/components/HomeChartsTooltip';
-import type {
-  StackedChartsTooltipModel,
-  StackedChartsTouchSession,
-} from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
+import type {StackedChartsTooltipModel} from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
+import {useHomeChartTouchSession} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useHomeChartTouchSession';
 import {useHomeChartViewport} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useHomeChartViewport';
 import {useMealSegments} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useMealSegments';
 import type {MealSegment} from 'app/containers/MainTabsNavigator/Containers/Home/hooks/useMealSegments';
@@ -293,35 +291,14 @@ const Home: React.FC = () => {
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [tooltipModel, setTooltipModel] = useState<StackedChartsTooltipModel | null>(null);
-  const [isChartTouchSessionActive, setIsChartTouchSessionActive] = useState(false);
-  const chartTouchSessionRef = React.useRef<StackedChartsTouchSession | null>(null);
+  const {
+    isChartTouchSessionActive,
+    handleChartTouchSessionChange,
+    scrollTouchHandlers,
+  } = useHomeChartTouchSession();
 
   const handleTooltipModelChange = useCallback((model: StackedChartsTooltipModel) => {
     setTooltipModel(model.visible ? model : null);
-  }, []);
-
-  const handleChartTouchSessionChange = useCallback(
-    (session: StackedChartsTouchSession | null) => {
-      chartTouchSessionRef.current = session;
-      setIsChartTouchSessionActive(session != null);
-    },
-    [],
-  );
-
-  const handleScrollTouchMove = useCallback((event: GestureResponderEvent) => {
-    chartTouchSessionRef.current?.handlePageTouchMove(event);
-  }, []);
-
-  const handleScrollTouchEnd = useCallback(() => {
-    chartTouchSessionRef.current?.handlePageTouchEnd();
-    chartTouchSessionRef.current = null;
-    setIsChartTouchSessionActive(false);
-  }, []);
-
-  const handleScrollTouchCancel = useCallback(() => {
-    chartTouchSessionRef.current?.handlePageTouchCancel();
-    chartTouchSessionRef.current = null;
-    setIsChartTouchSessionActive(false);
   }, []);
 
   const isShowingToday = useMemo(() => {
@@ -1138,9 +1115,7 @@ const Home: React.FC = () => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         scrollEnabled={!isChartTouchSessionActive}
-        onTouchMove={handleScrollTouchMove}
-        onTouchEnd={handleScrollTouchEnd}
-        onTouchCancel={handleScrollTouchCancel}
+        {...scrollTouchHandlers}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
