@@ -25,6 +25,8 @@ export function useStackedChartsTouchTooltip({
   const [chartsTooltip, setChartsTooltip] =
     React.useState<CGMGraphExternalTooltipPayload | null>(null);
 
+  const lastPayloadRef =
+    React.useRef<CGMGraphExternalTooltipPayload | null>(null);
   const tooltipTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -39,6 +41,7 @@ export function useStackedChartsTouchTooltip({
   const scheduleTooltipAutoHide = React.useCallback(() => {
     clearTooltipTimer();
     tooltipTimerRef.current = setTimeout(() => {
+      lastPayloadRef.current = null;
       setChartsTooltip(null);
       tooltipTimerRef.current = null;
     }, autoHideMs);
@@ -47,6 +50,7 @@ export function useStackedChartsTouchTooltip({
   const handleTooltipChange = React.useCallback(
     (payload: CGMGraphExternalTooltipPayload | null) => {
       clearTooltipTimer();
+      lastPayloadRef.current = payload;
       setChartsTooltip(payload);
       if (payload?.autoHide) {
         scheduleTooltipAutoHide();
@@ -106,10 +110,12 @@ export function useStackedChartsTouchTooltip({
   const handleTouchCancel = React.useCallback(() => {
     // Keep the last selection visible when ScrollView or another responder
     // takes over. If no release arrives afterwards, clear it as stale.
-    if (chartsTooltip) {
+    const lastPayload = lastPayloadRef.current;
+    if (lastPayload) {
+      setChartsTooltip(lastPayload);
       scheduleTooltipAutoHide();
     }
-  }, [chartsTooltip, scheduleTooltipAutoHide]);
+  }, [scheduleTooltipAutoHide]);
 
   const touchHandlers = React.useMemo(
     () => ({

@@ -247,6 +247,70 @@ describe('StackedHomeCharts tooltip docking', () => {
     await act(async () => tree!.unmount());
   });
 
+  it('preserves parent-driven CGM tooltip after touch cancel takeover', async () => {
+    jest.useFakeTimers();
+
+    const start = Date.UTC(2026, 0, 7, 0, 0, 0);
+    const end = start + 1000;
+    mockEmitTooltipOnMount = false;
+
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(
+        <ThemeProvider theme={theme}>
+          <StackedHomeCharts
+            testID="stacked"
+            bgSamples={[
+              {
+                sgv: 110,
+                date: start,
+                dateString: new Date(start).toISOString(),
+                trend: 0,
+                direction: 'Flat',
+                device: 'mock',
+                type: 'sgv',
+              } as any,
+            ]}
+            foodItems={null}
+            insulinData={[]}
+            width={400}
+            cgmHeight={240}
+            miniChartHeight={80}
+            xDomain={[new Date(start), new Date(end)]}
+            showFullScreenButton={false}
+            tooltipPlacement="inside"
+          />
+        </ThemeProvider>,
+      );
+    });
+
+    const cgmTouchArea = tree!.root.findByProps({
+      testID: 'stacked.cgmTouchArea',
+    });
+
+    act(() => {
+      cgmTouchArea.props.onTouchStart({
+        nativeEvent: {locationX: 200},
+      });
+      cgmTouchArea.props.onTouchCancel();
+    });
+
+    expect(
+      tree!.root.findAllByProps({testID: 'stacked.tooltipDock'}).length,
+    ).toBeGreaterThan(0);
+
+    act(() => {
+      jest.advanceTimersByTime(4500);
+    });
+
+    expect(
+      tree!.root.findAllByProps({testID: 'stacked.tooltipDock'}),
+    ).toHaveLength(0);
+
+    await act(async () => tree!.unmount());
+  });
+
   it('keeps active touch tooltip visible while the finger is held still', async () => {
     jest.useFakeTimers();
 
