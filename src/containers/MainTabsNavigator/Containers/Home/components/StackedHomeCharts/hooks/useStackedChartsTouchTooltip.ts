@@ -1,4 +1,4 @@
-import React from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {type GestureResponderEvent} from 'react-native';
 import * as d3 from 'd3';
 
@@ -23,45 +23,67 @@ export function useStackedChartsTouchTooltip({
   autoHideMs = 4000,
 }: UseStackedChartsTouchTooltipParams) {
   const [chartsTooltip, setChartsTooltip] =
-    React.useState<CGMGraphExternalTooltipPayload | null>(null);
+    useState<CGMGraphExternalTooltipPayload | null>(null);
 
   const lastPayloadRef =
-    React.useRef<CGMGraphExternalTooltipPayload | null>(null);
-  const tooltipTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    useRef<CGMGraphExternalTooltipPayload | null>(null);
+  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
 
-  const clearTooltipTimer = React.useCallback(() => {
+  const clearTooltipTimer = useCallback(() => {
     if (tooltipTimerRef.current) {
       clearTimeout(tooltipTimerRef.current);
       tooltipTimerRef.current = null;
     }
   }, []);
 
-  const scheduleTooltipAutoHide = React.useCallback(() => {
+  const clearTooltipState = useCallback(() => {
+    lastPayloadRef.current = null;
+    setChartsTooltip(null);
+  }, []);
+
+  const scheduleTooltipAutoHide = useCallback(() => {
     clearTooltipTimer();
     tooltipTimerRef.current = setTimeout(() => {
-      lastPayloadRef.current = null;
-      setChartsTooltip(null);
+      clearTooltipState();
       tooltipTimerRef.current = null;
     }, autoHideMs);
-  }, [autoHideMs, clearTooltipTimer]);
+  }, [autoHideMs, clearTooltipState, clearTooltipTimer]);
 
-  const handleTooltipChange = React.useCallback(
-    (payload: CGMGraphExternalTooltipPayload | null) => {
-      clearTooltipTimer();
+  const setActiveTooltip = useCallback(
+    (payload: CGMGraphExternalTooltipPayload) => {
       lastPayloadRef.current = payload;
       setChartsTooltip(payload);
+    },
+    [],
+  );
+
+  const handleTooltipChange = useCallback(
+    (payload: CGMGraphExternalTooltipPayload | null) => {
+      clearTooltipTimer();
+
+      if (!payload) {
+        clearTooltipState();
+        return;
+      }
+
+      setActiveTooltip(payload);
       if (payload?.autoHide) {
         scheduleTooltipAutoHide();
       }
     },
-    [clearTooltipTimer, scheduleTooltipAutoHide],
+    [
+      clearTooltipState,
+      clearTooltipTimer,
+      scheduleTooltipAutoHide,
+      setActiveTooltip,
+    ],
   );
 
-  React.useEffect(() => clearTooltipTimer, [clearTooltipTimer]);
+  useEffect(() => clearTooltipTimer, [clearTooltipTimer]);
 
-  const xScale = React.useMemo(() => {
+  const xScale = useMemo(() => {
     const resolvedDomain =
       xDomain ??
       (() => {
@@ -76,7 +98,7 @@ export function useStackedChartsTouchTooltip({
     return d3.scaleTime().domain(resolvedDomain).range([0, plotWidth]);
   }, [bgSamples, margin.left, margin.right, width, xDomain]);
 
-  const buildTooltipPayload = React.useCallback(
+  const buildTooltipPayload = useCallback(
     (evt: GestureResponderEvent): CGMGraphExternalTooltipPayload | null => {
       const rawX = evt.nativeEvent.locationX;
       if (typeof rawX !== 'number' || !Number.isFinite(rawX)) {
@@ -93,7 +115,7 @@ export function useStackedChartsTouchTooltip({
     [margin.left, margin.right, width, xScale],
   );
 
-  const handleTouchPoint = React.useCallback(
+  const handleTouchPoint = useCallback(
     (evt: GestureResponderEvent) => {
       const payload = buildTooltipPayload(evt);
       if (payload) {
@@ -103,21 +125,21 @@ export function useStackedChartsTouchTooltip({
     [buildTooltipPayload, handleTooltipChange],
   );
 
-  const handleTouchEnd = React.useCallback(() => {
+  const handleTouchEnd = useCallback(() => {
     handleTooltipChange(null);
   }, [handleTooltipChange]);
 
-  const handleTouchCancel = React.useCallback(() => {
+  const handleTouchCancel = useCallback(() => {
     // Keep the last selection visible when ScrollView or another responder
     // takes over. If no release arrives afterwards, clear it as stale.
     const lastPayload = lastPayloadRef.current;
     if (lastPayload) {
-      setChartsTooltip(lastPayload);
+      setActiveTooltip(lastPayload);
       scheduleTooltipAutoHide();
     }
-  }, [scheduleTooltipAutoHide]);
+  }, [scheduleTooltipAutoHide, setActiveTooltip]);
 
-  const touchHandlers = React.useMemo(
+  const touchHandlers = useMemo(
     () => ({
       onTouchStart: handleTouchPoint,
       onTouchMove: handleTouchPoint,
