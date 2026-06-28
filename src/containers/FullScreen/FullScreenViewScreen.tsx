@@ -14,7 +14,10 @@ import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
 import CgmGraph from 'app/components/charts/CgmGraph/CgmGraph';
-import StackedHomeCharts from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
+import StackedHomeCharts, {
+  StackedChartsTooltipModel,
+} from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
+import HomeChartsTooltip from 'app/containers/MainTabsNavigator/Containers/Home/components/HomeChartsTooltip';
 import {
   FoodItemDTO,
   formattedFoodItemDTO,
@@ -34,6 +37,7 @@ const FULL_SCREEN_CONSTANTS = {
   defaultCgmGraphHeightFallback: 240,
   agpMinWidth: 280,
   stackedMixedMiniMultiplier: 2.5,
+  stackedLandscapeGap: 10,
 } as const;
 
 type Mode = 'cgmRows' | 'cgmGraph' | 'stackedCharts' | 'agpGraph';
@@ -69,6 +73,32 @@ function getStackedChartHeights(params: {
   );
 
   return {cgmHeight, miniHeight};
+}
+
+function getStackedLandscapeRailWidth(availableWidth: number) {
+  return clamp(Math.floor(availableWidth * 0.28), 280, 360);
+}
+
+export function getStackedFullScreenFrame(params: {
+  contentWidth: number;
+  isLandscape: boolean;
+}) {
+  if (!params.isLandscape) {
+    return {
+      chartWidth: params.contentWidth,
+      tooltipRailWidth: 0,
+    };
+  }
+
+  const tooltipRailWidth = getStackedLandscapeRailWidth(params.contentWidth);
+  const chartWidth = Math.max(
+    1,
+    params.contentWidth -
+      tooltipRailWidth -
+      FULL_SCREEN_CONSTANTS.stackedLandscapeGap,
+  );
+
+  return {chartWidth, tooltipRailWidth};
 }
 
 type FullScreenRouteParams =
@@ -113,6 +143,8 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
   const [contentLayoutHeight, setContentLayoutHeight] = useState<number | null>(
     null,
   );
+  const [stackedTooltipModel, setStackedTooltipModel] =
+    useState<StackedChartsTooltipModel | null>(null);
 
   const contentHeight = useMemo(() => {
     // IMPORTANT:
@@ -138,12 +170,19 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
 
   const isDeviceLandscape = screenWidth > screenHeight;
 
+  const contentHorizontalPadding = useMemo(() => {
+    return mode === 'stackedCharts' ? theme.spacing.sm : theme.spacing.lg;
+  }, [mode, theme.spacing.lg, theme.spacing.sm]);
+
   const contentWidth = useMemo(() => {
-    // Give charts some breathing room from the screen edges.
-    const padding =
-      mode === 'stackedCharts' ? theme.spacing.sm : theme.spacing.lg;
-    return Math.max(1, Math.floor(screenWidth - padding * 2));
-  }, [mode, screenWidth, theme.spacing.lg, theme.spacing.sm]);
+    // Give charts breathing room while respecting landscape safe areas/nav bars.
+    return Math.max(
+      1,
+      Math.floor(
+        screenWidth - insets.left - insets.right - contentHorizontalPadding * 2,
+      ),
+    );
+  }, [contentHorizontalPadding, insets.left, insets.right, screenWidth]);
 
   const cgmGraphFrame = useMemo(() => {
     const hAvailable =
@@ -238,6 +277,13 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
     });
   }, [contentInnerHeight, isDeviceLandscape]);
 
+  const stackedFrame = useMemo(() => {
+    return getStackedFullScreenFrame({
+      contentWidth,
+      isLandscape: isDeviceLandscape,
+    });
+  }, [contentWidth, isDeviceLandscape]);
+
   return (
     <Screen testID={E2E_TEST_IDS.fullscreen.screen}>
       <StatusBar hidden={false} backgroundColor={theme.backgroundColor} />
@@ -266,7 +312,11 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
       </Header>
 
       <Content
-        style={{paddingBottom: insets.bottom}}
+        style={{
+          paddingBottom: insets.bottom,
+          paddingLeft: insets.left + contentHorizontalPadding,
+          paddingRight: insets.right + contentHorizontalPadding,
+        }}
         onLayout={(e: LayoutChangeEvent) =>
           setContentLayoutHeight(e.nativeEvent.layout.height)
         }>
@@ -301,27 +351,61 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
 
         {mode === 'stackedCharts' ? (
           <StackedChartsFrame testID={E2E_TEST_IDS.charts.cgmGraphFullScreen}>
-            <StackedHomeCharts
-              bgSamples={(params as any)?.bgSamples ?? []}
-              foodItems={(params as any)?.foodItems ?? null}
-              insulinData={(params as any)?.insulinData}
-              basalProfileData={(params as any)?.basalProfileData}
-              width={Math.max(1, Math.floor(contentWidth))}
-              cgmHeight={stackedHeights.cgmHeight}
-              miniChartHeight={stackedHeights.miniHeight}
-              xDomain={stackedXDomain}
-              fallbackAnchorTimeMs={(params as any)?.fallbackAnchorTimeMs}
-              showFullScreenButton={false}
-              chartMode="mixed"
-              tooltipPlacement="inside"
-              tooltipAlign={isDeviceLandscape ? 'auto' : 'left'}
-              tooltipFullWidth={!isDeviceLandscape}
-              tooltipMaxWidthPx={
-                isDeviceLandscape
-                  ? Math.min(420, Math.floor(contentWidth * 0.42))
-                  : undefined
-              }
-            />
+            <StackedChartsLandscapeRow>
+              <StackedChartsPanel>
+                <StackedHomeCharts
+                  bgSamples={(params as any)?.bgSamples ?? []}
+                  foodItems={(params as any)?.foodItems ?? null}
+                  insulinData={(params as any)?.insulinData}
+                  basalProfileData={(params as any)?.basalProfileData}
+                  width={Math.max(1, Math.floor(stackedFrame.chartWidth))}
+                  cgmHeight={stackedHeights.cgmHeight}
+                  miniChartHeight={stackedHeights.miniHeight}
+                  xDomain={stackedXDomain}
+                  fallbackAnchorTimeMs={(params as any)?.fallbackAnchorTimeMs}
+                  showFullScreenButton={false}
+                  chartMode="mixed"
+                  tooltipPlacement={isDeviceLandscape ? 'none' : 'inside'}
+                  tooltipAlign={isDeviceLandscape ? 'auto' : 'left'}
+                  tooltipFullWidth={!isDeviceLandscape}
+                  tooltipMaxWidthPx={
+                    isDeviceLandscape
+                      ? Math.min(420, Math.floor(contentWidth * 0.42))
+                      : undefined
+                  }
+                  onTooltipModelChange={
+                    isDeviceLandscape ? setStackedTooltipModel : undefined
+                  }
+                />
+              </StackedChartsPanel>
+
+              {isDeviceLandscape ? (
+                <StackedTooltipRail
+                  pointerEvents="none"
+                  style={{width: stackedFrame.tooltipRailWidth}}>
+                  {stackedTooltipModel?.visible ? (
+                    <HomeChartsTooltip
+                      anchorTimeMs={stackedTooltipModel.anchorTimeMs}
+                      bgSample={stackedTooltipModel.bgSample}
+                      activeInsulinU={stackedTooltipModel.activeInsulinU}
+                      activeInsulinBolusU={
+                        stackedTooltipModel.activeInsulinBolusU
+                      }
+                      activeInsulinBasalU={
+                        stackedTooltipModel.activeInsulinBasalU
+                      }
+                      cobG={stackedTooltipModel.cobG}
+                      basalRateUhr={stackedTooltipModel.basalRateUhr}
+                      bolusSummary={stackedTooltipModel.bolusSummary}
+                      carbsSummary={stackedTooltipModel.carbsSummary}
+                      bolusEvents={stackedTooltipModel.bolusEvents}
+                      carbEvents={stackedTooltipModel.carbEvents as any}
+                      fullWidth
+                    />
+                  ) : null}
+                </StackedTooltipRail>
+              ) : null}
+            </StackedChartsLandscapeRow>
           </StackedChartsFrame>
         ) : null}
 
@@ -446,6 +530,21 @@ const StackedChartsFrame = styled.View`
   flex: 1;
   align-items: center;
   justify-content: center;
+`;
+
+const StackedChartsLandscapeRow = styled.View`
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+`;
+
+const StackedChartsPanel = styled.View`
+  justify-content: center;
+`;
+
+const StackedTooltipRail = styled.View`
+  margin-left: ${FULL_SCREEN_CONSTANTS.stackedLandscapeGap}px;
+  justify-content: flex-start;
 `;
 
 export default FullScreenViewScreen;

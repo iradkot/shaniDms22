@@ -3,7 +3,9 @@ import renderer, {act} from 'react-test-renderer';
 import {ThemeProvider} from 'styled-components/native';
 import * as RN from 'react-native';
 
-import FullScreenViewScreen from '../src/containers/FullScreen/FullScreenViewScreen';
+import FullScreenViewScreen, {
+  getStackedFullScreenFrame,
+} from '../src/containers/FullScreen/FullScreenViewScreen';
 import StackedHomeCharts from '../src/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
 import {theme} from '../src/style/theme';
 
@@ -11,14 +13,12 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
   beforeEach(() => {
     jest.useFakeTimers();
 
-    jest
-      .spyOn(RN, 'useWindowDimensions')
-      .mockReturnValue({
-        width: 360,
-        height: 720,
-        scale: 1,
-        fontScale: 1,
-      } as any);
+    jest.spyOn(RN, 'useWindowDimensions').mockReturnValue({
+      width: 360,
+      height: 720,
+      scale: 1,
+      fontScale: 1,
+    } as any);
   });
 
   afterEach(() => {
@@ -200,5 +200,22 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
     await act(async () => {
       tree!.unmount();
     });
+  });
+
+  it('reserves a tooltip rail for stacked charts in landscape only', () => {
+    const landscape = getStackedFullScreenFrame({
+      contentWidth: 720,
+      isLandscape: true,
+    });
+    expect(landscape.tooltipRailWidth).toBeGreaterThan(0);
+    expect(landscape.chartWidth).toBeLessThan(720);
+    expect(landscape.chartWidth + landscape.tooltipRailWidth).toBeLessThan(720);
+
+    const portrait = getStackedFullScreenFrame({
+      contentWidth: 360,
+      isLandscape: false,
+    });
+    expect(portrait.tooltipRailWidth).toBe(0);
+    expect(portrait.chartWidth).toBe(360);
   });
 });
