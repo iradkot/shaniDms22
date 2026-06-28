@@ -18,7 +18,6 @@ import CgmGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import StackedHomeCharts, {
   StackedChartsTooltipModel,
 } from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
-import HomeChartsTooltip from 'app/containers/MainTabsNavigator/Containers/Home/components/HomeChartsTooltip';
 import {
   FoodItemDTO,
   formattedFoodItemDTO,
@@ -283,6 +282,13 @@ function formatRangeTimeLabel(date: Date) {
   const hours = date.getHours().toString().padStart(2, '0');
   const minutes = date.getMinutes().toString().padStart(2, '0');
   return `${hours}:${minutes}`;
+}
+
+function formatRailAmount(value: number | null | undefined, suffix: string) {
+  if (value == null || !Number.isFinite(value)) {
+    return '--';
+  }
+  return `${value.toFixed(suffix === 'g' ? 0 : 2)} ${suffix}`;
 }
 
 type FullScreenRouteParams =
@@ -623,24 +629,7 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
                 <StackedTooltipRail
                   style={{width: stackedFrame.tooltipRailWidth}}>
                   {stackedTooltipModel?.visible ? (
-                    <HomeChartsTooltip
-                      anchorTimeMs={stackedTooltipModel.anchorTimeMs}
-                      bgSample={stackedTooltipModel.bgSample}
-                      activeInsulinU={stackedTooltipModel.activeInsulinU}
-                      activeInsulinBolusU={
-                        stackedTooltipModel.activeInsulinBolusU
-                      }
-                      activeInsulinBasalU={
-                        stackedTooltipModel.activeInsulinBasalU
-                      }
-                      cobG={stackedTooltipModel.cobG}
-                      basalRateUhr={stackedTooltipModel.basalRateUhr}
-                      bolusSummary={stackedTooltipModel.bolusSummary}
-                      carbsSummary={stackedTooltipModel.carbsSummary}
-                      bolusEvents={stackedTooltipModel.bolusEvents}
-                      carbEvents={stackedTooltipModel.carbEvents as any}
-                      fullWidth
-                    />
+                    <StackedRailTooltip model={stackedTooltipModel} />
                   ) : null}
                   <StackedRailControls
                     selectableDomain={stackedSelectableXDomain}
@@ -689,6 +678,62 @@ type StackedRailControlsProps = {
   rangeSelection: StackedRangeSelection;
   onRangeSelectionPreview: (selection: StackedRangeSelection) => void;
   onRangeSelectionCommit: (selection: StackedRangeSelection) => void;
+};
+
+const StackedRailTooltip: React.FC<{model: StackedChartsTooltipModel}> = ({
+  model,
+}) => {
+  const bgValue =
+    model.bgSample?.sgv != null && Number.isFinite(model.bgSample.sgv)
+      ? `${Math.round(model.bgSample.sgv)} mg/dL`
+      : '--';
+  const bolusValue =
+    model.bolusSummary.count > 0
+      ? `${model.bolusSummary.totalU.toFixed(2)} U`
+      : '--';
+  const carbsValue =
+    model.carbsSummary.count > 0
+      ? `${Math.round(model.carbsSummary.totalG)} g`
+      : '--';
+
+  return (
+    <RailTooltipCard testID="fullscreen.stackedRailTooltip">
+      <RailTooltipHeader>
+        <RailTooltipTitle>
+          {formatRangeTimeLabel(new Date(model.anchorTimeMs))}
+        </RailTooltipTitle>
+        <RailTooltipBg>{bgValue}</RailTooltipBg>
+      </RailTooltipHeader>
+      <RailTooltipGrid>
+        <RailTooltipMetric>
+          <RailTooltipMetricLabel>IOB</RailTooltipMetricLabel>
+          <RailTooltipMetricValue>
+            {formatRailAmount(model.activeInsulinU, 'U')}
+          </RailTooltipMetricValue>
+        </RailTooltipMetric>
+        <RailTooltipMetric>
+          <RailTooltipMetricLabel>Basal</RailTooltipMetricLabel>
+          <RailTooltipMetricValue>
+            {formatRailAmount(model.basalRateUhr, 'U/hr')}
+          </RailTooltipMetricValue>
+        </RailTooltipMetric>
+        <RailTooltipMetric>
+          <RailTooltipMetricLabel>COB</RailTooltipMetricLabel>
+          <RailTooltipMetricValue>
+            {formatRailAmount(model.cobG, 'g')}
+          </RailTooltipMetricValue>
+        </RailTooltipMetric>
+        <RailTooltipMetric>
+          <RailTooltipMetricLabel>Bolus</RailTooltipMetricLabel>
+          <RailTooltipMetricValue>{bolusValue}</RailTooltipMetricValue>
+        </RailTooltipMetric>
+        <RailTooltipMetric $wide>
+          <RailTooltipMetricLabel>Carbs near point</RailTooltipMetricLabel>
+          <RailTooltipMetricValue>{carbsValue}</RailTooltipMetricValue>
+        </RailTooltipMetric>
+      </RailTooltipGrid>
+    </RailTooltipCard>
+  );
 };
 
 const StackedRailControls: React.FC<StackedRailControlsProps> = ({
@@ -978,7 +1023,7 @@ const AgpChartContainer = styled.View`
 const StackedChartsFrame = styled.View`
   flex: 1;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
 `;
 
 const StackedChartsLandscapeRow = styled.View`
@@ -994,6 +1039,62 @@ const StackedChartsPanel = styled.View`
 const StackedTooltipRail = styled.View`
   margin-left: ${FULL_SCREEN_CONSTANTS.stackedLandscapeGap}px;
   justify-content: flex-start;
+`;
+
+const RailTooltipCard = styled.View`
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
+  margin-left: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  margin-right: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  border-radius: ${({theme}: {theme: ThemeType}) => theme.borderRadius}px;
+  border-width: 1px;
+  border-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.12)};
+  background-color: ${({theme}: {theme: ThemeType}) => theme.white};
+  padding: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px
+    ${({theme}: {theme: ThemeType}) => theme.spacing.md}px;
+`;
+
+const RailTooltipHeader = styled.View`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
+`;
+
+const RailTooltipTitle = styled.Text`
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.sm}px;
+  font-weight: 900;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
+`;
+
+const RailTooltipBg = styled.Text`
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: 900;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.72)};
+`;
+
+const RailTooltipGrid = styled.View`
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+`;
+
+const RailTooltipMetric = styled.View<{$wide?: boolean}>`
+  width: ${({$wide}: {$wide?: boolean}) => ($wide ? '100%' : '48%')};
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
+`;
+
+const RailTooltipMetricLabel = styled.Text`
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: 700;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.56)};
+`;
+
+const RailTooltipMetricValue = styled.Text`
+  margin-top: 1px;
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: 900;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
 
 const RailControlsCard = styled.View`
