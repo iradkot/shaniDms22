@@ -29,6 +29,7 @@ import AGPChart from 'app/components/charts/AGPGraph/components/AGPChart';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {MAIN_TAB_NAVIGATOR} from 'app/constants/SCREEN_NAMES';
+import {addOpacity} from 'app/style/styling.utils';
 
 const FULL_SCREEN_CONSTANTS = {
   headerHeight: 48,
@@ -41,6 +42,15 @@ const FULL_SCREEN_CONSTANTS = {
 } as const;
 
 type Mode = 'cgmRows' | 'cgmGraph' | 'stackedCharts' | 'agpGraph';
+type StackedRangeHours = null | 12 | 6 | 3;
+
+const STACKED_RANGE_OPTIONS: Array<{label: string; hours: StackedRangeHours}> =
+  [
+    {label: 'Full', hours: null},
+    {label: '12h', hours: 12},
+    {label: '6h', hours: 6},
+    {label: '3h', hours: 3},
+  ];
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -101,6 +111,53 @@ export function getStackedFullScreenFrame(params: {
   return {chartWidth, tooltipRailWidth};
 }
 
+function getLatestBgTimeMs(bgSamples: BgSample[]) {
+  let latest: number | null = null;
+  for (const sample of bgSamples) {
+    if (typeof sample?.date === 'number' && Number.isFinite(sample.date)) {
+      latest = latest == null ? sample.date : Math.max(latest, sample.date);
+    }
+  }
+  return latest;
+}
+
+export function getStackedDisplayDomain(params: {
+  baseDomain: [Date, Date] | null;
+  bgSamples: BgSample[];
+  fallbackAnchorTimeMs?: number;
+  rangeHours: StackedRangeHours;
+}): [Date, Date] | null {
+  if (params.rangeHours == null) {
+    return params.baseDomain;
+  }
+
+  const baseStartMs = params.baseDomain?.[0]?.getTime();
+  const baseEndMs = params.baseDomain?.[1]?.getTime();
+  const fallbackEndMs =
+    typeof params.fallbackAnchorTimeMs === 'number' &&
+    Number.isFinite(params.fallbackAnchorTimeMs)
+      ? params.fallbackAnchorTimeMs
+      : null;
+  const endMs = Number.isFinite(baseEndMs)
+    ? (baseEndMs as number)
+    : fallbackEndMs ?? getLatestBgTimeMs(params.bgSamples);
+
+  if (endMs == null || !Number.isFinite(endMs)) {
+    return params.baseDomain;
+  }
+
+  const requestedStartMs = endMs - params.rangeHours * 60 * 60 * 1000;
+  const startMs = Number.isFinite(baseStartMs)
+    ? Math.max(baseStartMs as number, requestedStartMs)
+    : requestedStartMs;
+
+  if (!(startMs < endMs)) {
+    return params.baseDomain;
+  }
+
+  return [new Date(startMs), new Date(endMs)];
+}
+
 type FullScreenRouteParams =
   | {
       mode: 'cgmRows';
@@ -145,6 +202,8 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
   );
   const [stackedTooltipModel, setStackedTooltipModel] =
     useState<StackedChartsTooltipModel | null>(null);
+  const [stackedRangeHours, setStackedRangeHours] =
+    useState<StackedRangeHours>(null);
 
   const contentHeight = useMemo(() => {
     // IMPORTANT:
@@ -270,6 +329,15 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
     ];
   }, [params]);
 
+  const stackedDisplayXDomain = useMemo(() => {
+    return getStackedDisplayDomain({
+      baseDomain: stackedXDomain,
+      bgSamples: (params as any)?.bgSamples ?? [],
+      fallbackAnchorTimeMs: (params as any)?.fallbackAnchorTimeMs,
+      rangeHours: stackedRangeHours,
+    });
+  }, [params, stackedRangeHours, stackedXDomain]);
+
   const stackedHeights = useMemo(() => {
     return getStackedChartHeights({
       availableHeight: contentInnerHeight,
@@ -361,7 +429,7 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
                   width={Math.max(1, Math.floor(stackedFrame.chartWidth))}
                   cgmHeight={stackedHeights.cgmHeight}
                   miniChartHeight={stackedHeights.miniHeight}
-                  xDomain={stackedXDomain}
+                  xDomain={stackedDisplayXDomain}
                   fallbackAnchorTimeMs={(params as any)?.fallbackAnchorTimeMs}
                   showFullScreenButton={false}
                   chartMode="mixed"
@@ -403,6 +471,10 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
                       fullWidth
                     />
                   ) : null}
+                  <StackedRailControls
+                    selectedRangeHours={stackedRangeHours}
+                    onSelectRange={setStackedRangeHours}
+                  />
                 </StackedTooltipRail>
               ) : null}
             </StackedChartsLandscapeRow>
@@ -437,6 +509,39 @@ type AgpFullScreenChartProps = {
   bgData: BgSample[];
   width: number;
   height: number;
+};
+
+type StackedRailControlsProps = {
+  selectedRangeHours: StackedRangeHours;
+  onSelectRange: (hours: StackedRangeHours) => void;
+};
+
+const StackedRailControls: React.FC<StackedRailControlsProps> = ({
+  selectedRangeHours,
+  onSelectRange,
+}) => {
+  return (
+    <RailControlsCard>
+      <RailSectionTitle>Range</RailSectionTitle>
+      <RangeSegmentedControl>
+        {STACKED_RANGE_OPTIONS.map(option => {
+          const selected = option.hours === selectedRangeHours;
+          return (
+            <RangeButton
+              key={option.label}
+              $selected={selected}
+              accessibilityRole="button"
+              accessibilityState={{selected}}
+              onPress={() => onSelectRange(option.hours)}>
+              <RangeButtonText $selected={selected}>
+                {option.label}
+              </RangeButtonText>
+            </RangeButton>
+          );
+        })}
+      </RangeSegmentedControl>
+    </RailControlsCard>
+  );
 };
 
 const AgpFullScreenChart: React.FC<AgpFullScreenChartProps> = ({
@@ -545,6 +650,55 @@ const StackedChartsPanel = styled.View`
 const StackedTooltipRail = styled.View`
   margin-left: ${FULL_SCREEN_CONSTANTS.stackedLandscapeGap}px;
   justify-content: flex-start;
+`;
+
+const RailControlsCard = styled.View`
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  margin-left: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  margin-right: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  border-radius: ${({theme}: {theme: ThemeType}) => theme.borderRadius}px;
+  border-width: 1px;
+  border-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.12)};
+  background-color: ${({theme}: {theme: ThemeType}) => theme.white};
+  padding: ${({theme}: {theme: ThemeType}) => theme.spacing.md}px;
+`;
+
+const RailSectionTitle = styled.Text`
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.sm}px;
+  font-weight: 800;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.72)};
+`;
+
+const RangeSegmentedControl = styled.View`
+  flex-direction: row;
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  border-radius: ${({theme}: {theme: ThemeType}) => theme.borderRadius}px;
+  overflow: hidden;
+  border-width: 1px;
+  border-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.14)};
+`;
+
+const RangeButton = styled(Pressable)<{$selected: boolean}>`
+  flex: 1;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  background-color: ${({
+    $selected,
+    theme,
+  }: {
+    $selected: boolean;
+    theme: ThemeType;
+  }) => ($selected ? addOpacity(theme.textColor, 0.12) : 'transparent')};
+`;
+
+const RangeButtonText = styled.Text<{$selected: boolean}>`
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: ${({$selected}: {$selected: boolean}) =>
+    $selected ? 900 : 700};
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
 
 export default FullScreenViewScreen;

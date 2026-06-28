@@ -4,6 +4,7 @@ import {ThemeProvider} from 'styled-components/native';
 import * as RN from 'react-native';
 
 import FullScreenViewScreen, {
+  getStackedDisplayDomain,
   getStackedFullScreenFrame,
 } from '../src/containers/FullScreen/FullScreenViewScreen';
 import StackedHomeCharts from '../src/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
@@ -217,5 +218,36 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
     });
     expect(portrait.tooltipRailWidth).toBe(0);
     expect(portrait.chartWidth).toBe(360);
+  });
+
+  it('builds a focused stacked chart display domain from range controls', () => {
+    const startMs = Date.UTC(2026, 0, 7, 0, 0, 0);
+    const endMs = Date.UTC(2026, 0, 7, 14, 0, 0);
+
+    const sixHours = getStackedDisplayDomain({
+      baseDomain: [new Date(startMs), new Date(endMs)],
+      bgSamples: [],
+      rangeHours: 6,
+    });
+
+    expect(sixHours?.[0].getTime()).toBe(endMs - 6 * 60 * 60 * 1000);
+    expect(sixHours?.[1].getTime()).toBe(endMs);
+
+    const capped = getStackedDisplayDomain({
+      baseDomain: [new Date(startMs), new Date(endMs)],
+      bgSamples: [],
+      rangeHours: 12,
+    });
+
+    expect(capped?.[0].getTime()).toBe(endMs - 12 * 60 * 60 * 1000);
+
+    const full = getStackedDisplayDomain({
+      baseDomain: [new Date(startMs), new Date(endMs)],
+      bgSamples: [],
+      rangeHours: null,
+    });
+
+    expect(full?.[0].getTime()).toBe(startMs);
+    expect(full?.[1].getTime()).toBe(endMs);
   });
 });
