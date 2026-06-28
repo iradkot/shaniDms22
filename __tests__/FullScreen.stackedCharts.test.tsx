@@ -228,23 +228,37 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
       baseDomain: [new Date(startMs), new Date(endMs)],
       bgSamples: [],
       rangeHours: 6,
+      windowPosition: 1,
     });
 
     expect(sixHours?.[0].getTime()).toBe(endMs - 6 * 60 * 60 * 1000);
     expect(sixHours?.[1].getTime()).toBe(endMs);
 
-    const capped = getStackedDisplayDomain({
+    const earliest = getStackedDisplayDomain({
       baseDomain: [new Date(startMs), new Date(endMs)],
       bgSamples: [],
-      rangeHours: 12,
+      rangeHours: 6,
+      windowPosition: 0,
     });
 
-    expect(capped?.[0].getTime()).toBe(endMs - 12 * 60 * 60 * 1000);
+    expect(earliest?.[0].getTime()).toBe(startMs);
+    expect(earliest?.[1].getTime()).toBe(startMs + 6 * 60 * 60 * 1000);
+
+    const middle = getStackedDisplayDomain({
+      baseDomain: [new Date(startMs), new Date(endMs)],
+      bgSamples: [],
+      rangeHours: 6,
+      windowPosition: 0.5,
+    });
+
+    expect(middle?.[0].getTime()).toBe(startMs + 4 * 60 * 60 * 1000);
+    expect(middle?.[1].getTime()).toBe(startMs + 10 * 60 * 60 * 1000);
 
     const full = getStackedDisplayDomain({
       baseDomain: [new Date(startMs), new Date(endMs)],
       bgSamples: [],
       rangeHours: null,
+      windowPosition: 0,
     });
 
     expect(full?.[0].getTime()).toBe(startMs);

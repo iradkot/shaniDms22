@@ -9,6 +9,7 @@ import {
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import styled, {useTheme} from 'styled-components/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import Slider from '@react-native-community/slider';
 
 import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
@@ -54,6 +55,10 @@ const STACKED_RANGE_OPTIONS: Array<{label: string; hours: StackedRangeHours}> =
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function clamp01(value: number) {
+  return clamp(value, 0, 1);
 }
 
 function getStackedChartHeights(params: {
@@ -126,6 +131,7 @@ export function getStackedDisplayDomain(params: {
   bgSamples: BgSample[];
   fallbackAnchorTimeMs?: number;
   rangeHours: StackedRangeHours;
+  windowPosition?: number;
 }): [Date, Date] | null {
   if (params.rangeHours == null) {
     return params.baseDomain;
@@ -133,6 +139,21 @@ export function getStackedDisplayDomain(params: {
 
   const baseStartMs = params.baseDomain?.[0]?.getTime();
   const baseEndMs = params.baseDomain?.[1]?.getTime();
+  const requestedWindowMs = params.rangeHours * 60 * 60 * 1000;
+
+  if (
+    Number.isFinite(baseStartMs) &&
+    Number.isFinite(baseEndMs) &&
+    (baseEndMs as number) - (baseStartMs as number) > requestedWindowMs
+  ) {
+    const maxOffsetMs =
+      (baseEndMs as number) - (baseStartMs as number) - requestedWindowMs;
+    const startMs =
+      (baseStartMs as number) +
+      maxOffsetMs * clamp01(params.windowPosition ?? 1);
+    return [new Date(startMs), new Date(startMs + requestedWindowMs)];
+  }
+
   const fallbackEndMs =
     typeof params.fallbackAnchorTimeMs === 'number' &&
     Number.isFinite(params.fallbackAnchorTimeMs)
@@ -146,7 +167,7 @@ export function getStackedDisplayDomain(params: {
     return params.baseDomain;
   }
 
-  const requestedStartMs = endMs - params.rangeHours * 60 * 60 * 1000;
+  const requestedStartMs = endMs - requestedWindowMs;
   const startMs = Number.isFinite(baseStartMs)
     ? Math.max(baseStartMs as number, requestedStartMs)
     : requestedStartMs;
@@ -204,6 +225,7 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
     useState<StackedChartsTooltipModel | null>(null);
   const [stackedRangeHours, setStackedRangeHours] =
     useState<StackedRangeHours>(null);
+  const [stackedWindowPosition, setStackedWindowPosition] = useState(1);
 
   const contentHeight = useMemo(() => {
     // IMPORTANT:
@@ -335,8 +357,9 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
       bgSamples: (params as any)?.bgSamples ?? [],
       fallbackAnchorTimeMs: (params as any)?.fallbackAnchorTimeMs,
       rangeHours: stackedRangeHours,
+      windowPosition: stackedWindowPosition,
     });
-  }, [params, stackedRangeHours, stackedXDomain]);
+  }, [params, stackedRangeHours, stackedWindowPosition, stackedXDomain]);
 
   const stackedHeights = useMemo(() => {
     return getStackedChartHeights({
@@ -449,7 +472,6 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
 
               {isDeviceLandscape ? (
                 <StackedTooltipRail
-                  pointerEvents="none"
                   style={{width: stackedFrame.tooltipRailWidth}}>
                   {stackedTooltipModel?.visible ? (
                     <HomeChartsTooltip
@@ -473,7 +495,9 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
                   ) : null}
                   <StackedRailControls
                     selectedRangeHours={stackedRangeHours}
+                    windowPosition={stackedWindowPosition}
                     onSelectRange={setStackedRangeHours}
+                    onWindowPositionChange={setStackedWindowPosition}
                   />
                 </StackedTooltipRail>
               ) : null}
@@ -513,13 +537,19 @@ type AgpFullScreenChartProps = {
 
 type StackedRailControlsProps = {
   selectedRangeHours: StackedRangeHours;
+  windowPosition: number;
   onSelectRange: (hours: StackedRangeHours) => void;
+  onWindowPositionChange: (value: number) => void;
 };
 
 const StackedRailControls: React.FC<StackedRailControlsProps> = ({
   selectedRangeHours,
+  windowPosition,
   onSelectRange,
+  onWindowPositionChange,
 }) => {
+  const theme = useTheme() as ThemeType;
+
   return (
     <RailControlsCard>
       <RailSectionTitle>Range</RailSectionTitle>
@@ -540,6 +570,29 @@ const StackedRailControls: React.FC<StackedRailControlsProps> = ({
           );
         })}
       </RangeSegmentedControl>
+
+      {selectedRangeHours != null ? (
+        <WindowSliderBlock>
+          <WindowSliderHeader>
+            <WindowSliderLabel>Window</WindowSliderLabel>
+            <WindowSliderValue>{selectedRangeHours}h</WindowSliderValue>
+          </WindowSliderHeader>
+          <Slider
+            value={windowPosition}
+            minimumValue={0}
+            maximumValue={1}
+            step={0.01}
+            minimumTrackTintColor={addOpacity(theme.textColor, 0.7)}
+            maximumTrackTintColor={addOpacity(theme.textColor, 0.18)}
+            thumbTintColor={theme.textColor}
+            onValueChange={onWindowPositionChange}
+          />
+          <WindowSliderFooter>
+            <WindowSliderFooterText>Earlier</WindowSliderFooterText>
+            <WindowSliderFooterText>Later</WindowSliderFooterText>
+          </WindowSliderFooter>
+        </WindowSliderBlock>
+      ) : null}
     </RailControlsCard>
   );
 };
@@ -699,6 +752,40 @@ const RangeButtonText = styled.Text<{$selected: boolean}>`
   font-weight: ${({$selected}: {$selected: boolean}) =>
     $selected ? 900 : 700};
   color: ${({theme}: {theme: ThemeType}) => theme.textColor};
+`;
+
+const WindowSliderBlock = styled.View`
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.md}px;
+`;
+
+const WindowSliderHeader = styled.View`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const WindowSliderLabel = styled.Text`
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: 800;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.68)};
+`;
+
+const WindowSliderValue = styled.Text`
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: 900;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
+`;
+
+const WindowSliderFooter = styled.View`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const WindowSliderFooterText = styled.Text`
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: 700;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.56)};
 `;
 
 export default FullScreenViewScreen;
