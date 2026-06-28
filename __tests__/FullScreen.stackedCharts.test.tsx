@@ -13,7 +13,12 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
 
     jest
       .spyOn(RN, 'useWindowDimensions')
-      .mockReturnValue({width: 360, height: 720, scale: 1, fontScale: 1} as any);
+      .mockReturnValue({
+        width: 360,
+        height: 720,
+        scale: 1,
+        fontScale: 1,
+      } as any);
   });
 
   afterEach(() => {
@@ -175,15 +180,22 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
     expect(stacked.props.tooltipPlacement).toBe('inside');
 
     // Trigger an onLayout height update and ensure the heights reflow.
-    const contentWithOnLayout = tree!.root.findAll(n => typeof n?.props?.onLayout === 'function')[0];
+    const contentWithOnLayout = tree!.root.findAll(
+      n => typeof n?.props?.onLayout === 'function',
+    )[0];
     const beforeMini = stacked.props.miniChartHeight;
 
     await act(async () => {
-      contentWithOnLayout.props.onLayout({nativeEvent: {layout: {height: 520}}});
+      contentWithOnLayout.props.onLayout({
+        nativeEvent: {layout: {height: 520}},
+      });
     });
 
     const stackedAfter = tree!.root.findByType(StackedHomeCharts);
     expect(stackedAfter.props.miniChartHeight).not.toBe(beforeMini);
+    expect(
+      stackedAfter.props.cgmHeight + stackedAfter.props.miniChartHeight * 2.5,
+    ).toBeLessThanOrEqual(520);
 
     await act(async () => {
       tree!.unmount();

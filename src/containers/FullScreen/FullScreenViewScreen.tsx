@@ -1,5 +1,11 @@
 import React, {useMemo, useState} from 'react';
-import {LayoutChangeEvent, Pressable, StatusBar, useWindowDimensions, View} from 'react-native';
+import {
+  LayoutChangeEvent,
+  Pressable,
+  StatusBar,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import styled, {useTheme} from 'styled-components/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -9,7 +15,11 @@ import {BgSample} from 'app/types/day_bgs.types';
 import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
 import CgmGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import StackedHomeCharts from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
-import {FoodItemDTO, formattedFoodItemDTO, FormattedFoodItemDTO} from 'app/types/food.types';
+import {
+  FoodItemDTO,
+  formattedFoodItemDTO,
+  FormattedFoodItemDTO,
+} from 'app/types/food.types';
 import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {useAGPData} from 'app/components/charts/AGPGraph/hooks/useAGPData';
 import AGPChart from 'app/components/charts/AGPGraph/components/AGPChart';
@@ -23,9 +33,43 @@ const FULL_SCREEN_CONSTANTS = {
   hitSlop: {top: 10, bottom: 10, left: 10, right: 10},
   defaultCgmGraphHeightFallback: 240,
   agpMinWidth: 280,
+  stackedMixedMiniMultiplier: 2.5,
 } as const;
 
 type Mode = 'cgmRows' | 'cgmGraph' | 'stackedCharts' | 'agpGraph';
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getStackedChartHeights(params: {
+  availableHeight: number;
+  isLandscape: boolean;
+}) {
+  const availableHeight = Math.max(1, Math.floor(params.availableHeight));
+  const minCgm = params.isLandscape ? 150 : 220;
+  const minMixed = params.isLandscape ? 116 : 180;
+  const maxMixed = params.isLandscape ? 220 : 300;
+  const targetMixed = availableHeight * (params.isLandscape ? 0.38 : 0.42);
+  const minTotal = minCgm + minMixed;
+
+  let mixedHeight =
+    availableHeight >= minTotal
+      ? clamp(Math.floor(targetMixed), minMixed, maxMixed)
+      : Math.floor(availableHeight * 0.42);
+
+  if (availableHeight - mixedHeight < minCgm) {
+    mixedHeight = Math.max(1, availableHeight - minCgm);
+  }
+
+  const cgmHeight = Math.max(1, availableHeight - mixedHeight);
+  const miniHeight = Math.max(
+    1,
+    Math.floor(mixedHeight / FULL_SCREEN_CONSTANTS.stackedMixedMiniMultiplier),
+  );
+
+  return {cgmHeight, miniHeight};
+}
 
 type FullScreenRouteParams =
   | {
@@ -55,7 +99,10 @@ type FullScreenRouteParams =
       bgData: BgSample[];
     };
 
-const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigation, route}) => {
+const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
+  navigation,
+  route,
+}) => {
   const theme = useTheme() as ThemeType;
   const insets = useSafeAreaInsets();
   const {width: screenWidth, height: screenHeight} = useWindowDimensions();
@@ -63,7 +110,9 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
   const params = (route as any)?.params as FullScreenRouteParams | undefined;
   const mode: Mode = params?.mode ?? 'cgmRows';
 
-  const [contentLayoutHeight, setContentLayoutHeight] = useState<number | null>(null);
+  const [contentLayoutHeight, setContentLayoutHeight] = useState<number | null>(
+    null,
+  );
 
   const contentHeight = useMemo(() => {
     // IMPORTANT:
@@ -77,7 +126,10 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
   const contentInnerHeight = useMemo(() => {
     // Prefer the measured height since it reflects real layout (status bar, nav bars,
     // platform quirks, etc). Subtract bottom padding because children can't draw there.
-    if (typeof contentLayoutHeight === 'number' && Number.isFinite(contentLayoutHeight)) {
+    if (
+      typeof contentLayoutHeight === 'number' &&
+      Number.isFinite(contentLayoutHeight)
+    ) {
       return Math.max(0, contentLayoutHeight - insets.bottom);
     }
     // Fallback to the computed value (already excludes header).
@@ -88,16 +140,21 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
 
   const contentWidth = useMemo(() => {
     // Give charts some breathing room from the screen edges.
-    const padding = theme.spacing.lg;
+    const padding =
+      mode === 'stackedCharts' ? theme.spacing.sm : theme.spacing.lg;
     return Math.max(1, Math.floor(screenWidth - padding * 2));
-  }, [screenWidth, theme.spacing.lg]);
+  }, [mode, screenWidth, theme.spacing.lg, theme.spacing.sm]);
 
   const cgmGraphFrame = useMemo(() => {
-    const hAvailable = contentInnerHeight || FULL_SCREEN_CONSTANTS.defaultCgmGraphHeightFallback;
+    const hAvailable =
+      contentInnerHeight || FULL_SCREEN_CONSTANTS.defaultCgmGraphHeightFallback;
 
     // In portrait, avoid an overly tall/stretchy feel by capping height relative to width.
     // In landscape, use the available height (device rotation already provides the wide layout).
-    const hPortrait = Math.min(hAvailable, Math.max(260, Math.floor(contentWidth * 0.95)));
+    const hPortrait = Math.min(
+      hAvailable,
+      Math.max(260, Math.floor(contentWidth * 0.95)),
+    );
 
     return {
       width: contentWidth,
@@ -106,10 +163,14 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
   }, [contentInnerHeight, contentWidth, isDeviceLandscape]);
 
   const agpGraphFrame = useMemo(() => {
-    const hAvailable = contentInnerHeight || FULL_SCREEN_CONSTANTS.defaultCgmGraphHeightFallback;
+    const hAvailable =
+      contentInnerHeight || FULL_SCREEN_CONSTANTS.defaultCgmGraphHeightFallback;
 
     // AGP looks awkward when it fills the entire portrait height; keep a sane aspect.
-    const hPortrait = Math.min(hAvailable, Math.max(320, Math.floor(contentWidth * 1.1)));
+    const hPortrait = Math.min(
+      hAvailable,
+      Math.max(320, Math.floor(contentWidth * 1.1)),
+    );
 
     return {
       width: Math.max(FULL_SCREEN_CONSTANTS.agpMinWidth, contentWidth),
@@ -125,8 +186,15 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
       return;
     }
 
-    const parent = typeof navigation?.getParent === 'function' ? navigation.getParent() : null;
-    if (parent && typeof parent.canGoBack === 'function' && parent.canGoBack()) {
+    const parent =
+      typeof navigation?.getParent === 'function'
+        ? navigation.getParent()
+        : null;
+    if (
+      parent &&
+      typeof parent.canGoBack === 'function' &&
+      parent.canGoBack()
+    ) {
       parent.goBack();
       return;
     }
@@ -152,46 +220,22 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
       | null
       | undefined;
     if (!xDomainMs) return null;
-    if (!Number.isFinite(xDomainMs.startMs) || !Number.isFinite(xDomainMs.endMs)) return null;
-    return [new Date(xDomainMs.startMs), new Date(xDomainMs.endMs)] as [Date, Date];
+    if (
+      !Number.isFinite(xDomainMs.startMs) ||
+      !Number.isFinite(xDomainMs.endMs)
+    )
+      return null;
+    return [new Date(xDomainMs.startMs), new Date(xDomainMs.endMs)] as [
+      Date,
+      Date,
+    ];
   }, [params]);
 
   const stackedHeights = useMemo(() => {
-    // Ensure CGM + both mini charts always fit on screen.
-    // In landscape, vertical space is tighter, so we bias a bit more towards minis.
-    const minCgm = isDeviceLandscape ? 120 : 220;
-    const maxCgm = 420;
-
-    // Minis need enough height to show their titles + meaningful plot area.
-    const minMini = isDeviceLandscape ? 84 : 80;
-    const maxMini = isDeviceLandscape ? 150 : 160;
-
-    // Absolute floor to keep mini charts readable even on very small heights.
-    const hardMinMini = isDeviceLandscape ? 72 : 64;
-
-    const idealMini = Math.floor(contentInnerHeight * (isDeviceLandscape ? 0.28 : 0.19));
-    let mini = Math.max(minMini, Math.min(maxMini, idealMini));
-    mini = Math.max(hardMinMini, mini);
-
-    let cgm = contentInnerHeight - 2 * mini;
-
-    // Try to keep a usable CGM height by shrinking minis (but never below hardMinMini).
-    if (cgm < minCgm) {
-      const targetMini = Math.floor((contentInnerHeight - minCgm) / 2);
-      mini = Math.max(hardMinMini, Math.min(mini, targetMini));
-      cgm = contentInnerHeight - 2 * mini;
-    }
-
-    // Clamp CGM upper bound, then ensure we do not overflow.
-    cgm = Math.min(maxCgm, Math.max(0, cgm));
-
-    const total = cgm + 2 * mini;
-    if (total > contentInnerHeight) {
-      // Never let the stack overflow (which would clip the bottom chart).
-      cgm = Math.max(0, contentInnerHeight - 2 * mini);
-    }
-
-    return {cgmHeight: Math.floor(cgm), miniHeight: Math.floor(mini)};
+    return getStackedChartHeights({
+      availableHeight: contentInnerHeight,
+      isLandscape: isDeviceLandscape,
+    });
   }, [contentInnerHeight, isDeviceLandscape]);
 
   return (
@@ -203,9 +247,12 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
           <IconButton
             testID={E2E_TEST_IDS.fullscreen.backButton}
             onPress={handleBack}
-            hitSlop={FULL_SCREEN_CONSTANTS.hitSlop}
-          >
-            <MaterialIcons name="arrow-back" size={FULL_SCREEN_CONSTANTS.iconSize} color={theme.textColor} />
+            hitSlop={FULL_SCREEN_CONSTANTS.hitSlop}>
+            <MaterialIcons
+              name="arrow-back"
+              size={FULL_SCREEN_CONSTANTS.iconSize}
+              color={theme.textColor}
+            />
           </IconButton>
 
           <Title testID={E2E_TEST_IDS.fullscreen.title} numberOfLines={1}>
@@ -220,8 +267,9 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
 
       <Content
         style={{paddingBottom: insets.bottom}}
-        onLayout={(e: LayoutChangeEvent) => setContentLayoutHeight(e.nativeEvent.layout.height)}
-      >
+        onLayout={(e: LayoutChangeEvent) =>
+          setContentLayoutHeight(e.nativeEvent.layout.height)
+        }>
         {mode === 'cgmRows' ? (
           <CgmRows
             bgData={(params as any)?.bgData ?? []}
@@ -235,8 +283,10 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
           <Centered>
             <RotatableFrame
               testID={E2E_TEST_IDS.charts.cgmGraphFullScreen}
-              style={{width: cgmGraphFrame.width, height: cgmGraphFrame.height}}
-            >
+              style={{
+                width: cgmGraphFrame.width,
+                height: cgmGraphFrame.height,
+              }}>
               <CgmGraph
                 bgSamples={(params as any)?.bgSamples ?? []}
                 foodItems={(params as any)?.foodItems ?? null}
@@ -250,7 +300,7 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
         ) : null}
 
         {mode === 'stackedCharts' ? (
-          <View testID={E2E_TEST_IDS.charts.cgmGraphFullScreen} style={{alignItems: 'center'}}>
+          <StackedChartsFrame testID={E2E_TEST_IDS.charts.cgmGraphFullScreen}>
             <StackedHomeCharts
               bgSamples={(params as any)?.bgSamples ?? []}
               foodItems={(params as any)?.foodItems ?? null}
@@ -266,20 +316,29 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({navigati
               tooltipPlacement="inside"
               tooltipAlign={isDeviceLandscape ? 'auto' : 'left'}
               tooltipFullWidth={!isDeviceLandscape}
-              tooltipMaxWidthPx={isDeviceLandscape ? Math.floor(contentWidth * 0.5) : undefined}
+              tooltipMaxWidthPx={
+                isDeviceLandscape
+                  ? Math.min(420, Math.floor(contentWidth * 0.42))
+                  : undefined
+              }
             />
-          </View>
+          </StackedChartsFrame>
         ) : null}
 
         {mode === 'agpGraph' ? (
           <Centered>
             <AgpChartContainer
               testID={E2E_TEST_IDS.charts.agpGraphFullScreen}
-              style={{width: agpGraphFrame.width, height: agpGraphFrame.height}}
-            >
+              style={{
+                width: agpGraphFrame.width,
+                height: agpGraphFrame.height,
+              }}>
               <AgpFullScreenChart
                 bgData={(params as any)?.bgData ?? []}
-                width={Math.max(FULL_SCREEN_CONSTANTS.agpMinWidth, Math.floor(agpGraphFrame.width))}
+                width={Math.max(
+                  FULL_SCREEN_CONSTANTS.agpMinWidth,
+                  Math.floor(agpGraphFrame.width),
+                )}
                 height={Math.max(1, Math.floor(agpGraphFrame.height))}
               />
             </AgpChartContainer>
@@ -296,14 +355,25 @@ type AgpFullScreenChartProps = {
   height: number;
 };
 
-const AgpFullScreenChart: React.FC<AgpFullScreenChartProps> = ({bgData, width, height}) => {
+const AgpFullScreenChart: React.FC<AgpFullScreenChartProps> = ({
+  bgData,
+  width,
+  height,
+}) => {
   const {agpData, isLoading} = useAGPData(bgData);
 
   if (isLoading || !agpData) {
     return <View style={{width, height}} />;
   }
 
-  return <AGPChart agpData={agpData} width={width} height={height} targetRange={cgmRange.TARGET} />;
+  return (
+    <AGPChart
+      agpData={agpData}
+      width={width}
+      height={height}
+      targetRange={cgmRange.TARGET}
+    />
+  );
 };
 
 const Screen = styled.View`
@@ -368,6 +438,12 @@ const RotatableFrame = styled.View`
 `;
 
 const AgpChartContainer = styled.View`
+  align-items: center;
+  justify-content: center;
+`;
+
+const StackedChartsFrame = styled.View`
+  flex: 1;
   align-items: center;
   justify-content: center;
 `;

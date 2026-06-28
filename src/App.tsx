@@ -91,6 +91,13 @@ const Stack = createNativeStackNavigator();
 
 const queryClient = new QueryClient();
 
+function getFullScreenOrientation(route: any) {
+  const mode = route?.params?.mode;
+  return mode === 'cgmGraph' || mode === 'stackedCharts' || mode === 'agpGraph'
+    ? 'landscape'
+    : 'default';
+}
+
 // handle notification press with the modular Messaging API
 // https://rnfirebase.io/messaging/usage#handling-messages
 const messagingInstance = getMessaging(getApp());
@@ -352,7 +359,10 @@ const AppInner: () => React.ReactElement = () => {
                                 component={EditFoodItemScreen}
                               />
                               <Stack.Screen
-                                options={{headerShown: false}}
+                                options={({route}: any) => ({
+                                  headerShown: false,
+                                  orientation: getFullScreenOrientation(route),
+                                })}
                                 name={FULL_SCREEN_VIEW_SCREEN}
                                 component={FullScreenViewScreen}
                               />
@@ -431,4 +441,3 @@ const App: React.FC = () => (
 );
 
 export default App;
-
