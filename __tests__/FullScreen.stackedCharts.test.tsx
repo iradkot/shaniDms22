@@ -5,8 +5,11 @@ import * as RN from 'react-native';
 
 import FullScreenViewScreen, {
   getStackedDisplayDomain,
+  getStackedMinRangeRatio,
   getStackedSelectableDomain,
   getStackedFullScreenFrame,
+  normalizeStackedRangeSelection,
+  updateStackedRangeSelectionForThumb,
 } from '../src/containers/FullScreen/FullScreenViewScreen';
 import StackedHomeCharts from '../src/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
 import {theme} from '../src/style/theme';
@@ -290,5 +293,49 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
     expect(clamped?.[1].getTime()).toBeGreaterThan(
       clamped?.[0].getTime() ?? 0,
     );
+  });
+
+  it('normalizes stacked range selections with the same minimum as the display domain', () => {
+    const startMs = Date.UTC(2026, 0, 7, 0, 0, 0);
+    const endMs = Date.UTC(2026, 0, 7, 10, 0, 0);
+    const minRangeRatio = getStackedMinRangeRatio({
+      selectableDomain: [new Date(startMs), new Date(endMs)],
+    });
+
+    expect(minRangeRatio).toBe(0.05);
+
+    expect(
+      normalizeStackedRangeSelection({start: 0.6, end: 0.61}, minRangeRatio),
+    ).toEqual({start: 0.58, end: 0.63});
+
+    expect(
+      normalizeStackedRangeSelection({start: 0.99, end: 1}, minRangeRatio),
+    ).toEqual({start: 0.95, end: 1});
+
+    expect(
+      normalizeStackedRangeSelection({start: 0.8, end: 0.2}, minRangeRatio),
+    ).toEqual({start: 0.2, end: 0.8});
+  });
+
+  it('moves only the active range thumb and preserves the minimum range', () => {
+    const movedStart = updateStackedRangeSelectionForThumb({
+      selection: {start: 0.2, end: 0.8},
+      thumb: 'start',
+      ratio: 0.78,
+      minRangeRatio: 0.1,
+    });
+
+    expect(movedStart.start).toBeCloseTo(0.7);
+    expect(movedStart.end).toBeCloseTo(0.8);
+
+    const movedEnd = updateStackedRangeSelectionForThumb({
+      selection: {start: 0.2, end: 0.8},
+      thumb: 'end',
+      ratio: 0.22,
+      minRangeRatio: 0.1,
+    });
+
+    expect(movedEnd.start).toBeCloseTo(0.2);
+    expect(movedEnd.end).toBeCloseTo(0.3);
   });
 });

@@ -45,6 +45,7 @@ const FULL_SCREEN_CONSTANTS = {
 
 type Mode = 'cgmRows' | 'cgmGraph' | 'stackedCharts' | 'agpGraph';
 type StackedRangeSelection = {start: number; end: number};
+type ActiveRangeThumb = 'start' | 'end';
 
 const DEFAULT_STACKED_RANGE_SELECTION: StackedRangeSelection = {
   start: 0,
@@ -60,6 +61,78 @@ function clamp(value: number, min: number, max: number) {
 
 function clamp01(value: number) {
   return clamp(value, 0, 1);
+}
+
+export function getStackedMinRangeRatio(params: {
+  selectableDomain: [Date, Date] | null;
+}) {
+  const selectableMs = getFiniteDomainMs(params.selectableDomain);
+  if (!selectableMs) {
+    return 0;
+  }
+  const durationMs = selectableMs.endMs - selectableMs.startMs;
+  if (durationMs <= 0) {
+    return 0;
+  }
+  return Math.min(1, MIN_STACKED_RANGE_MS / durationMs);
+}
+
+export function normalizeStackedRangeSelection(
+  selection: StackedRangeSelection,
+  minRangeRatio = 0,
+): StackedRangeSelection {
+  const minGap = clamp01(minRangeRatio);
+  const safeStart = clamp01(selection.start);
+  const safeEnd = clamp01(selection.end);
+
+  if (minGap >= 1) {
+    return DEFAULT_STACKED_RANGE_SELECTION;
+  }
+
+  let start = Math.min(safeStart, safeEnd);
+  let end = Math.max(safeStart, safeEnd);
+
+  if (end - start < minGap) {
+    const midpoint = (start + end) / 2;
+    start = midpoint - minGap / 2;
+    end = midpoint + minGap / 2;
+
+    if (start < 0) {
+      end = minGap;
+      start = 0;
+    } else if (end > 1) {
+      start = 1 - minGap;
+      end = 1;
+    }
+  }
+
+  return {start: clamp01(start), end: clamp01(end)};
+}
+
+export function updateStackedRangeSelectionForThumb(params: {
+  selection: StackedRangeSelection;
+  thumb: ActiveRangeThumb;
+  ratio: number;
+  minRangeRatio?: number;
+}): StackedRangeSelection {
+  const current = normalizeStackedRangeSelection(
+    params.selection,
+    params.minRangeRatio,
+  );
+  const value = clamp01(params.ratio);
+  const minGap = clamp01(params.minRangeRatio ?? 0);
+
+  if (params.thumb === 'start') {
+    return {
+      start: clamp(value, 0, Math.max(0, current.end - minGap)),
+      end: current.end,
+    };
+  }
+
+  return {
+    start: current.start,
+    end: clamp(value, Math.min(1, current.start + minGap), 1),
+  };
 }
 
 function getStackedChartHeights(params: {
@@ -194,17 +267,13 @@ export function getStackedDisplayDomain(params: {
   }
 
   const durationMs = selectableMs.endMs - selectableMs.startMs;
-  const minRangeRatio = Math.min(1, MIN_STACKED_RANGE_MS / durationMs);
-  const selection = params.rangeSelection ?? DEFAULT_STACKED_RANGE_SELECTION;
-  const startRatio = clamp01(
-    Math.min(selection.start, selection.end - minRangeRatio),
-  );
-  const endRatio = clamp01(
-    Math.max(selection.end, startRatio + minRangeRatio),
+  const selection = normalizeStackedRangeSelection(
+    params.rangeSelection ?? DEFAULT_STACKED_RANGE_SELECTION,
+    getStackedMinRangeRatio({selectableDomain}),
   );
 
-  const startMs = selectableMs.startMs + durationMs * startRatio;
-  const endMs = selectableMs.startMs + durationMs * endRatio;
+  const startMs = selectableMs.startMs + durationMs * selection.start;
+  const endMs = selectableMs.startMs + durationMs * selection.end;
 
   if (!(startMs < endMs)) {
     return selectableDomain;
@@ -599,6 +668,10 @@ const StackedRailControls: React.FC<StackedRailControlsProps> = ({
   onRangeSelectionChange,
 }) => {
   const theme = useTheme() as ThemeType;
+  const minRangeRatio = useMemo(
+    () => getStackedMinRangeRatio({selectableDomain}),
+    [selectableDomain],
+  );
   const selectableStartLabel = selectableDomain
     ? formatRangeTimeLabel(selectableDomain[0])
     : '--:--';
@@ -628,6 +701,7 @@ const StackedRailControls: React.FC<StackedRailControlsProps> = ({
         selection={rangeSelection}
         onChange={onRangeSelectionChange}
         disabled={!selectableDomain}
+        minRangeRatio={minRangeRatio}
         tintColor={theme.textColor}
       />
       <WindowSliderFooter>
@@ -642,6 +716,7 @@ type RangeTimelineSliderProps = {
   selection: StackedRangeSelection;
   onChange: (selection: StackedRangeSelection) => void;
   disabled: boolean;
+  minRangeRatio: number;
   tintColor: string;
 };
 
@@ -649,29 +724,57 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
   selection,
   onChange,
   disabled,
+  minRangeRatio,
   tintColor,
 }) => {
   const [trackWidth, setTrackWidth] = useState(0);
-  const activeThumbRef = useRef<'start' | 'end'>('end');
+  const [draftSelection, setDraftSelection] = useState(() =>
+    normalizeStackedRangeSelection(selection, minRangeRatio),
+  );
+  const draftSelectionRef = useRef(draftSelection);
+  const activeThumbRef = useRef<ActiveRangeThumb>('end');
   const gestureStartRef = useRef({
-    x: 0,
-    start: selection.start,
-    end: selection.end,
+    touchX: 0,
+    thumbRatio: 1,
+    grabbedThumb: false,
+    selection: normalizeStackedRangeSelection(selection, minRangeRatio),
   });
+  const isDraggingRef = useRef(false);
 
-  const updateSelection = useCallback(
+  React.useEffect(() => {
+    if (!isDraggingRef.current) {
+      const normalizedSelection = normalizeStackedRangeSelection(
+        selection,
+        minRangeRatio,
+      );
+      draftSelectionRef.current = normalizedSelection;
+      setDraftSelection(normalizedSelection);
+    }
+  }, [minRangeRatio, selection]);
+
+  const updateDraftSelection = useCallback(
+    (nextSelection: StackedRangeSelection) => {
+      draftSelectionRef.current = nextSelection;
+      setDraftSelection(nextSelection);
+    },
+    [],
+  );
+
+  const setSelectionForThumb = useCallback(
     (ratio: number) => {
       if (disabled) {
-        return;
+        return draftSelectionRef.current;
       }
-      const value = clamp01(ratio);
-      if (activeThumbRef.current === 'start') {
-        onChange({start: Math.min(value, selection.end), end: selection.end});
-        return;
-      }
-      onChange({start: selection.start, end: Math.max(value, selection.start)});
+      const nextSelection = updateStackedRangeSelectionForThumb({
+        selection: gestureStartRef.current.selection,
+        thumb: activeThumbRef.current,
+        ratio,
+        minRangeRatio,
+      });
+      updateDraftSelection(nextSelection);
+      return nextSelection;
     },
-    [disabled, onChange, selection.end, selection.start],
+    [disabled, minRangeRatio, updateDraftSelection],
   );
 
   const handleGestureStart = useCallback(
@@ -680,18 +783,32 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
         return;
       }
       const ratio = clamp01(e.nativeEvent.locationX / trackWidth);
-      const distanceToStart = Math.abs(ratio - selection.start);
-      const distanceToEnd = Math.abs(ratio - selection.end);
+      const currentSelection = normalizeStackedRangeSelection(
+        draftSelection,
+        minRangeRatio,
+      );
+      const distanceToStart = Math.abs(ratio - currentSelection.start);
+      const distanceToEnd = Math.abs(ratio - currentSelection.end);
       activeThumbRef.current =
         distanceToStart < distanceToEnd ? 'start' : 'end';
+      const activeThumbRatio =
+        activeThumbRef.current === 'start'
+          ? currentSelection.start
+          : currentSelection.end;
+      const thumbHitRatio = (RANGE_SLIDER_THUMB_SIZE * 1.4) / trackWidth;
+      const grabbedThumb = Math.abs(ratio - activeThumbRatio) <= thumbHitRatio;
       gestureStartRef.current = {
-        x: e.nativeEvent.locationX,
-        start: selection.start,
-        end: selection.end,
+        touchX: e.nativeEvent.locationX,
+        thumbRatio: activeThumbRatio,
+        grabbedThumb,
+        selection: currentSelection,
       };
-      updateSelection(ratio);
+      isDraggingRef.current = true;
+      if (!grabbedThumb) {
+        setSelectionForThumb(ratio);
+      }
     },
-    [disabled, selection.end, selection.start, trackWidth, updateSelection],
+    [disabled, draftSelection, minRangeRatio, setSelectionForThumb, trackWidth],
   );
 
   const panResponder = useMemo(
@@ -705,19 +822,46 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
             return;
           }
           const start = gestureStartRef.current;
-          const ratio = clamp01((start.x + gestureState.dx) / trackWidth);
-          if (activeThumbRef.current === 'start') {
-            onChange({start: Math.min(ratio, start.end), end: start.end});
-            return;
-          }
-          onChange({start: start.start, end: Math.max(ratio, start.start)});
+          const ratio = start.grabbedThumb
+            ? clamp01(start.thumbRatio + gestureState.dx / trackWidth)
+            : clamp01((start.touchX + gestureState.dx) / trackWidth);
+          setSelectionForThumb(ratio);
+        },
+        onPanResponderRelease: () => {
+          isDraggingRef.current = false;
+          onChange(
+            normalizeStackedRangeSelection(
+              draftSelectionRef.current,
+              minRangeRatio,
+            ),
+          );
+        },
+        onPanResponderTerminate: () => {
+          isDraggingRef.current = false;
+          onChange(
+            normalizeStackedRangeSelection(
+              draftSelectionRef.current,
+              minRangeRatio,
+            ),
+          );
         },
       }),
-    [disabled, handleGestureStart, onChange, trackWidth],
+    [
+      disabled,
+      handleGestureStart,
+      minRangeRatio,
+      onChange,
+      setSelectionForThumb,
+      trackWidth,
+    ],
   );
 
-  const startPct = clamp01(Math.min(selection.start, selection.end)) * 100;
-  const endPct = clamp01(Math.max(selection.start, selection.end)) * 100;
+  const normalizedDraftSelection = normalizeStackedRangeSelection(
+    draftSelection,
+    minRangeRatio,
+  );
+  const startPct = normalizedDraftSelection.start * 100;
+  const endPct = normalizedDraftSelection.end * 100;
 
   return (
     <RangeTimelineHitArea
