@@ -54,6 +54,7 @@ const DEFAULT_STACKED_RANGE_SELECTION: StackedRangeSelection = {
 
 const MIN_STACKED_RANGE_MS = 30 * 60 * 1000;
 const RANGE_SLIDER_THUMB_SIZE = 22;
+const RANGE_SLIDER_TRACK_INSET = Math.ceil(RANGE_SLIDER_THUMB_SIZE / 2);
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -133,6 +134,18 @@ export function updateStackedRangeSelectionForThumb(params: {
     start: current.start,
     end: clamp(value, Math.min(1, current.start + minGap), 1),
   };
+}
+
+export function getStackedSliderRatioForTouchX(params: {
+  locationX: number;
+  trackWidth: number;
+}) {
+  if (params.trackWidth <= 0) {
+    return 0;
+  }
+  return clamp01(
+    (params.locationX - RANGE_SLIDER_TRACK_INSET) / params.trackWidth,
+  );
 }
 
 function getStackedChartHeights(params: {
@@ -782,9 +795,12 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
       if (!trackWidth || disabled) {
         return;
       }
-      const ratio = clamp01(e.nativeEvent.locationX / trackWidth);
+      const ratio = getStackedSliderRatioForTouchX({
+        locationX: e.nativeEvent.locationX,
+        trackWidth,
+      });
       const currentSelection = normalizeStackedRangeSelection(
-        draftSelection,
+        draftSelectionRef.current,
         minRangeRatio,
       );
       const distanceToStart = Math.abs(ratio - currentSelection.start);
@@ -808,7 +824,7 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
         setSelectionForThumb(ratio);
       }
     },
-    [disabled, draftSelection, minRangeRatio, setSelectionForThumb, trackWidth],
+    [disabled, minRangeRatio, setSelectionForThumb, trackWidth],
   );
 
   const panResponder = useMemo(
@@ -824,7 +840,10 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
           const start = gestureStartRef.current;
           const ratio = start.grabbedThumb
             ? clamp01(start.thumbRatio + gestureState.dx / trackWidth)
-            : clamp01((start.touchX + gestureState.dx) / trackWidth);
+            : getStackedSliderRatioForTouchX({
+                locationX: start.touchX + gestureState.dx,
+                trackWidth,
+              });
           setSelectionForThumb(ratio);
         },
         onPanResponderRelease: () => {
@@ -1052,7 +1071,8 @@ const SelectedRangeLabel = styled.Text`
 `;
 
 const RangeTimelineHitArea = styled.View`
-  height: 46px;
+  height: 56px;
+  padding-horizontal: ${RANGE_SLIDER_TRACK_INSET}px;
   justify-content: center;
 `;
 
