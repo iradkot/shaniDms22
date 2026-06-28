@@ -346,6 +346,8 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
     useState<StackedChartsTooltipModel | null>(null);
   const [stackedRangeSelection, setStackedRangeSelection] =
     useState<StackedRangeSelection>(DEFAULT_STACKED_RANGE_SELECTION);
+  const [stackedCommittedRangeSelection, setStackedCommittedRangeSelection] =
+    useState<StackedRangeSelection>(DEFAULT_STACKED_RANGE_SELECTION);
 
   const contentHeight = useMemo(() => {
     // IMPORTANT:
@@ -482,9 +484,9 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
     return getStackedDisplayDomain({
       baseDomain: stackedXDomain,
       bgSamples: (params as any)?.bgSamples ?? [],
-      rangeSelection: stackedRangeSelection,
+      rangeSelection: stackedCommittedRangeSelection,
     });
-  }, [params, stackedRangeSelection, stackedXDomain]);
+  }, [params, stackedCommittedRangeSelection, stackedXDomain]);
 
   const stackedSelectableXDomain = useMemo(() => {
     return getStackedSelectableDomain({
@@ -492,6 +494,36 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
       bgSamples: (params as any)?.bgSamples ?? [],
     });
   }, [params, stackedXDomain]);
+
+  const handleStackedRangePreview = useCallback(
+    (selection: StackedRangeSelection) => {
+      const nextSelection = normalizeStackedRangeSelection(
+        selection,
+        getStackedMinRangeRatio({selectableDomain: stackedSelectableXDomain}),
+      );
+      setStackedRangeSelection(nextSelection);
+    },
+    [stackedSelectableXDomain],
+  );
+
+  const handleStackedRangeCommit = useCallback(
+    (selection: StackedRangeSelection) => {
+      const nextSelection = normalizeStackedRangeSelection(
+        selection,
+        getStackedMinRangeRatio({selectableDomain: stackedSelectableXDomain}),
+      );
+      setStackedRangeSelection(nextSelection);
+      setStackedCommittedRangeSelection(nextSelection);
+    },
+    [stackedSelectableXDomain],
+  );
+
+  React.useEffect(() => {
+    const timeout = setTimeout(() => {
+      setStackedCommittedRangeSelection(stackedRangeSelection);
+    }, 250);
+    return () => clearTimeout(timeout);
+  }, [stackedRangeSelection]);
 
   const stackedHeights = useMemo(() => {
     return getStackedChartHeights({
@@ -627,9 +659,9 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
                   ) : null}
                   <StackedRailControls
                     selectableDomain={stackedSelectableXDomain}
-                    selectedDomain={stackedDisplayXDomain}
                     rangeSelection={stackedRangeSelection}
-                    onRangeSelectionChange={setStackedRangeSelection}
+                    onRangeSelectionPreview={handleStackedRangePreview}
+                    onRangeSelectionCommit={handleStackedRangeCommit}
                   />
                 </StackedTooltipRail>
               ) : null}
@@ -669,21 +701,30 @@ type AgpFullScreenChartProps = {
 
 type StackedRailControlsProps = {
   selectableDomain: [Date, Date] | null;
-  selectedDomain: [Date, Date] | null;
   rangeSelection: StackedRangeSelection;
-  onRangeSelectionChange: (selection: StackedRangeSelection) => void;
+  onRangeSelectionPreview: (selection: StackedRangeSelection) => void;
+  onRangeSelectionCommit: (selection: StackedRangeSelection) => void;
 };
 
 const StackedRailControls: React.FC<StackedRailControlsProps> = ({
   selectableDomain,
-  selectedDomain,
   rangeSelection,
-  onRangeSelectionChange,
+  onRangeSelectionPreview,
+  onRangeSelectionCommit,
 }) => {
   const theme = useTheme() as ThemeType;
   const minRangeRatio = useMemo(
     () => getStackedMinRangeRatio({selectableDomain}),
     [selectableDomain],
+  );
+  const selectedDomain = useMemo(
+    () =>
+      getStackedDisplayDomain({
+        baseDomain: selectableDomain,
+        bgSamples: [],
+        rangeSelection,
+      }),
+    [rangeSelection, selectableDomain],
   );
   const selectableStartLabel = selectableDomain
     ? formatRangeTimeLabel(selectableDomain[0])
@@ -704,15 +745,18 @@ const StackedRailControls: React.FC<StackedRailControlsProps> = ({
         <ResetRangeButton
           accessibilityRole="button"
           onPress={() =>
-            onRangeSelectionChange(DEFAULT_STACKED_RANGE_SELECTION)
+            onRangeSelectionCommit(DEFAULT_STACKED_RANGE_SELECTION)
           }>
           <ResetRangeText>Full</ResetRangeText>
         </ResetRangeButton>
       </RailHeaderRow>
-      <SelectedRangeLabel>{selectedLabel}</SelectedRangeLabel>
+      <SelectedRangeLabel testID="fullscreen.stackedRangeLabel">
+        {selectedLabel}
+      </SelectedRangeLabel>
       <RangeTimelineSlider
         selection={rangeSelection}
-        onChange={onRangeSelectionChange}
+        onPreviewChange={onRangeSelectionPreview}
+        onChange={onRangeSelectionCommit}
         disabled={!selectableDomain}
         minRangeRatio={minRangeRatio}
         tintColor={theme.textColor}
@@ -727,6 +771,7 @@ const StackedRailControls: React.FC<StackedRailControlsProps> = ({
 
 type RangeTimelineSliderProps = {
   selection: StackedRangeSelection;
+  onPreviewChange: (selection: StackedRangeSelection) => void;
   onChange: (selection: StackedRangeSelection) => void;
   disabled: boolean;
   minRangeRatio: number;
@@ -735,6 +780,7 @@ type RangeTimelineSliderProps = {
 
 const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
   selection,
+  onPreviewChange,
   onChange,
   disabled,
   minRangeRatio,
@@ -769,8 +815,9 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
     (nextSelection: StackedRangeSelection) => {
       draftSelectionRef.current = nextSelection;
       setDraftSelection(nextSelection);
+      onPreviewChange(nextSelection);
     },
-    [],
+    [onPreviewChange],
   );
 
   const setSelectionForThumb = useCallback(
