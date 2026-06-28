@@ -1,13 +1,12 @@
-import React, {useCallback, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {
-  GestureResponderEvent,
   LayoutChangeEvent,
-  PanResponder,
   Pressable,
   StatusBar,
   useWindowDimensions,
   View,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import styled, {useTheme} from 'styled-components/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -53,8 +52,6 @@ const DEFAULT_STACKED_RANGE_SELECTION: StackedRangeSelection = {
 };
 
 const MIN_STACKED_RANGE_MS = 30 * 60 * 1000;
-const RANGE_SLIDER_THUMB_SIZE = 22;
-const RANGE_SLIDER_TRACK_INSET = Math.ceil(RANGE_SLIDER_THUMB_SIZE / 2);
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -134,18 +131,6 @@ export function updateStackedRangeSelectionForThumb(params: {
     start: current.start,
     end: clamp(value, Math.min(1, current.start + minGap), 1),
   };
-}
-
-export function getStackedSliderRatioForTouchX(params: {
-  locationX: number;
-  trackWidth: number;
-}) {
-  if (params.trackWidth <= 0) {
-    return 0;
-  }
-  return clamp01(
-    (params.locationX - RANGE_SLIDER_TRACK_INSET) / params.trackWidth,
-  );
 }
 
 function getStackedChartHeights(params: {
@@ -786,178 +771,76 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
   minRangeRatio,
   tintColor,
 }) => {
-  const [trackWidth, setTrackWidth] = useState(0);
-  const [draftSelection, setDraftSelection] = useState(() =>
-    normalizeStackedRangeSelection(selection, minRangeRatio),
+  const normalizedSelection = normalizeStackedRangeSelection(
+    selection,
+    minRangeRatio,
   );
-  const draftSelectionRef = useRef(draftSelection);
-  const activeThumbRef = useRef<ActiveRangeThumb>('end');
-  const gestureStartRef = useRef({
-    touchX: 0,
-    thumbRatio: 1,
-    grabbedThumb: false,
-    selection: normalizeStackedRangeSelection(selection, minRangeRatio),
-  });
-  const isDraggingRef = useRef(false);
+  const inactiveTrackColor = addOpacity(tintColor, 0.18);
 
-  React.useEffect(() => {
-    if (!isDraggingRef.current) {
-      const normalizedSelection = normalizeStackedRangeSelection(
-        selection,
-        minRangeRatio,
-      );
-      draftSelectionRef.current = normalizedSelection;
-      setDraftSelection(normalizedSelection);
-    }
-  }, [minRangeRatio, selection]);
-
-  const updateDraftSelection = useCallback(
-    (nextSelection: StackedRangeSelection) => {
-      draftSelectionRef.current = nextSelection;
-      setDraftSelection(nextSelection);
-      onPreviewChange(nextSelection);
-    },
-    [onPreviewChange],
-  );
-
-  const setSelectionForThumb = useCallback(
-    (ratio: number) => {
+  const updateThumb = useCallback(
+    (thumb: ActiveRangeThumb, value: number, commit = false) => {
       if (disabled) {
-        return draftSelectionRef.current;
-      }
-      const nextSelection = updateStackedRangeSelectionForThumb({
-        selection: gestureStartRef.current.selection,
-        thumb: activeThumbRef.current,
-        ratio,
-        minRangeRatio,
-      });
-      updateDraftSelection(nextSelection);
-      return nextSelection;
-    },
-    [disabled, minRangeRatio, updateDraftSelection],
-  );
-
-  const handleGestureStart = useCallback(
-    (e: GestureResponderEvent) => {
-      if (!trackWidth || disabled) {
         return;
       }
-      const ratio = getStackedSliderRatioForTouchX({
-        locationX: e.nativeEvent.locationX,
-        trackWidth,
-      });
-      const currentSelection = normalizeStackedRangeSelection(
-        draftSelectionRef.current,
+      const nextSelection = updateStackedRangeSelectionForThumb({
+        selection: normalizedSelection,
+        thumb,
+        ratio: value,
         minRangeRatio,
-      );
-      const distanceToStart = Math.abs(ratio - currentSelection.start);
-      const distanceToEnd = Math.abs(ratio - currentSelection.end);
-      activeThumbRef.current =
-        distanceToStart < distanceToEnd ? 'start' : 'end';
-      const activeThumbRatio =
-        activeThumbRef.current === 'start'
-          ? currentSelection.start
-          : currentSelection.end;
-      const thumbHitRatio = (RANGE_SLIDER_THUMB_SIZE * 1.4) / trackWidth;
-      const grabbedThumb = Math.abs(ratio - activeThumbRatio) <= thumbHitRatio;
-      gestureStartRef.current = {
-        touchX: e.nativeEvent.locationX,
-        thumbRatio: activeThumbRatio,
-        grabbedThumb,
-        selection: currentSelection,
-      };
-      isDraggingRef.current = true;
-      if (!grabbedThumb) {
-        setSelectionForThumb(ratio);
+      });
+      onPreviewChange(nextSelection);
+      if (commit) {
+        onChange(nextSelection);
       }
     },
-    [disabled, minRangeRatio, setSelectionForThumb, trackWidth],
-  );
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => !disabled,
-        onMoveShouldSetPanResponder: () => !disabled,
-        onPanResponderGrant: handleGestureStart,
-        onPanResponderMove: (_, gestureState) => {
-          if (!trackWidth || disabled) {
-            return;
-          }
-          const start = gestureStartRef.current;
-          const ratio = start.grabbedThumb
-            ? clamp01(start.thumbRatio + gestureState.dx / trackWidth)
-            : getStackedSliderRatioForTouchX({
-                locationX: start.touchX + gestureState.dx,
-                trackWidth,
-              });
-          setSelectionForThumb(ratio);
-        },
-        onPanResponderRelease: () => {
-          isDraggingRef.current = false;
-          onChange(
-            normalizeStackedRangeSelection(
-              draftSelectionRef.current,
-              minRangeRatio,
-            ),
-          );
-        },
-        onPanResponderTerminate: () => {
-          isDraggingRef.current = false;
-          onChange(
-            normalizeStackedRangeSelection(
-              draftSelectionRef.current,
-              minRangeRatio,
-            ),
-          );
-        },
-      }),
     [
       disabled,
-      handleGestureStart,
       minRangeRatio,
+      normalizedSelection,
       onChange,
-      setSelectionForThumb,
-      trackWidth,
+      onPreviewChange,
     ],
   );
 
-  const normalizedDraftSelection = normalizeStackedRangeSelection(
-    draftSelection,
-    minRangeRatio,
-  );
-  const startPct = normalizedDraftSelection.start * 100;
-  const endPct = normalizedDraftSelection.end * 100;
-
   return (
-    <RangeTimelineHitArea
-      testID="fullscreen.stackedRangeSlider"
-      {...panResponder.panHandlers}>
-      <RangeTimelineTrack
-        onLayout={(e: LayoutChangeEvent) =>
-          setTrackWidth(e.nativeEvent.layout.width)
-        }>
-        <RangeTimelineFill
-          style={{
-            left: `${startPct}%`,
-            width: `${Math.max(0, endPct - startPct)}%`,
-            backgroundColor: tintColor,
-          }}
+    <NativeRangeSliders testID="fullscreen.stackedRangeSlider">
+      <NativeRangeSliderRow>
+        <NativeRangeSliderLabel>Start</NativeRangeSliderLabel>
+        <NativeRangeSlider
+          testID="fullscreen.stackedRangeStartSlider"
+          disabled={disabled}
+          minimumValue={0}
+          maximumValue={Math.max(0, normalizedSelection.end - minRangeRatio)}
+          step={0.001}
+          value={normalizedSelection.start}
+          onValueChange={(value: number) => updateThumb('start', value)}
+          onSlidingComplete={(value: number) =>
+            updateThumb('start', value, true)
+          }
+          minimumTrackTintColor={tintColor}
+          maximumTrackTintColor={inactiveTrackColor}
+          thumbTintColor={tintColor}
         />
-        <RangeTimelineThumb
-          style={{
-            left: `${startPct}%`,
-            backgroundColor: tintColor,
-          }}
+      </NativeRangeSliderRow>
+      <NativeRangeSliderRow>
+        <NativeRangeSliderLabel>End</NativeRangeSliderLabel>
+        <NativeRangeSlider
+          testID="fullscreen.stackedRangeEndSlider"
+          disabled={disabled}
+          minimumValue={Math.min(1, normalizedSelection.start + minRangeRatio)}
+          maximumValue={1}
+          step={0.001}
+          value={normalizedSelection.end}
+          onValueChange={(value: number) => updateThumb('end', value)}
+          onSlidingComplete={(value: number) =>
+            updateThumb('end', value, true)
+          }
+          minimumTrackTintColor={tintColor}
+          maximumTrackTintColor={inactiveTrackColor}
+          thumbTintColor={tintColor}
         />
-        <RangeTimelineThumb
-          style={{
-            left: `${endPct}%`,
-            backgroundColor: tintColor,
-          }}
-        />
-      </RangeTimelineTrack>
-    </RangeTimelineHitArea>
+      </NativeRangeSliderRow>
+    </NativeRangeSliders>
   );
 };
 
@@ -1117,35 +1000,27 @@ const SelectedRangeLabel = styled.Text`
   color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
 
-const RangeTimelineHitArea = styled.View`
-  height: 56px;
-  padding-horizontal: ${RANGE_SLIDER_TRACK_INSET}px;
-  justify-content: center;
+const NativeRangeSliders = styled.View`
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
+  row-gap: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
 `;
 
-const RangeTimelineTrack = styled.View`
-  height: 8px;
-  border-radius: 4px;
-  background-color: ${({theme}: {theme: ThemeType}) =>
-    addOpacity(theme.textColor, 0.14)};
+const NativeRangeSliderRow = styled.View`
+  min-height: 34px;
+  flex-direction: row;
+  align-items: center;
 `;
 
-const RangeTimelineFill = styled.View`
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 4px;
+const NativeRangeSliderLabel = styled.Text`
+  width: 36px;
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: 800;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.64)};
 `;
 
-const RangeTimelineThumb = styled.View`
-  position: absolute;
-  top: -${Math.floor((RANGE_SLIDER_THUMB_SIZE - 8) / 2)}px;
-  width: ${RANGE_SLIDER_THUMB_SIZE}px;
-  height: ${RANGE_SLIDER_THUMB_SIZE}px;
-  margin-left: -${Math.floor(RANGE_SLIDER_THUMB_SIZE / 2)}px;
-  border-radius: ${Math.floor(RANGE_SLIDER_THUMB_SIZE / 2)}px;
-  border-width: 3px;
-  border-color: ${({theme}: {theme: ThemeType}) => theme.white};
+const NativeRangeSlider = styled(Slider)`
+  flex: 1;
+  height: 34px;
 `;
 
 const WindowSliderFooter = styled.View`

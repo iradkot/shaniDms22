@@ -6,7 +6,6 @@ import * as RN from 'react-native';
 import FullScreenViewScreen, {
   getStackedDisplayDomain,
   getStackedMinRangeRatio,
-  getStackedSliderRatioForTouchX,
   getStackedSelectableDomain,
   getStackedFullScreenFrame,
   normalizeStackedRangeSelection,
@@ -338,17 +337,5 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
 
     expect(movedEnd.start).toBeCloseTo(0.2);
     expect(movedEnd.end).toBeCloseTo(0.3);
-  });
-
-  it('maps slider touches from the inset hit area to the visible track', () => {
-    expect(
-      getStackedSliderRatioForTouchX({locationX: 11, trackWidth: 200}),
-    ).toBe(0);
-    expect(
-      getStackedSliderRatioForTouchX({locationX: 111, trackWidth: 200}),
-    ).toBe(0.5);
-    expect(
-      getStackedSliderRatioForTouchX({locationX: 211, trackWidth: 200}),
-    ).toBe(1);
   });
 });
