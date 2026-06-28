@@ -1,6 +1,8 @@
-import React, {useMemo, useState} from 'react';
+import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {
+  GestureResponderEvent,
   LayoutChangeEvent,
+  PanResponder,
   Pressable,
   StatusBar,
   useWindowDimensions,
@@ -9,7 +11,6 @@ import {
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import styled, {useTheme} from 'styled-components/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import Slider from '@react-native-community/slider';
 
 import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
@@ -43,15 +44,15 @@ const FULL_SCREEN_CONSTANTS = {
 } as const;
 
 type Mode = 'cgmRows' | 'cgmGraph' | 'stackedCharts' | 'agpGraph';
-type StackedRangeHours = null | 12 | 6 | 3;
+type StackedRangeSelection = {start: number; end: number};
 
-const STACKED_RANGE_OPTIONS: Array<{label: string; hours: StackedRangeHours}> =
-  [
-    {label: 'Full', hours: null},
-    {label: '12h', hours: 12},
-    {label: '6h', hours: 6},
-    {label: '3h', hours: 3},
-  ];
+const DEFAULT_STACKED_RANGE_SELECTION: StackedRangeSelection = {
+  start: 0,
+  end: 1,
+};
+
+const MIN_STACKED_RANGE_MS = 30 * 60 * 1000;
+const RANGE_SLIDER_THUMB_SIZE = 22;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -126,57 +127,95 @@ function getLatestBgTimeMs(bgSamples: BgSample[]) {
   return latest;
 }
 
+function getEarliestBgTimeMs(bgSamples: BgSample[]) {
+  let earliest: number | null = null;
+  for (const sample of bgSamples) {
+    if (typeof sample?.date === 'number' && Number.isFinite(sample.date)) {
+      earliest =
+        earliest == null ? sample.date : Math.min(earliest, sample.date);
+    }
+  }
+  return earliest;
+}
+
+function getFiniteDomainMs(domain: [Date, Date] | null) {
+  const startMs = domain?.[0]?.getTime();
+  const endMs = domain?.[1]?.getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+    return null;
+  }
+  if (!((startMs as number) < (endMs as number))) {
+    return null;
+  }
+  return {startMs: startMs as number, endMs: endMs as number};
+}
+
+export function getStackedSelectableDomain(params: {
+  baseDomain: [Date, Date] | null;
+  bgSamples: BgSample[];
+}): [Date, Date] | null {
+  const baseMs = getFiniteDomainMs(params.baseDomain);
+  const firstBgMs = getEarliestBgTimeMs(params.bgSamples);
+  const lastBgMs = getLatestBgTimeMs(params.bgSamples);
+
+  if (
+    firstBgMs != null &&
+    lastBgMs != null &&
+    Number.isFinite(firstBgMs) &&
+    Number.isFinite(lastBgMs) &&
+    firstBgMs < lastBgMs
+  ) {
+    const startMs = baseMs
+      ? clamp(firstBgMs, baseMs.startMs, baseMs.endMs)
+      : firstBgMs;
+    const endMs = baseMs
+      ? clamp(lastBgMs, baseMs.startMs, baseMs.endMs)
+      : lastBgMs;
+    if (startMs < endMs) {
+      return [new Date(startMs), new Date(endMs)];
+    }
+  }
+
+  return params.baseDomain;
+}
+
 export function getStackedDisplayDomain(params: {
   baseDomain: [Date, Date] | null;
   bgSamples: BgSample[];
-  fallbackAnchorTimeMs?: number;
-  rangeHours: StackedRangeHours;
-  windowPosition?: number;
+  rangeSelection?: StackedRangeSelection;
 }): [Date, Date] | null {
-  if (params.rangeHours == null) {
+  const selectableDomain = getStackedSelectableDomain({
+    baseDomain: params.baseDomain,
+    bgSamples: params.bgSamples,
+  });
+  const selectableMs = getFiniteDomainMs(selectableDomain);
+  if (!selectableMs) {
     return params.baseDomain;
   }
 
-  const baseStartMs = params.baseDomain?.[0]?.getTime();
-  const baseEndMs = params.baseDomain?.[1]?.getTime();
-  const requestedWindowMs = params.rangeHours * 60 * 60 * 1000;
+  const durationMs = selectableMs.endMs - selectableMs.startMs;
+  const minRangeRatio = Math.min(1, MIN_STACKED_RANGE_MS / durationMs);
+  const selection = params.rangeSelection ?? DEFAULT_STACKED_RANGE_SELECTION;
+  const startRatio = clamp01(
+    Math.min(selection.start, selection.end - minRangeRatio),
+  );
+  const endRatio = clamp01(
+    Math.max(selection.end, startRatio + minRangeRatio),
+  );
 
-  if (
-    Number.isFinite(baseStartMs) &&
-    Number.isFinite(baseEndMs) &&
-    (baseEndMs as number) - (baseStartMs as number) > requestedWindowMs
-  ) {
-    const maxOffsetMs =
-      (baseEndMs as number) - (baseStartMs as number) - requestedWindowMs;
-    const startMs =
-      (baseStartMs as number) +
-      maxOffsetMs * clamp01(params.windowPosition ?? 1);
-    return [new Date(startMs), new Date(startMs + requestedWindowMs)];
-  }
-
-  const fallbackEndMs =
-    typeof params.fallbackAnchorTimeMs === 'number' &&
-    Number.isFinite(params.fallbackAnchorTimeMs)
-      ? params.fallbackAnchorTimeMs
-      : null;
-  const endMs = Number.isFinite(baseEndMs)
-    ? (baseEndMs as number)
-    : fallbackEndMs ?? getLatestBgTimeMs(params.bgSamples);
-
-  if (endMs == null || !Number.isFinite(endMs)) {
-    return params.baseDomain;
-  }
-
-  const requestedStartMs = endMs - requestedWindowMs;
-  const startMs = Number.isFinite(baseStartMs)
-    ? Math.max(baseStartMs as number, requestedStartMs)
-    : requestedStartMs;
+  const startMs = selectableMs.startMs + durationMs * startRatio;
+  const endMs = selectableMs.startMs + durationMs * endRatio;
 
   if (!(startMs < endMs)) {
-    return params.baseDomain;
+    return selectableDomain;
   }
-
   return [new Date(startMs), new Date(endMs)];
+}
+
+function formatRangeTimeLabel(date: Date) {
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
 }
 
 type FullScreenRouteParams =
@@ -223,9 +262,8 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
   );
   const [stackedTooltipModel, setStackedTooltipModel] =
     useState<StackedChartsTooltipModel | null>(null);
-  const [stackedRangeHours, setStackedRangeHours] =
-    useState<StackedRangeHours>(null);
-  const [stackedWindowPosition, setStackedWindowPosition] = useState(1);
+  const [stackedRangeSelection, setStackedRangeSelection] =
+    useState<StackedRangeSelection>(DEFAULT_STACKED_RANGE_SELECTION);
 
   const contentHeight = useMemo(() => {
     // IMPORTANT:
@@ -325,8 +363,12 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
   };
 
   const headerTitle = useMemo(() => {
-    if (mode === 'cgmRows') return 'Glucose Log';
-    if (mode === 'cgmGraph') return 'CGM Graph';
+    if (mode === 'cgmRows') {
+      return 'Glucose Log';
+    }
+    if (mode === 'cgmGraph') {
+      return 'CGM Graph';
+    }
     if (mode === 'stackedCharts') {
       const t = (params as any)?.title;
       return typeof t === 'string' && t.trim() ? t : 'Charts';
@@ -339,12 +381,15 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
       | {startMs: number; endMs: number}
       | null
       | undefined;
-    if (!xDomainMs) return null;
+    if (!xDomainMs) {
+      return null;
+    }
     if (
       !Number.isFinite(xDomainMs.startMs) ||
       !Number.isFinite(xDomainMs.endMs)
-    )
+    ) {
       return null;
+    }
     return [new Date(xDomainMs.startMs), new Date(xDomainMs.endMs)] as [
       Date,
       Date,
@@ -355,11 +400,16 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
     return getStackedDisplayDomain({
       baseDomain: stackedXDomain,
       bgSamples: (params as any)?.bgSamples ?? [],
-      fallbackAnchorTimeMs: (params as any)?.fallbackAnchorTimeMs,
-      rangeHours: stackedRangeHours,
-      windowPosition: stackedWindowPosition,
+      rangeSelection: stackedRangeSelection,
     });
-  }, [params, stackedRangeHours, stackedWindowPosition, stackedXDomain]);
+  }, [params, stackedRangeSelection, stackedXDomain]);
+
+  const stackedSelectableXDomain = useMemo(() => {
+    return getStackedSelectableDomain({
+      baseDomain: stackedXDomain,
+      bgSamples: (params as any)?.bgSamples ?? [],
+    });
+  }, [params, stackedXDomain]);
 
   const stackedHeights = useMemo(() => {
     return getStackedChartHeights({
@@ -494,10 +544,10 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
                     />
                   ) : null}
                   <StackedRailControls
-                    selectedRangeHours={stackedRangeHours}
-                    windowPosition={stackedWindowPosition}
-                    onSelectRange={setStackedRangeHours}
-                    onWindowPositionChange={setStackedWindowPosition}
+                    selectableDomain={stackedSelectableXDomain}
+                    selectedDomain={stackedDisplayXDomain}
+                    rangeSelection={stackedRangeSelection}
+                    onRangeSelectionChange={setStackedRangeSelection}
                   />
                 </StackedTooltipRail>
               ) : null}
@@ -536,64 +586,168 @@ type AgpFullScreenChartProps = {
 };
 
 type StackedRailControlsProps = {
-  selectedRangeHours: StackedRangeHours;
-  windowPosition: number;
-  onSelectRange: (hours: StackedRangeHours) => void;
-  onWindowPositionChange: (value: number) => void;
+  selectableDomain: [Date, Date] | null;
+  selectedDomain: [Date, Date] | null;
+  rangeSelection: StackedRangeSelection;
+  onRangeSelectionChange: (selection: StackedRangeSelection) => void;
 };
 
 const StackedRailControls: React.FC<StackedRailControlsProps> = ({
-  selectedRangeHours,
-  windowPosition,
-  onSelectRange,
-  onWindowPositionChange,
+  selectableDomain,
+  selectedDomain,
+  rangeSelection,
+  onRangeSelectionChange,
 }) => {
   const theme = useTheme() as ThemeType;
+  const selectableStartLabel = selectableDomain
+    ? formatRangeTimeLabel(selectableDomain[0])
+    : '--:--';
+  const selectableEndLabel = selectableDomain
+    ? formatRangeTimeLabel(selectableDomain[1])
+    : '--:--';
+  const selectedLabel = selectedDomain
+    ? `${formatRangeTimeLabel(selectedDomain[0])} - ${formatRangeTimeLabel(
+        selectedDomain[1],
+      )}`
+    : 'Full range';
 
   return (
     <RailControlsCard>
-      <RailSectionTitle>Range</RailSectionTitle>
-      <RangeSegmentedControl>
-        {STACKED_RANGE_OPTIONS.map(option => {
-          const selected = option.hours === selectedRangeHours;
-          return (
-            <RangeButton
-              key={option.label}
-              $selected={selected}
-              accessibilityRole="button"
-              accessibilityState={{selected}}
-              onPress={() => onSelectRange(option.hours)}>
-              <RangeButtonText $selected={selected}>
-                {option.label}
-              </RangeButtonText>
-            </RangeButton>
-          );
-        })}
-      </RangeSegmentedControl>
-
-      {selectedRangeHours != null ? (
-        <WindowSliderBlock>
-          <WindowSliderHeader>
-            <WindowSliderLabel>Window</WindowSliderLabel>
-            <WindowSliderValue>{selectedRangeHours}h</WindowSliderValue>
-          </WindowSliderHeader>
-          <Slider
-            value={windowPosition}
-            minimumValue={0}
-            maximumValue={1}
-            step={0.01}
-            minimumTrackTintColor={addOpacity(theme.textColor, 0.7)}
-            maximumTrackTintColor={addOpacity(theme.textColor, 0.18)}
-            thumbTintColor={theme.textColor}
-            onValueChange={onWindowPositionChange}
-          />
-          <WindowSliderFooter>
-            <WindowSliderFooterText>Earlier</WindowSliderFooterText>
-            <WindowSliderFooterText>Later</WindowSliderFooterText>
-          </WindowSliderFooter>
-        </WindowSliderBlock>
-      ) : null}
+      <RailHeaderRow>
+        <RailSectionTitle>Time range</RailSectionTitle>
+        <ResetRangeButton
+          accessibilityRole="button"
+          onPress={() =>
+            onRangeSelectionChange(DEFAULT_STACKED_RANGE_SELECTION)
+          }>
+          <ResetRangeText>Full</ResetRangeText>
+        </ResetRangeButton>
+      </RailHeaderRow>
+      <SelectedRangeLabel>{selectedLabel}</SelectedRangeLabel>
+      <RangeTimelineSlider
+        selection={rangeSelection}
+        onChange={onRangeSelectionChange}
+        disabled={!selectableDomain}
+        tintColor={theme.textColor}
+      />
+      <WindowSliderFooter>
+        <WindowSliderFooterText>{selectableStartLabel}</WindowSliderFooterText>
+        <WindowSliderFooterText>{selectableEndLabel}</WindowSliderFooterText>
+      </WindowSliderFooter>
     </RailControlsCard>
+  );
+};
+
+type RangeTimelineSliderProps = {
+  selection: StackedRangeSelection;
+  onChange: (selection: StackedRangeSelection) => void;
+  disabled: boolean;
+  tintColor: string;
+};
+
+const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
+  selection,
+  onChange,
+  disabled,
+  tintColor,
+}) => {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const activeThumbRef = useRef<'start' | 'end'>('end');
+  const gestureStartRef = useRef({
+    x: 0,
+    start: selection.start,
+    end: selection.end,
+  });
+
+  const updateSelection = useCallback(
+    (ratio: number) => {
+      if (disabled) {
+        return;
+      }
+      const value = clamp01(ratio);
+      if (activeThumbRef.current === 'start') {
+        onChange({start: Math.min(value, selection.end), end: selection.end});
+        return;
+      }
+      onChange({start: selection.start, end: Math.max(value, selection.start)});
+    },
+    [disabled, onChange, selection.end, selection.start],
+  );
+
+  const handleGestureStart = useCallback(
+    (e: GestureResponderEvent) => {
+      if (!trackWidth || disabled) {
+        return;
+      }
+      const ratio = clamp01(e.nativeEvent.locationX / trackWidth);
+      const distanceToStart = Math.abs(ratio - selection.start);
+      const distanceToEnd = Math.abs(ratio - selection.end);
+      activeThumbRef.current =
+        distanceToStart < distanceToEnd ? 'start' : 'end';
+      gestureStartRef.current = {
+        x: e.nativeEvent.locationX,
+        start: selection.start,
+        end: selection.end,
+      };
+      updateSelection(ratio);
+    },
+    [disabled, selection.end, selection.start, trackWidth, updateSelection],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !disabled,
+        onMoveShouldSetPanResponder: () => !disabled,
+        onPanResponderGrant: handleGestureStart,
+        onPanResponderMove: (_, gestureState) => {
+          if (!trackWidth || disabled) {
+            return;
+          }
+          const start = gestureStartRef.current;
+          const ratio = clamp01((start.x + gestureState.dx) / trackWidth);
+          if (activeThumbRef.current === 'start') {
+            onChange({start: Math.min(ratio, start.end), end: start.end});
+            return;
+          }
+          onChange({start: start.start, end: Math.max(ratio, start.start)});
+        },
+      }),
+    [disabled, handleGestureStart, onChange, trackWidth],
+  );
+
+  const startPct = clamp01(Math.min(selection.start, selection.end)) * 100;
+  const endPct = clamp01(Math.max(selection.start, selection.end)) * 100;
+
+  return (
+    <RangeTimelineHitArea
+      testID="fullscreen.stackedRangeSlider"
+      {...panResponder.panHandlers}>
+      <RangeTimelineTrack
+        onLayout={(e: LayoutChangeEvent) =>
+          setTrackWidth(e.nativeEvent.layout.width)
+        }>
+        <RangeTimelineFill
+          style={{
+            left: `${startPct}%`,
+            width: `${Math.max(0, endPct - startPct)}%`,
+            backgroundColor: tintColor,
+          }}
+        />
+        <RangeTimelineThumb
+          style={{
+            left: `${startPct}%`,
+            backgroundColor: tintColor,
+          }}
+        />
+        <RangeTimelineThumb
+          style={{
+            left: `${endPct}%`,
+            backgroundColor: tintColor,
+          }}
+        />
+      </RangeTimelineTrack>
+    </RangeTimelineHitArea>
   );
 };
 
@@ -723,57 +877,64 @@ const RailSectionTitle = styled.Text`
   color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.72)};
 `;
 
-const RangeSegmentedControl = styled.View`
-  flex-direction: row;
-  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
-  border-radius: ${({theme}: {theme: ThemeType}) => theme.borderRadius}px;
-  overflow: hidden;
-  border-width: 1px;
-  border-color: ${({theme}: {theme: ThemeType}) =>
-    addOpacity(theme.textColor, 0.14)};
-`;
-
-const RangeButton = styled(Pressable)<{$selected: boolean}>`
-  flex: 1;
-  min-height: 34px;
-  align-items: center;
-  justify-content: center;
-  background-color: ${({
-    $selected,
-    theme,
-  }: {
-    $selected: boolean;
-    theme: ThemeType;
-  }) => ($selected ? addOpacity(theme.textColor, 0.12) : 'transparent')};
-`;
-
-const RangeButtonText = styled.Text<{$selected: boolean}>`
-  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
-  font-weight: ${({$selected}: {$selected: boolean}) =>
-    $selected ? 900 : 700};
-  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
-`;
-
-const WindowSliderBlock = styled.View`
-  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.md}px;
-`;
-
-const WindowSliderHeader = styled.View`
+const RailHeaderRow = styled.View`
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
 `;
 
-const WindowSliderLabel = styled.Text`
-  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
-  font-weight: 800;
-  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.68)};
+const ResetRangeButton = styled(Pressable)`
+  min-height: 28px;
+  padding-horizontal: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  align-items: center;
+  justify-content: center;
+  border-radius: ${({theme}: {theme: ThemeType}) => theme.borderRadius}px;
+  border-width: 1px;
+  border-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.14)};
 `;
 
-const WindowSliderValue = styled.Text`
+const ResetRangeText = styled.Text`
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: 800;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
+`;
+
+const SelectedRangeLabel = styled.Text`
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
   font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
   font-weight: 900;
   color: ${({theme}: {theme: ThemeType}) => theme.textColor};
+`;
+
+const RangeTimelineHitArea = styled.View`
+  height: 46px;
+  justify-content: center;
+`;
+
+const RangeTimelineTrack = styled.View`
+  height: 8px;
+  border-radius: 4px;
+  background-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.14)};
+`;
+
+const RangeTimelineFill = styled.View`
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+`;
+
+const RangeTimelineThumb = styled.View`
+  position: absolute;
+  top: -${Math.floor((RANGE_SLIDER_THUMB_SIZE - 8) / 2)}px;
+  width: ${RANGE_SLIDER_THUMB_SIZE}px;
+  height: ${RANGE_SLIDER_THUMB_SIZE}px;
+  margin-left: -${Math.floor(RANGE_SLIDER_THUMB_SIZE / 2)}px;
+  border-radius: ${Math.floor(RANGE_SLIDER_THUMB_SIZE / 2)}px;
+  border-width: 3px;
+  border-color: ${({theme}: {theme: ThemeType}) => theme.white};
 `;
 
 const WindowSliderFooter = styled.View`

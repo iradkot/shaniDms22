@@ -5,6 +5,7 @@ import * as RN from 'react-native';
 
 import FullScreenViewScreen, {
   getStackedDisplayDomain,
+  getStackedSelectableDomain,
   getStackedFullScreenFrame,
 } from '../src/containers/FullScreen/FullScreenViewScreen';
 import StackedHomeCharts from '../src/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
@@ -220,48 +221,74 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
     expect(portrait.chartWidth).toBe(360);
   });
 
-  it('builds a focused stacked chart display domain from range controls', () => {
+  it('builds the stacked chart selectable domain from available bg data', () => {
+    const baseStartMs = Date.UTC(2026, 0, 7, 0, 0, 0);
+    const baseEndMs = Date.UTC(2026, 0, 7, 23, 59, 0);
+    const firstDataMs = Date.UTC(2026, 0, 7, 4, 0, 0);
+    const lastDataMs = Date.UTC(2026, 0, 7, 18, 0, 0);
+
+    const selectable = getStackedSelectableDomain({
+      baseDomain: [new Date(baseStartMs), new Date(baseEndMs)],
+      bgSamples: [
+        {
+          sgv: 104,
+          date: lastDataMs,
+          dateString: new Date(lastDataMs).toISOString(),
+          trend: 0,
+          direction: 'Flat',
+          device: 'mock',
+          type: 'sgv',
+        },
+        {
+          sgv: 110,
+          date: firstDataMs,
+          dateString: new Date(firstDataMs).toISOString(),
+          trend: 0,
+          direction: 'Flat',
+          device: 'mock',
+          type: 'sgv',
+        },
+      ],
+    });
+
+    expect(selectable?.[0].getTime()).toBe(firstDataMs);
+    expect(selectable?.[1].getTime()).toBe(lastDataMs);
+  });
+
+  it('builds a focused stacked chart display domain from start/end range selection', () => {
     const startMs = Date.UTC(2026, 0, 7, 0, 0, 0);
     const endMs = Date.UTC(2026, 0, 7, 14, 0, 0);
 
-    const sixHours = getStackedDisplayDomain({
+    const selectedMiddle = getStackedDisplayDomain({
       baseDomain: [new Date(startMs), new Date(endMs)],
       bgSamples: [],
-      rangeHours: 6,
-      windowPosition: 1,
+      rangeSelection: {start: 2 / 14, end: 8 / 14},
     });
 
-    expect(sixHours?.[0].getTime()).toBe(endMs - 6 * 60 * 60 * 1000);
-    expect(sixHours?.[1].getTime()).toBe(endMs);
-
-    const earliest = getStackedDisplayDomain({
-      baseDomain: [new Date(startMs), new Date(endMs)],
-      bgSamples: [],
-      rangeHours: 6,
-      windowPosition: 0,
-    });
-
-    expect(earliest?.[0].getTime()).toBe(startMs);
-    expect(earliest?.[1].getTime()).toBe(startMs + 6 * 60 * 60 * 1000);
-
-    const middle = getStackedDisplayDomain({
-      baseDomain: [new Date(startMs), new Date(endMs)],
-      bgSamples: [],
-      rangeHours: 6,
-      windowPosition: 0.5,
-    });
-
-    expect(middle?.[0].getTime()).toBe(startMs + 4 * 60 * 60 * 1000);
-    expect(middle?.[1].getTime()).toBe(startMs + 10 * 60 * 60 * 1000);
+    expect(selectedMiddle?.[0].getTime()).toBe(
+      startMs + 2 * 60 * 60 * 1000,
+    );
+    expect(selectedMiddle?.[1].getTime()).toBe(
+      startMs + 8 * 60 * 60 * 1000,
+    );
 
     const full = getStackedDisplayDomain({
       baseDomain: [new Date(startMs), new Date(endMs)],
       bgSamples: [],
-      rangeHours: null,
-      windowPosition: 0,
+      rangeSelection: {start: 0, end: 1},
     });
 
     expect(full?.[0].getTime()).toBe(startMs);
     expect(full?.[1].getTime()).toBe(endMs);
+
+    const clamped = getStackedDisplayDomain({
+      baseDomain: [new Date(startMs), new Date(endMs)],
+      bgSamples: [],
+      rangeSelection: {start: 0.9, end: 0.1},
+    });
+
+    expect(clamped?.[1].getTime()).toBeGreaterThan(
+      clamped?.[0].getTime() ?? 0,
+    );
   });
 });
