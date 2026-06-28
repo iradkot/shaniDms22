@@ -722,24 +722,32 @@ const StackedRailControls: React.FC<StackedRailControlsProps> = ({
         selectedDomain[1],
       )}`
     : 'Full range';
+  const selectedStartLabel = selectedDomain
+    ? formatRangeTimeLabel(selectedDomain[0])
+    : '--:--';
+  const selectedEndLabel = selectedDomain
+    ? formatRangeTimeLabel(selectedDomain[1])
+    : '--:--';
 
   return (
     <RailControlsCard>
       <RailHeaderRow>
-        <RailSectionTitle>Time range</RailSectionTitle>
+        <RailSectionTitle>Visible window</RailSectionTitle>
         <ResetRangeButton
           accessibilityRole="button"
           onPress={() =>
             onRangeSelectionCommit(DEFAULT_STACKED_RANGE_SELECTION)
           }>
-          <ResetRangeText>Full</ResetRangeText>
+          <ResetRangeText>Reset</ResetRangeText>
         </ResetRangeButton>
       </RailHeaderRow>
-      <SelectedRangeLabel testID="fullscreen.stackedRangeLabel">
-        {selectedLabel}
-      </SelectedRangeLabel>
+      <SelectedRangePill testID="fullscreen.stackedRangeLabel">
+        <SelectedRangePillText>{selectedLabel}</SelectedRangePillText>
+      </SelectedRangePill>
       <RangeTimelineSlider
         selection={rangeSelection}
+        startLabel={selectedStartLabel}
+        endLabel={selectedEndLabel}
         onPreviewChange={onRangeSelectionPreview}
         onChange={onRangeSelectionCommit}
         disabled={!selectableDomain}
@@ -747,8 +755,12 @@ const StackedRailControls: React.FC<StackedRailControlsProps> = ({
         tintColor={theme.textColor}
       />
       <WindowSliderFooter>
-        <WindowSliderFooterText>{selectableStartLabel}</WindowSliderFooterText>
-        <WindowSliderFooterText>{selectableEndLabel}</WindowSliderFooterText>
+        <WindowSliderFooterText>
+          Data starts {selectableStartLabel}
+        </WindowSliderFooterText>
+        <WindowSliderFooterText>
+          ends {selectableEndLabel}
+        </WindowSliderFooterText>
       </WindowSliderFooter>
     </RailControlsCard>
   );
@@ -756,6 +768,8 @@ const StackedRailControls: React.FC<StackedRailControlsProps> = ({
 
 type RangeTimelineSliderProps = {
   selection: StackedRangeSelection;
+  startLabel: string;
+  endLabel: string;
   onPreviewChange: (selection: StackedRangeSelection) => void;
   onChange: (selection: StackedRangeSelection) => void;
   disabled: boolean;
@@ -765,6 +779,8 @@ type RangeTimelineSliderProps = {
 
 const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
   selection,
+  startLabel,
+  endLabel,
   onPreviewChange,
   onChange,
   disabled,
@@ -776,6 +792,12 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
     minRangeRatio,
   );
   const inactiveTrackColor = addOpacity(tintColor, 0.18);
+  const selectedLeft = `${normalizedSelection.start * 100}%`;
+  const selectedEnd = `${normalizedSelection.end * 100}%`;
+  const selectedWidth = `${Math.max(
+    0,
+    (normalizedSelection.end - normalizedSelection.start) * 100,
+  )}%`;
 
   const updateThumb = useCallback(
     (thumb: ActiveRangeThumb, value: number, commit = false) => {
@@ -804,8 +826,27 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
 
   return (
     <NativeRangeSliders testID="fullscreen.stackedRangeSlider">
+      <RangeOverview
+        accessibilityLabel={`Selected time range ${startLabel} to ${endLabel}`}
+        pointerEvents="none">
+        <RangeOverviewTrack>
+          <RangeOverviewBase />
+          <RangeOverviewFill
+            style={{left: selectedLeft, width: selectedWidth}}
+          />
+          <RangeOverviewThumb style={{left: selectedLeft}} />
+          <RangeOverviewThumb style={{left: selectedEnd}} />
+        </RangeOverviewTrack>
+        <RangeOverviewLabels>
+          <RangeEndpointLabel>Start</RangeEndpointLabel>
+          <RangeEndpointLabel>End</RangeEndpointLabel>
+        </RangeOverviewLabels>
+      </RangeOverview>
       <NativeRangeSliderRow>
-        <NativeRangeSliderLabel>Start</NativeRangeSliderLabel>
+        <NativeRangeSliderLabelGroup>
+          <NativeRangeSliderLabel>Start</NativeRangeSliderLabel>
+          <NativeRangeSliderValue>{startLabel}</NativeRangeSliderValue>
+        </NativeRangeSliderLabelGroup>
         <NativeRangeSlider
           testID="fullscreen.stackedRangeStartSlider"
           disabled={disabled}
@@ -823,7 +864,10 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
         />
       </NativeRangeSliderRow>
       <NativeRangeSliderRow>
-        <NativeRangeSliderLabel>End</NativeRangeSliderLabel>
+        <NativeRangeSliderLabelGroup>
+          <NativeRangeSliderLabel>End</NativeRangeSliderLabel>
+          <NativeRangeSliderValue>{endLabel}</NativeRangeSliderValue>
+        </NativeRangeSliderLabelGroup>
         <NativeRangeSlider
           testID="fullscreen.stackedRangeEndSlider"
           disabled={disabled}
@@ -993,34 +1037,98 @@ const ResetRangeText = styled.Text`
   color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
 
-const SelectedRangeLabel = styled.Text`
+const SelectedRangePill = styled.View`
   margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+  align-self: flex-start;
+  border-radius: ${({theme}: {theme: ThemeType}) => theme.borderRadius}px;
+  background-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.1)};
+  padding-vertical: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
+  padding-horizontal: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
+`;
+
+const SelectedRangePillText = styled.Text`
   font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
   font-weight: 900;
   color: ${({theme}: {theme: ThemeType}) => theme.textColor};
 `;
 
 const NativeRangeSliders = styled.View`
-  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
+  margin-top: ${({theme}: {theme: ThemeType}) => theme.spacing.sm}px;
   row-gap: ${({theme}: {theme: ThemeType}) => theme.spacing.xs}px;
 `;
 
+const RangeOverview = styled.View`
+  min-height: 42px;
+`;
+
+const RangeOverviewTrack = styled.View`
+  height: 18px;
+  justify-content: center;
+`;
+
+const RangeOverviewFill = styled.View`
+  position: absolute;
+  height: 8px;
+  border-radius: 4px;
+  background-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.72)};
+`;
+
+const RangeOverviewBase = styled.View`
+  height: 8px;
+  border-radius: 4px;
+  background-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.16)};
+`;
+
+const RangeOverviewThumb = styled.View`
+  position: absolute;
+  margin-left: -5px;
+  width: 10px;
+  height: 18px;
+  border-radius: 5px;
+  background-color: ${({theme}: {theme: ThemeType}) => theme.textColor};
+`;
+
+const RangeOverviewLabels = styled.View`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const RangeEndpointLabel = styled.Text`
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: 700;
+  color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.52)};
+`;
+
 const NativeRangeSliderRow = styled.View`
-  min-height: 34px;
+  min-height: 42px;
   flex-direction: row;
   align-items: center;
 `;
 
+const NativeRangeSliderLabelGroup = styled.View`
+  width: 58px;
+`;
+
 const NativeRangeSliderLabel = styled.Text`
-  width: 36px;
   font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
   font-weight: 800;
   color: ${({theme}: {theme: ThemeType}) => addOpacity(theme.textColor, 0.64)};
 `;
 
+const NativeRangeSliderValue = styled.Text`
+  margin-top: 2px;
+  font-size: ${({theme}: {theme: ThemeType}) => theme.typography.size.xs}px;
+  font-weight: 900;
+  color: ${({theme}: {theme: ThemeType}) => theme.textColor};
+`;
+
 const NativeRangeSlider = styled(Slider)`
   flex: 1;
-  height: 34px;
+  height: 40px;
 `;
 
 const WindowSliderFooter = styled.View`
