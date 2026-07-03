@@ -1,5 +1,5 @@
 // /Trends/components/CompareSection.tsx
-import React, {useMemo} from 'react';
+import React, {useMemo, useState} from 'react';
 import {View, Button, ActivityIndicator, Dimensions, Text} from 'react-native';
 import {useTheme} from 'styled-components/native';
 
@@ -18,11 +18,11 @@ import {
 } from '../styles/Trends.styles';
 import {calculateTrendsMetrics} from '../utils/trendsCalculations';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
-import {t as tr} from 'app/i18n/translations';
+import {Lang, t as tr} from 'app/i18n/translations';
 import {BgSample} from 'app/types/day_bgs.types';
 import {useAGPData} from 'app/components/charts/AGPGraph/hooks/useAGPData';
 import AGPChart from 'app/components/charts/AGPGraph/components/AGPChart';
-import {cgmRange} from 'app/constants/PLAN_CONFIG';
+import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {addOpacity} from 'app/style/styling.utils';
 
 interface CompareSectionProps {
@@ -45,8 +45,18 @@ const ComparisonAgpChart: React.FC<{
   periodRange: {start: Date; end: Date};
   requestedDays: number;
   bgData: BgSample[];
-  language: string;
-}> = ({title, periodRange, requestedDays, bgData, language}) => {
+  language: Lang;
+  activeTimeOfDay: number | null;
+  onActiveTimeOfDayChange: (timeOfDay: number | null) => void;
+}> = ({
+  title,
+  periodRange,
+  requestedDays,
+  bgData,
+  language,
+  activeTimeOfDay,
+  onActiveTimeOfDayChange,
+}) => {
   const theme = useTheme() as ThemeType;
   const {agpData, isLoading, error} = useAGPData(bgData);
 
@@ -91,6 +101,8 @@ const ComparisonAgpChart: React.FC<{
             width={chartWidth}
             height={190}
             targetRange={cgmRange.TARGET}
+            activeTimeOfDay={activeTimeOfDay}
+            onActiveTimeOfDayChange={onActiveTimeOfDayChange}
           />
           <Text style={{color: muted, fontSize: 12, textAlign: 'center'}}>
             {dataCoverageLabel(
@@ -104,6 +116,19 @@ const ComparisonAgpChart: React.FC<{
       )}
     </View>
   );
+};
+
+type ComparisonCell = {
+  value: string;
+  numeric?: number;
+};
+
+type ComparisonMetricRow = {
+  key: string;
+  label: string;
+  current: ComparisonCell;
+  previous: ComparisonCell;
+  lowerIsBetter?: boolean;
 };
 
 export const CompareSection: React.FC<CompareSectionProps> = ({
@@ -122,35 +147,33 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
 }) => {
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
+  const [sharedAgpTimeOfDay, setSharedAgpTimeOfDay] = useState<number | null>(
+    null,
+  );
+
+  const comparisonRows = useMemo(
+    () =>
+      previousMetrics
+        ? buildComparisonRows({
+            language,
+            rangeDays,
+            currentBgData,
+            previousBgData,
+            currentMetrics,
+            previousMetrics,
+          })
+        : [],
+    [
+      currentBgData,
+      currentMetrics,
+      language,
+      previousBgData,
+      previousMetrics,
+      rangeDays,
+    ],
+  );
 
   if (!currentMetrics.dailyDetails.length) return null;
-
-  const renderComparisonValue = (
-    current: number,
-    previous: number,
-    unit: string,
-    lowerIsBetter = false,
-  ) => {
-    const diff = current - previous;
-    const diffPercentage = previous !== 0 ? (diff / previous) * 100 : 0;
-
-    const isImprovement = diff > 0 ? lowerIsBetter : !lowerIsBetter;
-    const color = isImprovement ? theme.inRangeColor : theme.belowRangeColor;
-
-    return (
-      <View>
-        <StatValue>
-          {current.toFixed(1)} {unit}
-        </StatValue>
-        <Subtle>
-          vs {previous.toFixed(1)} {unit}
-        </Subtle>
-        <StatChange color={color}>
-          {diff.toFixed(1)} ({diffPercentage.toFixed(0)}%)
-        </StatChange>
-      </View>
-    );
-  };
 
   return (
     <View style={{marginVertical: theme.spacing.sm + 2}}>
@@ -194,6 +217,8 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
               requestedDays={rangeDays}
               bgData={currentBgData}
               language={language}
+              activeTimeOfDay={sharedAgpTimeOfDay}
+              onActiveTimeOfDayChange={setSharedAgpTimeOfDay}
             />
             <ComparisonAgpChart
               title={
@@ -205,6 +230,8 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
               requestedDays={rangeDays}
               bgData={previousBgData}
               language={language}
+              activeTimeOfDay={sharedAgpTimeOfDay}
+              onActiveTimeOfDayChange={setSharedAgpTimeOfDay}
             />
           </View>
 
@@ -224,44 +251,19 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
             />
           </View>
 
-          <StatRow>
-            <StatLabel>{tr(language, 'trends.averageBg')}</StatLabel>
-            {renderComparisonValue(
-              currentMetrics.averageBg,
-              previousMetrics.averageBg,
-              'mg/dL',
-              true,
-            )}
-          </StatRow>
+          <Text
+            style={{
+              color: theme.textColor,
+              fontSize: 16,
+              fontWeight: '700',
+              marginBottom: theme.spacing.xs + 1,
+            }}>
+            {language === 'he' ? 'טבלת השוואה' : 'Comparison table'}
+          </Text>
 
-          <StatRow>
-            <StatLabel>{tr(language, 'trends.timeInRangeTir')}</StatLabel>
-            {renderComparisonValue(
-              currentMetrics.tir,
-              previousMetrics.tir,
-              '%',
-            )}
-          </StatRow>
-
-          <StatRow>
-            <StatLabel>{tr(language, 'trends.seriousHyposPerDay')}</StatLabel>
-            {renderComparisonValue(
-              currentMetrics.seriousHyposCount / rangeDays,
-              previousMetrics.seriousHyposCount / rangeDays,
-              'events/day',
-              true,
-            )}
-          </StatRow>
-
-          <StatRow>
-            <StatLabel>{tr(language, 'trends.seriousHypersPerDay')}</StatLabel>
-            {renderComparisonValue(
-              currentMetrics.seriousHypersCount / rangeDays,
-              previousMetrics.seriousHypersCount / rangeDays,
-              'events/day',
-              true,
-            )}
-          </StatRow>
+          {comparisonRows.map(row => (
+            <ComparisonTableRow key={row.key} row={row} />
+          ))}
 
           <ExplanationText style={{marginTop: theme.spacing.lg - 1}}>
             {tr(language, 'trends.compareInsight')}
@@ -269,6 +271,42 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
         </CompareBox>
       )}
     </View>
+  );
+};
+
+const ComparisonTableRow: React.FC<{row: ComparisonMetricRow}> = ({row}) => {
+  const theme = useTheme() as ThemeType;
+  const diff =
+    row.current.numeric !== undefined && row.previous.numeric !== undefined
+      ? row.current.numeric - row.previous.numeric
+      : null;
+  const isImprovement =
+    diff === null || Math.abs(diff) < 0.05
+      ? null
+      : row.lowerIsBetter
+        ? diff < 0
+        : diff > 0;
+
+  return (
+    <StatRow>
+      <StatLabel>{row.label}</StatLabel>
+      <View style={{marginTop: theme.spacing.xs + 1}}>
+        <StatValue>{row.current.value}</StatValue>
+        <Subtle>vs {row.previous.value}</Subtle>
+        {diff !== null && (
+          <StatChange
+            color={
+              isImprovement === null
+                ? addOpacity(theme.textColor, 0.7)
+                : isImprovement
+                  ? theme.inRangeColor
+                  : theme.belowRangeColor
+            }>
+            {formatSigned(diff)}
+          </StatChange>
+        )}
+      </View>
+    </StatRow>
   );
 };
 
@@ -337,4 +375,286 @@ function dataCoverageLabel(
   return hasMissingDays
     ? `Days with data: ${daysWithData}/${requestedDays} · ${readings} readings`
     : `Days with data: ${daysWithData} · ${readings} readings`;
+}
+
+export function buildComparisonRows({
+  language,
+  rangeDays,
+  currentBgData,
+  previousBgData,
+  currentMetrics,
+  previousMetrics,
+}: {
+  language: Lang;
+  rangeDays: number;
+  currentBgData: BgSample[];
+  previousBgData: BgSample[];
+  currentMetrics: ReturnType<typeof calculateTrendsMetrics>;
+  previousMetrics: ReturnType<typeof calculateTrendsMetrics>;
+}): ComparisonMetricRow[] {
+  const current = buildPeriodStats(currentBgData, currentMetrics);
+  const previous = buildPeriodStats(previousBgData, previousMetrics);
+
+  return [
+    {
+      key: 'avg-bg',
+      label: tr(language, 'trends.averageBg'),
+      current: numberCell(currentMetrics.averageBg, 'mg/dL'),
+      previous: numberCell(previousMetrics.averageBg, 'mg/dL'),
+      lowerIsBetter: true,
+    },
+    {
+      key: 'tir',
+      label: tr(language, 'trends.timeInRangeTir'),
+      current: numberCell(currentMetrics.tir * 100, '%'),
+      previous: numberCell(previousMetrics.tir * 100, '%'),
+    },
+    {
+      key: 'severe-hypos',
+      label: tr(language, 'trends.seriousHyposPerDay'),
+      current: numberCell(currentMetrics.seriousHyposCount / rangeDays, '/day'),
+      previous: numberCell(
+        previousMetrics.seriousHyposCount / rangeDays,
+        '/day',
+      ),
+      lowerIsBetter: true,
+    },
+    {
+      key: 'severe-hypers',
+      label: tr(language, 'trends.seriousHypersPerDay'),
+      current: numberCell(currentMetrics.seriousHypersCount / rangeDays, '/day'),
+      previous: numberCell(
+        previousMetrics.seriousHypersCount / rangeDays,
+        '/day',
+      ),
+      lowerIsBetter: true,
+    },
+    {
+      key: 'highest-hyper',
+      label: language === 'he' ? 'ההיפר הכי חמור' : 'Worst high',
+      current: numberCell(current.highestBg, 'mg/dL', 0),
+      previous: numberCell(previous.highestBg, 'mg/dL', 0),
+      lowerIsBetter: true,
+    },
+    {
+      key: 'best-tir-day',
+      label:
+        language === 'he'
+          ? 'היום עם הזמן בטווח הכי טוב'
+          : 'Best day in range',
+      current: textCell(formatDayTir(current.bestTirDay, language)),
+      previous: textCell(formatDayTir(previous.bestTirDay, language)),
+    },
+    {
+      key: 'most-balanced-hour',
+      label: language === 'he' ? 'השעה הכי מאוזנת' : 'Most balanced hour',
+      current: textCell(formatHourBucket(current.bestHour, language)),
+      previous: textCell(formatHourBucket(previous.bestHour, language)),
+    },
+    {
+      key: 'least-balanced-hour',
+      label: language === 'he' ? 'השעה הכי לא מאוזנת' : 'Least balanced hour',
+      current: textCell(formatHourBucket(current.worstHour, language)),
+      previous: textCell(formatHourBucket(previous.worstHour, language)),
+    },
+    {
+      key: 'meal-tir',
+      label:
+        language === 'he'
+          ? 'ממוצע זמן בטווח סביב ארוחות'
+          : 'Average meal-window TIR',
+      current: {
+        value: formatMealTir(current.mealTir, language),
+        numeric: current.mealTir.average,
+      },
+      previous: {
+        value: formatMealTir(previous.mealTir, language),
+        numeric: previous.mealTir.average,
+      },
+    },
+  ];
+}
+
+function buildPeriodStats(
+  bgData: BgSample[],
+  metrics: ReturnType<typeof calculateTrendsMetrics>,
+) {
+  const samples = validSamples(bgData);
+  const highestBg = samples.length ? Math.max(...samples.map(s => s.sgv)) : 0;
+  const bestTirDay = metrics.dailyDetails.reduce<DayTir | null>(
+    (best, day) => (!best || day.tir > best.tir ? day : best),
+    null,
+  );
+
+  const hourly = buildHourlyBuckets(samples);
+  const bestHour = hourly.reduce<HourBucket | null>(
+    (best, hour) => (!best || hour.balanceScore > best.balanceScore ? hour : best),
+    null,
+  );
+  const worstHour = hourly.reduce<HourBucket | null>(
+    (worst, hour) =>
+      !worst || hour.balanceScore < worst.balanceScore ? hour : worst,
+    null,
+  );
+
+  return {
+    highestBg,
+    bestTirDay,
+    bestHour,
+    worstHour,
+    mealTir: buildMealTir(samples),
+  };
+}
+
+type DayTir = {dateString: string; tir: number};
+type HourBucket = {
+  hour: number;
+  tir: number;
+  avg: number;
+  stdDev: number;
+  count: number;
+  balanceScore: number;
+};
+type MealTir = {
+  breakfast: number | null;
+  lunch: number | null;
+  dinner: number | null;
+  average: number;
+};
+
+const inRangeMax = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
+
+function validSamples(bgData: BgSample[]) {
+  return bgData.filter(
+    s => Number.isFinite(s.sgv) && s.sgv > 20 && s.sgv < 600,
+  );
+}
+
+function isInRange(sgv: number) {
+  return sgv >= cgmRange.TARGET.min && sgv <= inRangeMax;
+}
+
+function tirForSamples(samples: BgSample[]) {
+  if (!samples.length) return null;
+  const inRange = samples.filter(s => isInRange(s.sgv)).length;
+  return (inRange / samples.length) * 100;
+}
+
+function buildHourlyBuckets(samples: BgSample[]): HourBucket[] {
+  return Array.from({length: 24}, (_, hour) => {
+    const hourSamples = samples.filter(s => new Date(s.date).getHours() === hour);
+    const values = hourSamples.map(s => s.sgv);
+    const avg = average(values);
+    const stdDev = standardDeviation(values, avg);
+    const tir = tirForSamples(hourSamples) ?? 0;
+    return {
+      hour,
+      count: hourSamples.length,
+      tir,
+      avg,
+      stdDev,
+      balanceScore: tir - stdDev * 0.3 - Math.abs(avg - 110) * 0.1,
+    };
+  }).filter(bucket => bucket.count >= 3);
+}
+
+function buildMealTir(samples: BgSample[]): MealTir {
+  const breakfast = tirForWindow(samples, 6, 10);
+  const lunch = tirForWindow(samples, 12, 15);
+  const dinner = tirForWindow(samples, 18, 22);
+  const values = [breakfast, lunch, dinner].filter(
+    (value): value is number => value !== null,
+  );
+
+  return {
+    breakfast,
+    lunch,
+    dinner,
+    average: values.length
+      ? values.reduce((sum, value) => sum + value, 0) / values.length
+      : 0,
+  };
+}
+
+function tirForWindow(samples: BgSample[], startHour: number, endHour: number) {
+  return tirForSamples(
+    samples.filter(s => {
+      const hour = new Date(s.date).getHours();
+      return hour >= startHour && hour < endHour;
+    }),
+  );
+}
+
+function numberCell(value: number, unit: string, decimals = 1): ComparisonCell {
+  return {
+    value: `${value.toFixed(decimals)} ${unit}`,
+    numeric: value,
+  };
+}
+
+function textCell(value: string): ComparisonCell {
+  return {value};
+}
+
+function formatSigned(value: number) {
+  const rounded = Math.abs(value) >= 10 ? value.toFixed(0) : value.toFixed(1);
+  return `${value > 0 ? '+' : ''}${rounded}`;
+}
+
+function formatDayTir(day: DayTir | null, language: string) {
+  if (!day) return language === 'he' ? 'אין נתונים' : 'No data';
+  return `${formatDisplayDate(day.dateString, language)} · ${(
+    day.tir * 100
+  ).toFixed(1)}%`;
+}
+
+function formatDisplayDate(dateString: string, language: string) {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return dateString;
+  return date.toLocaleDateString(language === 'he' ? 'he-IL' : 'en-US', {
+    day: '2-digit',
+    month: '2-digit',
+  });
+}
+
+function formatHourBucket(bucket: HourBucket | null, language: string) {
+  if (!bucket) return language === 'he' ? 'אין מספיק נתונים' : 'Not enough data';
+  const avgLabel =
+    language === 'he'
+      ? `ממוצע ${bucket.avg.toFixed(0)}`
+      : `avg ${bucket.avg.toFixed(0)}`;
+  return `${formatHour(bucket.hour)} · ${bucket.tir.toFixed(0)}% · ${avgLabel}`;
+}
+
+function formatHour(hour: number) {
+  const start = `${String(hour).padStart(2, '0')}:00`;
+  const end = `${String((hour + 1) % 24).padStart(2, '0')}:00`;
+  return `${start}-${end}`;
+}
+
+function formatMealTir(mealTir: MealTir, language: string) {
+  const empty = language === 'he' ? 'אין נתונים' : 'No data';
+  const labels =
+    language === 'he'
+      ? ['בוקר', 'צהריים', 'ערב']
+      : ['Breakfast', 'Lunch', 'Dinner'];
+  const values = [mealTir.breakfast, mealTir.lunch, mealTir.dinner];
+  const parts = values.map((value, index) => {
+    const formatted = value === null ? empty : `${value.toFixed(0)}%`;
+    return `${labels[index]} ${formatted}`;
+  });
+  return parts.join(' · ');
+}
+
+function average(values: number[]) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function standardDeviation(values: number[], mean: number) {
+  if (values.length < 2) return 0;
+  const variance =
+    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
+    values.length;
+  return Math.sqrt(variance);
 }

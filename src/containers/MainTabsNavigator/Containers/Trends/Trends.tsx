@@ -10,7 +10,7 @@ import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
 import {ThemeType} from 'app/types/theme';
 
 import {useTrendsData} from './hooks/useTrendsData';
-import {DayDetail, calculateTrendsMetrics} from './utils/trendsCalculations';
+import {calculateTrendsMetrics} from './utils/trendsCalculations';
 import {fetchBgDataForDateRange} from 'app/api/apiRequests';
 import {CHUNK_SIZE} from './Trends.constants';
 import {BgSample} from 'app/types/day_bgs.types';
@@ -22,8 +22,6 @@ import {CompareSection} from './components/CompareSection';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 // (If you have insulin data, pass it in above.)
 
-import Collapsable from 'app/components/Collapsable';
-import {DayInsights} from './TrendsUI'; // <--- Now it exists for real!
 import {AGPSummary} from 'app/components/charts/AGPGraph';
 import QuickStatsRow from './components/QuickStatsRow';
 import {useTrendsQuickStats} from './hooks/useTrendsQuickStats';
@@ -38,17 +36,12 @@ import {addOpacity} from 'app/style/styling.utils';
 import {
   TrendsContainer,
   SectionTitle,
-  ExplanationText,
-  MetricButton,
-  MetricButtonText,
 } from './styles/Trends.styles';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {HYPO_INVESTIGATION_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
-
-type MetricType = 'tir' | 'hypos' | 'hypers';
 
 const Trends: React.FC = () => {
   const theme = useTheme() as ThemeType;
@@ -59,7 +52,6 @@ const Trends: React.FC = () => {
   const [presetDays, setPresetDays] = useState<number>(7);
   const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
   const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
-  const [selectedMetric, setSelectedMetric] = useState<MetricType>('tir');
   const [loopViewMode, setLoopViewMode] = useState<'both' | 'open' | 'closed'>(
     'both',
   );
@@ -345,25 +337,6 @@ const Trends: React.FC = () => {
     handleCompare(newOffset);
   };
 
-  // 4) Determine best/worst day based on selected metric
-  let displayDays: DayDetail[] = finalMetrics.dailyDetails;
-  if (selectedMetric === 'tir') {
-    displayDays = [...displayDays].sort((a, b) => b.tir - a.tir);
-  } else if (selectedMetric === 'hypos') {
-    displayDays = [...displayDays].sort(
-      (a, b) => a.seriousHypos - b.seriousHypos,
-    );
-  } else {
-    displayDays = [...displayDays].sort(
-      (a, b) => a.seriousHypers - b.seriousHypers,
-    );
-  }
-
-  const bestDayDetail = displayDays[0];
-  const worstDayDetail = displayDays[displayDays.length - 1];
-  const bestDay = bestDayDetail?.dateString || '';
-  const worstDay = worstDayDetail?.dateString || '';
-
   return (
     <TrendsContainer testID={E2E_TEST_IDS.screens.trends}>
       {/* 1. Date Range Buttons */}
@@ -609,58 +582,6 @@ const Trends: React.FC = () => {
             <OverallStatsSection metrics={finalMetrics} />
           </Collapsable>
           */}
-
-          {/* (e) Best/Worst Day Selection */}
-          <Collapsable
-            title={tr(language, 'trends.selectMetricTitle')}
-            testID={E2E_TEST_IDS.trends.metricSelectorCollapsable}>
-            <ExplanationText>
-              {tr(language, 'trends.selectMetricHint')}
-            </ExplanationText>
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'center',
-                marginVertical: theme.spacing.sm + 2,
-              }}>
-              <View style={{marginHorizontal: theme.spacing.xs + 1}}>
-                <MetricButton
-                  selected={selectedMetric === 'tir'}
-                  onPress={() => setSelectedMetric('tir')}>
-                  <MetricButtonText selected={selectedMetric === 'tir'}>
-                    {tr(language, 'trends.metricTir')}
-                  </MetricButtonText>
-                </MetricButton>
-              </View>
-              <View style={{marginHorizontal: theme.spacing.xs + 1}}>
-                <MetricButton
-                  selected={selectedMetric === 'hypos'}
-                  onPress={() => setSelectedMetric('hypos')}>
-                  <MetricButtonText selected={selectedMetric === 'hypos'}>
-                    {tr(language, 'trends.metricFewestHypos')}
-                  </MetricButtonText>
-                </MetricButton>
-              </View>
-              <View style={{marginHorizontal: theme.spacing.xs + 1}}>
-                <MetricButton
-                  selected={selectedMetric === 'hypers'}
-                  onPress={() => setSelectedMetric('hypers')}>
-                  <MetricButtonText selected={selectedMetric === 'hypers'}>
-                    {tr(language, 'trends.metricFewestHypers')}
-                  </MetricButtonText>
-                </MetricButton>
-              </View>
-            </View>
-          </Collapsable>
-
-          {/* (f) Best/Worst day details */}
-          <DayInsights
-            bestDayDetail={bestDayDetail}
-            worstDayDetail={worstDayDetail}
-            bestDay={bestDay}
-            worstDay={worstDay}
-            selectedMetric={selectedMetric}
-          />
 
           {/* (g) Compare with previous period */}
           <CompareSection

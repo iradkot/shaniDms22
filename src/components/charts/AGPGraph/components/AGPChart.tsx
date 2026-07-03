@@ -113,6 +113,8 @@ interface AGPChartProps {
   width: number;
   height: number;
   targetRange?: {min: number; max: number};
+  activeTimeOfDay?: number | null;
+  onActiveTimeOfDayChange?: (timeOfDay: number | null) => void;
 
   /**
    * Enables touch interaction (crosshair + tooltip). Disable in scrollable summaries
@@ -126,15 +128,18 @@ const AGPChart: React.FC<AGPChartProps> = ({
   width,
   height,
   targetRange = cgmRange.TARGET,
+  activeTimeOfDay,
+  onActiveTimeOfDayChange,
   enableTouch = true,
 }) => {
   const theme = useTheme();
 
-  const [activePoint, setActivePoint] = useState<AGPPercentilePoint | null>(
-    null,
-  );
-  const [activeX, setActiveX] = useState<number | null>(null);
+  const [localActiveTimeOfDay, setLocalActiveTimeOfDay] = useState<
+    number | null
+  >(null);
   const [isTouchActive, setIsTouchActive] = useState(false);
+  const syncedActiveTimeOfDay =
+    activeTimeOfDay !== undefined ? activeTimeOfDay : localActiveTimeOfDay;
 
   const margin = useMemo(
     () => ({
@@ -183,35 +188,33 @@ const AGPChart: React.FC<AGPChartProps> = ({
         return;
       }
 
-      const {xScale} = chartConfig;
       const chartX = clamp(locationX - margin.left, 0, innerWidth);
       const minutes = (chartX / Math.max(1, innerWidth)) * 1440;
       const point = findClosestPercentilePoint(agpData.percentiles, minutes);
 
       if (!point) {
-        setActivePoint(null);
-        setActiveX(null);
+        setLocalActiveTimeOfDay(null);
+        onActiveTimeOfDayChange?.(null);
         return;
       }
 
-      const snappedX = xScale(point.timeOfDay);
-
-      setActivePoint(point);
-      setActiveX(snappedX);
+      setLocalActiveTimeOfDay(point.timeOfDay);
+      onActiveTimeOfDayChange?.(point.timeOfDay);
     },
     [
       agpData.percentiles,
       chartConfig,
       innerWidth,
       margin.left,
+      onActiveTimeOfDayChange,
     ],
   );
 
   const clearTooltip = useCallback(() => {
     setIsTouchActive(false);
-    setActivePoint(null);
-    setActiveX(null);
-  }, []);
+    setLocalActiveTimeOfDay(null);
+    onActiveTimeOfDayChange?.(null);
+  }, [onActiveTimeOfDayChange]);
 
   if (!chartConfig) {
     return (
@@ -296,6 +299,11 @@ const AGPChart: React.FC<AGPChartProps> = ({
   const innerLine = addOpacity(theme.textColor, 0.55);
   const medianLine = theme.accentColor;
 
+  const activePoint =
+    syncedActiveTimeOfDay === null || syncedActiveTimeOfDay === undefined
+      ? null
+      : findClosestPercentilePoint(agpData.percentiles, syncedActiveTimeOfDay);
+  const activeX = activePoint ? xScale(activePoint.timeOfDay) : null;
   const activeY = activePoint ? yScale(activePoint.p50) : null;
 
   return (
