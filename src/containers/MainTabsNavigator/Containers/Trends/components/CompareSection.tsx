@@ -1,19 +1,21 @@
 // /Trends/components/CompareSection.tsx
 import React, {useMemo, useState} from 'react';
-import {View, Button, ActivityIndicator, Dimensions, Text} from 'react-native';
+import {
+  View,
+  Button,
+  ActivityIndicator,
+  Dimensions,
+  Text,
+  DimensionValue,
+} from 'react-native';
 import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {
   CompareBox,
   ExplanationText,
-  StatRow,
-  StatLabel,
-  StatValue,
-  Subtle,
   ComparisonTitle,
   ComparisonSubtitle,
-  StatChange,
   ComparisonDateRange,
 } from '../styles/Trends.styles';
 import {calculateTrendsMetrics} from '../utils/trendsCalculations';
@@ -261,9 +263,7 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
             {language === 'he' ? 'טבלת השוואה' : 'Comparison table'}
           </Text>
 
-          {comparisonRows.map(row => (
-            <ComparisonTableRow key={row.key} row={row} />
-          ))}
+          <ComparisonTable rows={comparisonRows} language={language} />
 
           <ExplanationText style={{marginTop: theme.spacing.lg - 1}}>
             {tr(language, 'trends.compareInsight')}
@@ -274,7 +274,64 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
   );
 };
 
-const ComparisonTableRow: React.FC<{row: ComparisonMetricRow}> = ({row}) => {
+const ComparisonTable: React.FC<{
+  rows: ComparisonMetricRow[];
+  language: Lang;
+}> = ({rows, language}) => {
+  const theme = useTheme() as ThemeType;
+  const isRTL = language === 'he';
+  const borderColor = addOpacity(theme.textColor, 0.14);
+  const headerBackground = addOpacity(theme.textColor, 0.06);
+
+  const headerLabels =
+    language === 'he'
+      ? ['מדד', 'נוכחי', 'קודם', 'שינוי']
+      : ['Metric', 'Current', 'Previous', 'Change'];
+
+  return (
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor,
+        borderRadius: 6,
+        overflow: 'hidden',
+        backgroundColor: theme.white,
+      }}>
+      <View
+        style={{
+          flexDirection: isRTL ? 'row-reverse' : 'row',
+          backgroundColor: headerBackground,
+          borderBottomWidth: 1,
+          borderBottomColor: borderColor,
+        }}>
+        {headerLabels.map((label, index) => (
+          <TableCell
+            key={label}
+            text={label}
+            width={columnWidth(index)}
+            bold
+            isRTL={isRTL}
+          />
+        ))}
+      </View>
+
+      {rows.map(row => (
+        <ComparisonTableRow
+          key={row.key}
+          row={row}
+          isRTL={isRTL}
+          borderColor={borderColor}
+        />
+      ))}
+    </View>
+  );
+};
+
+const ComparisonTableRow: React.FC<{
+  row: ComparisonMetricRow;
+  isRTL: boolean;
+  borderColor: string;
+}> = ({row, isRTL, borderColor}) => {
   const theme = useTheme() as ThemeType;
   const diff =
     row.current.numeric !== undefined && row.previous.numeric !== undefined
@@ -287,28 +344,74 @@ const ComparisonTableRow: React.FC<{row: ComparisonMetricRow}> = ({row}) => {
         ? diff < 0
         : diff > 0;
 
+  const changeColor =
+    isImprovement === null
+      ? addOpacity(theme.textColor, 0.7)
+      : isImprovement
+        ? theme.inRangeColor
+        : theme.belowRangeColor;
+
+  const values = [
+    row.label,
+    row.current.value,
+    row.previous.value,
+    diff === null ? '-' : formatSigned(diff),
+  ];
+
   return (
-    <StatRow>
-      <StatLabel>{row.label}</StatLabel>
-      <View style={{marginTop: theme.spacing.xs + 1}}>
-        <StatValue>{row.current.value}</StatValue>
-        <Subtle>vs {row.previous.value}</Subtle>
-        {diff !== null && (
-          <StatChange
-            color={
-              isImprovement === null
-                ? addOpacity(theme.textColor, 0.7)
-                : isImprovement
-                  ? theme.inRangeColor
-                  : theme.belowRangeColor
-            }>
-            {formatSigned(diff)}
-          </StatChange>
-        )}
-      </View>
-    </StatRow>
+    <View
+      style={{
+        flexDirection: isRTL ? 'row-reverse' : 'row',
+        borderBottomWidth: 1,
+        borderBottomColor: borderColor,
+      }}>
+      {values.map((value, index) => (
+        <TableCell
+          key={`${row.key}-${index}`}
+          text={value}
+          width={columnWidth(index)}
+          color={index === 3 ? changeColor : undefined}
+          bold={index === 0}
+          isRTL={isRTL}
+        />
+      ))}
+    </View>
   );
 };
+
+const TableCell: React.FC<{
+  text: string;
+  width: DimensionValue;
+  bold?: boolean;
+  color?: string;
+  isRTL: boolean;
+}> = ({text, width, bold = false, color, isRTL}) => {
+  const theme = useTheme() as ThemeType;
+
+  return (
+    <View
+      style={{
+        width,
+        paddingHorizontal: theme.spacing.xs + 2,
+        paddingVertical: theme.spacing.sm,
+      }}>
+      <Text
+        style={{
+          color: color ?? theme.textColor,
+          fontSize: 12,
+          fontWeight: bold ? '700' : '500',
+          textAlign: isRTL ? 'right' : 'left',
+        }}>
+        {text}
+      </Text>
+    </View>
+  );
+};
+
+function columnWidth(index: number): DimensionValue {
+  const widths: DimensionValue[] = ['34%', '25%', '25%', '16%'];
+  return widths[index] ?? '25%';
+}
 
 function comparisonTitle(language: string, days: number) {
   if (language === 'he') {
@@ -399,8 +502,8 @@ export function buildComparisonRows({
     {
       key: 'avg-bg',
       label: tr(language, 'trends.averageBg'),
-      current: numberCell(currentMetrics.averageBg, 'mg/dL'),
-      previous: numberCell(previousMetrics.averageBg, 'mg/dL'),
+      current: numberCell(current.averageBg, 'mg/dL'),
+      previous: numberCell(previous.averageBg, 'mg/dL'),
       lowerIsBetter: true,
     },
     {
@@ -481,10 +584,13 @@ function buildPeriodStats(
 ) {
   const samples = validSamples(bgData);
   const highestBg = samples.length ? Math.max(...samples.map(s => s.sgv)) : 0;
-  const bestTirDay = metrics.dailyDetails.reduce<DayTir | null>(
-    (best, day) => (!best || day.tir > best.tir ? day : best),
-    null,
-  );
+  const averageBg = average(samples.map(s => s.sgv));
+  const bestTirDay = metrics.dailyDetails
+    .filter(isFiniteDayTir)
+    .reduce<DayTir | null>(
+      (best, day) => (!best || day.tir > best.tir ? day : best),
+      null,
+    );
 
   const hourly = buildHourlyBuckets(samples);
   const bestHour = hourly.reduce<HourBucket | null>(
@@ -499,6 +605,7 @@ function buildPeriodStats(
 
   return {
     highestBg,
+    averageBg,
     bestTirDay,
     bestHour,
     worstHour,
@@ -586,6 +693,10 @@ function tirForWindow(samples: BgSample[], startHour: number, endHour: number) {
 }
 
 function numberCell(value: number, unit: string, decimals = 1): ComparisonCell {
+  if (!Number.isFinite(value)) {
+    return {value: '-'};
+  }
+
   return {
     value: `${value.toFixed(decimals)} ${unit}`,
     numeric: value,
@@ -606,6 +717,10 @@ function formatDayTir(day: DayTir | null, language: string) {
   return `${formatDisplayDate(day.dateString, language)} · ${(
     day.tir * 100
   ).toFixed(1)}%`;
+}
+
+function isFiniteDayTir(day: DayTir) {
+  return Number.isFinite(day.tir);
 }
 
 function formatDisplayDate(dateString: string, language: string) {
