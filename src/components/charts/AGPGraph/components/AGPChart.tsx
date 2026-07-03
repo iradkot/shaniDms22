@@ -1,6 +1,13 @@
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {View} from 'react-native';
-import Svg, {Circle, G, Rect, Line, Path, Text as SvgText} from 'react-native-svg';
+import Svg, {
+  Circle,
+  G,
+  Rect,
+  Line,
+  Path,
+  Text as SvgText,
+} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
 import {addOpacity} from 'app/style/styling.utils';
@@ -87,14 +94,17 @@ const findClosestPercentilePoint = (
 ): AGPPercentilePoint | null => {
   if (points.length === 0) return null;
 
-  const interval = points.length > 1 ? points[1].timeOfDay - points[0].timeOfDay : 5;
+  const interval =
+    points.length > 1 ? points[1].timeOfDay - points[0].timeOfDay : 5;
   const snapped = clamp(Math.round(minutes / interval) * interval, 0, 1440);
   const exact = points.find(p => p.timeOfDay === snapped);
   if (exact) return exact;
 
   // Fallback: nearest by absolute distance
   return points.reduce((best, p) => {
-    return Math.abs(p.timeOfDay - minutes) < Math.abs(best.timeOfDay - minutes) ? p : best;
+    return Math.abs(p.timeOfDay - minutes) < Math.abs(best.timeOfDay - minutes)
+      ? p
+      : best;
   }, points[0]);
 };
 
@@ -120,9 +130,23 @@ const AGPChart: React.FC<AGPChartProps> = ({
 }) => {
   const theme = useTheme();
 
-  const [activePoint, setActivePoint] = useState<AGPPercentilePoint | null>(null);
+  const [activePoint, setActivePoint] = useState<AGPPercentilePoint | null>(
+    null,
+  );
   const [activeX, setActiveX] = useState<number | null>(null);
   const [isTouchActive, setIsTouchActive] = useState(false);
+  const hideTooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  const clearHideTooltipTimeout = useCallback(() => {
+    if (hideTooltipTimeoutRef.current != null) {
+      clearTimeout(hideTooltipTimeoutRef.current);
+      hideTooltipTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearHideTooltipTimeout, [clearHideTooltipTimeout]);
 
   const margin = useMemo(
     () => ({
@@ -165,9 +189,53 @@ const AGPChart: React.FC<AGPChartProps> = ({
     return {xScale, yScale, yMin, yMax};
   }, [agpData, innerWidth, innerHeight]);
 
+  const handleTouch = useCallback(
+    (locationX: number) => {
+      if (!chartConfig) {
+        return;
+      }
+
+      const {xScale} = chartConfig;
+      clearHideTooltipTimeout();
+      const chartX = clamp(locationX - margin.left, 0, innerWidth);
+      const minutes = (chartX / Math.max(1, innerWidth)) * 1440;
+      const point = findClosestPercentilePoint(agpData.percentiles, minutes);
+
+      if (!point) {
+        setActivePoint(null);
+        setActiveX(null);
+        return;
+      }
+
+      const snappedX = xScale(point.timeOfDay);
+
+      setActivePoint(point);
+      setActiveX(snappedX);
+    },
+    [
+      agpData.percentiles,
+      chartConfig,
+      clearHideTooltipTimeout,
+      innerWidth,
+      margin.left,
+    ],
+  );
+
+  const hideTooltipSoon = useCallback(() => {
+    setIsTouchActive(false);
+    clearHideTooltipTimeout();
+    hideTooltipTimeoutRef.current = setTimeout(() => {
+      setActivePoint(null);
+      setActiveX(null);
+      hideTooltipTimeoutRef.current = null;
+    }, 2200);
+  }, [clearHideTooltipTimeout]);
+
   if (!chartConfig) {
     return (
-      <View style={{width, height, justifyContent: 'center', alignItems: 'center'}} />
+      <View
+        style={{width, height, justifyContent: 'center', alignItems: 'center'}}
+      />
     );
   }
 
@@ -177,12 +245,20 @@ const AGPChart: React.FC<AGPChartProps> = ({
   const yTicks = buildYTicks([yMin, yMax]);
 
   const p5p95Area = generateAreaPath(
-    agpData.percentiles.map(p => ({timeOfDay: p.timeOfDay, lower: p.p5, upper: p.p95})),
+    agpData.percentiles.map(p => ({
+      timeOfDay: p.timeOfDay,
+      lower: p.p5,
+      upper: p.p95,
+    })),
     xScale,
     yScale,
   );
   const p25p75Area = generateAreaPath(
-    agpData.percentiles.map(p => ({timeOfDay: p.timeOfDay, lower: p.p25, upper: p.p75})),
+    agpData.percentiles.map(p => ({
+      timeOfDay: p.timeOfDay,
+      lower: p.p25,
+      upper: p.p75,
+    })),
     xScale,
     yScale,
   );
@@ -238,26 +314,6 @@ const AGPChart: React.FC<AGPChartProps> = ({
   const innerLine = addOpacity(theme.textColor, 0.55);
   const medianLine = theme.accentColor;
 
-  const handleTouch = useCallback(
-    (locationX: number) => {
-      const chartX = clamp(locationX - margin.left, 0, innerWidth);
-      const minutes = (chartX / Math.max(1, innerWidth)) * 1440;
-      const point = findClosestPercentilePoint(agpData.percentiles, minutes);
-
-      if (!point) {
-        setActivePoint(null);
-        setActiveX(null);
-        return;
-      }
-
-      const snappedX = xScale(point.timeOfDay);
-
-      setActivePoint(point);
-      setActiveX(snappedX);
-    },
-    [agpData.percentiles, innerWidth, margin.left, xScale],
-  );
-
   const activeY = activePoint ? yScale(activePoint.p50) : null;
 
   return (
@@ -268,6 +324,7 @@ const AGPChart: React.FC<AGPChartProps> = ({
         onTouchStart={
           enableTouch
             ? e => {
+                clearHideTooltipTimeout();
                 setIsTouchActive(true);
                 handleTouch(e.nativeEvent.locationX);
               }
@@ -280,163 +337,167 @@ const AGPChart: React.FC<AGPChartProps> = ({
               }
             : undefined
         }
-        onTouchEnd={
-          enableTouch
-            ? () => {
-                setIsTouchActive(false);
-                setActivePoint(null);
-                setActiveX(null);
-              }
-            : undefined
-        }
-      >
+        onTouchEnd={enableTouch ? hideTooltipSoon : undefined}
+        onTouchCancel={enableTouch ? hideTooltipSoon : undefined}>
         <G transform={`translate(${margin.left}, ${margin.top})`}>
-        {/* Background + border */}
-        <Rect
-          x={0}
-          y={0}
-          width={innerWidth}
-          height={innerHeight}
-          fill={theme.white}
-          stroke={theme.borderColor}
-          strokeWidth={1}
-        />
-
-        {/* Grid: Y */}
-        {yTicks.map(v => (
-          <G key={`y-${v}`}>
-            <Line
-              x1={0}
-              y1={yScale(v)}
-              x2={innerWidth}
-              y2={yScale(v)}
-              stroke={gridColor}
-              strokeWidth={1}
-            />
-            <SvgText
-              x={-theme.spacing.sm}
-              y={yScale(v) + 4}
-              fontSize={theme.typography.size.xs}
-              fontFamily={theme.typography.fontFamily}
-              fill={labelColor}
-              textAnchor="end"
-            >
-              {v}
-            </SvgText>
-          </G>
-        ))}
-
-        {/* Grid: X */}
-        {timePoints.map(minutes => (
-          <G key={`x-${minutes}`}>
-            <Line
-              x1={xScale(minutes)}
-              y1={0}
-              x2={xScale(minutes)}
-              y2={innerHeight}
-              stroke={gridColor}
-              strokeWidth={1}
-            />
-            <SvgText
-              x={xScale(minutes)}
-              y={innerHeight + theme.spacing.lg}
-              fontSize={theme.typography.size.xs}
-              fontFamily={theme.typography.fontFamily}
-              fill={labelColor}
-              textAnchor="middle"
-            >
-              {minutes === 1440 ? '12 AM' : minutesToTimeLabel(minutes)}
-            </SvgText>
-          </G>
-        ))}
-
-        {/* Target range */}
-        {!!targetArea && (
-          <Path d={targetArea} fill={targetFill} />
-        )}
-
-        {/* Percentile bands */}
-        {!!p5p95Area && <Path d={p5p95Area} fill={bandOuterFill} />}
-        {!!p25p75Area && <Path d={p25p75Area} fill={bandInnerFill} />}
-
-        {/* Percentile lines */}
-        {!!p5Line && (
-          <Path
-            d={p5Line}
-            stroke={outerLine}
+          {/* Background + border */}
+          <Rect
+            x={0}
+            y={0}
+            width={innerWidth}
+            height={innerHeight}
+            fill={theme.white}
+            stroke={theme.borderColor}
             strokeWidth={1}
-            fill="none"
-            strokeDasharray="4,4"
           />
-        )}
-        {!!p95Line && (
-          <Path
-            d={p95Line}
-            stroke={outerLine}
-            strokeWidth={1}
-            fill="none"
-            strokeDasharray="4,4"
+
+          {/* Grid: Y */}
+          {yTicks.map(v => (
+            <G key={`y-${v}`}>
+              <Line
+                x1={0}
+                y1={yScale(v)}
+                x2={innerWidth}
+                y2={yScale(v)}
+                stroke={gridColor}
+                strokeWidth={1}
+              />
+              <SvgText
+                x={-theme.spacing.sm}
+                y={yScale(v) + 4}
+                fontSize={theme.typography.size.xs}
+                fontFamily={theme.typography.fontFamily}
+                fill={labelColor}
+                textAnchor="end">
+                {v}
+              </SvgText>
+            </G>
+          ))}
+
+          {/* Grid: X */}
+          {timePoints.map(minutes => (
+            <G key={`x-${minutes}`}>
+              <Line
+                x1={xScale(minutes)}
+                y1={0}
+                x2={xScale(minutes)}
+                y2={innerHeight}
+                stroke={gridColor}
+                strokeWidth={1}
+              />
+              <SvgText
+                x={xScale(minutes)}
+                y={innerHeight + theme.spacing.lg}
+                fontSize={theme.typography.size.xs}
+                fontFamily={theme.typography.fontFamily}
+                fill={labelColor}
+                textAnchor="middle">
+                {minutes === 1440 ? '12 AM' : minutesToTimeLabel(minutes)}
+              </SvgText>
+            </G>
+          ))}
+
+          {/* Target range */}
+          {!!targetArea && <Path d={targetArea} fill={targetFill} />}
+
+          {/* Percentile bands */}
+          {!!p5p95Area && <Path d={p5p95Area} fill={bandOuterFill} />}
+          {!!p25p75Area && <Path d={p25p75Area} fill={bandInnerFill} />}
+
+          {/* Percentile lines */}
+          {!!p5Line && (
+            <Path
+              d={p5Line}
+              stroke={outerLine}
+              strokeWidth={1}
+              fill="none"
+              strokeDasharray="4,4"
+            />
+          )}
+          {!!p95Line && (
+            <Path
+              d={p95Line}
+              stroke={outerLine}
+              strokeWidth={1}
+              fill="none"
+              strokeDasharray="4,4"
+            />
+          )}
+          {!!p25Line && (
+            <Path
+              d={p25Line}
+              stroke={innerLine}
+              strokeWidth={1.25}
+              fill="none"
+            />
+          )}
+          {!!p75Line && (
+            <Path
+              d={p75Line}
+              stroke={innerLine}
+              strokeWidth={1.25}
+              fill="none"
+            />
+          )}
+          {!!p50Line && (
+            <Path d={p50Line} stroke={medianLine} strokeWidth={2} fill="none" />
+          )}
+
+          {/* Target range borders */}
+          <Line
+            x1={0}
+            y1={yScale(targetRange.min)}
+            x2={innerWidth}
+            y2={yScale(targetRange.min)}
+            stroke={addOpacity(theme.inRangeColor, 0.7)}
+            strokeWidth={1.5}
+            strokeDasharray="6,6"
           />
-        )}
-        {!!p25Line && (
-          <Path d={p25Line} stroke={innerLine} strokeWidth={1.25} fill="none" />
-        )}
-        {!!p75Line && (
-          <Path d={p75Line} stroke={innerLine} strokeWidth={1.25} fill="none" />
-        )}
-        {!!p50Line && (
-          <Path d={p50Line} stroke={medianLine} strokeWidth={2} fill="none" />
-        )}
+          <Line
+            x1={0}
+            y1={yScale(targetRange.max)}
+            x2={innerWidth}
+            y2={yScale(targetRange.max)}
+            stroke={addOpacity(theme.inRangeColor, 0.7)}
+            strokeWidth={1.5}
+            strokeDasharray="6,6"
+          />
 
-        {/* Target range borders */}
-        <Line
-          x1={0}
-          y1={yScale(targetRange.min)}
-          x2={innerWidth}
-          y2={yScale(targetRange.min)}
-          stroke={addOpacity(theme.inRangeColor, 0.7)}
-          strokeWidth={1.5}
-          strokeDasharray="6,6"
-        />
-        <Line
-          x1={0}
-          y1={yScale(targetRange.max)}
-          x2={innerWidth}
-          y2={yScale(targetRange.max)}
-          stroke={addOpacity(theme.inRangeColor, 0.7)}
-          strokeWidth={1.5}
-          strokeDasharray="6,6"
-        />
-
-        {/* Touch overlay: crosshair + marker + tooltip */}
-        {enableTouch && isTouchActive && activePoint && activeX !== null && activeY !== null && (
-          <>
-            <Line
-              x1={activeX}
-              y1={0}
-              x2={activeX}
-              y2={innerHeight}
-              stroke={addOpacity(theme.textColor, 0.45)}
-              strokeWidth={1}
-            />
-            <Circle
-              cx={activeX}
-              cy={activeY}
-              r={4}
-              fill={theme.accentColor}
-              stroke={theme.white}
-              strokeWidth={1}
-            />
-            <AGPTooltip
-              x={activeX}
-              y={activeY}
-              point={activePoint}
-              chartWidth={innerWidth}
-              chartHeight={innerHeight}
-            />
-          </>
-        )}
-      </G>
+          {/* Touch overlay: crosshair + marker + tooltip */}
+          {enableTouch &&
+            activePoint &&
+            activeX !== null &&
+            activeY !== null && (
+              <>
+                <Line
+                  x1={activeX}
+                  y1={0}
+                  x2={activeX}
+                  y2={innerHeight}
+                  stroke={addOpacity(
+                    theme.textColor,
+                    isTouchActive ? 0.45 : 0.25,
+                  )}
+                  strokeWidth={1}
+                />
+                <Circle
+                  cx={activeX}
+                  cy={activeY}
+                  r={4}
+                  fill={theme.accentColor}
+                  stroke={theme.white}
+                  strokeWidth={1}
+                />
+                <AGPTooltip
+                  x={activeX}
+                  y={activeY}
+                  point={activePoint}
+                  chartWidth={innerWidth}
+                  chartHeight={innerHeight}
+                />
+              </>
+            )}
+        </G>
       </Svg>
     </View>
   );

@@ -107,7 +107,11 @@ const AGPSummary: React.FC<AGPSummaryProps> = ({
       label: 'Time in Range',
       value: formatPercentage(stats.timeInRange.target, 0),
       status:
-        stats.timeInRange.target >= 70 ? 'good' : stats.timeInRange.target >= 50 ? 'fair' : 'poor',
+        stats.timeInRange.target >= 70
+          ? 'good'
+          : stats.timeInRange.target >= 50
+          ? 'fair'
+          : 'poor',
       target: 'Target: ≥70%',
     },
     averageGlucose: {
@@ -117,10 +121,13 @@ const AGPSummary: React.FC<AGPSummaryProps> = ({
         stats.averageGlucose >= cgmRange.TARGET.min &&
         stats.averageGlucose <= (cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number)
           ? 'good'
-          : stats.averageGlucose <= (cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] as number)
-            ? 'fair'
-            : 'poor',
-      target: `Target: ${cgmRange.TARGET.min}-${cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number}`,
+          : stats.averageGlucose <=
+            (cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] as number)
+          ? 'fair'
+          : 'poor',
+      target: `Target: ${cgmRange.TARGET.min}-${
+        cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number
+      }`,
     },
     gmi: {
       label: 'GMI',
@@ -157,7 +164,6 @@ const AGPSummary: React.FC<AGPSummaryProps> = ({
           width={computedWidth}
           height={height}
           targetRange={cgmRange.TARGET}
-          enableTouch={false}
         />
         <View style={{marginTop: theme.spacing.sm}}>
           <ErrorText color={subtleText}>

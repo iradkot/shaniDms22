@@ -19,15 +19,25 @@ interface AGPTooltipProps {
   chartHeight: number;
 }
 
-const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHeight}) => {
+const AGPTooltip: React.FC<AGPTooltipProps> = ({
+  x,
+  y,
+  point,
+  chartWidth,
+  chartHeight,
+}) => {
   const theme = useTheme() as ThemeType;
 
-  const tooltipWidth = 190;
+  const tooltipWidth = 176;
 
   const fontSize = theme.typography.size.xs;
   const paddingX = theme.spacing.md;
   const paddingY = theme.spacing.sm;
-  const {textX, rowYs, height: tooltipHeight} = getSvgTooltipTextLayout({
+  const {
+    textX,
+    rowYs,
+    height: tooltipHeight,
+  } = getSvgTooltipTextLayout({
     rows: 4,
     fontSize,
     lineHeightMultiplier: theme.typography.lineHeight.normal,
@@ -50,7 +60,11 @@ const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHe
   const medianColor = theme.accentColor;
 
   return (
-    <Tooltip x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}>
+    <Tooltip
+      x={tooltipX}
+      y={tooltipY}
+      width={tooltipWidth}
+      height={tooltipHeight}>
       <SvgTooltipBox width={tooltipWidth} height={tooltipHeight} />
 
       <Text
@@ -58,8 +72,7 @@ const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHe
         y={rowYs[0]}
         fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
-        fill={titleColor}
-      >
+        fill={titleColor}>
         {minutesToTimeLabel(point.timeOfDay)}
       </Text>
 
@@ -68,9 +81,8 @@ const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHe
         y={rowYs[1]}
         fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
-        fill={medianColor}
-      >
-        Median: {formatGlucose(point.p50)}
+        fill={medianColor}>
+        Typical: {formatGlucose(point.p50)}
       </Text>
 
       <Text
@@ -78,9 +90,8 @@ const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHe
         y={rowYs[2]}
         fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
-        fill={subtle}
-      >
-        25–75%: {formatGlucose(point.p25)} – {formatGlucose(point.p75)}
+        fill={subtle}>
+        Usual: {formatGlucose(point.p25)}-{formatGlucose(point.p75)}
       </Text>
 
       <Text
@@ -88,9 +99,8 @@ const AGPTooltip: React.FC<AGPTooltipProps> = ({x, y, point, chartWidth, chartHe
         y={rowYs[3]}
         fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
-        fill={subtle}
-      >
-        5–95%: {formatGlucose(point.p5)} – {formatGlucose(point.p95)}
+        fill={subtle}>
+        Full range: {formatGlucose(point.p5)}-{formatGlucose(point.p95)}
       </Text>
     </Tooltip>
   );

@@ -9,21 +9,21 @@ import {dispatchToParentOrSelf} from 'app/utils/navigationDispatch.utils';
 
 import {ThemeType} from 'app/types/theme';
 
-import { useTrendsData } from './hooks/useTrendsData';
-import { DayDetail, calculateTrendsMetrics } from './utils/trendsCalculations';
-import { fetchBgDataForDateRange } from 'app/api/apiRequests';
-import { CHUNK_SIZE } from './Trends.constants';
-import { BgSample } from 'app/types/day_bgs.types';
+import {useTrendsData} from './hooks/useTrendsData';
+import {DayDetail, calculateTrendsMetrics} from './utils/trendsCalculations';
+import {fetchBgDataForDateRange} from 'app/api/apiRequests';
+import {CHUNK_SIZE} from './Trends.constants';
+import {BgSample} from 'app/types/day_bgs.types';
 
 // Components
-import { DataFetchStatus } from './components/DataFetchStatus';
-import { DateRangeSelector } from './components/DateRangeSelector';
-import { CompareSection } from './components/CompareSection';
+import {DataFetchStatus} from './components/DataFetchStatus';
+import {DateRangeSelector} from './components/DateRangeSelector';
+import {CompareSection} from './components/CompareSection';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 // (If you have insulin data, pass it in above.)
 
 import Collapsable from 'app/components/Collapsable';
-import { DayInsights } from './TrendsUI'; // <--- Now it exists for real!
+import {DayInsights} from './TrendsUI'; // <--- Now it exists for real!
 import {AGPSummary} from 'app/components/charts/AGPGraph';
 import QuickStatsRow from './components/QuickStatsRow';
 import {useTrendsQuickStats} from './hooks/useTrendsQuickStats';
@@ -36,7 +36,7 @@ import {
   SectionTitle,
   ExplanationText,
   MetricButton,
-  MetricButtonText
+  MetricButtonText,
 } from './styles/Trends.styles';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
@@ -56,7 +56,9 @@ const Trends: React.FC = () => {
   const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
   const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('tir');
-  const [loopViewMode, setLoopViewMode] = useState<'both' | 'open' | 'closed'>('both');
+  const [loopViewMode, setLoopViewMode] = useState<'both' | 'open' | 'closed'>(
+    'both',
+  );
 
   const isCustomRange = useMemo(
     () => Boolean(customStartDate && customEndDate),
@@ -116,25 +118,41 @@ const Trends: React.FC = () => {
     showLongWaitWarning,
     showMaxWaitReached,
     finalMetrics,
-  } = useTrendsData({ rangeDays, start, end });
+  } = useTrendsData({rangeDays, start, end});
 
-  const {stats: quickStats} = useTrendsQuickStats({bgData, start, end, rangeDays});
+  const {stats: quickStats} = useTrendsQuickStats({
+    bgData,
+    start,
+    end,
+    rangeDays,
+  });
   const loopModeStats = useLoopModeStats({start, end, bgData});
 
   const hypoInvestigationNavLockRef = useRef(false);
-  const hypoInvestigationUnlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isOpeningHypoInvestigation, setIsOpeningHypoInvestigation] = useState(false);
+  const hypoInvestigationUnlockTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const [isOpeningHypoInvestigation, setIsOpeningHypoInvestigation] =
+    useState(false);
 
   const severeHypoThreshold = useMemo(() => {
     const raw = cgmRange[CGM_STATUS_CODES.EXTREME_LOW];
-    return typeof raw === 'number' && Number.isFinite(raw) ? raw : cgmRange.TARGET.min;
+    return typeof raw === 'number' && Number.isFinite(raw)
+      ? raw
+      : cgmRange.TARGET.min;
   }, []);
 
   const longestSevereHypoDurationLabel = useMemo(() => {
     if (!bgData?.length) return null;
-    const events = extractHypoEvents({bgData, lowThreshold: severeHypoThreshold});
+    const events = extractHypoEvents({
+      bgData,
+      lowThreshold: severeHypoThreshold,
+    });
     if (!events.length) return null;
-    const maxMs = events.reduce((m, e) => Math.max(m, Math.max(0, e.endMs - e.startMs)), 0);
+    const maxMs = events.reduce(
+      (m, e) => Math.max(m, Math.max(0, e.endMs - e.startMs)),
+      0,
+    );
     const minutes = Math.max(1, Math.round(maxMs / 60_000));
     if (minutes < 60) return `${minutes}m`;
     const h = Math.floor(minutes / 60);
@@ -162,7 +180,8 @@ const Trends: React.FC = () => {
     dispatchToParentOrSelf({
       navigation,
       action,
-      fallbackNavigate: () => (navigation as any).navigate?.(HYPO_INVESTIGATION_SCREEN, payload),
+      fallbackNavigate: () =>
+        (navigation as any).navigate?.(HYPO_INVESTIGATION_SCREEN, payload),
     });
 
     // Safety: if navigation fails for any reason, unlock after a short delay.
@@ -211,20 +230,27 @@ const Trends: React.FC = () => {
   // 3) Compare logic
   const [showComparison, setShowComparison] = useState(false);
   const [comparing, setComparing] = useState(false);
-  const [previousMetrics, setPreviousMetrics] = useState<typeof finalMetrics | null>(null);
+  const [previousMetrics, setPreviousMetrics] = useState<
+    typeof finalMetrics | null
+  >(null);
+  const [previousBgData, setPreviousBgData] = useState<BgSample[]>([]);
   const [comparisonOffset, setComparisonOffset] = useState(rangeDays);
   const [comparisonDateRange, setComparisonDateRange] = useState<{
     start: Date;
     end: Date;
   } | null>(null);
 
-  const resetComparison = useCallback((nextRangeDays?: number) => {
-    setShowComparison(false);
-    setComparing(false);
-    setPreviousMetrics(null);
-    setComparisonDateRange(null);
-    setComparisonOffset(nextRangeDays ?? rangeDays);
-  }, [rangeDays]);
+  const resetComparison = useCallback(
+    (nextRangeDays?: number) => {
+      setShowComparison(false);
+      setComparing(false);
+      setPreviousMetrics(null);
+      setPreviousBgData([]);
+      setComparisonDateRange(null);
+      setComparisonOffset(nextRangeDays ?? rangeDays);
+    },
+    [rangeDays],
+  );
 
   const handlePresetDaysChange = useCallback(
     (days: number) => {
@@ -257,6 +283,7 @@ const Trends: React.FC = () => {
   async function handleCompare(offset = rangeDays) {
     setComparing(true);
     setPreviousMetrics(null);
+    setPreviousBgData([]);
 
     try {
       const previousStart = new Date(start);
@@ -267,11 +294,11 @@ const Trends: React.FC = () => {
       previousEnd.setHours(23, 59, 59, 999);
       previousEnd.setDate(previousStart.getDate() + (rangeDays - 1));
 
-      setComparisonDateRange({ start: previousStart, end: previousEnd });
+      setComparisonDateRange({start: previousStart, end: previousEnd});
 
       // We need to fetch data in chunks, similar to useTrendsData
       const totalChunks = Math.ceil(rangeDays / CHUNK_SIZE);
-      let previousBgData: BgSample[] = [];
+      let fetchedPreviousBgData: BgSample[] = [];
 
       for (let i = 0; i < totalChunks; i++) {
         const chunkStart = new Date(previousStart);
@@ -282,10 +309,11 @@ const Trends: React.FC = () => {
         if (chunkEnd > previousEnd) chunkEnd.setTime(previousEnd.getTime());
 
         const dataChunk = await fetchBgDataForDateRange(chunkStart, chunkEnd);
-        previousBgData = previousBgData.concat(dataChunk);
+        fetchedPreviousBgData = fetchedPreviousBgData.concat(dataChunk);
       }
 
-      const metrics = calculateTrendsMetrics(previousBgData);
+      const metrics = calculateTrendsMetrics(fetchedPreviousBgData);
+      setPreviousBgData(fetchedPreviousBgData);
       setPreviousMetrics(metrics);
       setShowComparison(true);
     } catch (e: any) {
@@ -310,9 +338,13 @@ const Trends: React.FC = () => {
   if (selectedMetric === 'tir') {
     displayDays = [...displayDays].sort((a, b) => b.tir - a.tir);
   } else if (selectedMetric === 'hypos') {
-    displayDays = [...displayDays].sort((a, b) => a.seriousHypos - b.seriousHypos);
+    displayDays = [...displayDays].sort(
+      (a, b) => a.seriousHypos - b.seriousHypos,
+    );
   } else {
-    displayDays = [...displayDays].sort((a, b) => a.seriousHypers - b.seriousHypers);
+    displayDays = [...displayDays].sort(
+      (a, b) => a.seriousHypers - b.seriousHypers,
+    );
   }
 
   const bestDayDetail = displayDays[0];
@@ -349,15 +381,24 @@ const Trends: React.FC = () => {
 
       {/* 4. No data case */}
       {!isLoading && !fetchError && bgData.length === 0 && !fetchCancelled && (
-        <View style={{alignItems: 'center', marginVertical: theme.spacing.sm + 2}}>
-          <Text style={{color: theme.textColor}}>{tr(language, 'trends.noBgData')}</Text>
+        <View
+          style={{alignItems: 'center', marginVertical: theme.spacing.sm + 2}}>
+          <Text style={{color: theme.textColor}}>
+            {tr(language, 'trends.noBgData')}
+          </Text>
         </View>
       )}
 
       {/* 5. Partial data if user canceled */}
       {!isLoading && fetchCancelled && finalMetrics.dailyDetails.length > 0 && (
-        <View style={{alignItems: 'center', marginVertical: theme.spacing.sm + 2}}>
-          <Text>{tr(language, 'trends.loadingCancelledPartial', {daysFetched, rangeDays})}</Text>
+        <View
+          style={{alignItems: 'center', marginVertical: theme.spacing.sm + 2}}>
+          <Text>
+            {tr(language, 'trends.loadingCancelledPartial', {
+              daysFetched,
+              rangeDays,
+            })}
+          </Text>
         </View>
       )}
 
@@ -366,7 +407,9 @@ const Trends: React.FC = () => {
         <ScrollView removeClippedSubviews={false}>
           {/* (a) Time In Range */}
           <View style={{marginBottom: theme.spacing.lg - 1}}>
-            <SectionTitle>{tr(language, 'trends.keyGlucoseTrends')}</SectionTitle>
+            <SectionTitle>
+              {tr(language, 'trends.keyGlucoseTrends')}
+            </SectionTitle>
             <TimeInRangeRow bgData={bgData} />
           </View>
 
@@ -391,14 +434,22 @@ const Trends: React.FC = () => {
 
           {/* (c) Open vs Closed loop – interactive compare */}
           <View style={{marginBottom: theme.spacing.lg - 1}}>
-            <SectionTitle>{language === 'he' ? 'לופ פתוח מול סגור' : 'Open vs Closed Loop'}</SectionTitle>
+            <SectionTitle>
+              {language === 'he' ? 'לופ פתוח מול סגור' : 'Open vs Closed Loop'}
+            </SectionTitle>
 
-            <View style={{flexDirection: isRTL ? 'row-reverse' : 'row', marginBottom: 10}}>
-              {([
-                {key: 'both', labelHe: 'שניהם', labelEn: 'Both'},
-                {key: 'open', labelHe: 'רק פתוח', labelEn: 'Open only'},
-                {key: 'closed', labelHe: 'רק סגור', labelEn: 'Closed only'},
-              ] as const).map(opt => {
+            <View
+              style={{
+                flexDirection: isRTL ? 'row-reverse' : 'row',
+                marginBottom: 10,
+              }}>
+              {(
+                [
+                  {key: 'both', labelHe: 'שניהם', labelEn: 'Both'},
+                  {key: 'open', labelHe: 'רק פתוח', labelEn: 'Open only'},
+                  {key: 'closed', labelHe: 'רק סגור', labelEn: 'Closed only'},
+                ] as const
+              ).map(opt => {
                 const active = loopViewMode === opt.key;
                 return (
                   <Pressable
@@ -407,7 +458,9 @@ const Trends: React.FC = () => {
                     style={{
                       borderRadius: 999,
                       borderWidth: 1,
-                      borderColor: active ? theme.primaryColor : addOpacity(theme.textColor, 0.25),
+                      borderColor: active
+                        ? theme.primaryColor
+                        : addOpacity(theme.textColor, 0.25),
                       backgroundColor: active
                         ? addOpacity(theme.primaryColor, 0.2)
                         : addOpacity(theme.textColor, 0.04),
@@ -416,7 +469,11 @@ const Trends: React.FC = () => {
                       marginRight: isRTL ? 0 : 8,
                       marginLeft: isRTL ? 8 : 0,
                     }}>
-                    <Text style={{color: theme.textColor, fontWeight: active ? '700' : '500'}}>
+                    <Text
+                      style={{
+                        color: theme.textColor,
+                        fontWeight: active ? '700' : '500',
+                      }}>
                       {language === 'he' ? opt.labelHe : opt.labelEn}
                     </Text>
                   </Pressable>
@@ -436,26 +493,80 @@ const Trends: React.FC = () => {
               {(loopViewMode === 'both' || loopViewMode === 'open') && (
                 <Text style={{color: theme.textColor, fontSize: 15}}>
                   {language === 'he'
-                    ? `פתוח: ${loopModeStats.openPct.toFixed(1)}% • ${Math.round(loopModeStats.openMinutes / 60)} שעות • ממוצע ${loopModeStats.openAvgBg?.toFixed(0) ?? '-'} • TIR ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}%`
-                    : `Open: ${loopModeStats.openPct.toFixed(1)}% • ${Math.round(loopModeStats.openMinutes / 60)}h • Avg ${loopModeStats.openAvgBg?.toFixed(0) ?? '-'} • TIR ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}%`}
+                    ? `פתוח: ${loopModeStats.openPct.toFixed(
+                        1,
+                      )}% • ${Math.round(
+                        loopModeStats.openMinutes / 60,
+                      )} שעות • ממוצע ${
+                        loopModeStats.openAvgBg?.toFixed(0) ?? '-'
+                      } • TIR ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}%`
+                    : `Open: ${loopModeStats.openPct.toFixed(
+                        1,
+                      )}% • ${Math.round(
+                        loopModeStats.openMinutes / 60,
+                      )}h • Avg ${
+                        loopModeStats.openAvgBg?.toFixed(0) ?? '-'
+                      } • TIR ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}%`}
                 </Text>
               )}
 
               {(loopViewMode === 'both' || loopViewMode === 'closed') && (
                 <Text style={{color: theme.textColor, fontSize: 15}}>
                   {language === 'he'
-                    ? `סגור: ${loopModeStats.closedPct.toFixed(1)}% • ${Math.round(loopModeStats.closedMinutes / 60)} שעות • ממוצע ${loopModeStats.closedAvgBg?.toFixed(0) ?? '-'} • TIR ${loopModeStats.closedTirPct?.toFixed(1) ?? '-'}%`
-                    : `Closed: ${loopModeStats.closedPct.toFixed(1)}% • ${Math.round(loopModeStats.closedMinutes / 60)}h • Avg ${loopModeStats.closedAvgBg?.toFixed(0) ?? '-'} • TIR ${loopModeStats.closedTirPct?.toFixed(1) ?? '-'}%`}
+                    ? `סגור: ${loopModeStats.closedPct.toFixed(
+                        1,
+                      )}% • ${Math.round(
+                        loopModeStats.closedMinutes / 60,
+                      )} שעות • ממוצע ${
+                        loopModeStats.closedAvgBg?.toFixed(0) ?? '-'
+                      } • TIR ${loopModeStats.closedTirPct?.toFixed(1) ?? '-'}%`
+                    : `Closed: ${loopModeStats.closedPct.toFixed(
+                        1,
+                      )}% • ${Math.round(
+                        loopModeStats.closedMinutes / 60,
+                      )}h • Avg ${
+                        loopModeStats.closedAvgBg?.toFixed(0) ?? '-'
+                      } • TIR ${
+                        loopModeStats.closedTirPct?.toFixed(1) ?? '-'
+                      }%`}
                 </Text>
               )}
 
               <Text style={{color: theme.textColor, fontSize: 14}}>
                 {language === 'he'
-                  ? `טמפ בזאל: ${loopModeStats.tempBasalPct.toFixed(1)}% (${Math.round(loopModeStats.tempBasalMinutes / 60)} ש׳) • מושעה: ${loopModeStats.suspendedPct.toFixed(1)}% (${Math.round(loopModeStats.suspendedMinutes / 60)} ש׳) • בזאל מתוכנן: ${loopModeStats.plannedBasalPct.toFixed(1)}% (${Math.round(loopModeStats.plannedBasalMinutes / 60)} ש׳)`
-                  : `Temp basal: ${loopModeStats.tempBasalPct.toFixed(1)}% (${Math.round(loopModeStats.tempBasalMinutes / 60)}h) • Suspended: ${loopModeStats.suspendedPct.toFixed(1)}% (${Math.round(loopModeStats.suspendedMinutes / 60)}h) • Planned basal: ${loopModeStats.plannedBasalPct.toFixed(1)}% (${Math.round(loopModeStats.plannedBasalMinutes / 60)}h)`}
+                  ? `טמפ בזאל: ${loopModeStats.tempBasalPct.toFixed(
+                      1,
+                    )}% (${Math.round(
+                      loopModeStats.tempBasalMinutes / 60,
+                    )} ש׳) • מושעה: ${loopModeStats.suspendedPct.toFixed(
+                      1,
+                    )}% (${Math.round(
+                      loopModeStats.suspendedMinutes / 60,
+                    )} ש׳) • בזאל מתוכנן: ${loopModeStats.plannedBasalPct.toFixed(
+                      1,
+                    )}% (${Math.round(
+                      loopModeStats.plannedBasalMinutes / 60,
+                    )} ש׳)`
+                  : `Temp basal: ${loopModeStats.tempBasalPct.toFixed(
+                      1,
+                    )}% (${Math.round(
+                      loopModeStats.tempBasalMinutes / 60,
+                    )}h) • Suspended: ${loopModeStats.suspendedPct.toFixed(
+                      1,
+                    )}% (${Math.round(
+                      loopModeStats.suspendedMinutes / 60,
+                    )}h) • Planned basal: ${loopModeStats.plannedBasalPct.toFixed(
+                      1,
+                    )}% (${Math.round(
+                      loopModeStats.plannedBasalMinutes / 60,
+                    )}h)`}
               </Text>
 
-              <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: 12}}>
+              <Text
+                style={{
+                  color: addOpacity(theme.textColor, 0.65),
+                  fontSize: 12,
+                }}>
                 {language === 'he'
                   ? `דיאגנוסטיקה: אירועים ${loopModeStats.diagnostics.eventsFetched}, מסווגים ${loopModeStats.diagnostics.eventsClassified}, דגימות פתוח ${loopModeStats.diagnostics.openSamples}, דגימות סגור ${loopModeStats.diagnostics.closedSamples}, אירועי בזאל ${loopModeStats.diagnostics.basalEvents}`
                   : `Diagnostics: events ${loopModeStats.diagnostics.eventsFetched}, classified ${loopModeStats.diagnostics.eventsClassified}, open samples ${loopModeStats.diagnostics.openSamples}, closed samples ${loopModeStats.diagnostics.closedSamples}, basal events ${loopModeStats.diagnostics.basalEvents}`}
@@ -465,7 +576,10 @@ const Trends: React.FC = () => {
           {/* (d) AGP Summary */}
           <View style={{marginBottom: theme.spacing.lg - 1}}>
             <SectionTitle>{tr(language, 'trends.agp')}</SectionTitle>
-            <AGPSummary bgData={bgData} testID={E2E_TEST_IDS.charts.agpSummary} />
+            <AGPSummary
+              bgData={bgData}
+              testID={E2E_TEST_IDS.charts.agpSummary}
+            />
           </View>
 
           {/* (c) Insulin Stats (optional) */}
@@ -488,7 +602,9 @@ const Trends: React.FC = () => {
           <Collapsable
             title={tr(language, 'trends.selectMetricTitle')}
             testID={E2E_TEST_IDS.trends.metricSelectorCollapsable}>
-            <ExplanationText>{tr(language, 'trends.selectMetricHint')}</ExplanationText>
+            <ExplanationText>
+              {tr(language, 'trends.selectMetricHint')}
+            </ExplanationText>
             <View
               style={{
                 flexDirection: 'row',
@@ -498,25 +614,28 @@ const Trends: React.FC = () => {
               <View style={{marginHorizontal: theme.spacing.xs + 1}}>
                 <MetricButton
                   selected={selectedMetric === 'tir'}
-                  onPress={() => setSelectedMetric('tir')}
-                >
-                  <MetricButtonText selected={selectedMetric === 'tir'}>{tr(language, 'trends.metricTir')}</MetricButtonText>
+                  onPress={() => setSelectedMetric('tir')}>
+                  <MetricButtonText selected={selectedMetric === 'tir'}>
+                    {tr(language, 'trends.metricTir')}
+                  </MetricButtonText>
                 </MetricButton>
               </View>
               <View style={{marginHorizontal: theme.spacing.xs + 1}}>
                 <MetricButton
                   selected={selectedMetric === 'hypos'}
-                  onPress={() => setSelectedMetric('hypos')}
-                >
-                  <MetricButtonText selected={selectedMetric === 'hypos'}>{tr(language, 'trends.metricFewestHypos')}</MetricButtonText>
+                  onPress={() => setSelectedMetric('hypos')}>
+                  <MetricButtonText selected={selectedMetric === 'hypos'}>
+                    {tr(language, 'trends.metricFewestHypos')}
+                  </MetricButtonText>
                 </MetricButton>
               </View>
               <View style={{marginHorizontal: theme.spacing.xs + 1}}>
                 <MetricButton
                   selected={selectedMetric === 'hypers'}
-                  onPress={() => setSelectedMetric('hypers')}
-                >
-                  <MetricButtonText selected={selectedMetric === 'hypers'}>{tr(language, 'trends.metricFewestHypers')}</MetricButtonText>
+                  onPress={() => setSelectedMetric('hypers')}>
+                  <MetricButtonText selected={selectedMetric === 'hypers'}>
+                    {tr(language, 'trends.metricFewestHypers')}
+                  </MetricButtonText>
                 </MetricButton>
               </View>
             </View>
@@ -537,6 +656,8 @@ const Trends: React.FC = () => {
             comparing={comparing}
             handleCompare={() => handleCompare(comparisonOffset)}
             rangeDays={rangeDays}
+            currentBgData={bgData}
+            previousBgData={previousBgData}
             currentMetrics={finalMetrics}
             previousMetrics={previousMetrics}
             comparisonDateRange={comparisonDateRange}
