@@ -656,6 +656,7 @@ const Trends: React.FC = () => {
             comparing={comparing}
             handleCompare={() => handleCompare(comparisonOffset)}
             rangeDays={rangeDays}
+            currentDateRange={{start, end}}
             currentBgData={bgData}
             previousBgData={previousBgData}
             currentMetrics={finalMetrics}

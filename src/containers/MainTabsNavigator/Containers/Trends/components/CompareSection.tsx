@@ -30,6 +30,7 @@ interface CompareSectionProps {
   comparing: boolean;
   handleCompare: () => void;
   rangeDays: number;
+  currentDateRange: {start: Date; end: Date};
   currentBgData: BgSample[];
   previousBgData: BgSample[];
   currentMetrics: ReturnType<typeof calculateTrendsMetrics>;
@@ -41,9 +42,11 @@ interface CompareSectionProps {
 
 const ComparisonAgpChart: React.FC<{
   title: string;
-  subtitle: string;
+  periodRange: {start: Date; end: Date};
+  requestedDays: number;
   bgData: BgSample[];
-}> = ({title, subtitle, bgData}) => {
+  language: string;
+}> = ({title, periodRange, requestedDays, bgData, language}) => {
   const theme = useTheme() as ThemeType;
   const {agpData, isLoading, error} = useAGPData(bgData);
 
@@ -53,6 +56,7 @@ const ComparisonAgpChart: React.FC<{
   }, [theme.spacing.lg]);
 
   const muted = addOpacity(theme.textColor, 0.68);
+  const periodLabel = formatDateRange(periodRange, language);
 
   return (
     <View
@@ -73,7 +77,7 @@ const ComparisonAgpChart: React.FC<{
           fontSize: 12,
           marginBottom: theme.spacing.xs + 1,
         }}>
-        {subtitle}
+        {periodLabel} · {requestedDaysLabel(language, requestedDays)}
       </Text>
 
       {isLoading ? (
@@ -89,8 +93,12 @@ const ComparisonAgpChart: React.FC<{
             targetRange={cgmRange.TARGET}
           />
           <Text style={{color: muted, fontSize: 12, textAlign: 'center'}}>
-            {agpData.dateRange.days} days • {agpData.statistics.totalReadings}{' '}
-            readings
+            {dataCoverageLabel(
+              language,
+              agpData.dateRange.days,
+              requestedDays,
+              agpData.statistics.totalReadings,
+            )}
           </Text>
         </>
       )}
@@ -103,6 +111,7 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
   comparing,
   handleCompare,
   rangeDays,
+  currentDateRange,
   currentBgData,
   previousBgData,
   currentMetrics,
@@ -173,21 +182,18 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
               color={theme.belowRangeColor}
             />
           </View>
-          <ComparisonSubtitle>
-            {tr(language, 'trends.currentVsPeriod', {rangeDays})}
-          </ComparisonSubtitle>
+          <ComparisonSubtitle>{comparisonTitle(language, rangeDays)}</ComparisonSubtitle>
           <ComparisonDateRange>
-            {comparisonDateRange.start.toDateString()} -{' '}
-            {comparisonDateRange.end.toDateString()}
+            {comparisonDatesLabel(language, currentDateRange, comparisonDateRange)}
           </ComparisonDateRange>
 
           <View style={{marginBottom: theme.spacing.sm + 2}}>
             <ComparisonAgpChart
               title={language === 'he' ? 'AGP נוכחי' : 'Current AGP'}
-              subtitle={`${startOfCurrentLabel(
-                language,
-              )} ${rangeDays} ${daysLabel(language, rangeDays)}`}
+              periodRange={currentDateRange}
+              requestedDays={rangeDays}
               bgData={currentBgData}
+              language={language}
             />
             <ComparisonAgpChart
               title={
@@ -195,8 +201,10 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
                   ? 'AGP של התקופה הקודמת'
                   : 'Previous-period AGP'
               }
-              subtitle={`${comparisonDateRange.start.toDateString()} - ${comparisonDateRange.end.toDateString()}`}
+              periodRange={comparisonDateRange}
+              requestedDays={rangeDays}
               bgData={previousBgData}
+              language={language}
             />
           </View>
 
@@ -264,11 +272,69 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
   );
 };
 
-function startOfCurrentLabel(language: string) {
-  return language === 'he' ? 'התקופה הנוכחית:' : 'Current period:';
+function comparisonTitle(language: string, days: number) {
+  if (language === 'he') {
+    return `השוואה בין שני טווחים של ${days} ימים`;
+  }
+
+  return `Comparing two ${days}-day periods`;
 }
 
-function daysLabel(language: string, days: number) {
-  if (language === 'he') return 'ימים';
-  return days === 1 ? 'day' : 'days';
+function comparisonDatesLabel(
+  language: string,
+  current: {start: Date; end: Date},
+  previous: {start: Date; end: Date},
+) {
+  if (language === 'he') {
+    return `נוכחי: ${formatDateRange(current, language)}\nקודם: ${formatDateRange(
+      previous,
+      language,
+    )}`;
+  }
+
+  return `Current: ${formatDateRange(current, language)}\nPrevious: ${formatDateRange(
+    previous,
+    language,
+  )}`;
+}
+
+function formatDateRange(range: {start: Date; end: Date}, language: string) {
+  return `${formatShortDate(range.start, language)} - ${formatShortDate(
+    range.end,
+    language,
+  )}`;
+}
+
+function formatShortDate(date: Date, language: string) {
+  return date.toLocaleDateString(language === 'he' ? 'he-IL' : 'en-US', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function requestedDaysLabel(language: string, days: number) {
+  if (language === 'he') {
+    return `נבחרו ${days} ימים`;
+  }
+
+  return `Selected ${days} ${days === 1 ? 'day' : 'days'}`;
+}
+
+function dataCoverageLabel(
+  language: string,
+  dataDays: number,
+  requestedDays: number,
+  readings: number,
+) {
+  const hasMissingDays = dataDays !== requestedDays;
+  if (language === 'he') {
+    return hasMissingDays
+      ? `דאטה בפועל: ${dataDays}/${requestedDays} ימים · ${readings} קריאות`
+      : `דאטה בפועל: ${dataDays} ימים · ${readings} קריאות`;
+  }
+
+  return hasMissingDays
+    ? `Data: ${dataDays}/${requestedDays} days · ${readings} readings`
+    : `Data: ${dataDays} days · ${readings} readings`;
 }

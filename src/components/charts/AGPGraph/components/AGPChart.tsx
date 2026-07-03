@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {View} from 'react-native';
 import Svg, {
   Circle,
@@ -135,18 +135,6 @@ const AGPChart: React.FC<AGPChartProps> = ({
   );
   const [activeX, setActiveX] = useState<number | null>(null);
   const [isTouchActive, setIsTouchActive] = useState(false);
-  const hideTooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-
-  const clearHideTooltipTimeout = useCallback(() => {
-    if (hideTooltipTimeoutRef.current != null) {
-      clearTimeout(hideTooltipTimeoutRef.current);
-      hideTooltipTimeoutRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => clearHideTooltipTimeout, [clearHideTooltipTimeout]);
 
   const margin = useMemo(
     () => ({
@@ -196,7 +184,6 @@ const AGPChart: React.FC<AGPChartProps> = ({
       }
 
       const {xScale} = chartConfig;
-      clearHideTooltipTimeout();
       const chartX = clamp(locationX - margin.left, 0, innerWidth);
       const minutes = (chartX / Math.max(1, innerWidth)) * 1440;
       const point = findClosestPercentilePoint(agpData.percentiles, minutes);
@@ -215,21 +202,16 @@ const AGPChart: React.FC<AGPChartProps> = ({
     [
       agpData.percentiles,
       chartConfig,
-      clearHideTooltipTimeout,
       innerWidth,
       margin.left,
     ],
   );
 
-  const hideTooltipSoon = useCallback(() => {
+  const clearTooltip = useCallback(() => {
     setIsTouchActive(false);
-    clearHideTooltipTimeout();
-    hideTooltipTimeoutRef.current = setTimeout(() => {
-      setActivePoint(null);
-      setActiveX(null);
-      hideTooltipTimeoutRef.current = null;
-    }, 2200);
-  }, [clearHideTooltipTimeout]);
+    setActivePoint(null);
+    setActiveX(null);
+  }, []);
 
   if (!chartConfig) {
     return (
@@ -324,7 +306,6 @@ const AGPChart: React.FC<AGPChartProps> = ({
         onTouchStart={
           enableTouch
             ? e => {
-                clearHideTooltipTimeout();
                 setIsTouchActive(true);
                 handleTouch(e.nativeEvent.locationX);
               }
@@ -337,8 +318,8 @@ const AGPChart: React.FC<AGPChartProps> = ({
               }
             : undefined
         }
-        onTouchEnd={enableTouch ? hideTooltipSoon : undefined}
-        onTouchCancel={enableTouch ? hideTooltipSoon : undefined}>
+        onTouchEnd={enableTouch ? clearTooltip : undefined}
+        onTouchCancel={enableTouch ? clearTooltip : undefined}>
         <G transform={`translate(${margin.left}, ${margin.top})`}>
           {/* Background + border */}
           <Rect
