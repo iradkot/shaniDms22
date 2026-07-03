@@ -243,9 +243,11 @@ const Trends: React.FC = () => {
     start: Date;
     end: Date;
   } | null>(null);
+  const compareRequestIdRef = useRef(0);
 
   const resetComparison = useCallback(
     (nextRangeDays?: number) => {
+      compareRequestIdRef.current += 1;
       setShowComparison(false);
       setComparing(false);
       setPreviousMetrics(null);
@@ -285,6 +287,9 @@ const Trends: React.FC = () => {
   );
 
   async function handleCompare(offset = rangeDays) {
+    const requestId = compareRequestIdRef.current + 1;
+    compareRequestIdRef.current = requestId;
+    setComparisonOffset(offset);
     setComparing(true);
     setPreviousMetrics(null);
     setPreviousBgData([]);
@@ -296,6 +301,10 @@ const Trends: React.FC = () => {
         offsetDays: offset,
       });
 
+      if (compareRequestIdRef.current !== requestId) {
+        return;
+      }
+
       setComparisonDateRange(previousRange);
 
       // We need to fetch data in chunks, similar to useTrendsData
@@ -303,7 +312,14 @@ const Trends: React.FC = () => {
 
       for (const chunk of buildDateRangeChunks(previousRange, CHUNK_SIZE)) {
         const dataChunk = await fetchBgDataForDateRange(chunk.start, chunk.end);
+        if (compareRequestIdRef.current !== requestId) {
+          return;
+        }
         fetchedPreviousBgData = fetchedPreviousBgData.concat(dataChunk);
+      }
+
+      if (compareRequestIdRef.current !== requestId) {
+        return;
       }
 
       const metrics = calculateTrendsMetrics(fetchedPreviousBgData);
@@ -314,7 +330,9 @@ const Trends: React.FC = () => {
       console.log('Failed to compare previous period:', e.message);
       // Optionally, handle the error in the UI
     } finally {
-      setComparing(false);
+      if (compareRequestIdRef.current === requestId) {
+        setComparing(false);
+      }
     }
   }
 
@@ -648,7 +666,7 @@ const Trends: React.FC = () => {
           <CompareSection
             showComparison={showComparison}
             comparing={comparing}
-            handleCompare={() => handleCompare(comparisonOffset)}
+            handleCompare={() => handleCompare(rangeDays)}
             rangeDays={rangeDays}
             currentDateRange={{start, end}}
             currentBgData={bgData}

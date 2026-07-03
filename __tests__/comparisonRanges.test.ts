@@ -36,6 +36,38 @@ describe('comparison range helpers', () => {
       999,
     ]);
   });
+
+  it('splits longer ranges without dropping the last day of each chunk', () => {
+    const chunks = buildDateRangeChunks(
+      {
+        start: new Date(2026, 5, 1, 0, 0, 0, 0),
+        end: new Date(2026, 5, 10, 23, 59, 59, 999),
+      },
+      7,
+    );
+
+    expect(chunks).toHaveLength(2);
+    expect(localDateParts(chunks[0].start)).toEqual([2026, 5, 1, 0, 0, 0, 0]);
+    expect(localDateParts(chunks[0].end)).toEqual([
+      2026,
+      5,
+      7,
+      23,
+      59,
+      59,
+      999,
+    ]);
+    expect(localDateParts(chunks[1].start)).toEqual([2026, 5, 8, 0, 0, 0, 0]);
+    expect(localDateParts(chunks[1].end)).toEqual([
+      2026,
+      5,
+      10,
+      23,
+      59,
+      59,
+      999,
+    ]);
+  });
 });
 
 function localDateParts(date: Date) {

@@ -11,6 +11,7 @@ import {
 import {calculateAGPStatistics} from '../utils/statistics';
 
 const DEFAULT_INTERVAL_MINUTES = 5;
+const DEFAULT_AGP_OPTIONS: AGPProcessingOptions = {};
 
 const validateInput = (bgSamples: BgSample[]) => {
   const errors: string[] = [];
@@ -26,7 +27,7 @@ const validateInput = (bgSamples: BgSample[]) => {
 
 export const useAGPData = (
   bgSamples: BgSample[],
-  options: AGPProcessingOptions = {},
+  options: AGPProcessingOptions = DEFAULT_AGP_OPTIONS,
 ): {
   agpData: AGPData | null;
   isLoading: boolean;

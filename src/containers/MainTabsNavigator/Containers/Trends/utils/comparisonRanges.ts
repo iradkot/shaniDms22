@@ -1,3 +1,5 @@
+import {differenceInCalendarDays} from 'date-fns';
+
 export interface DateRange {
   start: Date;
   end: Date;
@@ -39,10 +41,7 @@ export const buildDateRangeChunks = (
 ): DateRange[] => {
   const totalDays = Math.max(
     1,
-    Math.floor(
-      (startOfDay(range.end).getTime() - startOfDay(range.start).getTime()) /
-        (24 * 60 * 60 * 1000),
-    ) + 1,
+    differenceInCalendarDays(range.end, range.start) + 1,
   );
   const totalChunks = Math.ceil(totalDays / chunkSize);
 
