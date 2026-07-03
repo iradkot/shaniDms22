@@ -29,6 +29,10 @@ import QuickStatsRow from './components/QuickStatsRow';
 import {useTrendsQuickStats} from './hooks/useTrendsQuickStats';
 import {extractHypoEvents} from 'app/containers/MainTabsNavigator/Containers/Trends/utils/hypoInvestigation.utils';
 import {useLoopModeStats} from './hooks/useLoopModeStats';
+import {
+  buildDateRangeChunks,
+  buildPreviousComparisonRange,
+} from './utils/comparisonRanges';
 import {addOpacity} from 'app/style/styling.utils';
 
 import {
@@ -286,29 +290,19 @@ const Trends: React.FC = () => {
     setPreviousBgData([]);
 
     try {
-      const previousStart = new Date(start);
-      previousStart.setDate(start.getDate() - offset);
-      previousStart.setHours(0, 0, 0, 0);
+      const previousRange = buildPreviousComparisonRange({
+        currentStart: start,
+        rangeDays,
+        offsetDays: offset,
+      });
 
-      const previousEnd = new Date(previousStart);
-      previousEnd.setHours(23, 59, 59, 999);
-      previousEnd.setDate(previousStart.getDate() + (rangeDays - 1));
-
-      setComparisonDateRange({start: previousStart, end: previousEnd});
+      setComparisonDateRange(previousRange);
 
       // We need to fetch data in chunks, similar to useTrendsData
-      const totalChunks = Math.ceil(rangeDays / CHUNK_SIZE);
       let fetchedPreviousBgData: BgSample[] = [];
 
-      for (let i = 0; i < totalChunks; i++) {
-        const chunkStart = new Date(previousStart);
-        chunkStart.setDate(previousStart.getDate() + i * CHUNK_SIZE);
-
-        const chunkEnd = new Date(chunkStart);
-        chunkEnd.setDate(chunkStart.getDate() + CHUNK_SIZE - 1);
-        if (chunkEnd > previousEnd) chunkEnd.setTime(previousEnd.getTime());
-
-        const dataChunk = await fetchBgDataForDateRange(chunkStart, chunkEnd);
+      for (const chunk of buildDateRangeChunks(previousRange, CHUNK_SIZE)) {
+        const dataChunk = await fetchBgDataForDateRange(chunk.start, chunk.end);
         fetchedPreviousBgData = fetchedPreviousBgData.concat(dataChunk);
       }
 

@@ -95,7 +95,7 @@ const ComparisonAgpChart: React.FC<{
           <Text style={{color: muted, fontSize: 12, textAlign: 'center'}}>
             {dataCoverageLabel(
               language,
-              agpData.dateRange.days,
+              agpData.statistics.daysWithData,
               requestedDays,
               agpData.statistics.totalReadings,
             )}
@@ -323,18 +323,18 @@ function requestedDaysLabel(language: string, days: number) {
 
 function dataCoverageLabel(
   language: string,
-  dataDays: number,
+  daysWithData: number,
   requestedDays: number,
   readings: number,
 ) {
-  const hasMissingDays = dataDays !== requestedDays;
+  const hasMissingDays = daysWithData !== requestedDays;
   if (language === 'he') {
     return hasMissingDays
-      ? `דאטה בפועל: ${dataDays}/${requestedDays} ימים · ${readings} קריאות`
-      : `דאטה בפועל: ${dataDays} ימים · ${readings} קריאות`;
+      ? `ימים עם נתונים: ${daysWithData}/${requestedDays} · ${readings} קריאות`
+      : `ימים עם נתונים: ${daysWithData} · ${readings} קריאות`;
   }
 
   return hasMissingDays
-    ? `Data: ${dataDays}/${requestedDays} days · ${readings} readings`
-    : `Data: ${dataDays} days · ${readings} readings`;
+    ? `Days with data: ${daysWithData}/${requestedDays} · ${readings} readings`
+    : `Days with data: ${daysWithData} · ${readings} readings`;
 }
