@@ -207,9 +207,15 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
               color={theme.belowRangeColor}
             />
           </View>
-          <ComparisonSubtitle>{comparisonTitle(language, rangeDays)}</ComparisonSubtitle>
+          <ComparisonSubtitle>
+            {comparisonTitle(language, rangeDays)}
+          </ComparisonSubtitle>
           <ComparisonDateRange>
-            {comparisonDatesLabel(language, currentDateRange, comparisonDateRange)}
+            {comparisonDatesLabel(
+              language,
+              currentDateRange,
+              comparisonDateRange,
+            )}
           </ComparisonDateRange>
 
           <View style={{marginBottom: theme.spacing.sm + 2}}>
@@ -341,15 +347,15 @@ const ComparisonTableRow: React.FC<{
     diff === null || Math.abs(diff) < 0.05
       ? null
       : row.lowerIsBetter
-        ? diff < 0
-        : diff > 0;
+      ? diff < 0
+      : diff > 0;
 
   const changeColor =
     isImprovement === null
       ? addOpacity(theme.textColor, 0.7)
       : isImprovement
-        ? theme.inRangeColor
-        : theme.belowRangeColor;
+      ? theme.inRangeColor
+      : theme.belowRangeColor;
 
   const values = [
     row.label,
@@ -427,16 +433,16 @@ function comparisonDatesLabel(
   previous: {start: Date; end: Date},
 ) {
   if (language === 'he') {
-    return `נוכחי: ${formatDateRange(current, language)}\nקודם: ${formatDateRange(
-      previous,
+    return `נוכחי: ${formatDateRange(
+      current,
       language,
-    )}`;
+    )}\nקודם: ${formatDateRange(previous, language)}`;
   }
 
-  return `Current: ${formatDateRange(current, language)}\nPrevious: ${formatDateRange(
-    previous,
+  return `Current: ${formatDateRange(
+    current,
     language,
-  )}`;
+  )}\nPrevious: ${formatDateRange(previous, language)}`;
 }
 
 function formatDateRange(range: {start: Date; end: Date}, language: string) {
@@ -525,7 +531,10 @@ export function buildComparisonRows({
     {
       key: 'severe-hypers',
       label: tr(language, 'trends.seriousHypersPerDay'),
-      current: numberCell(currentMetrics.seriousHypersCount / rangeDays, '/day'),
+      current: numberCell(
+        currentMetrics.seriousHypersCount / rangeDays,
+        '/day',
+      ),
       previous: numberCell(
         previousMetrics.seriousHypersCount / rangeDays,
         '/day',
@@ -542,9 +551,7 @@ export function buildComparisonRows({
     {
       key: 'best-tir-day',
       label:
-        language === 'he'
-          ? 'היום עם הזמן בטווח הכי טוב'
-          : 'Best day in range',
+        language === 'he' ? 'היום עם הזמן בטווח הכי טוב' : 'Best day in range',
       current: textCell(formatDayTir(current.bestTirDay, language)),
       previous: textCell(formatDayTir(previous.bestTirDay, language)),
     },
@@ -560,6 +567,7 @@ export function buildComparisonRows({
       current: textCell(formatHourBucket(current.worstHour, language)),
       previous: textCell(formatHourBucket(previous.worstHour, language)),
     },
+    ...buildDayPartRows(language, current.dayParts, previous.dayParts),
     {
       key: 'meal-tir',
       label:
@@ -594,7 +602,8 @@ function buildPeriodStats(
 
   const hourly = buildHourlyBuckets(samples);
   const bestHour = hourly.reduce<HourBucket | null>(
-    (best, hour) => (!best || hour.balanceScore > best.balanceScore ? hour : best),
+    (best, hour) =>
+      !best || hour.balanceScore > best.balanceScore ? hour : best,
     null,
   );
   const worstHour = hourly.reduce<HourBucket | null>(
@@ -609,6 +618,7 @@ function buildPeriodStats(
     bestTirDay,
     bestHour,
     worstHour,
+    dayParts: buildDayPartStats(samples),
     mealTir: buildMealTir(samples),
   };
 }
@@ -628,6 +638,14 @@ type MealTir = {
   dinner: number | null;
   average: number;
 };
+type DayPartKey = 'morning' | 'noon' | 'evening' | 'night';
+type DayPartStats = Record<
+  DayPartKey,
+  {
+    tir: number | null;
+    averageBg: number | null;
+  }
+>;
 
 const inRangeMax = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
 
@@ -649,7 +667,9 @@ function tirForSamples(samples: BgSample[]) {
 
 function buildHourlyBuckets(samples: BgSample[]): HourBucket[] {
   return Array.from({length: 24}, (_, hour) => {
-    const hourSamples = samples.filter(s => new Date(s.date).getHours() === hour);
+    const hourSamples = samples.filter(
+      s => new Date(s.date).getHours() === hour,
+    );
     const values = hourSamples.map(s => s.sgv);
     const avg = average(values);
     const stdDev = standardDeviation(values, avg);
@@ -683,13 +703,96 @@ function buildMealTir(samples: BgSample[]): MealTir {
   };
 }
 
+function buildDayPartRows(
+  language: Lang,
+  current: DayPartStats,
+  previous: DayPartStats,
+): ComparisonMetricRow[] {
+  const rows: ComparisonMetricRow[] = [];
+  dayPartDefinitions().forEach(part => {
+    rows.push(
+      {
+        key: `${part.key}-tir`,
+        label:
+          language === 'he'
+            ? `זמן בטווח - ${part.labelHe}`
+            : `Time in range - ${part.labelEn}`,
+        current: percentCell(current[part.key].tir),
+        previous: percentCell(previous[part.key].tir),
+      },
+      {
+        key: `${part.key}-avg-bg`,
+        label:
+          language === 'he'
+            ? `ממוצע סוכר - ${part.labelHe}`
+            : `Average glucose - ${part.labelEn}`,
+        current: nullableNumberCell(current[part.key].averageBg, 'mg/dL'),
+        previous: nullableNumberCell(previous[part.key].averageBg, 'mg/dL'),
+        lowerIsBetter: true,
+      },
+    );
+  });
+  return rows;
+}
+
+function buildDayPartStats(samples: BgSample[]): DayPartStats {
+  return dayPartDefinitions().reduce((stats, part) => {
+    const partSamples = samplesForWindow(samples, part.startHour, part.endHour);
+    const values = partSamples.map(s => s.sgv);
+    stats[part.key] = {
+      tir: tirForSamples(partSamples),
+      averageBg: values.length ? average(values) : null,
+    };
+    return stats;
+  }, {} as DayPartStats);
+}
+
+function dayPartDefinitions(): {
+  key: DayPartKey;
+  labelHe: string;
+  labelEn: string;
+  startHour: number;
+  endHour: number;
+}[] {
+  return [
+    {
+      key: 'morning',
+      labelHe: 'בוקר',
+      labelEn: 'Morning',
+      startHour: 6,
+      endHour: 12,
+    },
+    {
+      key: 'noon',
+      labelHe: 'צהריים',
+      labelEn: 'Noon',
+      startHour: 12,
+      endHour: 18,
+    },
+    {
+      key: 'evening',
+      labelHe: 'ערב',
+      labelEn: 'Evening',
+      startHour: 18,
+      endHour: 24,
+    },
+    {key: 'night', labelHe: 'לילה', labelEn: 'Night', startHour: 0, endHour: 6},
+  ];
+}
+
 function tirForWindow(samples: BgSample[], startHour: number, endHour: number) {
-  return tirForSamples(
-    samples.filter(s => {
-      const hour = new Date(s.date).getHours();
-      return hour >= startHour && hour < endHour;
-    }),
-  );
+  return tirForSamples(samplesForWindow(samples, startHour, endHour));
+}
+
+function samplesForWindow(
+  samples: BgSample[],
+  startHour: number,
+  endHour: number,
+) {
+  return samples.filter(s => {
+    const hour = new Date(s.date).getHours();
+    return hour >= startHour && hour < endHour;
+  });
 }
 
 function numberCell(value: number, unit: string, decimals = 1): ComparisonCell {
@@ -701,6 +804,18 @@ function numberCell(value: number, unit: string, decimals = 1): ComparisonCell {
     value: `${value.toFixed(decimals)} ${unit}`,
     numeric: value,
   };
+}
+
+function nullableNumberCell(
+  value: number | null,
+  unit: string,
+  decimals = 1,
+): ComparisonCell {
+  return value === null ? {value: '-'} : numberCell(value, unit, decimals);
+}
+
+function percentCell(value: number | null): ComparisonCell {
+  return value === null ? {value: '-'} : numberCell(value, '%');
 }
 
 function textCell(value: string): ComparisonCell {
@@ -733,7 +848,8 @@ function formatDisplayDate(dateString: string, language: string) {
 }
 
 function formatHourBucket(bucket: HourBucket | null, language: string) {
-  if (!bucket) return language === 'he' ? 'אין מספיק נתונים' : 'Not enough data';
+  if (!bucket)
+    return language === 'he' ? 'אין מספיק נתונים' : 'Not enough data';
   const avgLabel =
     language === 'he'
       ? `ממוצע ${bucket.avg.toFixed(0)}`
@@ -769,7 +885,6 @@ function average(values: number[]) {
 function standardDeviation(values: number[], mean: number) {
   if (values.length < 2) return 0;
   const variance =
-    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
-    values.length;
+    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
   return Math.sqrt(variance);
 }

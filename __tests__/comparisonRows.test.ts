@@ -58,6 +58,56 @@ describe('comparison table rows', () => {
       '100.0 mg/dL',
     );
   });
+
+  it('adds time-in-range and average glucose rows for day parts', () => {
+    const currentBgData = [
+      bgSample(new Date(2026, 6, 1, 6, 0), 100),
+      bgSample(new Date(2026, 6, 1, 7, 0), 210),
+      bgSample(new Date(2026, 6, 1, 12, 0), 110),
+      bgSample(new Date(2026, 6, 1, 13, 0), 120),
+      bgSample(new Date(2026, 6, 1, 18, 0), 250),
+      bgSample(new Date(2026, 6, 1, 19, 0), 260),
+      bgSample(new Date(2026, 6, 1, 0, 0), 90),
+      bgSample(new Date(2026, 6, 1, 1, 0), 100),
+    ];
+    const previousBgData = [
+      bgSample(new Date(2026, 5, 24, 6, 0), 100),
+      bgSample(new Date(2026, 5, 24, 7, 0), 110),
+      bgSample(new Date(2026, 5, 24, 12, 0), 220),
+      bgSample(new Date(2026, 5, 24, 13, 0), 230),
+      bgSample(new Date(2026, 5, 24, 18, 0), 100),
+      bgSample(new Date(2026, 5, 24, 19, 0), 210),
+    ];
+
+    const rows = buildComparisonRows({
+      language: 'he',
+      rangeDays: 1,
+      currentBgData,
+      previousBgData,
+      currentMetrics: calculateTrendsMetrics(currentBgData),
+      previousMetrics: calculateTrendsMetrics(previousBgData),
+    });
+
+    expect(rows.find(row => row.key === 'morning-tir')?.current.value).toBe(
+      '50.0 %',
+    );
+    expect(rows.find(row => row.key === 'morning-avg-bg')?.current.value).toBe(
+      '155.0 mg/dL',
+    );
+    expect(rows.find(row => row.key === 'noon-tir')?.previous.value).toBe(
+      '0.0 %',
+    );
+    expect(rows.find(row => row.key === 'evening-tir')?.current.value).toBe(
+      '0.0 %',
+    );
+    expect(rows.find(row => row.key === 'night-tir')?.current.value).toBe(
+      '100.0 %',
+    );
+    expect(rows.find(row => row.key === 'night-tir')?.previous.value).toBe('-');
+    expect(rows.find(row => row.key === 'night-avg-bg')?.previous.value).toBe(
+      '-',
+    );
+  });
 });
 
 function bgSample(date: Date, sgv: number): BgSample {
