@@ -13,6 +13,7 @@ describe('computeLoopModeStats', () => {
         timestamp: new Date('2026-04-01T00:00:00Z').getTime(),
         mode: 'open' as const,
         basalMode: 'temp' as const,
+        basalDurationMinutes: 60,
       },
       {
         timestamp: new Date('2026-04-01T01:00:00Z').getTime(),
@@ -23,6 +24,7 @@ describe('computeLoopModeStats', () => {
         timestamp: new Date('2026-04-01T02:00:00Z').getTime(),
         mode: 'closed' as const,
         basalMode: 'suspended' as const,
+        basalDurationMinutes: 60,
       },
       {
         timestamp: new Date('2026-04-01T03:00:00Z').getTime(),
@@ -59,6 +61,7 @@ describe('computeLoopModeStats', () => {
     expect(stats.tempBasalMinutes).toBe(60);
     expect(stats.suspendedMinutes).toBe(60);
     expect(stats.plannedBasalMinutes).toBe(120);
+    expect(stats.unknownBasalMinutes).toBe(0);
 
     expect(stats.diagnostics.eventsFetched).toBe(4);
     expect(stats.diagnostics.openSamples).toBe(2);
@@ -193,7 +196,7 @@ describe('buildLoopModeEventsFromDeviceStatus', () => {
 
     expect(events.map(e => e.mode)).toEqual(['open', 'closed', 'closed']);
     expect(events.map(e => e.basalMode)).toEqual([
-      'suspended',
+      'unknown',
       'temp',
       'suspended',
     ]);
@@ -204,6 +207,22 @@ describe('buildLoopModeEventsFromDeviceStatus', () => {
       {
         created_at: '2026-04-01T00:00:00Z',
         pump: {
+          clock: '2026-04-01T00:00:00Z',
+        },
+      },
+    ] as any[]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].mode).toBe('unknown');
+    expect(events[0].basalMode).toBe('unknown');
+  });
+
+  it('uses pump status as planned basal without inferring loop mode', () => {
+    const events = buildLoopModeEventsFromDeviceStatus([
+      {
+        created_at: '2026-04-01T00:00:00Z',
+        pump: {
+          suspended: false,
           clock: '2026-04-01T00:00:00Z',
         },
       },
@@ -230,6 +249,6 @@ describe('buildLoopModeEventsFromDeviceStatus', () => {
 
     expect(events).toHaveLength(1);
     expect(events[0].mode).toBe('open');
-    expect(events[0].basalMode).toBe('temp');
+    expect(events[0].basalMode).toBe('unknown');
   });
 });

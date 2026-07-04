@@ -889,49 +889,6 @@ const Trends: React.FC = () => {
                   {(loopViewMode === 'both' || loopViewMode === 'closed') &&
                     renderLoopModeCard('closed')}
 
-                  <View style={{gap: 8}}>
-                    <Text
-                      style={{
-                        color: addOpacity(theme.textColor, 0.72),
-                        fontSize: 12,
-                        fontWeight: '800',
-                        textAlign: isRTL ? 'right' : 'left',
-                      }}>
-                      {language === 'he' ? 'פירוק בזאל' : 'Basal breakdown'}
-                    </Text>
-                    <View
-                      style={{
-                        flexDirection: isRTL ? 'row-reverse' : 'row',
-                        flexWrap: 'wrap',
-                        gap: 8,
-                      }}>
-                      {[
-                        {
-                          icon: 'bolt',
-                          label: language === 'he' ? 'טמפ בזאל' : 'Temp basal',
-                          pct: loopModeStats.tempBasalPct,
-                          minutes: loopModeStats.tempBasalMinutes,
-                        },
-                        {
-                          icon: 'pause-circle-outline',
-                          label:
-                            language === 'he'
-                              ? 'בזאל 0 / עצירה'
-                              : 'Zero basal / stop',
-                          pct: loopModeStats.suspendedPct,
-                          minutes: loopModeStats.suspendedMinutes,
-                        },
-                        {
-                          icon: 'event-repeat',
-                          label:
-                            language === 'he' ? 'בזאל מתוכנן' : 'Planned basal',
-                          pct: loopModeStats.plannedBasalPct,
-                          minutes: loopModeStats.plannedBasalMinutes,
-                        },
-                      ].map(renderBasalPill)}
-                    </View>
-                  </View>
-
                   {!loopModeStats.hasEnoughLoopCoverage && (
                     <View
                       style={{
@@ -1079,6 +1036,113 @@ const Trends: React.FC = () => {
                       </View>
                     ))}
                   </View>
+                </View>
+              )}
+            </View>
+          </View>
+
+          <View style={{marginBottom: theme.spacing.lg - 1}}>
+            <SectionTitle>
+              {language === 'he' ? 'מצב בזאל' : 'Basal Delivery'}
+            </SectionTitle>
+
+            <View
+              style={{
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: addOpacity(theme.textColor, 0.12),
+                backgroundColor: addOpacity(theme.textColor, 0.03),
+                padding: 12,
+                gap: 10,
+              }}>
+              <View
+                style={{
+                  flexDirection: isRTL ? 'row-reverse' : 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                }}>
+                <MaterialIcons
+                  name="waterfall-chart"
+                  size={18}
+                  color={theme.primaryColor}
+                />
+                <Text
+                  style={{
+                    flex: 1,
+                    color: theme.textColor,
+                    fontSize: 14,
+                    fontWeight: '800',
+                    textAlign: isRTL ? 'right' : 'left',
+                  }}>
+                  {language === 'he' ? 'פירוק בזאל' : 'Basal breakdown'}
+                </Text>
+              </View>
+
+              {isLoopModeStatsLoading ? (
+                <View
+                  style={{
+                    borderRadius: 12,
+                    padding: 12,
+                    backgroundColor: addOpacity(theme.textColor, 0.055),
+                    flexDirection: isRTL ? 'row-reverse' : 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}>
+                  <MaterialIcons
+                    name="hourglass-empty"
+                    size={17}
+                    color={addOpacity(theme.textColor, 0.72)}
+                  />
+                  <Text
+                    style={{
+                      flex: 1,
+                      color: addOpacity(theme.textColor, 0.72),
+                      fontSize: 13,
+                      fontWeight: '700',
+                      textAlign: isRTL ? 'right' : 'left',
+                    }}>
+                    {language === 'he'
+                      ? 'טוען נתוני בזאל...'
+                      : 'Loading basal data...'}
+                  </Text>
+                </View>
+              ) : (
+                <View
+                  style={{
+                    flexDirection: isRTL ? 'row-reverse' : 'row',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                  }}>
+                  {[
+                    {
+                      icon: 'bolt',
+                      label: language === 'he' ? 'טמפ בזאל' : 'Temp basal',
+                      pct: loopModeStats.tempBasalPct,
+                      minutes: loopModeStats.tempBasalMinutes,
+                    },
+                    {
+                      icon: 'pause-circle-outline',
+                      label:
+                        language === 'he'
+                          ? 'בזאל 0 / עצירה'
+                          : 'Zero basal / stop',
+                      pct: loopModeStats.suspendedPct,
+                      minutes: loopModeStats.suspendedMinutes,
+                    },
+                    {
+                      icon: 'event-repeat',
+                      label:
+                        language === 'he' ? 'בזאל מתוכנן' : 'Planned basal',
+                      pct: loopModeStats.plannedBasalPct,
+                      minutes: loopModeStats.plannedBasalMinutes,
+                    },
+                    {
+                      icon: 'help-outline',
+                      label: language === 'he' ? 'לא ידוע' : 'Unknown',
+                      pct: loopModeStats.unknownBasalPct,
+                      minutes: loopModeStats.unknownBasalMinutes,
+                    },
+                  ].map(renderBasalPill)}
                 </View>
               )}
             </View>
