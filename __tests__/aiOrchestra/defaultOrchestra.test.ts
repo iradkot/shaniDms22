@@ -32,6 +32,8 @@ describe('default AI orchestra', () => {
     );
 
     expect(memoryAgent?.allowedTools).toContain('addMemoryEntry');
+    expect(memoryAgent?.allowedTools).toContain('proposeMemoryEntry');
+    expect(memoryAgent?.allowedTools).toContain('approveMemoryEntry');
   });
 
   it('renders a compact prompt block without exposing implementation detail as a user instruction', () => {

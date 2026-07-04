@@ -13,8 +13,10 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {
+  approveMemoryEntry,
   deleteMemoryEntry,
   getMemoryTree,
+  isPendingMemorySuggestion,
   listMemoryEntries,
   MemoryEntry,
   updateMemoryEntry,
@@ -51,6 +53,10 @@ const AiMemoryScreen: React.FC = () => {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const he = language === 'he';
+  const pendingCount = useMemo(
+    () => entries.filter(entry => isPendingMemorySuggestion(entry)).length,
+    [entries],
+  );
 
   const categoryOptions = useMemo(
     () =>
@@ -119,6 +125,23 @@ const AiMemoryScreen: React.FC = () => {
     }
   };
 
+  const approveEntry = async (entry: MemoryEntry) => {
+    setSavingId(entry.id);
+    try {
+      const textSummary = (drafts[entry.id] ?? entry.textSummary).trim();
+      if (textSummary && textSummary !== entry.textSummary) {
+        await updateMemoryEntry(entry.id, {textSummary});
+      }
+      const updated = await approveMemoryEntry(entry.id);
+      if (updated) {
+        setEntries(prev => prev.map(item => (item.id === entry.id ? updated : item)));
+        setDrafts(prev => ({...prev, [entry.id]: updated.textSummary}));
+      }
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   const confirmDelete = (entry: MemoryEntry) => {
     Alert.alert(
       he ? 'למחוק זיכרון?' : 'Delete memory?',
@@ -168,6 +191,13 @@ const AiMemoryScreen: React.FC = () => {
               ? 'צפה, ערוך, מחק או החרג מידע מהמלצות עתידיות.'
               : 'Review, edit, delete, or exclude memory from future recommendations.'}
           </Text>
+          {pendingCount > 0 ? (
+            <Text style={{color: theme.accentColor, marginTop: 6, fontWeight: '700'}}>
+              {he
+                ? `${pendingCount} הצעות ממתינות לאישור`
+                : `${pendingCount} pending suggestion${pendingCount === 1 ? '' : 's'}`}
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -259,6 +289,7 @@ const AiMemoryScreen: React.FC = () => {
       {entries.map(entry => {
         const folder = normalizeMemoryFolder(entry.folder);
         const disabled = isDisabledForAi(entry);
+        const pending = isPendingMemorySuggestion(entry);
         return (
           <View
             key={entry.id}
@@ -266,7 +297,11 @@ const AiMemoryScreen: React.FC = () => {
               borderRadius: theme.borderRadius,
               backgroundColor: theme.white,
               borderWidth: 1,
-              borderColor: disabled ? addOpacity(theme.belowRangeColor, 0.35) : theme.borderColor,
+              borderColor: pending
+                ? theme.accentColor
+                : disabled
+                  ? addOpacity(theme.belowRangeColor, 0.35)
+                  : theme.borderColor,
               padding: theme.spacing.md,
               marginBottom: theme.spacing.md,
             }}
@@ -278,13 +313,31 @@ const AiMemoryScreen: React.FC = () => {
                 </Text>
                 <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: theme.typography.size.xs}}>
                   {entry.type} · {formatDate(entry.updatedAt)}
-                  {disabled ? (he ? ' · לא בשימוש AI' : ' · excluded from AI') : ''}
+                  {pending ? (he ? ' · ממתין לאישור' : ' · pending approval') : ''}
+                  {!pending && disabled ? (he ? ' · לא בשימוש AI' : ' · excluded from AI') : ''}
                 </Text>
               </View>
               <Pressable onPress={() => confirmDelete(entry)} accessibilityRole="button">
                 <MaterialIcons name="delete-outline" size={22} color={theme.belowRangeColor} />
               </Pressable>
             </View>
+
+            {pending ? (
+              <View
+                style={{
+                  marginTop: theme.spacing.md,
+                  borderRadius: theme.borderRadius,
+                  backgroundColor: addOpacity(theme.accentColor, 0.1),
+                  padding: theme.spacing.sm,
+                }}
+              >
+                <Text style={{color: theme.textColor, fontWeight: '700'}}>
+                  {he
+                    ? 'הסוכן מציע לשמור את זה. זה לא ישמש להמלצות עד שתאשר.'
+                    : 'The AI suggested saving this. It will not be used for recommendations until approved.'}
+                </Text>
+              </View>
+            ) : null}
 
             <TextInput
               multiline
@@ -321,19 +374,24 @@ const AiMemoryScreen: React.FC = () => {
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => toggleUseInAi(entry)}
+                onPress={() => (pending ? approveEntry(entry) : toggleUseInAi(entry))}
+                disabled={savingId === entry.id}
                 style={{
                   flex: 1,
                   borderRadius: theme.borderRadius,
                   paddingVertical: theme.spacing.sm,
                   alignItems: 'center',
                   borderWidth: 1,
-                  borderColor: disabled ? theme.accentColor : theme.borderColor,
+                  borderColor: pending || disabled ? theme.accentColor : theme.borderColor,
                   backgroundColor: theme.white,
                 }}
               >
                 <Text style={{color: theme.textColor, fontWeight: '700'}}>
-                  {disabled
+                  {pending
+                    ? he
+                      ? 'אשר זיכרון'
+                      : 'Approve memory'
+                    : disabled
                     ? he
                       ? 'החזר לשימוש'
                       : 'Use again'

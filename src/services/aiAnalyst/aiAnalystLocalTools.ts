@@ -23,9 +23,11 @@ import {buildHypoDetectiveContext} from './hypoDetectiveContextBuilder';
 import {
   buildCompactPatientMemory,
   addMemoryEntry,
+  approveMemoryEntry,
   getMemoryByIds,
   getMemoryTree,
   listMemoryEntries,
+  proposeMemoryEntry,
   searchMemory,
   updateMemoryEntry,
 } from 'app/services/aiMemory/aiMemoryStore';
@@ -84,6 +86,8 @@ export type AiAnalystToolName =
   // Local memory tools
   | 'searchMemory'
   | 'addMemoryEntry'
+  | 'proposeMemoryEntry'
+  | 'approveMemoryEntry'
   | 'getMemoryByIds'
   | 'listMemoryEntries'
   | 'getMemoryTree'
@@ -91,6 +95,8 @@ export type AiAnalystToolName =
   | 'getPatientProfileSnapshot'
   | 'search_memory'
   | 'add_memory_entry'
+  | 'propose_memory_entry'
+  | 'approve_memory_entry'
   | 'get_memory_by_ids'
   | 'list_memory_entries'
   | 'get_memory_tree'
@@ -117,6 +123,8 @@ function normalizeToolName(name: string): string {
     'get_pump_profile': 'getPumpProfile',
     'search_memory': 'searchMemory',
     'add_memory_entry': 'addMemoryEntry',
+    'propose_memory_entry': 'proposeMemoryEntry',
+    'approve_memory_entry': 'approveMemoryEntry',
     'get_memory_by_ids': 'getMemoryByIds',
     'list_memory_entries': 'listMemoryEntries',
     'get_memory_tree': 'getMemoryTree',
@@ -1521,9 +1529,15 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         }
         const textSummary = String(args?.textSummary ?? '').trim();
         if (!textSummary) return {ok: false, error: 'textSummary is required'};
+        const rawTags = Array.isArray(args?.tags) ? args.tags.map((x: any) => String(x)) : [];
         const result = await addMemoryEntry({
           type: args?.type === 'profile' || args?.type === 'chat_summary' ? args.type : 'episode',
-          tags: Array.isArray(args?.tags) ? args.tags.map((x: any) => String(x)) : ['user_approved'],
+          tags: [
+            ...rawTags.filter(
+              (tag: string) => tag !== 'pending_suggestion' && tag !== 'disabled_for_ai',
+            ),
+            'user_approved',
+          ],
           textSummary,
           facts: args?.facts ?? {},
           folder: args?.folder,
@@ -1532,6 +1546,30 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           confidence: typeof args?.confidence === 'number' ? args.confidence : 0.9,
           expiresAt: args?.expiresAt ?? null,
         });
+        return {ok: true, result};
+      }
+
+      case 'proposeMemoryEntry': {
+        const textSummary = String(args?.textSummary ?? '').trim();
+        if (!textSummary) return {ok: false, error: 'textSummary is required'};
+        const result = await proposeMemoryEntry({
+          type: args?.type === 'profile' || args?.type === 'chat_summary' ? args.type : 'episode',
+          tags: Array.isArray(args?.tags) ? args.tags.map((x: any) => String(x)) : ['ai_suggestion'],
+          textSummary,
+          facts: args?.facts ?? {},
+          folder: args?.folder,
+          retention: args?.retention,
+          confidence: typeof args?.confidence === 'number' ? args.confidence : 0.65,
+          expiresAt: args?.expiresAt ?? null,
+        });
+        return {ok: true, result};
+      }
+
+      case 'approveMemoryEntry': {
+        const id = String(args?.id ?? '').trim();
+        if (!id) return {ok: false, error: 'id is required'};
+        const result = await approveMemoryEntry(id);
+        if (!result) return {ok: false, error: 'memory entry not found'};
         return {ok: true, result};
       }
 

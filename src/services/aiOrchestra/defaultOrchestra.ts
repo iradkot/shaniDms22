@@ -38,6 +38,8 @@ export const DEFAULT_AI_ORCHESTRA_AGENTS: AiAgentDefinition[] = [
       'searchMemory',
       'getMemoryByIds',
       'addMemoryEntry',
+      'proposeMemoryEntry',
+      'approveMemoryEntry',
     ],
     outputKind: 'memory_context',
   },

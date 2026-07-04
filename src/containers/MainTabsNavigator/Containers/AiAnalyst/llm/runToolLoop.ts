@@ -257,6 +257,8 @@ function normalizeAllowedToolName(toolName: AiAnalystToolName): AiAnalystToolNam
     get_monthly_glucose_summary: 'getMonthlyGlucoseSummary',
     get_meal_absorption_data: 'getMealAbsorptionData',
     add_memory_entry: 'addMemoryEntry',
+    propose_memory_entry: 'proposeMemoryEntry',
+    approve_memory_entry: 'approveMemoryEntry',
     search_memory: 'searchMemory',
     get_memory_by_ids: 'getMemoryByIds',
     list_memory_entries: 'listMemoryEntries',

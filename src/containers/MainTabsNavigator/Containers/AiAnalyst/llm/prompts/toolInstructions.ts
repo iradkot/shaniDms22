@@ -26,6 +26,8 @@ export const DEFAULT_TOOL_SYSTEM_PROMPT =
   `- getMealAbsorptionData: {daysBack: number (1-90), mealType?: "all"|"breakfast"|"lunch"|"dinner"|"snack"}  → Returns per-meal carb absorption: carbsEntered vs carbsAbsorbed, estimation accuracy (over/under/accurate), TIR score, and aggregated summary.\n` +
   `- getPatientProfileSnapshot: {}  → compact patient profile + relevant recent memories.\n` +
   `- addMemoryEntry: {userApproved: true, textSummary: string, type?: "profile"|"episode"|"chat_summary", tags?: string[], folder?: {category: string, path: string[]}, retention?: {...}}  → save memory ONLY after explicit user approval.\n` +
+  `- proposeMemoryEntry: {textSummary: string, type?: "profile"|"episode"|"chat_summary", tags?: string[], folder?: {category: string, path: string[]}, retention?: {...}}  → create a pending memory suggestion that is NOT used by AI until the user approves it.\n` +
+  `- approveMemoryEntry: {id: string}  → approve a pending memory suggestion after the user explicitly accepts it.\n` +
   `- searchMemory: {query: string, limit?: number (1-20), types?: ["profile"|"episode"|"chat_summary"]}  → semantic memory search; returns IDs/snippets only.\n` +
   `- getMemoryByIds: {ids: string[]}  → fetch full memory records by IDs after search.\n\n` +
   `- getMemoryTree: {}  → list patient-memory folders with entry counts.\n` +
@@ -35,7 +37,7 @@ export const DEFAULT_TOOL_SYSTEM_PROMPT =
   `- If the user asks about hypers/highs, do NOT call getHypoDetectiveContext. Use getGlycemicEvents(kind="hyper") or getCgmData.\n` +
   `- If the user asks about hypos/lows, use getGlycemicEvents(kind="hypo") or getHypoDetectiveContext.\n` +
   `- To get ALL pump/loop settings, call getCurrentProfileSettings which includes basal, ISF, CR, targets and DIA.\n\n` +
-  `- For sensitive inferred facts (pregnancy, diagnosis, major life events), ask the user whether to save it before calling addMemoryEntry.\n\n` +
+  `- For sensitive inferred facts (pregnancy, diagnosis, major life events), do not save active memory without consent. You may call proposeMemoryEntry to create a pending suggestion, then ask the user whether to approve it. If the user explicitly approves a pending suggestion, call approveMemoryEntry; if they explicitly approve new text, call addMemoryEntry with userApproved=true.\n\n` +
   `How to call a tool:\n` +
   `- Respond with ONLY a single-line JSON object: {"type":"tool_call","name":"getCgmSamples","args":{...}}\n` +
   `- After you receive a message starting with "Tool result (NAME):", respond with ONLY: {"type":"final","content":"..."}.\n` +
@@ -81,6 +83,8 @@ export const LOOP_SETTINGS_TOOL_SYSTEM_PROMPT =
   `- getSettingsChangeHistory: {daysBack: number (1-180), changeType?: "all"|"carb_ratio"|"isf"|"targets"|"basal"|"dia"}\n` +
   `- getPatientProfileSnapshot: {}\n` +
   `- addMemoryEntry: {userApproved: true, textSummary: string, type?: "profile"|"episode"|"chat_summary", tags?: string[], folder?: {category: string, path: string[]}, retention?: {...}}\n` +
+  `- proposeMemoryEntry: {textSummary: string, type?: "profile"|"episode"|"chat_summary", tags?: string[], folder?: {category: string, path: string[]}, retention?: {...}}\n` +
+  `- approveMemoryEntry: {id: string}\n` +
   `- searchMemory: {query: string, limit?: number (1-20), types?: ["profile"|"episode"|"chat_summary"]}\n` +
   `- getMemoryByIds: {ids: string[]}\n` +
   `- getMemoryTree: {}\n` +

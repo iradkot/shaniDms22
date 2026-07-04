@@ -11,6 +11,8 @@ import {
 const MEMORY_KEY = 'aiMemory:v1:entries';
 const PROFILE_KEY = 'aiMemory:v1:profile';
 const MEMORY_EPISODE_KEYS = 'aiMemory:v1:episodeKeys';
+export const PENDING_MEMORY_TAG = 'pending_suggestion';
+export const DISABLED_FOR_AI_TAG = 'disabled_for_ai';
 
 export type MemoryType = 'profile' | 'episode' | 'chat_summary';
 
@@ -48,6 +50,10 @@ function genId(prefix: string) {
 
 function uniq(items: string[]) {
   return [...new Set((items ?? []).filter(Boolean))];
+}
+
+export function isPendingMemorySuggestion(entry: Pick<MemoryEntry, 'tags'>) {
+  return (entry.tags ?? []).includes(PENDING_MEMORY_TAG);
 }
 
 function tokenize(text: string): string[] {
@@ -118,6 +124,41 @@ export async function addMemoryEntry(input: Omit<MemoryEntry, 'id' | 'createdAt'
   const next = pruneEntries([entry, ...entries]);
   await writeEntries(next);
   return entry;
+}
+
+export async function proposeMemoryEntry(
+  input: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'source'>,
+) {
+  return addMemoryEntry({
+    ...input,
+    tags: uniq([...(input.tags ?? []), PENDING_MEMORY_TAG, DISABLED_FOR_AI_TAG]),
+    source: 'ai',
+    confidence: typeof input.confidence === 'number' ? input.confidence : 0.65,
+  });
+}
+
+export async function approveMemoryEntry(id: string) {
+  const entries = await readEntries();
+  const idx = entries.findIndex(entry => entry.id === id);
+  if (idx < 0) return null;
+
+  const existing = entries[idx];
+  const updated: MemoryEntry = {
+    ...existing,
+    tags: uniq([
+      ...(existing.tags ?? []).filter(
+        tag => tag !== PENDING_MEMORY_TAG && tag !== DISABLED_FOR_AI_TAG,
+      ),
+      'user_approved',
+    ]),
+    source: 'user',
+    confidence: Math.max(existing.confidence ?? 0, 0.9),
+    updatedAt: nowMs(),
+  };
+
+  const next = entries.map(entry => (entry.id === id ? updated : entry));
+  await writeEntries(pruneEntries(next));
+  return updated;
 }
 
 export async function getMemoryByIds(ids: string[]) {
@@ -216,7 +257,7 @@ export async function searchMemory(query: string, opts?: {types?: MemoryType[]; 
 
   const scored = entries
     .filter(e => (typeSet ? typeSet.has(e.type) : true))
-    .filter(e => !(e.tags ?? []).includes('disabled_for_ai'))
+    .filter(e => !(e.tags ?? []).includes(DISABLED_FOR_AI_TAG))
     .map(e => {
       const haystack = `${e.textSummary} ${(e.tags ?? []).join(' ')} ${JSON.stringify(e.facts ?? {})}`;
       const semantic = overlapScore(query, haystack);
