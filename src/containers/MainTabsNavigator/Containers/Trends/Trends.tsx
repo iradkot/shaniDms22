@@ -2,6 +2,7 @@
 
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {View, ScrollView, Text, Pressable} from 'react-native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {differenceInCalendarDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 import {StackActions, useNavigation} from '@react-navigation/native';
@@ -33,10 +34,7 @@ import {
 } from './utils/comparisonRanges';
 import {addOpacity} from 'app/style/styling.utils';
 
-import {
-  TrendsContainer,
-  SectionTitle,
-} from './styles/Trends.styles';
+import {TrendsContainer, SectionTitle} from './styles/Trends.styles';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {HYPO_INVESTIGATION_SCREEN} from 'app/constants/SCREEN_NAMES';
@@ -49,6 +47,9 @@ const formatLoopHours = (minutes: number) => {
     ? String(Math.round(hours))
     : String(Number(hours.toFixed(1)));
 };
+
+const formatLoopValue = (value: number | null | undefined, decimals = 0) =>
+  value == null || !Number.isFinite(value) ? '-' : value.toFixed(decimals);
 
 const Trends: React.FC = () => {
   const theme = useTheme() as ThemeType;
@@ -345,6 +346,212 @@ const Trends: React.FC = () => {
     handleCompare(newOffset);
   };
 
+  const renderLoopMetricTile = ({
+    icon,
+    label,
+    value,
+  }: {
+    icon: string;
+    label: string;
+    value: string;
+  }) => (
+    <View
+      key={label}
+      style={{
+        flexGrow: 1,
+        minWidth: 86,
+        borderRadius: 10,
+        paddingHorizontal: 9,
+        paddingVertical: 8,
+        backgroundColor: addOpacity(theme.textColor, 0.055),
+      }}>
+      <View
+        style={{
+          flexDirection: isRTL ? 'row-reverse' : 'row',
+          alignItems: 'center',
+          gap: 5,
+        }}>
+        <MaterialIcons
+          name={icon}
+          size={14}
+          color={addOpacity(theme.textColor, 0.7)}
+        />
+        <Text
+          style={{
+            color: addOpacity(theme.textColor, 0.64),
+            fontSize: 11,
+            fontWeight: '700',
+          }}>
+          {label}
+        </Text>
+      </View>
+      <Text
+        style={{
+          marginTop: 3,
+          color: theme.textColor,
+          fontSize: 15,
+          fontWeight: '800',
+          textAlign: isRTL ? 'right' : 'left',
+        }}>
+        {value}
+      </Text>
+    </View>
+  );
+
+  const renderLoopModeCard = (mode: 'open' | 'closed') => {
+    const isOpen = mode === 'open';
+    const color = isOpen ? '#f39c12' : '#2ecc71';
+    const minutes = isOpen
+      ? loopModeStats.openMinutes
+      : loopModeStats.closedMinutes;
+    const reliable = isOpen
+      ? loopModeStats.openMetricsReliable
+      : loopModeStats.closedMetricsReliable;
+    const avgBg = isOpen ? loopModeStats.openAvgBg : loopModeStats.closedAvgBg;
+    const tirPct = isOpen
+      ? loopModeStats.openTirPct
+      : loopModeStats.closedTirPct;
+    const pct = isOpen ? loopModeStats.openPct : loopModeStats.closedPct;
+
+    return (
+      <View
+        style={{
+          borderRadius: 12,
+          padding: 12,
+          backgroundColor: addOpacity(color, 0.1),
+          borderWidth: 1,
+          borderColor: addOpacity(color, 0.22),
+          gap: 10,
+        }}>
+        <View
+          style={{
+            flexDirection: isRTL ? 'row-reverse' : 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+          }}>
+          <View
+            style={{
+              flexDirection: isRTL ? 'row-reverse' : 'row',
+              alignItems: 'center',
+              gap: 7,
+            }}>
+            <MaterialIcons
+              name={isOpen ? 'radio-button-unchecked' : 'lock-outline'}
+              size={18}
+              color={color}
+            />
+            <Text
+              style={{
+                color: theme.textColor,
+                fontSize: 15,
+                fontWeight: '800',
+              }}>
+              {language === 'he'
+                ? isOpen
+                  ? 'לופ פתוח'
+                  : 'לופ סגור'
+                : isOpen
+                ? 'Open loop'
+                : 'Closed loop'}
+            </Text>
+          </View>
+          <Text
+            style={{
+              color: theme.textColor,
+              fontSize: 20,
+              fontWeight: '800',
+            }}>
+            {pct.toFixed(1)}%
+          </Text>
+        </View>
+
+        <View
+          style={{
+            flexDirection: isRTL ? 'row-reverse' : 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+          }}>
+          {[
+            {
+              icon: 'schedule',
+              label: language === 'he' ? 'זמן' : 'Time',
+              value:
+                language === 'he'
+                  ? `${formatLoopHours(minutes)} ש׳`
+                  : `${formatLoopHours(minutes)}h`,
+            },
+            {
+              icon: 'show-chart',
+              label: language === 'he' ? 'ממוצע' : 'Avg',
+              value: reliable ? formatLoopValue(avgBg) : '-',
+            },
+            {
+              icon: 'check-circle-outline',
+              label: 'TIR',
+              value: reliable ? `${formatLoopValue(tirPct, 1)}%` : '-',
+            },
+          ].map(renderLoopMetricTile)}
+        </View>
+      </View>
+    );
+  };
+
+  const renderBasalPill = ({
+    icon,
+    label,
+    pct,
+    minutes,
+  }: {
+    icon: string;
+    label: string;
+    pct: number;
+    minutes: number;
+  }) => (
+    <View
+      key={label}
+      style={{
+        flexGrow: 1,
+        minWidth: 138,
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        backgroundColor: addOpacity(theme.textColor, 0.055),
+        flexDirection: isRTL ? 'row-reverse' : 'row',
+        alignItems: 'center',
+        gap: 7,
+      }}>
+      <MaterialIcons
+        name={icon}
+        size={15}
+        color={addOpacity(theme.textColor, 0.72)}
+      />
+      <Text
+        style={{
+          flexShrink: 1,
+          color: theme.textColor,
+          fontSize: 12,
+          fontWeight: '700',
+          textAlign: isRTL ? 'right' : 'left',
+        }}>
+        {label}
+      </Text>
+      <Text
+        style={{
+          marginLeft: isRTL ? 0 : 'auto',
+          marginRight: isRTL ? 'auto' : 0,
+          color: addOpacity(theme.textColor, 0.72),
+          fontSize: 12,
+          fontWeight: '700',
+        }}>
+        {pct.toFixed(1)}% ·{' '}
+        {language === 'he'
+          ? `${formatLoopHours(minutes)} ש׳`
+          : `${formatLoopHours(minutes)}h`}
+      </Text>
+    </View>
+  );
+
   return (
     <TrendsContainer testID={E2E_TEST_IDS.screens.trends}>
       {/* 1. Date Range Buttons */}
@@ -481,121 +688,178 @@ const Trends: React.FC = () => {
                 borderColor: addOpacity(theme.textColor, 0.12),
                 backgroundColor: addOpacity(theme.textColor, 0.03),
                 padding: 12,
-                gap: 8,
+                gap: 12,
               }}>
-              {(loopViewMode === 'both' || loopViewMode === 'open') && (
-                <Text style={{color: theme.textColor, fontSize: 15}}>
-                  {language === 'he'
-                    ? `פתוח: ${loopModeStats.openPct.toFixed(
-                        1,
-                      )}% • ${formatLoopHours(
-                        loopModeStats.openMinutes,
-                      )} ש׳ • ממוצע ${
-                        loopModeStats.openMetricsReliable
-                          ? loopModeStats.openAvgBg?.toFixed(0) ?? '-'
-                          : '-'
-                      } • TIR ${
-                        loopModeStats.openMetricsReliable
-                          ? loopModeStats.openTirPct?.toFixed(1) ?? '-'
-                          : '-'
-                      }%`
-                    : `Open: ${loopModeStats.openPct.toFixed(
-                        1,
-                      )}% • ${formatLoopHours(loopModeStats.openMinutes)}h • Avg ${
-                        loopModeStats.openMetricsReliable
-                          ? loopModeStats.openAvgBg?.toFixed(0) ?? '-'
-                          : '-'
-                      } • TIR ${
-                        loopModeStats.openMetricsReliable
-                          ? loopModeStats.openTirPct?.toFixed(1) ?? '-'
-                          : '-'
-                      }%`}
-                </Text>
-              )}
-
-              {(loopViewMode === 'both' || loopViewMode === 'closed') && (
-                <Text style={{color: theme.textColor, fontSize: 15}}>
-                  {language === 'he'
-                    ? `סגור: ${loopModeStats.closedPct.toFixed(
-                        1,
-                      )}% • ${formatLoopHours(
-                        loopModeStats.closedMinutes,
-                      )} ש׳ • ממוצע ${
-                        loopModeStats.closedMetricsReliable
-                          ? loopModeStats.closedAvgBg?.toFixed(0) ?? '-'
-                          : '-'
-                      } • TIR ${
-                        loopModeStats.closedMetricsReliable
-                          ? loopModeStats.closedTirPct?.toFixed(1) ?? '-'
-                          : '-'
-                      }%`
-                    : `Closed: ${loopModeStats.closedPct.toFixed(
-                        1,
-                      )}% • ${formatLoopHours(loopModeStats.closedMinutes)}h • Avg ${
-                        loopModeStats.closedMetricsReliable
-                          ? loopModeStats.closedAvgBg?.toFixed(0) ?? '-'
-                          : '-'
-                      } • TIR ${
-                        loopModeStats.closedMetricsReliable
-                          ? loopModeStats.closedTirPct?.toFixed(1) ?? '-'
-                          : '-'
-                      }%`}
-                </Text>
-              )}
-
-              <Text style={{color: theme.textColor, fontSize: 14}}>
-                {language === 'he'
-                  ? `טמפ בזאל: ${loopModeStats.tempBasalPct.toFixed(
-                      1,
-                    )}% (${formatLoopHours(
-                      loopModeStats.tempBasalMinutes,
-                    )} ש׳) • בזאל 0 / עצירה: ${loopModeStats.suspendedPct.toFixed(
-                      1,
-                    )}% (${formatLoopHours(
-                      loopModeStats.suspendedMinutes,
-                    )} ש׳) • בזאל מתוכנן: ${loopModeStats.plannedBasalPct.toFixed(
-                      1,
-                    )}% (${formatLoopHours(loopModeStats.plannedBasalMinutes)} ש׳)`
-                  : `Temp basal: ${loopModeStats.tempBasalPct.toFixed(
-                      1,
-                    )}% (${formatLoopHours(
-                      loopModeStats.tempBasalMinutes,
-                    )}h) • Zero basal / stop: ${loopModeStats.suspendedPct.toFixed(
-                      1,
-                    )}% (${formatLoopHours(
-                      loopModeStats.suspendedMinutes,
-                    )}h) • Planned basal: ${loopModeStats.plannedBasalPct.toFixed(
-                      1,
-                    )}% (${formatLoopHours(loopModeStats.plannedBasalMinutes)}h)`}
-              </Text>
-
-              <Text
+              <View
                 style={{
-                  color: addOpacity(theme.textColor, 0.72),
-                  fontSize: 13,
+                  flexDirection: isRTL ? 'row-reverse' : 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 10,
                 }}>
-                {language === 'he'
-                  ? `כיסוי נתוני לופ: ${loopModeStats.knownCoveragePct.toFixed(
-                      1,
-                    )}% • לא ידוע: ${loopModeStats.unknownPct.toFixed(1)}%${
-                      loopModeStats.hasEnoughLoopCoverage
-                        ? ''
-                        : ' • אין מספיק כיסוי להשוואה חזקה'
-                    }`
-                  : `Loop data coverage: ${loopModeStats.knownCoveragePct.toFixed(
-                      1,
-                    )}% • Unknown: ${loopModeStats.unknownPct.toFixed(1)}%${
-                      loopModeStats.hasEnoughLoopCoverage
-                        ? ''
-                        : ' • Not enough coverage for a strong comparison'
-                    }`}
-              </Text>
+                <View
+                  style={{
+                    flexDirection: isRTL ? 'row-reverse' : 'row',
+                    alignItems: 'center',
+                    flex: 1,
+                    gap: 8,
+                  }}>
+                  <View
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: 15,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: addOpacity(theme.primaryColor, 0.16),
+                    }}>
+                    <MaterialIcons
+                      name="settings-input-component"
+                      size={18}
+                      color={theme.primaryColor}
+                    />
+                  </View>
+                  <View style={{flex: 1}}>
+                    <Text
+                      style={{
+                        color: theme.textColor,
+                        fontSize: 14,
+                        fontWeight: '700',
+                        textAlign: isRTL ? 'right' : 'left',
+                      }}>
+                      {language === 'he'
+                        ? 'כיסוי נתוני לופ'
+                        : 'Loop data coverage'}
+                    </Text>
+                    <Text
+                      style={{
+                        color: addOpacity(theme.textColor, 0.68),
+                        fontSize: 12,
+                        textAlign: isRTL ? 'right' : 'left',
+                      }}>
+                      {language === 'he'
+                        ? `לא ידוע ${loopModeStats.unknownPct.toFixed(1)}%`
+                        : `Unknown ${loopModeStats.unknownPct.toFixed(1)}%`}
+                    </Text>
+                  </View>
+                </View>
+
+                <View
+                  style={{
+                    minWidth: 74,
+                    borderRadius: 12,
+                    paddingHorizontal: 10,
+                    paddingVertical: 7,
+                    backgroundColor: loopModeStats.hasEnoughLoopCoverage
+                      ? addOpacity('#2ecc71', 0.16)
+                      : addOpacity('#f1c40f', 0.16),
+                    alignItems: 'center',
+                  }}>
+                  <Text
+                    style={{
+                      color: theme.textColor,
+                      fontSize: 18,
+                      fontWeight: '800',
+                    }}>
+                    {loopModeStats.knownCoveragePct.toFixed(0)}%
+                  </Text>
+                  <Text
+                    style={{
+                      color: addOpacity(theme.textColor, 0.68),
+                      fontSize: 11,
+                      fontWeight: '600',
+                    }}>
+                    {language === 'he' ? 'ידוע' : 'known'}
+                  </Text>
+                </View>
+              </View>
+
+              {(loopViewMode === 'both' || loopViewMode === 'open') &&
+                renderLoopModeCard('open')}
+
+              {(loopViewMode === 'both' || loopViewMode === 'closed') &&
+                renderLoopModeCard('closed')}
+
+              <View style={{gap: 8}}>
+                <Text
+                  style={{
+                    color: addOpacity(theme.textColor, 0.72),
+                    fontSize: 12,
+                    fontWeight: '800',
+                    textAlign: isRTL ? 'right' : 'left',
+                  }}>
+                  {language === 'he' ? 'פירוק בזאל' : 'Basal breakdown'}
+                </Text>
+                <View
+                  style={{
+                    flexDirection: isRTL ? 'row-reverse' : 'row',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                  }}>
+                  {[
+                    {
+                      icon: 'bolt',
+                      label: language === 'he' ? 'טמפ בזאל' : 'Temp basal',
+                      pct: loopModeStats.tempBasalPct,
+                      minutes: loopModeStats.tempBasalMinutes,
+                    },
+                    {
+                      icon: 'pause-circle-outline',
+                      label:
+                        language === 'he'
+                          ? 'בזאל 0 / עצירה'
+                          : 'Zero basal / stop',
+                      pct: loopModeStats.suspendedPct,
+                      minutes: loopModeStats.suspendedMinutes,
+                    },
+                    {
+                      icon: 'event-repeat',
+                      label:
+                        language === 'he' ? 'בזאל מתוכנן' : 'Planned basal',
+                      pct: loopModeStats.plannedBasalPct,
+                      minutes: loopModeStats.plannedBasalMinutes,
+                    },
+                  ].map(renderBasalPill)}
+                </View>
+              </View>
+
+              {!loopModeStats.hasEnoughLoopCoverage && (
+                <View
+                  style={{
+                    borderRadius: 10,
+                    paddingHorizontal: 10,
+                    paddingVertical: 8,
+                    backgroundColor: addOpacity('#f1c40f', 0.13),
+                    flexDirection: isRTL ? 'row-reverse' : 'row',
+                    alignItems: 'center',
+                    gap: 7,
+                  }}>
+                  <MaterialIcons
+                    name="info-outline"
+                    size={16}
+                    color={addOpacity(theme.textColor, 0.75)}
+                  />
+                  <Text
+                    style={{
+                      flex: 1,
+                      color: addOpacity(theme.textColor, 0.72),
+                      fontSize: 12,
+                      fontWeight: '600',
+                      textAlign: isRTL ? 'right' : 'left',
+                    }}>
+                    {language === 'he'
+                      ? 'אין מספיק כיסוי להשוואה חזקה בין פתוח לסגור.'
+                      : 'Not enough coverage for a strong open/closed comparison.'}
+                  </Text>
+                </View>
+              )}
 
               {!loopModeStats.canCompareOpenClosed && (
                 <Text
                   style={{
                     color: addOpacity(theme.textColor, 0.65),
                     fontSize: 12,
+                    textAlign: isRTL ? 'right' : 'left',
                   }}>
                   {language === 'he'
                     ? 'ממוצע ו-TIR מוצגים לכל מצב רק כשיש מספיק כיסוי ודגימות.'
@@ -620,21 +884,79 @@ const Trends: React.FC = () => {
                       ? 'הסתר דיאגנוסטיקה'
                       : 'הצג דיאגנוסטיקה'
                     : showLoopDiagnostics
-                      ? 'Hide diagnostics'
-                      : 'Show diagnostics'}
+                    ? 'Hide diagnostics'
+                    : 'Show diagnostics'}
                 </Text>
               </Pressable>
 
               {showLoopDiagnostics && (
-                <Text
+                <View
                   style={{
-                    color: addOpacity(theme.textColor, 0.65),
-                    fontSize: 12,
+                    borderTopWidth: 1,
+                    borderTopColor: addOpacity(theme.textColor, 0.1),
+                    paddingTop: 10,
+                    gap: 6,
                   }}>
-                  {language === 'he'
-                    ? `דיאגנוסטיקה: אירועים ${loopModeStats.diagnostics.eventsFetched}, מסווגים ${loopModeStats.diagnostics.eventsClassified}, דגימות פתוח ${loopModeStats.diagnostics.openSamples}, דגימות סגור ${loopModeStats.diagnostics.closedSamples}, אירועי בזאל ${loopModeStats.diagnostics.basalEvents}`
-                    : `Diagnostics: events ${loopModeStats.diagnostics.eventsFetched}, classified ${loopModeStats.diagnostics.eventsClassified}, open samples ${loopModeStats.diagnostics.openSamples}, closed samples ${loopModeStats.diagnostics.closedSamples}, basal events ${loopModeStats.diagnostics.basalEvents}`}
-                </Text>
+                  <Text
+                    style={{
+                      color: addOpacity(theme.textColor, 0.65),
+                      fontSize: 12,
+                      fontWeight: '800',
+                      textAlign: isRTL ? 'right' : 'left',
+                    }}>
+                    {language === 'he' ? 'דיאגנוסטיקה' : 'Diagnostics'}
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: isRTL ? 'row-reverse' : 'row',
+                      flexWrap: 'wrap',
+                      gap: 6,
+                    }}>
+                    {[
+                      {
+                        label: language === 'he' ? 'אירועים' : 'events',
+                        value: loopModeStats.diagnostics.eventsFetched,
+                      },
+                      {
+                        label: language === 'he' ? 'מסווגים' : 'classified',
+                        value: loopModeStats.diagnostics.eventsClassified,
+                      },
+                      {
+                        label:
+                          language === 'he' ? 'דגימות פתוח' : 'open samples',
+                        value: loopModeStats.diagnostics.openSamples,
+                      },
+                      {
+                        label:
+                          language === 'he' ? 'דגימות סגור' : 'closed samples',
+                        value: loopModeStats.diagnostics.closedSamples,
+                      },
+                      {
+                        label:
+                          language === 'he' ? 'אירועי בזאל' : 'basal events',
+                        value: loopModeStats.diagnostics.basalEvents,
+                      },
+                    ].map(item => (
+                      <View
+                        key={item.label}
+                        style={{
+                          borderRadius: 8,
+                          paddingHorizontal: 8,
+                          paddingVertical: 5,
+                          backgroundColor: addOpacity(theme.textColor, 0.05),
+                        }}>
+                        <Text
+                          style={{
+                            color: addOpacity(theme.textColor, 0.64),
+                            fontSize: 11,
+                            fontWeight: '700',
+                          }}>
+                          {item.label}: {item.value}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
               )}
             </View>
           </View>
