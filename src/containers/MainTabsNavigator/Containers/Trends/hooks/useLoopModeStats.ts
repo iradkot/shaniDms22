@@ -1,9 +1,13 @@
 import {useEffect, useMemo, useState} from 'react';
 import {BgSample} from 'app/types/day_bgs.types';
-import {fetchProfileChangeHistory} from 'app/services/loopAnalysis/profileHistoryService';
+import {fetchDeviceStatusForDateRangeUncached} from 'app/api/apiRequests';
+import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
 
 export type LoopMode = 'open' | 'closed' | 'unknown';
-type BasalMode = 'temp' | 'suspended' | 'planned' | 'other';
+type BasalMode = 'temp' | 'suspended' | 'planned' | 'other' | 'unknown';
+type LoopModeEvent = {timestamp: number; mode: LoopMode; basalMode?: BasalMode};
+
+const LOOP_STATUS_CARRY_FORWARD_MINUTES = 20;
 
 function inferLoopModeFromBasal(basalMode: BasalMode): LoopMode {
   if (basalMode === 'temp' || basalMode === 'suspended') {
@@ -40,109 +44,114 @@ export interface LoopModeStats {
   };
 }
 
-function classifyMode(text?: string): LoopMode {
-  const s = (text || '').toLowerCase();
-  if (!s) return 'unknown';
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : null;
+}
 
-  if (
-    s.includes('open loop') ||
-    s.includes('open') ||
-    s.includes('manual') ||
-    s.includes('profile switch') ||
-    s.includes('openaps disabled') ||
-    s.includes('פתוח') ||
-    s.includes('ידני')
-  ) {
+function readNumber(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function readTimestampMs(entry: DeviceStatusEntry): number | null {
+  const mills = readNumber(entry.mills);
+  if (mills != null) {
+    return mills > 1e12 ? mills : mills * 1000;
+  }
+
+  const createdAt =
+    typeof entry.created_at === 'string' ? Date.parse(entry.created_at) : NaN;
+  return Number.isFinite(createdAt) ? createdAt : null;
+}
+
+function classifyModeFromDeviceStatus(entry: DeviceStatusEntry): LoopMode {
+  const loop = asRecord(entry.loop);
+  const openaps = asRecord(entry.openaps);
+
+  const loopEnacted = asRecord(loop?.enacted);
+  const loopRecommendation = asRecord(loop?.automaticDoseRecommendation);
+  if (loopEnacted) {
+    return loopEnacted.received === false ? 'open' : 'closed';
+  }
+  if (loopRecommendation) {
     return 'open';
   }
 
-  if (
-    s.includes('closed loop') ||
-    s.includes('closed') ||
-    s.includes('auto') ||
-    s.includes('aps') ||
-    s.includes('loop on') ||
-    s.includes('openaps') ||
-    s.includes('profile switch') ||
-    s.includes('autotune') ||
-    s.includes('סגור') ||
-    s.includes('אוטו') ||
-    s.includes('אוטומ')
-  ) {
+  const openapsEnacted = asRecord(openaps?.enacted);
+  if (openapsEnacted) {
     return 'closed';
+  }
+  if (asRecord(openaps?.suggested)) {
+    return 'open';
   }
 
   return 'unknown';
 }
 
-function classifyBasalMode(text?: string, row?: any): BasalMode {
-  const s = (text || '').toLowerCase();
-
-  const rate = Number(row?.rate ?? row?.absolute ?? NaN);
-  const duration = Number(row?.duration ?? row?.durationInMinutes ?? NaN);
-  const hasBasalSignal =
-    s.includes('basal') ||
-    s.includes('temp basal') ||
-    s.includes('temporary basal') ||
-    s.includes('tempbasal') ||
-    s.includes('profile switch') ||
-    s.includes('profile') ||
-    s.includes('suspend') ||
-    s.includes('suspended') ||
-    s.includes('בסל') ||
-    s.includes('פרופיל') ||
-    s.includes('זמני') ||
-    s.includes('מושהה');
-
-  if (!hasBasalSignal) {
-    return 'other';
-  }
-
-  if (
-    s.includes('suspend') ||
-    s.includes('suspended') ||
-    s.includes('pump suspend') ||
-    s.includes('suspend pump') ||
-    s.includes('השע') ||
-    s.includes('מושהה') ||
-    (Number.isFinite(rate) && rate === 0 && Number.isFinite(duration) && duration > 0)
-  ) {
+function classifyBasalModeFromDeviceStatus(
+  entry: DeviceStatusEntry,
+): BasalMode {
+  const pump = asRecord(entry.pump);
+  if (pump?.suspended === true) {
     return 'suspended';
   }
 
-  if (
-    s.includes('temp basal') ||
-    s.includes('temporary basal') ||
-    s.includes('tempbasal') ||
-    s.includes('basal temp') ||
-    s.includes('זמני') ||
-    (Number.isFinite(duration) && duration > 0 && !s.includes('profile'))
-  ) {
-    return 'temp';
+  const loop = asRecord(entry.loop);
+  const openaps = asRecord(entry.openaps);
+  const recommendation = asRecord(loop?.automaticDoseRecommendation);
+  const enacted =
+    asRecord(loop?.enacted) ??
+    asRecord(openaps?.enacted) ??
+    asRecord(recommendation?.tempBasalAdjustment);
+
+  const rate = readNumber(enacted?.rate);
+  const duration = readNumber(enacted?.duration);
+  if (duration != null && duration > 0) {
+    return rate === 0 ? 'suspended' : 'temp';
   }
 
-  if (
-    s.includes('planned basal') ||
-    s.includes('plan basal') ||
-    s.includes('scheduled basal') ||
-    s.includes('profile') ||
-    s.includes('profile switch') ||
-    s.includes('basal profile') ||
-    s.includes('פרופיל') ||
-    s.includes('בסל מתוכנן')
-  ) {
-    return 'planned';
-  }
-
-  return 'other';
+  return 'planned';
 }
 
-function avg(arr: number[]) {
+function isValidBgSample(sample: BgSample): boolean {
+  return (
+    Number.isFinite(sample.date) &&
+    Number.isFinite(sample.sgv) &&
+    sample.sgv > 0
+  );
+}
+
+function avg(arr: number[]): number | null {
   return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
 }
 
-function tir(arr: number[]) {
-  return arr.length ? (arr.filter(v => v >= 70 && v <= 180).length / arr.length) * 100 : null;
+function tir(arr: number[]): number | null {
+  return arr.length
+    ? (arr.filter(v => v >= 70 && v <= 180).length / arr.length) * 100
+    : null;
+}
+
+export function buildLoopModeEventsFromDeviceStatus(
+  status: DeviceStatusEntry[],
+): LoopModeEvent[] {
+  return status
+    .map((entry): LoopModeEvent | null => {
+      const timestamp = readTimestampMs(entry);
+      if (timestamp == null) {
+        return null;
+      }
+
+      const basalMode = classifyBasalModeFromDeviceStatus(entry);
+      const rawMode = classifyModeFromDeviceStatus(entry);
+      const mode =
+        rawMode === 'unknown' ? inferLoopModeFromBasal(basalMode) : rawMode;
+
+      return {timestamp, mode, basalMode};
+    })
+    .filter((event): event is LoopModeEvent => event !== null)
+    .sort((a, b) => a.timestamp - b.timestamp);
 }
 
 export function computeLoopModeStats({
@@ -150,17 +159,26 @@ export function computeLoopModeStats({
   end,
   bgData,
   events,
+  maxCarryForwardMinutes = Infinity,
 }: {
   start: Date;
   end: Date;
   bgData: BgSample[];
-  events: Array<{timestamp: number; mode: LoopMode; basalMode?: BasalMode}>;
+  events: LoopModeEvent[];
+  maxCarryForwardMinutes?: number;
 }): LoopModeStats {
   const startMs = start.getTime();
   const endMs = end.getTime();
   const totalMinutes = Math.max(1, Math.round((endMs - startMs) / 60000));
+  const maxCarryForwardMs =
+    Number.isFinite(maxCarryForwardMinutes) && maxCarryForwardMinutes >= 0
+      ? maxCarryForwardMinutes * 60000
+      : Infinity;
+  const sortedEvents = events
+    .filter(e => Number.isFinite(e.timestamp))
+    .sort((a, b) => a.timestamp - b.timestamp);
 
-  if (!events.length) {
+  if (!sortedEvents.length) {
     return {
       openMinutes: 0,
       closedMinutes: 0,
@@ -188,8 +206,14 @@ export function computeLoopModeStats({
   }
 
   let currentMode: LoopMode = 'unknown';
-  const prior = events.filter(e => e.timestamp <= startMs).slice(-1)[0];
-  if (prior) currentMode = prior.mode;
+  const prior = sortedEvents.filter(e => e.timestamp <= startMs).slice(-1)[0];
+  if (
+    prior &&
+    (maxCarryForwardMs === Infinity ||
+      startMs - prior.timestamp <= maxCarryForwardMs)
+  ) {
+    currentMode = prior.mode;
+  }
 
   let cursor = startMs;
   let openMinutes = 0;
@@ -201,58 +225,130 @@ export function computeLoopModeStats({
   let suspendedMinutes = 0;
   let plannedBasalMinutes = 0;
 
-  const priorBasal = events.filter(e => e.timestamp <= startMs).slice(-1)[0];
-  if (priorBasal?.basalMode) currentBasalMode = priorBasal.basalMode;
+  const priorBasal = sortedEvents
+    .filter(e => e.timestamp <= startMs)
+    .slice(-1)[0];
+  if (
+    priorBasal?.basalMode &&
+    (maxCarryForwardMs === Infinity ||
+      startMs - priorBasal.timestamp <= maxCarryForwardMs)
+  ) {
+    currentBasalMode = priorBasal.basalMode;
+  }
 
-  for (const e of events) {
+  for (const e of sortedEvents) {
     if (e.timestamp <= startMs || e.timestamp >= endMs) {
-      if (e.timestamp <= startMs) currentMode = e.mode;
+      if (
+        e.timestamp <= startMs &&
+        (maxCarryForwardMs === Infinity ||
+          startMs - e.timestamp <= maxCarryForwardMs)
+      ) {
+        currentMode = e.mode;
+        currentBasalMode = e.basalMode ?? 'unknown';
+      }
       continue;
     }
 
-    const deltaMin = Math.max(0, Math.round((e.timestamp - cursor) / 60000));
-    if (currentMode === 'open') openMinutes += deltaMin;
-    else if (currentMode === 'closed') closedMinutes += deltaMin;
-    else unknownMinutes += deltaMin;
+    const segmentEnd =
+      maxCarryForwardMs === Infinity
+        ? e.timestamp
+        : Math.min(e.timestamp, cursor + maxCarryForwardMs);
+    const deltaMin = Math.max(0, Math.round((segmentEnd - cursor) / 60000));
+    if (currentMode === 'open') {
+      openMinutes += deltaMin;
+    } else if (currentMode === 'closed') {
+      closedMinutes += deltaMin;
+    } else {
+      unknownMinutes += deltaMin;
+    }
+    if (segmentEnd < e.timestamp) {
+      unknownMinutes += Math.max(
+        0,
+        Math.round((e.timestamp - segmentEnd) / 60000),
+      );
+    }
 
     currentMode = e.mode;
     cursor = e.timestamp;
 
+    const basalSegmentEnd =
+      maxCarryForwardMs === Infinity
+        ? e.timestamp
+        : Math.min(e.timestamp, basalCursor + maxCarryForwardMs);
     const basalDeltaMin = Math.max(
       0,
-      Math.round((e.timestamp - basalCursor) / 60000),
+      Math.round((basalSegmentEnd - basalCursor) / 60000),
     );
-    if (currentBasalMode === 'temp') tempBasalMinutes += basalDeltaMin;
-    else if (currentBasalMode === 'suspended') suspendedMinutes += basalDeltaMin;
-    else if (currentBasalMode === 'planned') plannedBasalMinutes += basalDeltaMin;
+    if (currentBasalMode === 'temp') {
+      tempBasalMinutes += basalDeltaMin;
+    } else if (currentBasalMode === 'suspended') {
+      suspendedMinutes += basalDeltaMin;
+    } else if (currentBasalMode === 'planned') {
+      plannedBasalMinutes += basalDeltaMin;
+    }
     currentBasalMode = e.basalMode ?? 'unknown';
     basalCursor = e.timestamp;
   }
 
-  const tailMin = Math.max(0, Math.round((endMs - cursor) / 60000));
-  if (currentMode === 'open') openMinutes += tailMin;
-  else if (currentMode === 'closed') closedMinutes += tailMin;
-  else unknownMinutes += tailMin;
+  const tailEnd =
+    maxCarryForwardMs === Infinity
+      ? endMs
+      : Math.min(endMs, cursor + maxCarryForwardMs);
+  const tailMin = Math.max(0, Math.round((tailEnd - cursor) / 60000));
+  if (currentMode === 'open') {
+    openMinutes += tailMin;
+  } else if (currentMode === 'closed') {
+    closedMinutes += tailMin;
+  } else {
+    unknownMinutes += tailMin;
+  }
+  if (tailEnd < endMs) {
+    unknownMinutes += Math.max(0, Math.round((endMs - tailEnd) / 60000));
+  }
 
+  const basalTailEnd =
+    maxCarryForwardMs === Infinity
+      ? endMs
+      : Math.min(endMs, basalCursor + maxCarryForwardMs);
   const basalTailMin = Math.max(
     0,
-    Math.round((endMs - basalCursor) / 60000),
+    Math.round((basalTailEnd - basalCursor) / 60000),
   );
-  if (currentBasalMode === 'temp') tempBasalMinutes += basalTailMin;
-  else if (currentBasalMode === 'suspended') suspendedMinutes += basalTailMin;
-  else if (currentBasalMode === 'planned') plannedBasalMinutes += basalTailMin;
+  if (currentBasalMode === 'temp') {
+    tempBasalMinutes += basalTailMin;
+  } else if (currentBasalMode === 'suspended') {
+    suspendedMinutes += basalTailMin;
+  } else if (currentBasalMode === 'planned') {
+    plannedBasalMinutes += basalTailMin;
+  }
 
   const modeAt = (ts: number): LoopMode => {
     let m: LoopMode = 'unknown';
-    for (const e of events) {
-      if (e.timestamp <= ts) m = e.mode;
-      else break;
+    let eventTs: number | null = null;
+    for (const e of sortedEvents) {
+      if (e.timestamp <= ts) {
+        m = e.mode;
+      } else {
+        break;
+      }
+      eventTs = e.timestamp;
+    }
+    if (
+      eventTs != null &&
+      maxCarryForwardMs !== Infinity &&
+      ts - eventTs > maxCarryForwardMs
+    ) {
+      return 'unknown';
     }
     return m;
   };
 
-  const openSamples = bgData.filter(s => modeAt(s.date) === 'open').map(s => s.sgv);
-  const closedSamples = bgData.filter(s => modeAt(s.date) === 'closed').map(s => s.sgv);
+  const openSamples = bgData
+    .filter(s => isValidBgSample(s) && modeAt(s.date) === 'open')
+    .map(s => s.sgv);
+  const closedSamples = bgData
+    .filter(s => isValidBgSample(s) && modeAt(s.date) === 'closed')
+    .map(s => s.sgv);
 
   return {
     openMinutes,
@@ -271,11 +367,11 @@ export function computeLoopModeStats({
     suspendedPct: (suspendedMinutes / totalMinutes) * 100,
     plannedBasalPct: (plannedBasalMinutes / totalMinutes) * 100,
     diagnostics: {
-      eventsFetched: events.length,
-      eventsClassified: events.filter(e => e.mode !== 'unknown').length,
+      eventsFetched: sortedEvents.length,
+      eventsClassified: sortedEvents.filter(e => e.mode !== 'unknown').length,
       openSamples: openSamples.length,
       closedSamples: closedSamples.length,
-      basalEvents: events.length,
+      basalEvents: sortedEvents.filter(e => e.basalMode != null).length,
     },
   };
 }
@@ -289,40 +385,25 @@ export function useLoopModeStats({
   end: Date;
   bgData: BgSample[];
 }) {
-  const [events, setEvents] = useState<Array<{timestamp: number; mode: LoopMode; basalMode: BasalMode}>>([]);
+  const [events, setEvents] = useState<LoopModeEvent[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const rows = await fetchProfileChangeHistory({
-          startMs: start.getTime() - 24 * 60 * 60 * 1000,
-          endMs: end.getTime(),
-          limit: 500,
-        });
+        const rows = await fetchDeviceStatusForDateRangeUncached(
+          new Date(start.getTime() - LOOP_STATUS_CARRY_FORWARD_MINUTES * 60000),
+          end,
+        );
+        const normalized = buildLoopModeEventsFromDeviceStatus(rows);
 
-        const normalized = rows
-          .map(r => {
-            const eventType = (r as any)?.eventType || '';
-            const notes = (r as any)?.notes || '';
-            const enteredBy = (r as any)?.enteredBy || '';
-            const profile = (r as any)?.profile || '';
-            const raw = JSON.stringify(r || {}).slice(0, 400);
-            const text = `${eventType} ${notes} ${enteredBy} ${profile} ${r.profileName || ''} ${r.summary || ''} ${raw}`;
-            const basalMode = classifyBasalMode(text, r);
-            const modeRaw = classifyMode(text);
-            const mode = modeRaw === 'unknown' ? inferLoopModeFromBasal(basalMode) : modeRaw;
-            return {
-              timestamp: r.timestamp,
-              mode,
-              basalMode,
-            };
-          })
-          .sort((a, b) => a.timestamp - b.timestamp);
-
-        if (!cancelled) setEvents(normalized);
+        if (!cancelled) {
+          setEvents(normalized);
+        }
       } catch {
-        if (!cancelled) setEvents([]);
+        if (!cancelled) {
+          setEvents([]);
+        }
       }
     })();
 
@@ -332,56 +413,12 @@ export function useLoopModeStats({
   }, [start, end]);
 
   return useMemo(() => {
-    const base = computeLoopModeStats({
+    return computeLoopModeStats({
       start,
       end,
       bgData,
-      events: events.map(e => ({timestamp: e.timestamp, mode: e.mode})),
+      events,
+      maxCarryForwardMinutes: LOOP_STATUS_CARRY_FORWARD_MINUTES,
     });
-
-    const startMs = start.getTime();
-    const endMs = end.getTime();
-    const totalMinutes = Math.max(1, Math.round((endMs - startMs) / 60000));
-
-    let currentBasal: BasalMode = 'other';
-    const prior = events.filter(e => e.timestamp <= startMs).slice(-1)[0];
-    if (prior) currentBasal = prior.basalMode;
-
-    let cursor = startMs;
-    let tempBasalMinutes = 0;
-    let suspendedMinutes = 0;
-    let plannedBasalMinutes = 0;
-
-    for (const e of events) {
-      if (e.timestamp <= startMs || e.timestamp >= endMs) {
-        if (e.timestamp <= startMs) currentBasal = e.basalMode;
-        continue;
-      }
-      const delta = Math.max(0, Math.round((e.timestamp - cursor) / 60000));
-      if (currentBasal === 'temp') tempBasalMinutes += delta;
-      if (currentBasal === 'suspended') suspendedMinutes += delta;
-      if (currentBasal === 'planned') plannedBasalMinutes += delta;
-      currentBasal = e.basalMode;
-      cursor = e.timestamp;
-    }
-
-    const tail = Math.max(0, Math.round((endMs - cursor) / 60000));
-    if (currentBasal === 'temp') tempBasalMinutes += tail;
-    if (currentBasal === 'suspended') suspendedMinutes += tail;
-    if (currentBasal === 'planned') plannedBasalMinutes += tail;
-
-    return {
-      ...base,
-      tempBasalMinutes,
-      suspendedMinutes,
-      plannedBasalMinutes,
-      tempBasalPct: (tempBasalMinutes / totalMinutes) * 100,
-      suspendedPct: (suspendedMinutes / totalMinutes) * 100,
-      plannedBasalPct: (plannedBasalMinutes / totalMinutes) * 100,
-      diagnostics: {
-        ...base.diagnostics,
-        basalEvents: events.length,
-      },
-    };
   }, [events, bgData, start, end]);
 }
