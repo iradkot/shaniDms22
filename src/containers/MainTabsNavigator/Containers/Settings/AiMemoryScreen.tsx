@@ -32,6 +32,65 @@ import {addOpacity} from 'app/style/styling.utils';
 
 const ALL_CATEGORY = 'all';
 type CategoryFilter = AiMemoryCategory | typeof ALL_CATEGORY;
+type FolderTreeItem = {key: string; count: number};
+
+const CATEGORY_ICONS: Record<AiMemoryCategory, string> = {
+  current_status: 'bolt',
+  clinical_history: 'medical-services',
+  preferences: 'tune',
+  daily_patterns: 'insights',
+  nightscout_strategy: 'cloud-sync',
+  assistant_feedback: 'rate-review',
+};
+
+const CATEGORY_LABELS_HE: Record<AiMemoryCategory, string> = {
+  current_status: 'מצב עדכני',
+  clinical_history: 'היסטוריה קלינית',
+  preferences: 'העדפות אישיות',
+  daily_patterns: 'דפוסים יומיים',
+  nightscout_strategy: 'אסטרטגיית Nightscout',
+  assistant_feedback: 'פידבק על הסוכן',
+};
+
+const FOLDER_LABELS_HE: Record<string, string> = {
+  'current_status/active_context': 'הקשר פעיל עכשיו',
+  'current_status/recent_recommendations': 'המלצות אחרונות',
+  'current_status/pregnancy': 'הריון פעיל',
+  'current_status/general': 'כללי',
+  'clinical_history/pregnancy_history': 'היסטוריית הריון',
+  'clinical_history/loop_settings_history': 'היסטוריית הגדרות Loop',
+  'preferences/communication_style': 'סגנון תקשורת',
+  'preferences/recommendation_style': 'סגנון המלצות',
+  'daily_patterns/meals': 'ארוחות ותגובות',
+  'daily_patterns/meals/plans': 'תכניות לארוחות',
+  'daily_patterns/meals/photos': 'תמונות ארוחה',
+  'daily_patterns/sleep': 'שינה',
+  'daily_patterns/exercise': 'פעילות גופנית',
+  'nightscout_strategy/data_fetching': 'שליפת נתונים',
+  'nightscout_strategy/known_data_gaps': 'פערי נתונים ידועים',
+  'assistant_feedback/helpful': 'מה עזר',
+  'assistant_feedback/not_helpful': 'מה לא עזר',
+};
+
+const FOLDER_LABELS_EN: Record<string, string> = {
+  'current_status/active_context': 'Active context',
+  'current_status/recent_recommendations': 'Recent recommendations',
+  'current_status/pregnancy': 'Active pregnancy',
+  'current_status/general': 'General',
+  'clinical_history/pregnancy_history': 'Pregnancy history',
+  'clinical_history/loop_settings_history': 'Loop settings history',
+  'preferences/communication_style': 'Communication style',
+  'preferences/recommendation_style': 'Recommendation style',
+  'daily_patterns/meals': 'Meals and responses',
+  'daily_patterns/meals/plans': 'Meal plans',
+  'daily_patterns/meals/photos': 'Meal photos',
+  'daily_patterns/sleep': 'Sleep',
+  'daily_patterns/exercise': 'Exercise',
+  'nightscout_strategy/data_fetching': 'Data fetching',
+  'nightscout_strategy/known_data_gaps': 'Known data gaps',
+  'assistant_feedback/helpful': 'Helpful feedback',
+  'assistant_feedback/not_helpful': 'Not helpful feedback',
+};
 
 function isDisabledForAi(entry: MemoryEntry) {
   return (entry.tags ?? []).includes('disabled_for_ai');
@@ -42,15 +101,60 @@ function formatDate(ms: number | null | undefined) {
   return new Date(ms).toLocaleDateString();
 }
 
+function folderLabel(key: string, he: boolean) {
+  return (he ? FOLDER_LABELS_HE : FOLDER_LABELS_EN)[key] ?? key.split('/').slice(1).join(' / ') ?? key;
+}
+
+function categoryLabel(category: AiMemoryCategory, he: boolean) {
+  return he ? CATEGORY_LABELS_HE[category] : AI_MEMORY_CATEGORY_LABELS[category];
+}
+
+function cleanSummary(text: string) {
+  return String(text ?? '')
+    .replace(/\bcurrent_(status|subcategory)\b/gi, '')
+    .replace(/\bcurrent_status\/general\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function entryTitle(entry: MemoryEntry, he: boolean) {
+  const tags = new Set(entry.tags ?? []);
+  const facts = entry.facts ?? {};
+  if (isPendingMemorySuggestion(entry)) return he ? 'הצעת זיכרון לאישור' : 'Memory suggestion';
+  if (tags.has('home_recommendation') || facts.recommendationKind) {
+    return he ? 'המלצה אחרונה מהסוכן' : 'Recent AI recommendation';
+  }
+  if (tags.has('photo_input')) {
+    return he ? 'תמונת ארוחה לניתוח' : 'Meal photo context';
+  }
+  if (tags.has('meal') || facts.mealId || facts.carbsG != null) {
+    return he ? 'תגובה לארוחה' : 'Meal response';
+  }
+  if (tags.has('daily_review') || tags.has('plan_tomorrow')) {
+    return he ? 'תובנת סיכום יומי' : 'Daily review insight';
+  }
+  if (tags.has('assistant_feedback')) {
+    return he ? 'פידבק על תשובת הסוכן' : 'AI feedback';
+  }
+  return he ? 'זיכרון שמור' : 'Saved memory';
+}
+
+function entryPreview(entry: MemoryEntry) {
+  const summary = cleanSummary(entry.textSummary);
+  const firstLine = summary.split('\n').map(line => line.trim()).find(Boolean) ?? summary;
+  return firstLine.length > 180 ? `${firstLine.slice(0, 177)}...` : firstLine;
+}
+
 const AiMemoryScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const {language} = useAppLanguage();
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
-  const [tree, setTree] = useState<Array<{key: string; count: number}>>([]);
+  const [tree, setTree] = useState<FolderTreeItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>(ALL_CATEGORY);
   const [busy, setBusy] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [editingIds, setEditingIds] = useState<Record<string, boolean>>({});
 
   const he = language === 'he';
   const pendingCount = useMemo(
@@ -64,7 +168,7 @@ const AiMemoryScreen: React.FC = () => {
         {id: ALL_CATEGORY, label: he ? 'הכל' : 'All'},
         ...Object.entries(AI_MEMORY_CATEGORY_LABELS).map(([id, label]) => ({
           id: id as AiMemoryCategory,
-          label,
+          label: categoryLabel(id as AiMemoryCategory, he) ?? label,
         })),
       ] as Array<{id: CategoryFilter; label: string}>,
     [he],
@@ -107,6 +211,7 @@ const AiMemoryScreen: React.FC = () => {
       const updated = await updateMemoryEntry(entry.id, {textSummary});
       if (updated) {
         setEntries(prev => prev.map(item => (item.id === entry.id ? updated : item)));
+        setEditingIds(prev => ({...prev, [entry.id]: false}));
       }
     } finally {
       setSavingId(null);
@@ -237,29 +342,46 @@ const AiMemoryScreen: React.FC = () => {
         }}
       >
         <Text style={{color: theme.textColor, fontWeight: '800', marginBottom: theme.spacing.xs}}>
-          {he ? 'תיקיות' : 'Folders'}
+          {he ? 'תיקיות פעילות' : 'Active folders'}
         </Text>
         <View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
           {tree.filter(item => item.count > 0).length ? (
             tree
               .filter(item => item.count > 0)
-              .map(item => (
-                <View
-                  key={item.key}
-                  style={{
-                    paddingHorizontal: theme.spacing.sm,
-                    paddingVertical: 6,
-                    borderRadius: 999,
-                    backgroundColor: addOpacity(theme.textColor, 0.06),
-                    marginRight: theme.spacing.xs,
-                    marginTop: theme.spacing.xs,
-                  }}
-                >
-                  <Text style={{color: theme.textColor, fontSize: theme.typography.size.xs}}>
-                    {item.key} ({item.count})
-                  </Text>
-                </View>
-              ))
+              .map(item => {
+                const category = item.key.split('/')[0] as AiMemoryCategory;
+                return (
+                  <View
+                    key={item.key}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingHorizontal: theme.spacing.sm,
+                      paddingVertical: 7,
+                      borderRadius: 999,
+                      backgroundColor: addOpacity(theme.accentColor, 0.08),
+                      marginRight: theme.spacing.xs,
+                      marginTop: theme.spacing.xs,
+                    }}
+                  >
+                    <MaterialIcons
+                      name={CATEGORY_ICONS[category] ?? 'folder'}
+                      size={14}
+                      color={theme.accentColor}
+                    />
+                    <Text
+                      style={{
+                        color: theme.textColor,
+                        fontSize: theme.typography.size.xs,
+                        marginLeft: 5,
+                        fontWeight: '700',
+                      }}
+                    >
+                      {folderLabel(item.key, he)} ({item.count})
+                    </Text>
+                  </View>
+                );
+              })
           ) : (
             <Text style={{color: addOpacity(theme.textColor, 0.7)}}>
               {he ? 'אין עדיין זיכרונות שמורים.' : 'No saved memories yet.'}
@@ -288,6 +410,8 @@ const AiMemoryScreen: React.FC = () => {
 
       {entries.map(entry => {
         const folder = normalizeMemoryFolder(entry.folder);
+        const folderKey = memoryFolderKey(folder);
+        const editing = Boolean(editingIds[entry.id]);
         const disabled = isDisabledForAi(entry);
         const pending = isPendingMemorySuggestion(entry);
         return (
@@ -307,12 +431,29 @@ const AiMemoryScreen: React.FC = () => {
             }}
           >
             <View style={{flexDirection: 'row', alignItems: 'center'}}>
+              <View
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 17,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: addOpacity(theme.accentColor, 0.1),
+                  marginRight: theme.spacing.sm,
+                }}
+              >
+                <MaterialIcons
+                  name={CATEGORY_ICONS[folder.category] ?? 'folder'}
+                  size={19}
+                  color={theme.accentColor}
+                />
+              </View>
               <View style={{flex: 1}}>
                 <Text style={{color: theme.textColor, fontWeight: '800'}}>
-                  {memoryFolderKey(folder)}
+                  {entryTitle(entry, he)}
                 </Text>
                 <Text style={{color: addOpacity(theme.textColor, 0.65), fontSize: theme.typography.size.xs}}>
-                  {entry.type} · {formatDate(entry.updatedAt)}
+                  {folderLabel(folderKey, he)} · {formatDate(entry.updatedAt)}
                   {pending ? (he ? ' · ממתין לאישור' : ' · pending approval') : ''}
                   {!pending && disabled ? (he ? ' · לא בשימוש AI' : ' · excluded from AI') : ''}
                 </Text>
@@ -339,38 +480,135 @@ const AiMemoryScreen: React.FC = () => {
               </View>
             ) : null}
 
-            <TextInput
-              multiline
-              value={drafts[entry.id] ?? entry.textSummary}
-              onChangeText={text => setDrafts(prev => ({...prev, [entry.id]: text}))}
+            {editing ? (
+              <TextInput
+                multiline
+                value={drafts[entry.id] ?? cleanSummary(entry.textSummary)}
+                onChangeText={text => setDrafts(prev => ({...prev, [entry.id]: text}))}
+                style={{
+                  marginTop: theme.spacing.md,
+                  minHeight: 110,
+                  textAlignVertical: 'top',
+                  borderWidth: 1,
+                  borderColor: theme.borderColor,
+                  borderRadius: theme.borderRadius,
+                  padding: theme.spacing.md,
+                  color: theme.textColor,
+                  backgroundColor: theme.backgroundColor,
+                }}
+              />
+            ) : (
+              <View
+                style={{
+                  marginTop: theme.spacing.md,
+                  borderRadius: theme.borderRadius,
+                  backgroundColor: theme.backgroundColor,
+                  padding: theme.spacing.md,
+                }}
+              >
+                <Text style={{color: theme.textColor, lineHeight: 20}}>
+                  {entryPreview(entry)}
+                </Text>
+              </View>
+            )}
+
+            <View
               style={{
                 marginTop: theme.spacing.md,
-                minHeight: 86,
-                textAlignVertical: 'top',
-                borderWidth: 1,
-                borderColor: theme.borderColor,
-                borderRadius: theme.borderRadius,
-                padding: theme.spacing.md,
-                color: theme.textColor,
-                backgroundColor: theme.backgroundColor,
+                flexDirection: 'row',
+                flexWrap: 'wrap',
               }}
-            />
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  borderRadius: 999,
+                  backgroundColor: addOpacity(theme.textColor, 0.06),
+                  paddingHorizontal: theme.spacing.sm,
+                  paddingVertical: 5,
+                  marginRight: theme.spacing.xs,
+                  marginBottom: theme.spacing.xs,
+                }}
+              >
+                <MaterialIcons name="label-outline" size={14} color={addOpacity(theme.textColor, 0.65)} />
+                <Text
+                  style={{
+                    color: addOpacity(theme.textColor, 0.72),
+                    fontSize: theme.typography.size.xs,
+                    marginLeft: 4,
+                    fontWeight: '600',
+                  }}
+                >
+                  {categoryLabel(folder.category, he)}
+                </Text>
+              </View>
+              {entry.source ? (
+                <View
+                  style={{
+                    borderRadius: 999,
+                    backgroundColor: addOpacity(theme.textColor, 0.06),
+                    paddingHorizontal: theme.spacing.sm,
+                    paddingVertical: 5,
+                    marginRight: theme.spacing.xs,
+                    marginBottom: theme.spacing.xs,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: addOpacity(theme.textColor, 0.72),
+                      fontSize: theme.typography.size.xs,
+                      fontWeight: '600',
+                    }}
+                  >
+                    {entry.source === 'ai'
+                      ? he
+                        ? 'נוצר על ידי AI'
+                        : 'AI generated'
+                      : entry.source === 'sensor'
+                        ? he
+                          ? 'מנתוני חיישן'
+                          : 'Sensor data'
+                        : he
+                          ? 'מהמשתמש'
+                          : 'User saved'}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
 
             <View style={{flexDirection: 'row', marginTop: theme.spacing.md}}>
               <Pressable
-                onPress={() => saveEntry(entry)}
+                onPress={() => {
+                  if (!editing) {
+                    setEditingIds(prev => ({...prev, [entry.id]: true}));
+                    setDrafts(prev => ({...prev, [entry.id]: cleanSummary(entry.textSummary)}));
+                    return;
+                  }
+                  saveEntry(entry);
+                }}
                 disabled={savingId === entry.id}
                 style={{
                   flex: 1,
                   borderRadius: theme.borderRadius,
                   paddingVertical: theme.spacing.sm,
                   alignItems: 'center',
-                  backgroundColor: theme.accentColor,
+                  backgroundColor: editing ? theme.accentColor : addOpacity(theme.accentColor, 0.12),
                   marginRight: theme.spacing.sm,
                 }}
               >
-                <Text style={{color: theme.white, fontWeight: '800'}}>
-                  {savingId === entry.id ? (he ? 'שומר...' : 'Saving...') : he ? 'שמור' : 'Save'}
+                <Text style={{color: editing ? theme.white : theme.textColor, fontWeight: '800'}}>
+                  {savingId === entry.id
+                    ? he
+                      ? 'שומר...'
+                      : 'Saving...'
+                    : editing
+                      ? he
+                        ? 'שמור'
+                        : 'Save'
+                      : he
+                        ? 'ערוך'
+                        : 'Edit'}
                 </Text>
               </Pressable>
               <Pressable

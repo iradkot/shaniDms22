@@ -31,6 +31,7 @@ export const AI_MEMORY_CATEGORY_LABELS: Record<AiMemoryCategory, string> = {
 
 export const DEFAULT_MEMORY_FOLDERS: AiMemoryFolder[] = [
   {category: 'current_status', path: ['active_context']},
+  {category: 'current_status', path: ['recent_recommendations']},
   {category: 'current_status', path: ['pregnancy']},
   {category: 'clinical_history', path: ['pregnancy_history']},
   {category: 'clinical_history', path: ['loop_settings_history']},
@@ -52,7 +53,17 @@ export function memoryFolderKey(folder: AiMemoryFolder): string {
 export function normalizeMemoryFolder(
   input?: Partial<AiMemoryFolder> | null,
 ): AiMemoryFolder {
-  const category = input?.category ?? 'current_status';
+  const allowedCategories: AiMemoryCategory[] = [
+    'current_status',
+    'clinical_history',
+    'preferences',
+    'daily_patterns',
+    'nightscout_strategy',
+    'assistant_feedback',
+  ];
+  const category = allowedCategories.includes(input?.category as AiMemoryCategory)
+    ? (input?.category as AiMemoryCategory)
+    : 'current_status';
   const pathInput = input?.path;
   const path = Array.isArray(pathInput)
     ? pathInput.map(x => String(x).trim()).filter(Boolean)

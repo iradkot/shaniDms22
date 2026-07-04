@@ -52,6 +52,54 @@ function uniq(items: string[]) {
   return [...new Set((items ?? []).filter(Boolean))];
 }
 
+function inferFolderForLegacyEntry(entry: MemoryEntry): AiMemoryFolder {
+  const tags = new Set(entry.tags ?? []);
+  const facts = entry.facts ?? {};
+
+  if (entry.folder) {
+    return normalizeMemoryFolder(entry.folder);
+  }
+
+  if (tags.has('photo_input')) {
+    return {category: 'daily_patterns', path: ['meals', 'photos']};
+  }
+
+  if (tags.has('daily_review') || tags.has('plan_tomorrow')) {
+    return {category: 'daily_patterns', path: ['meals', 'plans']};
+  }
+
+  if (tags.has('meal') || facts.mealId || facts.carbsG != null) {
+    return {category: 'daily_patterns', path: ['meals']};
+  }
+
+  if (tags.has('assistant_feedback')) {
+    return {
+      category: 'assistant_feedback',
+      path: [tags.has('not_helpful') ? 'not_helpful' : 'helpful'],
+    };
+  }
+
+  if (tags.has('home_recommendation') || facts.recommendationKind) {
+    return {category: 'current_status', path: ['recent_recommendations']};
+  }
+
+  if (tags.has('nightscout') || tags.has('data_fetching')) {
+    return {category: 'nightscout_strategy', path: ['data_fetching']};
+  }
+
+  return {category: 'current_status', path: ['general']};
+}
+
+function normalizeStoredEntry(entry: MemoryEntry): MemoryEntry {
+  return {
+    ...entry,
+    tags: uniq(entry.tags ?? []),
+    textSummary: String(entry.textSummary ?? '').trim(),
+    facts: entry.facts ?? {},
+    folder: inferFolderForLegacyEntry(entry),
+  };
+}
+
 export function isPendingMemorySuggestion(entry: Pick<MemoryEntry, 'tags'>) {
   return (entry.tags ?? []).includes(PENDING_MEMORY_TAG);
 }
@@ -79,7 +127,11 @@ async function readEntries(): Promise<MemoryEntry[]> {
     const raw = await AsyncStorage.getItem(MEMORY_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed)
+      ? parsed
+        .map(item => normalizeStoredEntry(item as MemoryEntry))
+        .filter(item => item.textSummary)
+      : [];
   } catch {
     return [];
   }
