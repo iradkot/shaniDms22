@@ -17,6 +17,7 @@ export {buildGlucoseThresholdsBlock} from './glucoseThresholds';
 import {GlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {withAppLanguagePolicy} from 'app/services/llm/llmClient';
 import {withSharedAiContext} from 'app/services/llm/sharedAiContext';
+import {buildAiOrchestraPromptBlock} from 'app/services/aiOrchestra';
 import {AnalystMode} from '../../types';
 
 import {AI_ANALYST_SYSTEM_PROMPT} from './baseAnalyst';
@@ -53,6 +54,12 @@ export function buildSystemPrompt(
   personality?: 'tachles' | 'nice' | 'buddha',
 ): string {
   let base: string;
+  const mission =
+    analystMode === 'loopSettings'
+      ? 'loopSettings'
+      : analystMode === 'userBehavior'
+        ? 'userBehavior'
+        : 'openChat';
 
   if (analystMode === 'loopSettings') {
     base =
@@ -67,5 +74,9 @@ export function buildSystemPrompt(
     base = AI_ANALYST_SYSTEM_PROMPT + '\n' + DEFAULT_TOOL_SYSTEM_PROMPT + EVIDENCE_LINK_INSTRUCTION;
   }
 
-  return withSharedAiContext(withAppLanguagePolicy(base, language ?? 'en'), {language, personality});
+  const orchestraBlock = buildAiOrchestraPromptBlock(mission);
+  return withSharedAiContext(
+    withAppLanguagePolicy(`${orchestraBlock}\n\n${base}`, language ?? 'en'),
+    {language, personality},
+  );
 }

@@ -27,6 +27,9 @@ export const DEFAULT_TOOL_SYSTEM_PROMPT =
   `- getPatientProfileSnapshot: {}  → compact patient profile + relevant recent memories.\n` +
   `- searchMemory: {query: string, limit?: number (1-20), types?: ["profile"|"episode"|"chat_summary"]}  → semantic memory search; returns IDs/snippets only.\n` +
   `- getMemoryByIds: {ids: string[]}  → fetch full memory records by IDs after search.\n\n` +
+  `- getMemoryTree: {}  → list patient-memory folders with entry counts.\n` +
+  `- listMemoryEntries: {category?: string, folderKey?: string, limit?: number}  → show editable memory records.\n` +
+  `- updateMemoryEntry: {id: string, patch: {...}}  → update a memory record when the user explicitly asks to edit what is saved.\n\n` +
   `Tool choice guidance:\n` +
   `- If the user asks about hypers/highs, do NOT call getHypoDetectiveContext. Use getGlycemicEvents(kind="hyper") or getCgmData.\n` +
   `- If the user asks about hypos/lows, use getGlycemicEvents(kind="hypo") or getHypoDetectiveContext.\n` +
@@ -77,6 +80,8 @@ export const LOOP_SETTINGS_TOOL_SYSTEM_PROMPT =
   `- getPatientProfileSnapshot: {}\n` +
   `- searchMemory: {query: string, limit?: number (1-20), types?: ["profile"|"episode"|"chat_summary"]}\n` +
   `- getMemoryByIds: {ids: string[]}\n` +
+  `- getMemoryTree: {}\n` +
+  `- listMemoryEntries: {category?: string, folderKey?: string, limit?: number}\n` +
   `- getProfileChangeHistory: {rangeDays: number (7-180), maxEvents?: number (1-50)}\n` +
   `- analyzeSettingsImpact: {changeDate: ISO string, windowDays: number (1-30)}\n\n` +
   `Naming note: snake_case aliases like get_settings_change_history are accepted, but prefer the camelCase names listed here when possible.\n\n` +

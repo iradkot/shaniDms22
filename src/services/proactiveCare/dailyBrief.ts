@@ -7,6 +7,7 @@ import {getStoredAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr, Lang} from 'app/i18n/translations';
 import {createLlmProvider} from 'app/services/llm/llmClient';
 import {withSharedAiContext} from 'app/services/llm/sharedAiContext';
+import {buildAiOrchestraPromptBlock} from 'app/services/aiOrchestra';
 import {computeRank} from 'app/services/proactiveCare/streakRank';
 
 const CHANNEL_ID = 'daily-briefs';
@@ -753,10 +754,12 @@ export function buildDailyBriefSystemInstruction(lang: Lang): string {
   ].join(' ');
 
   if (lang === 'he') {
-    return `${core} Keep the final user-facing wording in Hebrew, simple and warm.`;
+    return `${buildAiOrchestraPromptBlock(
+      'dailyBrief',
+    )}\n\n${core} Keep the final user-facing wording in Hebrew, simple and warm.`;
   }
 
-  return core;
+  return `${buildAiOrchestraPromptBlock('dailyBrief')}\n\n${core}`;
 }
 
 export function getDailyBriefLanguageGuardrails() {

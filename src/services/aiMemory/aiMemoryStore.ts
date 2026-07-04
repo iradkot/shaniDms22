@@ -1,5 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import {
+  AiMemoryFolder,
+  AiMemoryRetentionPolicy,
+  DEFAULT_MEMORY_FOLDERS,
+  memoryFolderKey,
+  normalizeMemoryFolder,
+} from './memoryTaxonomy';
+
 const MEMORY_KEY = 'aiMemory:v1:entries';
 const PROFILE_KEY = 'aiMemory:v1:profile';
 const MEMORY_EPISODE_KEYS = 'aiMemory:v1:episodeKeys';
@@ -14,6 +22,8 @@ export type MemoryEntry = {
   tags: string[];
   textSummary: string;
   facts?: Record<string, any>;
+  folder?: AiMemoryFolder;
+  retention?: AiMemoryRetentionPolicy;
   source?: 'user' | 'sensor' | 'ai' | 'system';
   confidence?: number; // 0..1
   expiresAt?: number | null;
@@ -75,7 +85,10 @@ async function writeEntries(entries: MemoryEntry[]) {
 
 function pruneEntries(entries: MemoryEntry[]): MemoryEntry[] {
   const now = nowMs();
-  const alive = (entries ?? []).filter(e => !e.expiresAt || e.expiresAt > now);
+  const alive = (entries ?? []).filter(e => {
+    const expiresAt = e.expiresAt ?? e.retention?.rememberUntil ?? null;
+    return !expiresAt || expiresAt > now;
+  });
 
   // Keep at most 500 entries total with simple recency policy.
   alive.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -92,6 +105,8 @@ export async function addMemoryEntry(input: Omit<MemoryEntry, 'id' | 'createdAt'
     tags: uniq(input.tags ?? []),
     textSummary: String(input.textSummary ?? '').trim(),
     facts: input.facts ?? {},
+    folder: normalizeMemoryFolder(input.folder),
+    retention: input.retention,
     source: input.source ?? 'system',
     confidence: typeof input.confidence === 'number' ? Math.max(0, Math.min(1, input.confidence)) : undefined,
     expiresAt: input.expiresAt ?? null,
@@ -109,6 +124,89 @@ export async function getMemoryByIds(ids: string[]) {
   const idSet = new Set(ids ?? []);
   const entries = await readEntries();
   return entries.filter(e => idSet.has(e.id));
+}
+
+export async function listMemoryEntries(opts?: {
+  category?: AiMemoryFolder['category'];
+  folderKey?: string;
+  limit?: number;
+}) {
+  const entries = pruneEntries(await readEntries());
+  const limit = Math.max(1, Math.min(500, opts?.limit ?? 200));
+
+  return entries
+    .filter(e => {
+      const folder = normalizeMemoryFolder(e.folder);
+      if (opts?.category && folder.category !== opts.category) return false;
+      if (opts?.folderKey && memoryFolderKey(folder) !== opts.folderKey) return false;
+      return true;
+    })
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, limit);
+}
+
+export async function updateMemoryEntry(
+  id: string,
+  patch: Partial<
+    Pick<
+      MemoryEntry,
+      'textSummary' | 'facts' | 'tags' | 'folder' | 'retention' | 'confidence'
+    >
+  >,
+) {
+  const entries = await readEntries();
+  const idx = entries.findIndex(entry => entry.id === id);
+  if (idx < 0) return null;
+
+  const existing = entries[idx];
+  const updated: MemoryEntry = {
+    ...existing,
+    ...patch,
+    tags: patch.tags ? uniq(patch.tags) : existing.tags,
+    folder: patch.folder ? normalizeMemoryFolder(patch.folder) : existing.folder,
+    textSummary:
+      patch.textSummary != null
+        ? String(patch.textSummary).trim()
+        : existing.textSummary,
+    updatedAt: nowMs(),
+  };
+
+  if (!updated.textSummary) return null;
+
+  const next = entries.map(entry =>
+    entry.id === id
+      ? updated
+      : entry,
+  );
+
+  await writeEntries(pruneEntries(next));
+  return updated;
+}
+
+export async function deleteMemoryEntry(id: string) {
+  const entries = await readEntries();
+  const next = entries.filter(entry => entry.id !== id);
+  await writeEntries(next);
+  return next.length !== entries.length;
+}
+
+export async function getMemoryTree() {
+  const entries = await listMemoryEntries({limit: 500});
+  const counts = new Map<string, number>();
+
+  for (const folder of DEFAULT_MEMORY_FOLDERS) {
+    counts.set(memoryFolderKey(folder), 0);
+  }
+
+  for (const entry of entries) {
+    const folder = normalizeMemoryFolder(entry.folder);
+    const key = memoryFolderKey(folder);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .map(([key, count]) => ({key, count}))
+    .sort((a, b) => a.key.localeCompare(b.key));
 }
 
 export async function searchMemory(query: string, opts?: {types?: MemoryType[]; limit?: number}) {

@@ -20,7 +20,14 @@ import {extractHypoEvents} from 'app/containers/MainTabsNavigator/Containers/Tre
 import {BgSample} from 'app/types/day_bgs.types';
 
 import {buildHypoDetectiveContext} from './hypoDetectiveContextBuilder';
-import {buildCompactPatientMemory, getMemoryByIds, searchMemory} from 'app/services/aiMemory/aiMemoryStore';
+import {
+  buildCompactPatientMemory,
+  getMemoryByIds,
+  getMemoryTree,
+  listMemoryEntries,
+  searchMemory,
+  updateMemoryEntry,
+} from 'app/services/aiMemory/aiMemoryStore';
 
 // Loop Analysis imports
 import {
@@ -76,9 +83,15 @@ export type AiAnalystToolName =
   // Local memory tools
   | 'searchMemory'
   | 'getMemoryByIds'
+  | 'listMemoryEntries'
+  | 'getMemoryTree'
+  | 'updateMemoryEntry'
   | 'getPatientProfileSnapshot'
   | 'search_memory'
   | 'get_memory_by_ids'
+  | 'list_memory_entries'
+  | 'get_memory_tree'
+  | 'update_memory_entry'
   | 'get_patient_profile_snapshot';
 
 // Normalize tool names: convert snake_case to camelCase
@@ -101,6 +114,9 @@ function normalizeToolName(name: string): string {
     'get_pump_profile': 'getPumpProfile',
     'search_memory': 'searchMemory',
     'get_memory_by_ids': 'getMemoryByIds',
+    'list_memory_entries': 'listMemoryEntries',
+    'get_memory_tree': 'getMemoryTree',
+    'update_memory_entry': 'updateMemoryEntry',
     'get_patient_profile_snapshot': 'getPatientProfileSnapshot',
   };
   return snakeToCamelMap[name] || name;
@@ -781,7 +797,6 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
 
         // Check if post-change period has enough data
         const now = Date.now();
-        const postEndMs = changeEvent.timestamp + windowDays * 24 * 60 * 60 * 1000;
         const availablePostMs = Math.max(0, now - changeEvent.timestamp);
         const postCoverage = availablePostMs / (windowDays * 24 * 60 * 60 * 1000);
 
@@ -1497,6 +1512,28 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         if (!ids.length) return {ok: false, error: 'ids[] is required'};
         const result = await getMemoryByIds(ids);
         return {ok: true, result: {count: result.length, results: result}};
+      }
+
+      case 'listMemoryEntries': {
+        const result = await listMemoryEntries({
+          category: args?.category,
+          folderKey: args?.folderKey,
+          limit: args?.limit,
+        });
+        return {ok: true, result: {count: result.length, results: result}};
+      }
+
+      case 'getMemoryTree': {
+        const result = await getMemoryTree();
+        return {ok: true, result: {folders: result}};
+      }
+
+      case 'updateMemoryEntry': {
+        const id = String(args?.id ?? '').trim();
+        if (!id) return {ok: false, error: 'id is required'};
+        const result = await updateMemoryEntry(id, args?.patch ?? {});
+        if (!result) return {ok: false, error: 'memory entry not found or empty'};
+        return {ok: true, result};
       }
 
       case 'getPatientProfileSnapshot': {
