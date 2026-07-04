@@ -4,10 +4,12 @@ import {fetchDeviceStatusForDateRangeUncached} from 'app/api/apiRequests';
 import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
 
 export type LoopMode = 'open' | 'closed' | 'unknown';
-type BasalMode = 'temp' | 'suspended' | 'planned' | 'other' | 'unknown';
+export type BasalMode = 'temp' | 'suspended' | 'planned' | 'other' | 'unknown';
 type LoopModeEvent = {timestamp: number; mode: LoopMode; basalMode?: BasalMode};
 
-const LOOP_STATUS_CARRY_FORWARD_MINUTES = 20;
+export const LOOP_STATUS_CARRY_FORWARD_MINUTES = 20;
+export const MIN_LOOP_KNOWN_COVERAGE_PCT = 70;
+export const MIN_BG_SAMPLES_PER_LOOP_MODE = 3;
 
 function inferLoopModeFromBasal(basalMode: BasalMode): LoopMode {
   if (basalMode === 'temp' || basalMode === 'suspended') {
@@ -35,6 +37,13 @@ export interface LoopModeStats {
   tempBasalPct: number;
   suspendedPct: number;
   plannedBasalPct: number;
+  knownMinutes: number;
+  knownCoveragePct: number;
+  unknownPct: number;
+  hasEnoughLoopCoverage: boolean;
+  openMetricsReliable: boolean;
+  closedMetricsReliable: boolean;
+  canCompareOpenClosed: boolean;
   diagnostics: {
     eventsFetched: number;
     eventsClassified: number;
@@ -195,6 +204,13 @@ export function computeLoopModeStats({
       tempBasalPct: 0,
       suspendedPct: 0,
       plannedBasalPct: 0,
+      knownMinutes: 0,
+      knownCoveragePct: 0,
+      unknownPct: 100,
+      hasEnoughLoopCoverage: false,
+      openMetricsReliable: false,
+      closedMetricsReliable: false,
+      canCompareOpenClosed: false,
       diagnostics: {
         eventsFetched: 0,
         eventsClassified: 0,
@@ -349,6 +365,16 @@ export function computeLoopModeStats({
   const closedSamples = bgData
     .filter(s => isValidBgSample(s) && modeAt(s.date) === 'closed')
     .map(s => s.sgv);
+  const knownMinutes = openMinutes + closedMinutes;
+  const knownCoveragePct = (knownMinutes / totalMinutes) * 100;
+  const unknownPct = (unknownMinutes / totalMinutes) * 100;
+  const hasEnoughLoopCoverage =
+    knownCoveragePct >= MIN_LOOP_KNOWN_COVERAGE_PCT;
+  const openMetricsReliable =
+    hasEnoughLoopCoverage && openSamples.length >= MIN_BG_SAMPLES_PER_LOOP_MODE;
+  const closedMetricsReliable =
+    hasEnoughLoopCoverage &&
+    closedSamples.length >= MIN_BG_SAMPLES_PER_LOOP_MODE;
 
   return {
     openMinutes,
@@ -366,6 +392,13 @@ export function computeLoopModeStats({
     tempBasalPct: (tempBasalMinutes / totalMinutes) * 100,
     suspendedPct: (suspendedMinutes / totalMinutes) * 100,
     plannedBasalPct: (plannedBasalMinutes / totalMinutes) * 100,
+    knownMinutes,
+    knownCoveragePct,
+    unknownPct,
+    hasEnoughLoopCoverage,
+    openMetricsReliable,
+    closedMetricsReliable,
+    canCompareOpenClosed: openMetricsReliable && closedMetricsReliable,
     diagnostics: {
       eventsFetched: sortedEvents.length,
       eventsClassified: sortedEvents.filter(e => e.mode !== 'unknown').length,

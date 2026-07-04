@@ -55,6 +55,7 @@ const Trends: React.FC = () => {
   const [loopViewMode, setLoopViewMode] = useState<'both' | 'open' | 'closed'>(
     'both',
   );
+  const [showLoopDiagnostics, setShowLoopDiagnostics] = useState(false);
 
   const isCustomRange = useMemo(
     () => Boolean(customStartDate && customEndDate),
@@ -483,15 +484,27 @@ const Trends: React.FC = () => {
                       )}% • ${Math.round(
                         loopModeStats.openMinutes / 60,
                       )} שעות • ממוצע ${
-                        loopModeStats.openAvgBg?.toFixed(0) ?? '-'
-                      } • TIR ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}%`
+                        loopModeStats.openMetricsReliable
+                          ? loopModeStats.openAvgBg?.toFixed(0) ?? '-'
+                          : '-'
+                      } • TIR ${
+                        loopModeStats.openMetricsReliable
+                          ? loopModeStats.openTirPct?.toFixed(1) ?? '-'
+                          : '-'
+                      }%`
                     : `Open: ${loopModeStats.openPct.toFixed(
                         1,
                       )}% • ${Math.round(
                         loopModeStats.openMinutes / 60,
                       )}h • Avg ${
-                        loopModeStats.openAvgBg?.toFixed(0) ?? '-'
-                      } • TIR ${loopModeStats.openTirPct?.toFixed(1) ?? '-'}%`}
+                        loopModeStats.openMetricsReliable
+                          ? loopModeStats.openAvgBg?.toFixed(0) ?? '-'
+                          : '-'
+                      } • TIR ${
+                        loopModeStats.openMetricsReliable
+                          ? loopModeStats.openTirPct?.toFixed(1) ?? '-'
+                          : '-'
+                      }%`}
                 </Text>
               )}
 
@@ -503,16 +516,26 @@ const Trends: React.FC = () => {
                       )}% • ${Math.round(
                         loopModeStats.closedMinutes / 60,
                       )} שעות • ממוצע ${
-                        loopModeStats.closedAvgBg?.toFixed(0) ?? '-'
-                      } • TIR ${loopModeStats.closedTirPct?.toFixed(1) ?? '-'}%`
+                        loopModeStats.closedMetricsReliable
+                          ? loopModeStats.closedAvgBg?.toFixed(0) ?? '-'
+                          : '-'
+                      } • TIR ${
+                        loopModeStats.closedMetricsReliable
+                          ? loopModeStats.closedTirPct?.toFixed(1) ?? '-'
+                          : '-'
+                      }%`
                     : `Closed: ${loopModeStats.closedPct.toFixed(
                         1,
                       )}% • ${Math.round(
                         loopModeStats.closedMinutes / 60,
                       )}h • Avg ${
-                        loopModeStats.closedAvgBg?.toFixed(0) ?? '-'
+                        loopModeStats.closedMetricsReliable
+                          ? loopModeStats.closedAvgBg?.toFixed(0) ?? '-'
+                          : '-'
                       } • TIR ${
-                        loopModeStats.closedTirPct?.toFixed(1) ?? '-'
+                        loopModeStats.closedMetricsReliable
+                          ? loopModeStats.closedTirPct?.toFixed(1) ?? '-'
+                          : '-'
                       }%`}
                 </Text>
               )}
@@ -523,7 +546,7 @@ const Trends: React.FC = () => {
                       1,
                     )}% (${Math.round(
                       loopModeStats.tempBasalMinutes / 60,
-                    )} ש׳) • מושעה: ${loopModeStats.suspendedPct.toFixed(
+                    )} ש׳) • בזאל 0 / עצירה: ${loopModeStats.suspendedPct.toFixed(
                       1,
                     )}% (${Math.round(
                       loopModeStats.suspendedMinutes / 60,
@@ -536,7 +559,7 @@ const Trends: React.FC = () => {
                       1,
                     )}% (${Math.round(
                       loopModeStats.tempBasalMinutes / 60,
-                    )}h) • Suspended: ${loopModeStats.suspendedPct.toFixed(
+                    )}h) • Zero basal / stop: ${loopModeStats.suspendedPct.toFixed(
                       1,
                     )}% (${Math.round(
                       loopModeStats.suspendedMinutes / 60,
@@ -549,13 +572,71 @@ const Trends: React.FC = () => {
 
               <Text
                 style={{
-                  color: addOpacity(theme.textColor, 0.65),
-                  fontSize: 12,
+                  color: addOpacity(theme.textColor, 0.72),
+                  fontSize: 13,
                 }}>
                 {language === 'he'
-                  ? `דיאגנוסטיקה: אירועים ${loopModeStats.diagnostics.eventsFetched}, מסווגים ${loopModeStats.diagnostics.eventsClassified}, דגימות פתוח ${loopModeStats.diagnostics.openSamples}, דגימות סגור ${loopModeStats.diagnostics.closedSamples}, אירועי בזאל ${loopModeStats.diagnostics.basalEvents}`
-                  : `Diagnostics: events ${loopModeStats.diagnostics.eventsFetched}, classified ${loopModeStats.diagnostics.eventsClassified}, open samples ${loopModeStats.diagnostics.openSamples}, closed samples ${loopModeStats.diagnostics.closedSamples}, basal events ${loopModeStats.diagnostics.basalEvents}`}
+                  ? `כיסוי נתוני לופ: ${loopModeStats.knownCoveragePct.toFixed(
+                      1,
+                    )}% • לא ידוע: ${loopModeStats.unknownPct.toFixed(1)}%${
+                      loopModeStats.hasEnoughLoopCoverage
+                        ? ''
+                        : ' • אין מספיק כיסוי להשוואה חזקה'
+                    }`
+                  : `Loop data coverage: ${loopModeStats.knownCoveragePct.toFixed(
+                      1,
+                    )}% • Unknown: ${loopModeStats.unknownPct.toFixed(1)}%${
+                      loopModeStats.hasEnoughLoopCoverage
+                        ? ''
+                        : ' • Not enough coverage for a strong comparison'
+                    }`}
               </Text>
+
+              {!loopModeStats.canCompareOpenClosed && (
+                <Text
+                  style={{
+                    color: addOpacity(theme.textColor, 0.65),
+                    fontSize: 12,
+                  }}>
+                  {language === 'he'
+                    ? 'ממוצע ו-TIR מוצגים לכל מצב רק כשיש מספיק כיסוי ודגימות.'
+                    : 'Avg and TIR are shown per mode only when coverage and samples are sufficient.'}
+                </Text>
+              )}
+
+              <Pressable
+                onPress={() => setShowLoopDiagnostics(v => !v)}
+                style={{
+                  alignSelf: isRTL ? 'flex-end' : 'flex-start',
+                  paddingVertical: 4,
+                }}>
+                <Text
+                  style={{
+                    color: addOpacity(theme.primaryColor, 0.9),
+                    fontSize: 12,
+                    fontWeight: '600',
+                  }}>
+                  {language === 'he'
+                    ? showLoopDiagnostics
+                      ? 'הסתר דיאגנוסטיקה'
+                      : 'הצג דיאגנוסטיקה'
+                    : showLoopDiagnostics
+                      ? 'Hide diagnostics'
+                      : 'Show diagnostics'}
+                </Text>
+              </Pressable>
+
+              {showLoopDiagnostics && (
+                <Text
+                  style={{
+                    color: addOpacity(theme.textColor, 0.65),
+                    fontSize: 12,
+                  }}>
+                  {language === 'he'
+                    ? `דיאגנוסטיקה: אירועים ${loopModeStats.diagnostics.eventsFetched}, מסווגים ${loopModeStats.diagnostics.eventsClassified}, דגימות פתוח ${loopModeStats.diagnostics.openSamples}, דגימות סגור ${loopModeStats.diagnostics.closedSamples}, אירועי בזאל ${loopModeStats.diagnostics.basalEvents}`
+                    : `Diagnostics: events ${loopModeStats.diagnostics.eventsFetched}, classified ${loopModeStats.diagnostics.eventsClassified}, open samples ${loopModeStats.diagnostics.openSamples}, closed samples ${loopModeStats.diagnostics.closedSamples}, basal events ${loopModeStats.diagnostics.basalEvents}`}
+                </Text>
+              )}
             </View>
           </View>
           {/* (d) AGP Summary */}

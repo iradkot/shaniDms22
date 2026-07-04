@@ -44,6 +44,9 @@ describe('computeLoopModeStats', () => {
     expect(stats.closedMinutes).toBe(120);
     expect(stats.openPct).toBeCloseTo(50, 1);
     expect(stats.closedPct).toBeCloseTo(50, 1);
+    expect(stats.knownCoveragePct).toBeCloseTo(100, 1);
+    expect(stats.unknownPct).toBeCloseTo(0, 1);
+    expect(stats.hasEnoughLoopCoverage).toBe(true);
 
     expect(stats.openAvgBg).toBeCloseTo(170, 0);
     expect(stats.closedAvgBg).toBeCloseTo(100, 0);
@@ -112,8 +115,46 @@ describe('computeLoopModeStats', () => {
 
     expect(stats.closedMinutes).toBe(20);
     expect(stats.unknownMinutes).toBe(100);
+    expect(stats.knownCoveragePct).toBeCloseTo(16.7, 1);
+    expect(stats.hasEnoughLoopCoverage).toBe(false);
+    expect(stats.closedMetricsReliable).toBe(false);
+    expect(stats.canCompareOpenClosed).toBe(false);
     expect(stats.closedAvgBg).toBe(120);
     expect(stats.diagnostics.closedSamples).toBe(1);
+  });
+
+  it('requires enough BG samples before mode metrics are marked reliable', () => {
+    const start = new Date('2026-04-01T00:00:00Z');
+    const end = new Date('2026-04-01T02:00:00Z');
+
+    const stats = computeLoopModeStats({
+      start,
+      end,
+      events: [
+        {
+          timestamp: start.getTime(),
+          mode: 'open',
+          basalMode: 'planned',
+        },
+        {
+          timestamp: start.getTime() + 60 * 60000,
+          mode: 'closed',
+          basalMode: 'temp',
+        },
+      ],
+      bgData: [
+        {date: start.getTime() + 10 * 60000, sgv: 130},
+        {date: start.getTime() + 20 * 60000, sgv: 140},
+        {date: start.getTime() + 70 * 60000, sgv: 120},
+        {date: start.getTime() + 80 * 60000, sgv: 125},
+        {date: start.getTime() + 90 * 60000, sgv: 135},
+      ] as any[],
+    });
+
+    expect(stats.hasEnoughLoopCoverage).toBe(true);
+    expect(stats.openMetricsReliable).toBe(false);
+    expect(stats.closedMetricsReliable).toBe(true);
+    expect(stats.canCompareOpenClosed).toBe(false);
   });
 });
 
