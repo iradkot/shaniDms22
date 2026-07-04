@@ -15,6 +15,7 @@ export const ORACLE_TAB_SCREEN: string = 'OracleTabScreen';
 
 // AI Analyst (LLM)
 export const AI_ANALYST_TAB_SCREEN: string = 'AiAnalystTabScreen';
+export const AI_MEMORY_SCREEN: string = 'AiMemoryScreen';
 
 // FOOD
 export const Food_Tracking_TAB_SCREEN: string = 'FoodTrackingTabScreen';

@@ -66,7 +66,7 @@ import {
   stripFillerSuffix,
 } from '../helpers/textParsing';
 import {DEFAULT_TOOL_SYSTEM_PROMPT, buildSystemPrompt} from '../llm/prompts';
-import {runLlmToolLoop, withTimeout} from '../llm';
+import {runAiAnalystAgentOrchestra, runLlmToolLoop, withTimeout} from '../llm';
 import {
   createMarkdownItInstance,
   createSelectableMarkdownRules,
@@ -1016,24 +1016,48 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const systemPrompt = buildSystemPrompt(analystMode, glucoseSettings, language, aiSettings.personality);
 
       const contextWindowMessages = buildContextWindow(workingLlmMessages);
-
-      const {finalText, llmMessages: updatedMessages} = await runLlmToolLoop({
+      const callbacks = {
+        onToolStart: (name: string) => setProgressText(`Running ${name}…`),
+        onToolResult: recordDataUsed,
+        isCancelled: () => runSeqRef.current !== runId,
+      };
+      const mission =
+        analystMode === 'loopSettings'
+          ? 'loopSettings'
+          : analystMode === 'userBehavior'
+            ? 'userBehavior'
+            : 'openChat';
+      const commonLoopParams = {
         provider,
         model: aiSettings.openAiModel,
-        systemPrompt,
         initialMessages: contextWindowMessages,
         maxToolCalls,
         maxOutputTokens,
         temperature: temperatureForModel(aiSettings.openAiModel, DEFAULT_TEMPERATURE),
         abortSignal: signal,
-        callbacks: {
-          onToolStart: name => setProgressText(`Running ${name}…`),
-          onToolResult: recordDataUsed,
-          isCancelled: () => runSeqRef.current !== runId,
-        },
-        isLoopSettingsMode: analystMode === 'loopSettings',
-        enableExpertReflection: analystMode === 'loopSettings',
-      });
+        callbacks,
+      };
+
+      let finalText = '';
+      let updatedMessages = contextWindowMessages;
+      try {
+        const orchestrated = await runAiAnalystAgentOrchestra({
+          ...commonLoopParams,
+          mission,
+          baseSystemPrompt: systemPrompt,
+        });
+        finalText = orchestrated.finalText;
+        updatedMessages = orchestrated.llmMessages;
+      } catch {
+        const legacy = await runLlmToolLoop({
+          ...commonLoopParams,
+          systemPrompt,
+          isLoopSettingsMode: analystMode === 'loopSettings',
+          enableExpertReflection: analystMode === 'loopSettings',
+        });
+        finalText = legacy.finalText;
+        updatedMessages = legacy.llmMessages;
+      }
 
       if (runSeqRef.current !== runId) return;
       setLlmMessages(updatedMessages);

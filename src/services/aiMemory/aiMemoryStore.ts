@@ -216,6 +216,7 @@ export async function searchMemory(query: string, opts?: {types?: MemoryType[]; 
 
   const scored = entries
     .filter(e => (typeSet ? typeSet.has(e.type) : true))
+    .filter(e => !(e.tags ?? []).includes('disabled_for_ai'))
     .map(e => {
       const haystack = `${e.textSummary} ${(e.tags ?? []).join(' ')} ${JSON.stringify(e.facts ?? {})}`;
       const semantic = overlapScore(query, haystack);

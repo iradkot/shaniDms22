@@ -26,6 +26,14 @@ describe('default AI orchestra', () => {
     expect(finalPhase.agentIds).toEqual(['safety_reviewer', 'final_writer']);
   });
 
+  it('allows the memory curator to save explicitly approved memories', () => {
+    const memoryAgent = getAiOrchestraAgentsForMission('openChat').find(
+      agent => agent.id === 'memory_curator',
+    );
+
+    expect(memoryAgent?.allowedTools).toContain('addMemoryEntry');
+  });
+
   it('renders a compact prompt block without exposing implementation detail as a user instruction', () => {
     const block = buildAiOrchestraPromptBlock('userBehavior');
 

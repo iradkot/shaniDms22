@@ -21,7 +21,7 @@ import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import ADIcon from 'react-native-vector-icons/AntDesign';
 import {useNavigation, useRoute} from '@react-navigation/native';
-import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
+import {AI_MEMORY_SCREEN, NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {validateOpenAiApiKey} from 'app/services/llm/providers/openaiProvider';
 import {sendDailyBriefNow} from 'app/services/proactiveCare/dailyBrief';
 import {clearAllMemory, getMemoryStats} from 'app/services/aiMemory/aiMemoryStore';
@@ -1021,6 +1021,22 @@ const Settings: React.FC = () => {
                   : `Total ${memoryStats?.total ?? 0} items | profile ${memoryStats?.byType?.profile ?? 0} | episodes ${memoryStats?.byType?.episode ?? 0} | summaries ${memoryStats?.byType?.chat_summary ?? 0}`}
               </Text>
               <View style={{flexDirection: 'row', marginTop: theme.spacing.sm}}>
+                <Pressable
+                  onPress={() => navigation.navigate(AI_MEMORY_SCREEN)}
+                  style={({pressed}) => ({
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderRadius: theme.borderRadius,
+                    borderWidth: 1,
+                    borderColor: theme.borderColor,
+                    backgroundColor: pressed ? theme.borderColor : theme.white,
+                    marginRight: theme.spacing.sm,
+                  })}
+                >
+                  <Text style={{color: theme.textColor, fontWeight: '700'}}>
+                    {language === 'he' ? 'פתח זיכרון' : 'Open memory'}
+                  </Text>
+                </Pressable>
                 <Pressable
                   onPress={refreshMemoryStats}
                   disabled={memoryBusy}

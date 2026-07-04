@@ -33,7 +33,12 @@ export const DEFAULT_AI_ORCHESTRA_AGENTS: AiAgentDefinition[] = [
     objective:
       'Retrieve patient context, preferences, active clinical flags, and historical notes that should influence the response.',
     required: true,
-    allowedTools: ['getPatientProfileSnapshot', 'searchMemory', 'getMemoryByIds'],
+    allowedTools: [
+      'getPatientProfileSnapshot',
+      'searchMemory',
+      'getMemoryByIds',
+      'addMemoryEntry',
+    ],
     outputKind: 'memory_context',
   },
   {

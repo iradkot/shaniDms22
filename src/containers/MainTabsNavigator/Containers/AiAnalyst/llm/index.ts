@@ -14,6 +14,7 @@ export type {
 
 // Core loop
 export {runLlmToolLoop} from './runToolLoop';
+export {runAiAnalystAgentOrchestra} from './runAgentOrchestra';
 
 // Utilities
 export {withTimeout} from './withTimeout';

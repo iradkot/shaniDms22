@@ -22,6 +22,7 @@ import {BgSample} from 'app/types/day_bgs.types';
 import {buildHypoDetectiveContext} from './hypoDetectiveContextBuilder';
 import {
   buildCompactPatientMemory,
+  addMemoryEntry,
   getMemoryByIds,
   getMemoryTree,
   listMemoryEntries,
@@ -82,12 +83,14 @@ export type AiAnalystToolName =
   | 'get_monthly_glucose_summary'
   // Local memory tools
   | 'searchMemory'
+  | 'addMemoryEntry'
   | 'getMemoryByIds'
   | 'listMemoryEntries'
   | 'getMemoryTree'
   | 'updateMemoryEntry'
   | 'getPatientProfileSnapshot'
   | 'search_memory'
+  | 'add_memory_entry'
   | 'get_memory_by_ids'
   | 'list_memory_entries'
   | 'get_memory_tree'
@@ -113,6 +116,7 @@ function normalizeToolName(name: string): string {
     'get_treatments': 'getTreatments',
     'get_pump_profile': 'getPumpProfile',
     'search_memory': 'searchMemory',
+    'add_memory_entry': 'addMemoryEntry',
     'get_memory_by_ids': 'getMemoryByIds',
     'list_memory_entries': 'listMemoryEntries',
     'get_memory_tree': 'getMemoryTree',
@@ -1505,6 +1509,30 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const types = Array.isArray(args?.types) ? args.types : undefined;
         const result = await searchMemory(query, {limit, types});
         return {ok: true, result: {query, count: result.length, results: result}};
+      }
+
+      case 'addMemoryEntry': {
+        if (!args?.userApproved) {
+          return {
+            ok: false,
+            error:
+              'Explicit userApproved=true is required before saving patient memory from chat.',
+          };
+        }
+        const textSummary = String(args?.textSummary ?? '').trim();
+        if (!textSummary) return {ok: false, error: 'textSummary is required'};
+        const result = await addMemoryEntry({
+          type: args?.type === 'profile' || args?.type === 'chat_summary' ? args.type : 'episode',
+          tags: Array.isArray(args?.tags) ? args.tags.map((x: any) => String(x)) : ['user_approved'],
+          textSummary,
+          facts: args?.facts ?? {},
+          folder: args?.folder,
+          retention: args?.retention,
+          source: 'user',
+          confidence: typeof args?.confidence === 'number' ? args.confidence : 0.9,
+          expiresAt: args?.expiresAt ?? null,
+        });
+        return {ok: true, result};
       }
 
       case 'getMemoryByIds': {

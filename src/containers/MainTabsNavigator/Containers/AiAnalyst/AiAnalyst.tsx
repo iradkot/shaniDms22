@@ -5,6 +5,7 @@ import {useTheme} from 'styled-components/native';
 
 import {ThemeType} from 'app/types/theme';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {AI_MEMORY_SCREEN, SETTINGS_TAB_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {addOpacity} from 'app/style/styling.utils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
@@ -163,6 +164,9 @@ const AiAnalyst: React.FC = () => {
       onStartUserBehavior={engine.startUserBehavior}
       onStartLoopSettings={engine.startLoopSettingsAdvisor}
       onOpenHistory={engine.openHistory}
+      onOpenMemory={() =>
+        navigation.navigate(SETTINGS_TAB_SCREEN, {screen: AI_MEMORY_SCREEN})
+      }
       isBusy={engine.isBusy}
       progressText={engine.progressText}
       errorText={engine.errorText}

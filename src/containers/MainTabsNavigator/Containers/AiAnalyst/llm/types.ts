@@ -53,6 +53,7 @@ export interface ToolLoopParams {
   systemPrompt: string;
   initialMessages: LlmChatMessage[];
   maxToolCalls: number;
+  allowedTools?: AiAnalystToolName[];
   maxOutputTokens: number;
   temperature?: number;
   abortSignal?: AbortSignal;

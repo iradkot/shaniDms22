@@ -32,6 +32,7 @@ export interface DashboardScreenProps {
   onStartUserBehavior: () => void;
   onStartLoopSettings: () => void;
   onOpenHistory: () => void;
+  onOpenMemory: () => void;
   isBusy: boolean;
   progressText: string;
   errorText: string | null;
@@ -47,6 +48,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onStartUserBehavior,
   onStartLoopSettings,
   onOpenHistory,
+  onOpenMemory,
   isBusy,
   progressText,
   errorText,
@@ -75,6 +77,27 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <View style={{flex: 1}}>
               <CardTitle>{tr(language, 'ai.conversationHistory')}</CardTitle>
               <CardSubtitle>{tr(language, 'ai.savedTextOnly')}</CardSubtitle>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
+          </CardRow>
+
+          <View style={{height: theme.spacing.md}} />
+
+          <CardRow
+            onPress={onOpenMemory}
+            accessibilityRole="button"
+            accessibilityLabel={language === 'he' ? 'מה הסוכן זוכר' : 'AI memory'}
+          >
+            <CardIcon>
+              <MaterialIcons name="folder-shared" size={22} color={theme.accentColor} />
+            </CardIcon>
+            <View style={{flex: 1}}>
+              <CardTitle>{language === 'he' ? 'מה הסוכן זוכר' : 'AI memory'}</CardTitle>
+              <CardSubtitle>
+                {language === 'he'
+                  ? 'צפייה ועריכה של זיכרונות, תיקיות והעדפות'
+                  : 'Review and edit saved memories, folders, and preferences'}
+              </CardSubtitle>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={addOpacity(theme.textColor, 0.5)} />
           </CardRow>

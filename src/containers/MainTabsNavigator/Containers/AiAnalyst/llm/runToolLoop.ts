@@ -38,6 +38,7 @@ export async function runLlmToolLoop(params: ToolLoopParams): Promise<ToolLoopRe
     systemPrompt,
     initialMessages,
     maxToolCalls,
+    allowedTools,
     maxOutputTokens,
     temperature,
     abortSignal,
@@ -111,7 +112,7 @@ export async function runLlmToolLoop(params: ToolLoopParams): Promise<ToolLoopRe
       console.log(`[AiAnalyst] Tool call #${toolCalls}: ${envelope.name}`, envelope.args);
 
       const toolResult = await executeToolCall(
-        envelope.name, envelope.args, callbacks,
+        envelope.name, envelope.args, callbacks, allowedTools,
       );
 
       if (callbacks.isCancelled()) {
@@ -214,7 +215,17 @@ async function executeToolCall(
   toolName: AiAnalystToolName,
   toolArgs: any,
   callbacks: ToolLoopParams['callbacks'],
+  allowedTools?: AiAnalystToolName[],
 ): Promise<any> {
+  const normalizedToolName = normalizeAllowedToolName(toolName);
+  if (
+    allowedTools?.length &&
+    !allowedTools.includes(toolName) &&
+    !allowedTools.includes(normalizedToolName)
+  ) {
+    return {ok: false, error: `Tool ${toolName} is not allowed for this agent`};
+  }
+
   callbacks.onToolStart?.(toolName);
 
   const result = await withTimeout(
@@ -230,6 +241,30 @@ async function executeToolCall(
   );
 
   return result;
+}
+
+function normalizeAllowedToolName(toolName: AiAnalystToolName): AiAnalystToolName {
+  const aliases: Partial<Record<AiAnalystToolName, AiAnalystToolName>> = {
+    get_glucose_patterns: 'getGlucosePatterns',
+    analyze_time_in_range: 'analyzeTimeInRange',
+    compare_periods: 'comparePeriods',
+    get_insulin_delivery_stats: 'getInsulinDeliveryStats',
+    analyze_meal_responses: 'analyzeMealResponses',
+    get_settings_change_history: 'getSettingsChangeHistory',
+    get_profile_change_history: 'getProfileChangeHistory',
+    get_current_profile_settings: 'getCurrentProfileSettings',
+    get_glucose_stats: 'getGlucoseStats',
+    get_monthly_glucose_summary: 'getMonthlyGlucoseSummary',
+    get_meal_absorption_data: 'getMealAbsorptionData',
+    add_memory_entry: 'addMemoryEntry',
+    search_memory: 'searchMemory',
+    get_memory_by_ids: 'getMemoryByIds',
+    list_memory_entries: 'listMemoryEntries',
+    get_memory_tree: 'getMemoryTree',
+    update_memory_entry: 'updateMemoryEntry',
+    get_patient_profile_snapshot: 'getPatientProfileSnapshot',
+  };
+  return aliases[toolName] ?? toolName;
 }
 
 /** Append a tool-call exchange (assistant request + tool result) to messages. */
