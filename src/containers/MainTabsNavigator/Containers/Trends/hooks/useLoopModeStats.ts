@@ -356,8 +356,7 @@ export function computeLoopModeStats({
   const knownMinutes = openMinutes + closedMinutes;
   const knownCoveragePct = (knownMinutes / totalMinutes) * 100;
   const unknownPct = (unknownMinutes / totalMinutes) * 100;
-  const hasEnoughLoopCoverage =
-    knownCoveragePct >= MIN_LOOP_KNOWN_COVERAGE_PCT;
+  const hasEnoughLoopCoverage = knownCoveragePct >= MIN_LOOP_KNOWN_COVERAGE_PCT;
   const openMetricsReliable =
     hasEnoughLoopCoverage && openSamples.length >= MIN_BG_SAMPLES_PER_LOOP_MODE;
   const closedMetricsReliable =
@@ -407,23 +406,37 @@ export function useLoopModeStats({
   bgData: BgSample[];
 }) {
   const [events, setEvents] = useState<LoopModeEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [rowsFetched, setRowsFetched] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setIsLoading(true);
+      setFetchError(null);
       try {
         const rows = await fetchDeviceStatusForDateRangeUncached(
           new Date(start.getTime() - LOOP_STATUS_CARRY_FORWARD_MINUTES * 60000),
           end,
+          {throwOnError: true},
         );
         const normalized = buildLoopModeEventsFromDeviceStatus(rows);
 
         if (!cancelled) {
+          setRowsFetched(rows.length);
           setEvents(normalized);
+          setFetchError(null);
         }
-      } catch {
+      } catch (error: any) {
         if (!cancelled) {
+          setRowsFetched(0);
           setEvents([]);
+          setFetchError(error?.message ?? String(error ?? 'Unknown error'));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
         }
       }
     })();
@@ -433,7 +446,7 @@ export function useLoopModeStats({
     };
   }, [start, end]);
 
-  return useMemo(() => {
+  const stats = useMemo(() => {
     return computeLoopModeStats({
       start,
       end,
@@ -442,4 +455,11 @@ export function useLoopModeStats({
       maxCarryForwardMinutes: LOOP_STATUS_CARRY_FORWARD_MINUTES,
     });
   }, [events, bgData, start, end]);
+
+  return {
+    stats,
+    isLoading,
+    fetchError,
+    rowsFetched,
+  };
 }

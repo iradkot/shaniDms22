@@ -165,7 +165,7 @@ export const fetchTreatmentsForDateRangeUncached = async (
 export const fetchDeviceStatusForDateRangeUncached = async (
   startDate: Date,
   endDate: Date,
-  options?: {count?: number},
+  options?: {count?: number; throwOnError?: boolean},
 ): Promise<DeviceStatusEntry[]> => {
   const startIso = startDate.toISOString();
   const endIso = endDate.toISOString();
@@ -183,6 +183,9 @@ export const fetchDeviceStatusForDateRangeUncached = async (
       'fetchDeviceStatusForDateRangeUncached: Failed to fetch device status',
       error,
     );
+    if (options?.throwOnError) {
+      throw error;
+    }
     return [];
   }
 };

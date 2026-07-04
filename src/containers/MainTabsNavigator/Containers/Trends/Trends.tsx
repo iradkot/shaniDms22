@@ -131,7 +131,12 @@ const Trends: React.FC = () => {
     end,
     rangeDays,
   });
-  const loopModeStats = useLoopModeStats({start, end, bgData});
+  const {
+    stats: loopModeStats,
+    isLoading: isLoopModeStatsLoading,
+    fetchError: loopModeStatsError,
+    rowsFetched: loopModeRowsFetched,
+  } = useLoopModeStats({start, end, bgData});
 
   const hypoInvestigationNavLockRef = useRef(false);
   const hypoInvestigationUnlockTimeoutRef = useRef<ReturnType<
@@ -737,7 +742,11 @@ const Trends: React.FC = () => {
                         fontSize: 12,
                         textAlign: isRTL ? 'right' : 'left',
                       }}>
-                      {language === 'he'
+                      {isLoopModeStatsLoading
+                        ? language === 'he'
+                          ? 'טוען devicestatus...'
+                          : 'Loading devicestatus...'
+                        : language === 'he'
                         ? `לא ידוע ${loopModeStats.unknownPct.toFixed(1)}%`
                         : `Unknown ${loopModeStats.unknownPct.toFixed(1)}%`}
                     </Text>
@@ -761,7 +770,9 @@ const Trends: React.FC = () => {
                       fontSize: 18,
                       fontWeight: '800',
                     }}>
-                    {loopModeStats.knownCoveragePct.toFixed(0)}%
+                    {isLoopModeStatsLoading
+                      ? '...'
+                      : `${loopModeStats.knownCoveragePct.toFixed(0)}%`}
                   </Text>
                   <Text
                     style={{
@@ -769,102 +780,202 @@ const Trends: React.FC = () => {
                       fontSize: 11,
                       fontWeight: '600',
                     }}>
-                    {language === 'he' ? 'ידוע' : 'known'}
+                    {isLoopModeStatsLoading
+                      ? language === 'he'
+                        ? 'טוען'
+                        : 'loading'
+                      : language === 'he'
+                      ? 'ידוע'
+                      : 'known'}
                   </Text>
                 </View>
               </View>
 
-              {(loopViewMode === 'both' || loopViewMode === 'open') &&
-                renderLoopModeCard('open')}
-
-              {(loopViewMode === 'both' || loopViewMode === 'closed') &&
-                renderLoopModeCard('closed')}
-
-              <View style={{gap: 8}}>
-                <Text
-                  style={{
-                    color: addOpacity(theme.textColor, 0.72),
-                    fontSize: 12,
-                    fontWeight: '800',
-                    textAlign: isRTL ? 'right' : 'left',
-                  }}>
-                  {language === 'he' ? 'פירוק בזאל' : 'Basal breakdown'}
-                </Text>
+              {isLoopModeStatsLoading ? (
                 <View
                   style={{
-                    flexDirection: isRTL ? 'row-reverse' : 'row',
-                    flexWrap: 'wrap',
-                    gap: 8,
-                  }}>
-                  {[
-                    {
-                      icon: 'bolt',
-                      label: language === 'he' ? 'טמפ בזאל' : 'Temp basal',
-                      pct: loopModeStats.tempBasalPct,
-                      minutes: loopModeStats.tempBasalMinutes,
-                    },
-                    {
-                      icon: 'pause-circle-outline',
-                      label:
-                        language === 'he'
-                          ? 'בזאל 0 / עצירה'
-                          : 'Zero basal / stop',
-                      pct: loopModeStats.suspendedPct,
-                      minutes: loopModeStats.suspendedMinutes,
-                    },
-                    {
-                      icon: 'event-repeat',
-                      label:
-                        language === 'he' ? 'בזאל מתוכנן' : 'Planned basal',
-                      pct: loopModeStats.plannedBasalPct,
-                      minutes: loopModeStats.plannedBasalMinutes,
-                    },
-                  ].map(renderBasalPill)}
-                </View>
-              </View>
-
-              {!loopModeStats.hasEnoughLoopCoverage && (
-                <View
-                  style={{
-                    borderRadius: 10,
-                    paddingHorizontal: 10,
-                    paddingVertical: 8,
-                    backgroundColor: addOpacity('#f1c40f', 0.13),
+                    borderRadius: 12,
+                    padding: 12,
+                    backgroundColor: addOpacity(theme.textColor, 0.055),
                     flexDirection: isRTL ? 'row-reverse' : 'row',
                     alignItems: 'center',
-                    gap: 7,
+                    gap: 8,
                   }}>
                   <MaterialIcons
-                    name="info-outline"
-                    size={16}
-                    color={addOpacity(theme.textColor, 0.75)}
+                    name="hourglass-empty"
+                    size={17}
+                    color={addOpacity(theme.textColor, 0.72)}
                   />
                   <Text
                     style={{
                       flex: 1,
                       color: addOpacity(theme.textColor, 0.72),
-                      fontSize: 12,
-                      fontWeight: '600',
+                      fontSize: 13,
+                      fontWeight: '700',
                       textAlign: isRTL ? 'right' : 'left',
                     }}>
                     {language === 'he'
-                      ? 'אין מספיק כיסוי להשוואה חזקה בין פתוח לסגור.'
-                      : 'Not enough coverage for a strong open/closed comparison.'}
+                      ? 'טוען נתוני לופ מהשרת...'
+                      : 'Loading loop data from the server...'}
                   </Text>
                 </View>
-              )}
+              ) : (
+                <>
+                  {loopModeStatsError && (
+                    <View
+                      style={{
+                        borderRadius: 10,
+                        paddingHorizontal: 10,
+                        paddingVertical: 8,
+                        backgroundColor: addOpacity('#e74c3c', 0.12),
+                        flexDirection: isRTL ? 'row-reverse' : 'row',
+                        alignItems: 'center',
+                        gap: 7,
+                      }}>
+                      <MaterialIcons
+                        name="error-outline"
+                        size={16}
+                        color={addOpacity(theme.textColor, 0.78)}
+                      />
+                      <Text
+                        style={{
+                          flex: 1,
+                          color: addOpacity(theme.textColor, 0.75),
+                          fontSize: 12,
+                          fontWeight: '700',
+                          textAlign: isRTL ? 'right' : 'left',
+                        }}>
+                        {language === 'he'
+                          ? 'טעינת נתוני הלופ נכשלה.'
+                          : 'Loop data failed to load.'}
+                      </Text>
+                    </View>
+                  )}
 
-              {!loopModeStats.canCompareOpenClosed && (
-                <Text
-                  style={{
-                    color: addOpacity(theme.textColor, 0.65),
-                    fontSize: 12,
-                    textAlign: isRTL ? 'right' : 'left',
-                  }}>
-                  {language === 'he'
-                    ? 'ממוצע ו-TIR מוצגים לכל מצב רק כשיש מספיק כיסוי ודגימות.'
-                    : 'Avg and TIR are shown per mode only when coverage and samples are sufficient.'}
-                </Text>
+                  {!loopModeStatsError && loopModeRowsFetched === 0 && (
+                    <View
+                      style={{
+                        borderRadius: 10,
+                        paddingHorizontal: 10,
+                        paddingVertical: 8,
+                        backgroundColor: addOpacity('#f1c40f', 0.13),
+                        flexDirection: isRTL ? 'row-reverse' : 'row',
+                        alignItems: 'center',
+                        gap: 7,
+                      }}>
+                      <MaterialIcons
+                        name="info-outline"
+                        size={16}
+                        color={addOpacity(theme.textColor, 0.75)}
+                      />
+                      <Text
+                        style={{
+                          flex: 1,
+                          color: addOpacity(theme.textColor, 0.72),
+                          fontSize: 12,
+                          fontWeight: '700',
+                          textAlign: isRTL ? 'right' : 'left',
+                        }}>
+                        {language === 'he'
+                          ? 'לא נמצאו נתוני devicestatus לטווח הזה.'
+                          : 'No devicestatus data was found for this range.'}
+                      </Text>
+                    </View>
+                  )}
+
+                  {(loopViewMode === 'both' || loopViewMode === 'open') &&
+                    renderLoopModeCard('open')}
+
+                  {(loopViewMode === 'both' || loopViewMode === 'closed') &&
+                    renderLoopModeCard('closed')}
+
+                  <View style={{gap: 8}}>
+                    <Text
+                      style={{
+                        color: addOpacity(theme.textColor, 0.72),
+                        fontSize: 12,
+                        fontWeight: '800',
+                        textAlign: isRTL ? 'right' : 'left',
+                      }}>
+                      {language === 'he' ? 'פירוק בזאל' : 'Basal breakdown'}
+                    </Text>
+                    <View
+                      style={{
+                        flexDirection: isRTL ? 'row-reverse' : 'row',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                      }}>
+                      {[
+                        {
+                          icon: 'bolt',
+                          label: language === 'he' ? 'טמפ בזאל' : 'Temp basal',
+                          pct: loopModeStats.tempBasalPct,
+                          minutes: loopModeStats.tempBasalMinutes,
+                        },
+                        {
+                          icon: 'pause-circle-outline',
+                          label:
+                            language === 'he'
+                              ? 'בזאל 0 / עצירה'
+                              : 'Zero basal / stop',
+                          pct: loopModeStats.suspendedPct,
+                          minutes: loopModeStats.suspendedMinutes,
+                        },
+                        {
+                          icon: 'event-repeat',
+                          label:
+                            language === 'he' ? 'בזאל מתוכנן' : 'Planned basal',
+                          pct: loopModeStats.plannedBasalPct,
+                          minutes: loopModeStats.plannedBasalMinutes,
+                        },
+                      ].map(renderBasalPill)}
+                    </View>
+                  </View>
+
+                  {!loopModeStats.hasEnoughLoopCoverage && (
+                    <View
+                      style={{
+                        borderRadius: 10,
+                        paddingHorizontal: 10,
+                        paddingVertical: 8,
+                        backgroundColor: addOpacity('#f1c40f', 0.13),
+                        flexDirection: isRTL ? 'row-reverse' : 'row',
+                        alignItems: 'center',
+                        gap: 7,
+                      }}>
+                      <MaterialIcons
+                        name="info-outline"
+                        size={16}
+                        color={addOpacity(theme.textColor, 0.75)}
+                      />
+                      <Text
+                        style={{
+                          flex: 1,
+                          color: addOpacity(theme.textColor, 0.72),
+                          fontSize: 12,
+                          fontWeight: '600',
+                          textAlign: isRTL ? 'right' : 'left',
+                        }}>
+                        {language === 'he'
+                          ? 'אין מספיק כיסוי להשוואה חזקה בין פתוח לסגור.'
+                          : 'Not enough coverage for a strong open/closed comparison.'}
+                      </Text>
+                    </View>
+                  )}
+
+                  {!loopModeStats.canCompareOpenClosed && (
+                    <Text
+                      style={{
+                        color: addOpacity(theme.textColor, 0.65),
+                        fontSize: 12,
+                        textAlign: isRTL ? 'right' : 'left',
+                      }}>
+                      {language === 'he'
+                        ? 'ממוצע ו-TIR מוצגים לכל מצב רק כשיש מספיק כיסוי ודגימות.'
+                        : 'Avg and TIR are shown per mode only when coverage and samples are sufficient.'}
+                    </Text>
+                  )}
+                </>
               )}
 
               <Pressable
@@ -914,6 +1025,10 @@ const Trends: React.FC = () => {
                     }}>
                     {[
                       {
+                        label: language === 'he' ? 'rows מהשרת' : 'server rows',
+                        value: loopModeRowsFetched,
+                      },
+                      {
                         label: language === 'he' ? 'אירועים' : 'events',
                         value: loopModeStats.diagnostics.eventsFetched,
                       },
@@ -936,6 +1051,14 @@ const Trends: React.FC = () => {
                           language === 'he' ? 'אירועי בזאל' : 'basal events',
                         value: loopModeStats.diagnostics.basalEvents,
                       },
+                      ...(loopModeStatsError
+                        ? [
+                            {
+                              label: language === 'he' ? 'שגיאה' : 'error',
+                              value: loopModeStatsError,
+                            },
+                          ]
+                        : []),
                     ].map(item => (
                       <View
                         key={item.label}
