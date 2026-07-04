@@ -406,9 +406,12 @@ export function useLoopModeStats({
   bgData: BgSample[];
 }) {
   const [events, setEvents] = useState<LoopModeEvent[]>([]);
+  const [eventsRangeKey, setEventsRangeKey] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [rowsFetched, setRowsFetched] = useState(0);
+  const rangeKey = `${start.getTime()}-${end.getTime()}`;
+  const hasCurrentRangeData = eventsRangeKey === rangeKey;
 
   useEffect(() => {
     let cancelled = false;
@@ -426,12 +429,14 @@ export function useLoopModeStats({
         if (!cancelled) {
           setRowsFetched(rows.length);
           setEvents(normalized);
+          setEventsRangeKey(rangeKey);
           setFetchError(null);
         }
       } catch (error: any) {
         if (!cancelled) {
           setRowsFetched(0);
           setEvents([]);
+          setEventsRangeKey(rangeKey);
           setFetchError(error?.message ?? String(error ?? 'Unknown error'));
         }
       } finally {
@@ -444,22 +449,22 @@ export function useLoopModeStats({
     return () => {
       cancelled = true;
     };
-  }, [start, end]);
+  }, [end, rangeKey, start]);
 
   const stats = useMemo(() => {
     return computeLoopModeStats({
       start,
       end,
       bgData,
-      events,
+      events: hasCurrentRangeData ? events : [],
       maxCarryForwardMinutes: LOOP_STATUS_CARRY_FORWARD_MINUTES,
     });
-  }, [events, bgData, start, end]);
+  }, [bgData, end, events, hasCurrentRangeData, start]);
 
   return {
     stats,
-    isLoading,
+    isLoading: isLoading || !hasCurrentRangeData,
     fetchError,
-    rowsFetched,
+    rowsFetched: hasCurrentRangeData ? rowsFetched : 0,
   };
 }
