@@ -198,4 +198,38 @@ describe('buildLoopModeEventsFromDeviceStatus', () => {
       'suspended',
     ]);
   });
+
+  it('does not infer open loop from planned basal alone', () => {
+    const events = buildLoopModeEventsFromDeviceStatus([
+      {
+        created_at: '2026-04-01T00:00:00Z',
+        pump: {
+          clock: '2026-04-01T00:00:00Z',
+        },
+      },
+    ] as any[]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].mode).toBe('unknown');
+    expect(events[0].basalMode).toBe('planned');
+  });
+
+  it('does not classify rejected OpenAPS enacted payloads as closed', () => {
+    const events = buildLoopModeEventsFromDeviceStatus([
+      {
+        created_at: '2026-04-01T00:00:00Z',
+        openaps: {
+          enacted: {
+            received: false,
+            rate: 1.1,
+            duration: 30,
+          },
+        },
+      },
+    ] as any[]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].mode).toBe('open');
+    expect(events[0].basalMode).toBe('temp');
+  });
 });

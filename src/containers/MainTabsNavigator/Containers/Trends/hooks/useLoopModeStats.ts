@@ -11,16 +11,6 @@ export const LOOP_STATUS_CARRY_FORWARD_MINUTES = 20;
 export const MIN_LOOP_KNOWN_COVERAGE_PCT = 70;
 export const MIN_BG_SAMPLES_PER_LOOP_MODE = 3;
 
-function inferLoopModeFromBasal(basalMode: BasalMode): LoopMode {
-  if (basalMode === 'temp' || basalMode === 'suspended') {
-    return 'closed';
-  }
-  if (basalMode === 'planned') {
-    return 'open';
-  }
-  return 'unknown';
-}
-
 export interface LoopModeStats {
   openMinutes: number;
   closedMinutes: number;
@@ -90,7 +80,7 @@ function classifyModeFromDeviceStatus(entry: DeviceStatusEntry): LoopMode {
 
   const openapsEnacted = asRecord(openaps?.enacted);
   if (openapsEnacted) {
-    return 'closed';
+    return openapsEnacted.received === false ? 'open' : 'closed';
   }
   if (asRecord(openaps?.suggested)) {
     return 'open';
@@ -153,9 +143,7 @@ export function buildLoopModeEventsFromDeviceStatus(
       }
 
       const basalMode = classifyBasalModeFromDeviceStatus(entry);
-      const rawMode = classifyModeFromDeviceStatus(entry);
-      const mode =
-        rawMode === 'unknown' ? inferLoopModeFromBasal(basalMode) : rawMode;
+      const mode = classifyModeFromDeviceStatus(entry);
 
       return {timestamp, mode, basalMode};
     })

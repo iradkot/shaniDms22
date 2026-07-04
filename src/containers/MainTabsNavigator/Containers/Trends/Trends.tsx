@@ -43,6 +43,13 @@ import {HYPO_INVESTIGATION_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 
+const formatLoopHours = (minutes: number) => {
+  const hours = Math.max(0, minutes) / 60;
+  return hours >= 10
+    ? String(Math.round(hours))
+    : String(Number(hours.toFixed(1)));
+};
+
 const Trends: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation();
@@ -481,9 +488,9 @@ const Trends: React.FC = () => {
                   {language === 'he'
                     ? `פתוח: ${loopModeStats.openPct.toFixed(
                         1,
-                      )}% • ${Math.round(
-                        loopModeStats.openMinutes / 60,
-                      )} שעות • ממוצע ${
+                      )}% • ${formatLoopHours(
+                        loopModeStats.openMinutes,
+                      )} ש׳ • ממוצע ${
                         loopModeStats.openMetricsReliable
                           ? loopModeStats.openAvgBg?.toFixed(0) ?? '-'
                           : '-'
@@ -494,9 +501,7 @@ const Trends: React.FC = () => {
                       }%`
                     : `Open: ${loopModeStats.openPct.toFixed(
                         1,
-                      )}% • ${Math.round(
-                        loopModeStats.openMinutes / 60,
-                      )}h • Avg ${
+                      )}% • ${formatLoopHours(loopModeStats.openMinutes)}h • Avg ${
                         loopModeStats.openMetricsReliable
                           ? loopModeStats.openAvgBg?.toFixed(0) ?? '-'
                           : '-'
@@ -513,9 +518,9 @@ const Trends: React.FC = () => {
                   {language === 'he'
                     ? `סגור: ${loopModeStats.closedPct.toFixed(
                         1,
-                      )}% • ${Math.round(
-                        loopModeStats.closedMinutes / 60,
-                      )} שעות • ממוצע ${
+                      )}% • ${formatLoopHours(
+                        loopModeStats.closedMinutes,
+                      )} ש׳ • ממוצע ${
                         loopModeStats.closedMetricsReliable
                           ? loopModeStats.closedAvgBg?.toFixed(0) ?? '-'
                           : '-'
@@ -526,9 +531,7 @@ const Trends: React.FC = () => {
                       }%`
                     : `Closed: ${loopModeStats.closedPct.toFixed(
                         1,
-                      )}% • ${Math.round(
-                        loopModeStats.closedMinutes / 60,
-                      )}h • Avg ${
+                      )}% • ${formatLoopHours(loopModeStats.closedMinutes)}h • Avg ${
                         loopModeStats.closedMetricsReliable
                           ? loopModeStats.closedAvgBg?.toFixed(0) ?? '-'
                           : '-'
@@ -544,30 +547,26 @@ const Trends: React.FC = () => {
                 {language === 'he'
                   ? `טמפ בזאל: ${loopModeStats.tempBasalPct.toFixed(
                       1,
-                    )}% (${Math.round(
-                      loopModeStats.tempBasalMinutes / 60,
+                    )}% (${formatLoopHours(
+                      loopModeStats.tempBasalMinutes,
                     )} ש׳) • בזאל 0 / עצירה: ${loopModeStats.suspendedPct.toFixed(
                       1,
-                    )}% (${Math.round(
-                      loopModeStats.suspendedMinutes / 60,
+                    )}% (${formatLoopHours(
+                      loopModeStats.suspendedMinutes,
                     )} ש׳) • בזאל מתוכנן: ${loopModeStats.plannedBasalPct.toFixed(
                       1,
-                    )}% (${Math.round(
-                      loopModeStats.plannedBasalMinutes / 60,
-                    )} ש׳)`
+                    )}% (${formatLoopHours(loopModeStats.plannedBasalMinutes)} ש׳)`
                   : `Temp basal: ${loopModeStats.tempBasalPct.toFixed(
                       1,
-                    )}% (${Math.round(
-                      loopModeStats.tempBasalMinutes / 60,
+                    )}% (${formatLoopHours(
+                      loopModeStats.tempBasalMinutes,
                     )}h) • Zero basal / stop: ${loopModeStats.suspendedPct.toFixed(
                       1,
-                    )}% (${Math.round(
-                      loopModeStats.suspendedMinutes / 60,
+                    )}% (${formatLoopHours(
+                      loopModeStats.suspendedMinutes,
                     )}h) • Planned basal: ${loopModeStats.plannedBasalPct.toFixed(
                       1,
-                    )}% (${Math.round(
-                      loopModeStats.plannedBasalMinutes / 60,
-                    )}h)`}
+                    )}% (${formatLoopHours(loopModeStats.plannedBasalMinutes)}h)`}
               </Text>
 
               <Text
