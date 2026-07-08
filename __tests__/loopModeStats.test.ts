@@ -126,6 +126,36 @@ describe('computeLoopModeStats', () => {
     expect(stats.diagnostics.closedSamples).toBe(1);
   });
 
+  it('does not let unknown device-status rows break known loop carry-forward', () => {
+    const start = new Date('2026-04-01T00:00:00Z');
+    const end = new Date('2026-04-01T01:00:00Z');
+
+    const stats = computeLoopModeStats({
+      start,
+      end,
+      maxCarryForwardMinutes: 20,
+      events: [
+        {
+          timestamp: start.getTime(),
+          mode: 'closed',
+          basalMode: 'planned',
+        },
+        {
+          timestamp: start.getTime() + 5 * 60000,
+          mode: 'unknown',
+          basalMode: 'planned',
+        },
+      ],
+      bgData: [{date: start.getTime() + 10 * 60000, sgv: 120}] as any[],
+    });
+
+    expect(stats.closedMinutes).toBe(20);
+    expect(stats.unknownMinutes).toBe(40);
+    expect(stats.closedAvgBg).toBe(120);
+    expect(stats.diagnostics.eventsFetched).toBe(2);
+    expect(stats.diagnostics.eventsClassified).toBe(1);
+  });
+
   it('requires enough BG samples before mode metrics are marked reliable', () => {
     const start = new Date('2026-04-01T00:00:00Z');
     const end = new Date('2026-04-01T02:00:00Z');
@@ -196,7 +226,7 @@ describe('buildLoopModeEventsFromDeviceStatus', () => {
 
     expect(events.map(e => e.mode)).toEqual(['open', 'closed', 'closed']);
     expect(events.map(e => e.basalMode)).toEqual([
-      'unknown',
+      'suspended',
       'temp',
       'suspended',
     ]);
@@ -231,6 +261,47 @@ describe('buildLoopModeEventsFromDeviceStatus', () => {
     expect(events).toHaveLength(1);
     expect(events[0].mode).toBe('unknown');
     expect(events[0].basalMode).toBe('planned');
+  });
+
+  it('treats enacted duration zero with an active pump as planned basal', () => {
+    const events = buildLoopModeEventsFromDeviceStatus([
+      {
+        created_at: '2026-07-06T00:38:09.000Z',
+        pump: {
+          suspended: false,
+        },
+        loop: {
+          enacted: {
+            received: true,
+            rate: 0,
+            duration: 0,
+          },
+        },
+      },
+    ] as any[]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].mode).toBe('closed');
+    expect(events[0].basalMode).toBe('planned');
+  });
+
+  it('honors explicit Loop open/closed status fields when present', () => {
+    const events = buildLoopModeEventsFromDeviceStatus([
+      {
+        created_at: '2026-04-01T00:00:00Z',
+        loop: {
+          closedLoop: false,
+        },
+      },
+      {
+        created_at: '2026-04-01T00:05:00Z',
+        loop: {
+          dosingEnabled: true,
+        },
+      },
+    ] as any[]);
+
+    expect(events.map(e => e.mode)).toEqual(['open', 'closed']);
   });
 
   it('does not classify rejected OpenAPS enacted payloads as closed', () => {

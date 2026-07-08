@@ -61,6 +61,22 @@ function readNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function readBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', 'yes', 'on', 'closed', 'closedloop'].includes(normalized)) {
+      return true;
+    }
+    if (['false', 'no', 'off', 'open', 'openloop'].includes(normalized)) {
+      return false;
+    }
+  }
+  return null;
+}
+
 function readTimestampMs(entry: DeviceStatusEntry): number | null {
   const mills = readNumber(entry.mills);
   if (mills != null) {
@@ -75,6 +91,17 @@ function readTimestampMs(entry: DeviceStatusEntry): number | null {
 function classifyModeFromDeviceStatus(entry: DeviceStatusEntry): LoopMode {
   const loop = asRecord(entry.loop);
   const openaps = asRecord(entry.openaps);
+
+  const explicitLoopClosed =
+    readBoolean(loop?.closedLoop) ??
+    readBoolean(loop?.isClosedLoop) ??
+    readBoolean(loop?.dosingEnabled) ??
+    readBoolean(loop?.automaticDosingStatus) ??
+    readBoolean(loop?.loopStatus) ??
+    readBoolean(loop?.status);
+  if (explicitLoopClosed != null) {
+    return explicitLoopClosed ? 'closed' : 'open';
+  }
 
   const loopEnacted = asRecord(loop?.enacted);
   const loopRecommendation = asRecord(loop?.automaticDoseRecommendation);
@@ -96,6 +123,37 @@ function classifyModeFromDeviceStatus(entry: DeviceStatusEntry): LoopMode {
   return 'unknown';
 }
 
+function classifyBasalRecord(
+  record: Record<string, unknown> | null,
+): {mode: BasalMode; durationMinutes: number | null} | null {
+  if (!record) {
+    return null;
+  }
+
+  const adjustment =
+    asRecord(record.tempBasalAdjustment) ??
+    asRecord(record.basalAdjustment) ??
+    asRecord(record.tempBasal) ??
+    record;
+  const rate =
+    readNumber(adjustment.rate) ??
+    readNumber(adjustment.absolute) ??
+    readNumber(adjustment.unitsPerHour);
+  const duration =
+    readNumber(adjustment.duration) ??
+    readNumber(adjustment.durationMinutes) ??
+    readNumber(adjustment.minutes);
+
+  if (duration == null || duration <= 0) {
+    return null;
+  }
+
+  return {
+    mode: rate === 0 ? 'suspended' : 'temp',
+    durationMinutes: duration,
+  };
+}
+
 function classifyBasalModeFromDeviceStatus(
   entry: DeviceStatusEntry,
 ): {mode: BasalMode; durationMinutes: number | null} {
@@ -108,14 +166,16 @@ function classifyBasalModeFromDeviceStatus(
   const openaps = asRecord(entry.openaps);
   const enacted = asRecord(loop?.enacted) ?? asRecord(openaps?.enacted);
   const enactedReceived = enacted && enacted.received !== false;
-  const basalRecord = enactedReceived ? enacted : null;
-  const rate = readNumber(basalRecord?.rate);
-  const duration = readNumber(basalRecord?.duration);
-  if (duration != null && duration > 0) {
-    return {
-      mode: rate === 0 ? 'suspended' : 'temp',
-      durationMinutes: duration,
-    };
+  const enactedBasal = classifyBasalRecord(enactedReceived ? enacted : null);
+  if (enactedBasal) {
+    return enactedBasal;
+  }
+
+  const recommendedBasal =
+    classifyBasalRecord(asRecord(loop?.automaticDoseRecommendation)) ??
+    classifyBasalRecord(asRecord(openaps?.suggested));
+  if (recommendedBasal) {
+    return recommendedBasal;
   }
 
   return pump?.suspended === false
@@ -188,6 +248,7 @@ export function computeLoopModeStats({
   const sortedEvents = events
     .filter(e => Number.isFinite(e.timestamp))
     .sort((a, b) => a.timestamp - b.timestamp);
+  const sortedModeEvents = sortedEvents.filter(e => e.mode !== 'unknown');
 
   if (!sortedEvents.length) {
     return {
@@ -226,7 +287,9 @@ export function computeLoopModeStats({
   }
 
   let currentMode: LoopMode = 'unknown';
-  const prior = sortedEvents.filter(e => e.timestamp <= startMs).slice(-1)[0];
+  const prior = sortedModeEvents
+    .filter(e => e.timestamp <= startMs)
+    .slice(-1)[0];
   if (
     prior &&
     (maxCarryForwardMs === Infinity ||
@@ -240,7 +303,7 @@ export function computeLoopModeStats({
   let closedMinutes = 0;
   let unknownMinutes = 0;
 
-  for (const e of sortedEvents) {
+  for (const e of sortedModeEvents) {
     if (e.timestamp <= startMs || e.timestamp >= endMs) {
       if (
         e.timestamp <= startMs &&
@@ -381,7 +444,7 @@ export function computeLoopModeStats({
   const modeAt = (ts: number): LoopMode => {
     let m: LoopMode = 'unknown';
     let eventTs: number | null = null;
-    for (const e of sortedEvents) {
+    for (const e of sortedModeEvents) {
       if (e.timestamp <= ts) {
         m = e.mode;
       } else {
@@ -442,7 +505,7 @@ export function computeLoopModeStats({
     canCompareOpenClosed: openMetricsReliable && closedMetricsReliable,
     diagnostics: {
       eventsFetched: sortedEvents.length,
-      eventsClassified: sortedEvents.filter(e => e.mode !== 'unknown').length,
+      eventsClassified: sortedModeEvents.length,
       openSamples: openSamples.length,
       closedSamples: closedSamples.length,
       basalEvents: sortedEvents.filter(e => e.basalMode != null).length,
