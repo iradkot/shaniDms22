@@ -4,6 +4,10 @@ import {
 } from '../src/containers/MainTabsNavigator/Containers/Trends/hooks/useLoopModeStats';
 
 describe('computeLoopModeStats', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('splits minutes between open and closed and computes BG/TIR per mode', () => {
     const start = new Date('2026-04-01T00:00:00Z');
     const end = new Date('2026-04-01T04:00:00Z'); // 240 min
@@ -124,6 +128,31 @@ describe('computeLoopModeStats', () => {
     expect(stats.canCompareOpenClosed).toBe(false);
     expect(stats.closedAvgBg).toBe(120);
     expect(stats.diagnostics.closedSamples).toBe(1);
+  });
+
+  it('does not count future minutes from today as unknown loop time', () => {
+    const start = new Date('2026-04-01T00:00:00Z');
+    const now = new Date('2026-04-01T01:00:00Z');
+    const end = new Date('2026-04-01T23:59:59Z');
+    jest.spyOn(Date, 'now').mockReturnValue(now.getTime());
+
+    const stats = computeLoopModeStats({
+      start,
+      end,
+      events: [
+        {
+          timestamp: start.getTime(),
+          mode: 'closed',
+          basalMode: 'planned',
+        },
+      ],
+      bgData: [],
+    });
+
+    expect(stats.closedMinutes).toBe(60);
+    expect(stats.unknownMinutes).toBe(0);
+    expect(stats.closedPct).toBeCloseTo(100, 1);
+    expect(stats.unknownPct).toBeCloseTo(0, 1);
   });
 
   it('does not let unknown device-status rows break known loop carry-forward', () => {

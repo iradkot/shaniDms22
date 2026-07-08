@@ -239,7 +239,7 @@ export function computeLoopModeStats({
   maxCarryForwardMinutes?: number;
 }): LoopModeStats {
   const startMs = start.getTime();
-  const endMs = end.getTime();
+  const endMs = Math.min(end.getTime(), Date.now());
   const totalMinutes = Math.max(1, Math.round((endMs - startMs) / 60000));
   const maxCarryForwardMs =
     Number.isFinite(maxCarryForwardMinutes) && maxCarryForwardMinutes >= 0
