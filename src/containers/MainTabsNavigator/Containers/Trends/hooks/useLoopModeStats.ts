@@ -1,6 +1,9 @@
 import {useEffect, useMemo, useState} from 'react';
 import {BgSample} from 'app/types/day_bgs.types';
-import {fetchDeviceStatusForDateRangeUncached} from 'app/api/apiRequests';
+import {
+  fetchDeviceStatusForDateRangeUncached,
+  fetchTreatmentsForDateRangeUncached,
+} from 'app/api/apiRequests';
 import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
 
 export type LoopMode = 'open' | 'closed' | 'unknown';
@@ -10,9 +13,11 @@ type LoopModeEvent = {
   mode: LoopMode;
   basalMode?: BasalMode;
   basalDurationMinutes?: number | null;
+  modeDurationMinutes?: number | null;
 };
 
 export const LOOP_STATUS_CARRY_FORWARD_MINUTES = 20;
+export const LOOP_TREATMENT_LOOKBACK_MINUTES = 180;
 export const MIN_LOOP_KNOWN_COVERAGE_PCT = 70;
 export const MIN_BG_SAMPLES_PER_LOOP_MODE = 3;
 
@@ -225,6 +230,59 @@ export function buildLoopModeEventsFromDeviceStatus(
     .sort((a, b) => a.timestamp - b.timestamp);
 }
 
+export function buildLoopModeEventsFromTreatments(
+  treatments: Array<Record<string, unknown>>,
+): LoopModeEvent[] {
+  return treatments
+    .map((treatment): LoopModeEvent | null => {
+      const eventType =
+        typeof treatment.eventType === 'string'
+          ? treatment.eventType.toLowerCase()
+          : '';
+      const enteredBy =
+        typeof treatment.enteredBy === 'string'
+          ? treatment.enteredBy.toLowerCase()
+          : '';
+      const durationMinutes = readNumber(treatment.duration);
+      const createdAt =
+        typeof treatment.created_at === 'string'
+          ? Date.parse(treatment.created_at)
+          : NaN;
+      const timestamp =
+        Number.isFinite(createdAt) && createdAt > 0
+          ? createdAt
+          : typeof treatment.timestamp === 'string'
+            ? Date.parse(treatment.timestamp)
+            : NaN;
+
+      if (
+        eventType !== 'temp basal' ||
+        treatment.automatic !== true ||
+        !enteredBy.includes('loop') ||
+        durationMinutes == null ||
+        durationMinutes <= 0 ||
+        !Number.isFinite(timestamp)
+      ) {
+        return null;
+      }
+
+      const rate =
+        readNumber(treatment.rate) ??
+        readNumber(treatment.absolute) ??
+        readNumber(treatment.amount);
+
+      return {
+        timestamp,
+        mode: 'closed',
+        basalMode: rate === 0 ? 'suspended' : 'temp',
+        basalDurationMinutes: durationMinutes,
+        modeDurationMinutes: durationMinutes,
+      };
+    })
+    .filter((event): event is LoopModeEvent => event !== null)
+    .sort((a, b) => a.timestamp - b.timestamp);
+}
+
 export function computeLoopModeStats({
   start,
   end,
@@ -287,15 +345,33 @@ export function computeLoopModeStats({
   }
 
   let currentMode: LoopMode = 'unknown';
-  const prior = sortedModeEvents
-    .filter(e => e.timestamp <= startMs)
-    .slice(-1)[0];
-  if (
-    prior &&
-    (maxCarryForwardMs === Infinity ||
-      startMs - prior.timestamp <= maxCarryForwardMs)
-  ) {
-    currentMode = prior.mode;
+  let currentModeUntil = startMs;
+  const getModeCoverageEnd = (event: LoopModeEvent) => {
+    if (maxCarryForwardMs === Infinity) {
+      return Infinity;
+    }
+
+    const durationMs =
+      event.modeDurationMinutes != null && event.modeDurationMinutes > 0
+        ? event.modeDurationMinutes * 60000
+        : 0;
+    return event.timestamp + Math.max(maxCarryForwardMs, durationMs);
+  };
+
+  for (const event of sortedModeEvents) {
+    if (event.timestamp > startMs) {
+      break;
+    }
+
+    const coverageEnd = getModeCoverageEnd(event);
+    if (coverageEnd >= startMs) {
+      if (event.mode === currentMode) {
+        currentModeUntil = Math.max(currentModeUntil, coverageEnd);
+      } else {
+        currentMode = event.mode;
+        currentModeUntil = coverageEnd;
+      }
+    }
   }
 
   let cursor = startMs;
@@ -305,20 +381,13 @@ export function computeLoopModeStats({
 
   for (const e of sortedModeEvents) {
     if (e.timestamp <= startMs || e.timestamp >= endMs) {
-      if (
-        e.timestamp <= startMs &&
-        (maxCarryForwardMs === Infinity ||
-          startMs - e.timestamp <= maxCarryForwardMs)
-      ) {
-        currentMode = e.mode;
-      }
       continue;
     }
 
     const segmentEnd =
       maxCarryForwardMs === Infinity
         ? e.timestamp
-        : Math.min(e.timestamp, cursor + maxCarryForwardMs);
+        : Math.min(e.timestamp, currentModeUntil);
     const deltaMin = Math.max(0, Math.round((segmentEnd - cursor) / 60000));
     if (currentMode === 'open') {
       openMinutes += deltaMin;
@@ -334,14 +403,20 @@ export function computeLoopModeStats({
       );
     }
 
+    const nextModeUntil = getModeCoverageEnd(e);
+    const extendsCurrentMode = e.mode === currentMode;
     currentMode = e.mode;
+    currentModeUntil =
+      extendsCurrentMode && currentModeUntil > e.timestamp
+        ? Math.max(currentModeUntil, nextModeUntil)
+        : nextModeUntil;
     cursor = e.timestamp;
   }
 
   const tailEnd =
     maxCarryForwardMs === Infinity
       ? endMs
-      : Math.min(endMs, cursor + maxCarryForwardMs);
+      : Math.min(endMs, currentModeUntil);
   const tailMin = Math.max(0, Math.round((tailEnd - cursor) / 60000));
   if (currentMode === 'open') {
     openMinutes += tailMin;
@@ -443,21 +518,15 @@ export function computeLoopModeStats({
 
   const modeAt = (ts: number): LoopMode => {
     let m: LoopMode = 'unknown';
-    let eventTs: number | null = null;
     for (const e of sortedModeEvents) {
       if (e.timestamp <= ts) {
-        m = e.mode;
+        const coverageEnd = getModeCoverageEnd(e);
+        if (coverageEnd >= ts) {
+          m = e.mode;
+        }
       } else {
         break;
       }
-      eventTs = e.timestamp;
-    }
-    if (
-      eventTs != null &&
-      maxCarryForwardMs !== Infinity &&
-      ts - eventTs > maxCarryForwardMs
-    ) {
-      return 'unknown';
     }
     return m;
   };
@@ -536,15 +605,25 @@ export function useLoopModeStats({
       setIsLoading(true);
       setFetchError(null);
       try {
-        const rows = await fetchDeviceStatusForDateRangeUncached(
-          new Date(start.getTime() - LOOP_STATUS_CARRY_FORWARD_MINUTES * 60000),
-          end,
-          {throwOnError: true},
+        const deviceStatusFetchStart = new Date(
+          start.getTime() - LOOP_STATUS_CARRY_FORWARD_MINUTES * 60000,
         );
-        const normalized = buildLoopModeEventsFromDeviceStatus(rows);
+        const treatmentFetchStart = new Date(
+          start.getTime() - LOOP_TREATMENT_LOOKBACK_MINUTES * 60000,
+        );
+        const [rows, treatments] = await Promise.all([
+          fetchDeviceStatusForDateRangeUncached(deviceStatusFetchStart, end, {
+            throwOnError: true,
+          }),
+          fetchTreatmentsForDateRangeUncached(treatmentFetchStart, end),
+        ]);
+        const normalized = [
+          ...buildLoopModeEventsFromDeviceStatus(rows),
+          ...buildLoopModeEventsFromTreatments(treatments),
+        ].sort((a, b) => a.timestamp - b.timestamp);
 
         if (!cancelled) {
-          setRowsFetched(rows.length);
+          setRowsFetched(rows.length + treatments.length);
           setEvents(normalized);
           setEventsRangeKey(rangeKey);
           setFetchError(null);

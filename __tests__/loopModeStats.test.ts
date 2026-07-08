@@ -1,4 +1,5 @@
 import {
+  buildLoopModeEventsFromTreatments,
   buildLoopModeEventsFromDeviceStatus,
   computeLoopModeStats,
 } from '../src/containers/MainTabsNavigator/Containers/Trends/hooks/useLoopModeStats';
@@ -185,6 +186,39 @@ describe('computeLoopModeStats', () => {
     expect(stats.diagnostics.eventsClassified).toBe(1);
   });
 
+  it('uses automatic Loop treatment duration to extend closed loop coverage', () => {
+    const start = new Date('2026-04-01T00:00:00Z');
+    const end = new Date('2026-04-01T01:10:00Z');
+
+    const stats = computeLoopModeStats({
+      start,
+      end,
+      maxCarryForwardMinutes: 20,
+      events: [
+        {
+          timestamp: start.getTime(),
+          mode: 'closed',
+          basalMode: 'temp',
+          basalDurationMinutes: 60,
+          modeDurationMinutes: 60,
+        },
+        {
+          timestamp: start.getTime() + 30 * 60000,
+          mode: 'closed',
+          basalMode: 'planned',
+        },
+      ],
+      bgData: [
+        {date: start.getTime() + 55 * 60000, sgv: 120},
+        {date: start.getTime() + 65 * 60000, sgv: 130},
+      ] as any[],
+    });
+
+    expect(stats.closedMinutes).toBe(60);
+    expect(stats.unknownMinutes).toBe(10);
+    expect(stats.closedAvgBg).toBe(120);
+  });
+
   it('requires enough BG samples before mode metrics are marked reliable', () => {
     const start = new Date('2026-04-01T00:00:00Z');
     const end = new Date('2026-04-01T02:00:00Z');
@@ -350,5 +384,34 @@ describe('buildLoopModeEventsFromDeviceStatus', () => {
     expect(events).toHaveLength(1);
     expect(events[0].mode).toBe('open');
     expect(events[0].basalMode).toBe('unknown');
+  });
+});
+
+describe('buildLoopModeEventsFromTreatments', () => {
+  it('classifies automatic Loop temp basal treatments as closed for their duration', () => {
+    const events = buildLoopModeEventsFromTreatments([
+      {
+        created_at: '2026-04-01T00:00:00Z',
+        eventType: 'Temp Basal',
+        automatic: true,
+        enteredBy: 'loop://iPhone',
+        rate: 1.2,
+        duration: 45,
+      },
+      {
+        created_at: '2026-04-01T00:05:00Z',
+        eventType: 'Temp Basal',
+        automatic: false,
+        enteredBy: 'loop://iPhone',
+        rate: 1.2,
+        duration: 45,
+      },
+    ]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].mode).toBe('closed');
+    expect(events[0].basalMode).toBe('temp');
+    expect(events[0].basalDurationMinutes).toBe(45);
+    expect(events[0].modeDurationMinutes).toBe(45);
   });
 });
