@@ -17,6 +17,7 @@ type LoopModeEvent = {
 };
 
 export const LOOP_STATUS_CARRY_FORWARD_MINUTES = 20;
+export const LOOP_CONTEXT_LOOKBACK_MINUTES = 180;
 export const LOOP_TREATMENT_LOOKBACK_MINUTES = 180;
 export const MIN_LOOP_KNOWN_COVERAGE_PCT = 70;
 export const MIN_BG_SAMPLES_PER_LOOP_MODE = 3;
@@ -289,12 +290,14 @@ export function computeLoopModeStats({
   bgData,
   events,
   maxCarryForwardMinutes = Infinity,
+  initialContextLookbackMinutes = maxCarryForwardMinutes,
 }: {
   start: Date;
   end: Date;
   bgData: BgSample[];
   events: LoopModeEvent[];
   maxCarryForwardMinutes?: number;
+  initialContextLookbackMinutes?: number;
 }): LoopModeStats {
   const startMs = start.getTime();
   const endMs = Math.min(end.getTime(), Date.now());
@@ -303,6 +306,11 @@ export function computeLoopModeStats({
     Number.isFinite(maxCarryForwardMinutes) && maxCarryForwardMinutes >= 0
       ? maxCarryForwardMinutes * 60000
       : Infinity;
+  const initialContextLookbackMs =
+    Number.isFinite(initialContextLookbackMinutes) &&
+    initialContextLookbackMinutes >= 0
+      ? initialContextLookbackMinutes * 60000
+      : maxCarryForwardMs;
   const sortedEvents = events
     .filter(e => Number.isFinite(e.timestamp))
     .sort((a, b) => a.timestamp - b.timestamp);
@@ -357,13 +365,24 @@ export function computeLoopModeStats({
         : 0;
     return event.timestamp + Math.max(maxCarryForwardMs, durationMs);
   };
+  const getInitialContextCoverageEnd = (event: LoopModeEvent) => {
+    if (event.timestamp > startMs) {
+      return getModeCoverageEnd(event);
+    }
+
+    const initialContextEnd =
+      maxCarryForwardMs === Infinity || initialContextLookbackMs === Infinity
+        ? Infinity
+        : event.timestamp + initialContextLookbackMs;
+    return Math.max(getModeCoverageEnd(event), initialContextEnd);
+  };
 
   for (const event of sortedModeEvents) {
     if (event.timestamp > startMs) {
       break;
     }
 
-    const coverageEnd = getModeCoverageEnd(event);
+    const coverageEnd = getInitialContextCoverageEnd(event);
     if (coverageEnd >= startMs) {
       if (event.mode === currentMode) {
         currentModeUntil = Math.max(currentModeUntil, coverageEnd);
@@ -518,17 +537,26 @@ export function computeLoopModeStats({
 
   const modeAt = (ts: number): LoopMode => {
     let m: LoopMode = 'unknown';
+    let modeUntil = startMs;
     for (const e of sortedModeEvents) {
       if (e.timestamp <= ts) {
-        const coverageEnd = getModeCoverageEnd(e);
-        if (coverageEnd >= ts) {
-          m = e.mode;
+        if (e.timestamp > modeUntil) {
+          m = 'unknown';
+          modeUntil = e.timestamp;
         }
+
+        const coverageEnd =
+          ts >= startMs ? getInitialContextCoverageEnd(e) : getModeCoverageEnd(e);
+        const extendsMode = e.mode === m && modeUntil > e.timestamp;
+        m = e.mode;
+        modeUntil = extendsMode
+          ? Math.max(modeUntil, coverageEnd)
+          : coverageEnd;
       } else {
         break;
       }
     }
-    return m;
+    return modeUntil >= ts ? m : 'unknown';
   };
 
   const openSamples = bgData
@@ -606,7 +634,7 @@ export function useLoopModeStats({
       setFetchError(null);
       try {
         const deviceStatusFetchStart = new Date(
-          start.getTime() - LOOP_STATUS_CARRY_FORWARD_MINUTES * 60000,
+          start.getTime() - LOOP_CONTEXT_LOOKBACK_MINUTES * 60000,
         );
         const treatmentFetchStart = new Date(
           start.getTime() - LOOP_TREATMENT_LOOKBACK_MINUTES * 60000,
@@ -654,6 +682,7 @@ export function useLoopModeStats({
       bgData,
       events: hasCurrentRangeData ? events : [],
       maxCarryForwardMinutes: LOOP_STATUS_CARRY_FORWARD_MINUTES,
+      initialContextLookbackMinutes: LOOP_CONTEXT_LOOKBACK_MINUTES,
     });
   }, [bgData, end, events, hasCurrentRangeData, start]);
 

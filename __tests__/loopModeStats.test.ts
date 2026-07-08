@@ -131,6 +131,40 @@ describe('computeLoopModeStats', () => {
     expect(stats.diagnostics.closedSamples).toBe(1);
   });
 
+  it('uses wider pre-range context only to seed the beginning of the selected range', () => {
+    const start = new Date('2026-04-01T00:00:00Z');
+    const end = new Date('2026-04-01T02:00:00Z');
+
+    const stats = computeLoopModeStats({
+      start,
+      end,
+      maxCarryForwardMinutes: 20,
+      initialContextLookbackMinutes: 180,
+      events: [
+        {
+          timestamp: start.getTime() - 45 * 60000,
+          mode: 'closed',
+          basalMode: 'planned',
+        },
+        {
+          timestamp: start.getTime() + 70 * 60000,
+          mode: 'open',
+          basalMode: 'planned',
+        },
+      ],
+      bgData: [
+        {date: start.getTime() + 30 * 60000, sgv: 120},
+        {date: start.getTime() + 85 * 60000, sgv: 130},
+      ] as any[],
+    });
+
+    expect(stats.closedMinutes).toBe(70);
+    expect(stats.openMinutes).toBe(20);
+    expect(stats.unknownMinutes).toBe(30);
+    expect(stats.closedAvgBg).toBe(120);
+    expect(stats.openAvgBg).toBe(130);
+  });
+
   it('does not count future minutes from today as unknown loop time', () => {
     const start = new Date('2026-04-01T00:00:00Z');
     const now = new Date('2026-04-01T01:00:00Z');
