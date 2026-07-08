@@ -19,6 +19,7 @@ type LoopModeEvent = {
 export const LOOP_STATUS_CARRY_FORWARD_MINUTES = 20;
 export const LOOP_CONTEXT_LOOKBACK_MINUTES = 180;
 export const LOOP_TREATMENT_LOOKBACK_MINUTES = 180;
+export const LOOP_DATA_FETCH_CHUNK_DAYS = 7;
 export const MIN_LOOP_KNOWN_COVERAGE_PCT = 70;
 export const MIN_BG_SAMPLES_PER_LOOP_MODE = 3;
 
@@ -68,6 +69,11 @@ export interface LoopModeStats {
     basalEvents: number;
   };
 }
+
+export type LoopDataFetchRange = {
+  start: Date;
+  end: Date;
+};
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object'
@@ -218,6 +224,39 @@ function tir(arr: number[]): number | null {
   return arr.length
     ? (arr.filter(v => v >= 70 && v <= 180).length / arr.length) * 100
     : null;
+}
+
+export function buildLoopDataFetchRanges({
+  start,
+  end,
+  lookbackMinutes,
+  chunkDays = LOOP_DATA_FETCH_CHUNK_DAYS,
+}: {
+  start: Date;
+  end: Date;
+  lookbackMinutes: number;
+  chunkDays?: number;
+}): LoopDataFetchRange[] {
+  const fetchStart = new Date(start.getTime() - lookbackMinutes * 60000);
+  const safeChunkDays = Math.max(1, Math.floor(chunkDays));
+  const ranges: LoopDataFetchRange[] = [];
+  let cursor = fetchStart;
+
+  while (cursor.getTime() <= end.getTime()) {
+    const chunkStart = new Date(cursor);
+    const chunkEnd = new Date(chunkStart);
+    chunkEnd.setDate(chunkEnd.getDate() + safeChunkDays);
+    chunkEnd.setMilliseconds(chunkEnd.getMilliseconds() - 1);
+
+    if (chunkEnd.getTime() > end.getTime()) {
+      chunkEnd.setTime(end.getTime());
+    }
+
+    ranges.push({start: chunkStart, end: chunkEnd});
+    cursor = new Date(chunkEnd.getTime() + 1);
+  }
+
+  return ranges;
 }
 
 export function buildLoopModeEventsFromDeviceStatus(
@@ -706,18 +745,32 @@ export function useLoopModeStats({
       setIsLoading(true);
       setFetchError(null);
       try {
-        const deviceStatusFetchStart = new Date(
-          start.getTime() - LOOP_CONTEXT_LOOKBACK_MINUTES * 60000,
-        );
-        const treatmentFetchStart = new Date(
-          start.getTime() - LOOP_TREATMENT_LOOKBACK_MINUTES * 60000,
-        );
-        const [rows, treatments] = await Promise.all([
-          fetchDeviceStatusForDateRangeUncached(deviceStatusFetchStart, end, {
-            throwOnError: true,
-          }),
-          fetchTreatmentsForDateRangeUncached(treatmentFetchStart, end),
-        ]);
+        const deviceStatusRanges = buildLoopDataFetchRanges({
+          start,
+          end,
+          lookbackMinutes: LOOP_CONTEXT_LOOKBACK_MINUTES,
+        });
+        const treatmentRanges = buildLoopDataFetchRanges({
+          start,
+          end,
+          lookbackMinutes: LOOP_TREATMENT_LOOKBACK_MINUTES,
+        });
+        let rows: DeviceStatusEntry[] = [];
+        let treatments: Array<Record<string, unknown>> = [];
+
+        for (const range of deviceStatusRanges) {
+          rows = rows.concat(
+            await fetchDeviceStatusForDateRangeUncached(range.start, range.end, {
+              throwOnError: true,
+            }),
+          );
+        }
+
+        for (const range of treatmentRanges) {
+          treatments = treatments.concat(
+            await fetchTreatmentsForDateRangeUncached(range.start, range.end),
+          );
+        }
         const normalized = [
           ...buildLoopModeEventsFromDeviceStatus(rows),
           ...buildLoopModeEventsFromTreatments(treatments),

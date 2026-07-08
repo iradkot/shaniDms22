@@ -1,8 +1,38 @@
 import {
+  buildLoopDataFetchRanges,
   buildLoopModeEventsFromTreatments,
   buildLoopModeEventsFromDeviceStatus,
   computeLoopModeStats,
 } from '../src/containers/MainTabsNavigator/Containers/Trends/hooks/useLoopModeStats';
+
+describe('buildLoopDataFetchRanges', () => {
+  it('splits long Loop data fetches into bounded chunks with pre-range context', () => {
+    const start = new Date('2026-06-09T00:00:00Z');
+    const end = new Date('2026-07-08T23:59:59.999Z');
+
+    const ranges = buildLoopDataFetchRanges({
+      start,
+      end,
+      lookbackMinutes: 180,
+      chunkDays: 7,
+    });
+
+    expect(ranges.length).toBeGreaterThan(1);
+    expect(ranges[0].start.toISOString()).toBe('2026-06-08T21:00:00.000Z');
+    expect(ranges[ranges.length - 1].end.getTime()).toBe(end.getTime());
+
+    for (const range of ranges) {
+      const rangeDays =
+        (range.end.getTime() - range.start.getTime() + 1) /
+        (24 * 60 * 60 * 1000);
+      expect(rangeDays).toBeLessThanOrEqual(7);
+    }
+
+    for (let i = 1; i < ranges.length; i += 1) {
+      expect(ranges[i].start.getTime()).toBe(ranges[i - 1].end.getTime() + 1);
+    }
+  });
+});
 
 describe('computeLoopModeStats', () => {
   afterEach(() => {
