@@ -9,6 +9,7 @@ import {
   LOOP_CONTEXT_LOOKBACK_MINUTES,
   LOOP_STATUS_CARRY_FORWARD_MINUTES,
   LOOP_TREATMENT_LOOKBACK_MINUTES,
+  LoopDataLoadProgress,
   LoopModeEvent,
   buildLoopDataFetchRanges,
   buildLoopModeEventsFromDeviceStatus,
@@ -17,6 +18,12 @@ import {
 } from '../utils/loopModeStats';
 
 export * from '../utils/loopModeStats';
+
+const IDLE_LOAD_PROGRESS: LoopDataLoadProgress = {
+  phase: 'idle',
+  completedChunks: 0,
+  totalChunks: 0,
+};
 
 export function useLoopModeStats({
   start,
@@ -32,6 +39,8 @@ export function useLoopModeStats({
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [rowsFetched, setRowsFetched] = useState(0);
+  const [loadProgress, setLoadProgress] =
+    useState<LoopDataLoadProgress>(IDLE_LOAD_PROGRESS);
   const rangeKey = `${start.getTime()}-${end.getTime()}`;
   const hasCurrentRangeData = eventsRangeKey === rangeKey;
 
@@ -53,8 +62,16 @@ export function useLoopModeStats({
           end,
           lookbackMinutes: LOOP_TREATMENT_LOOKBACK_MINUTES,
         });
+        const totalChunks = deviceStatusRanges.length + treatmentRanges.length;
         let rows: DeviceStatusEntry[] = [];
         let treatments: Array<Record<string, unknown>> = [];
+        let completedChunks = 0;
+
+        setLoadProgress({
+          phase: 'deviceStatus',
+          completedChunks: 0,
+          totalChunks,
+        });
 
         for (const range of deviceStatusRanges) {
           rows = rows.concat(
@@ -62,12 +79,44 @@ export function useLoopModeStats({
               throwOnError: true,
             }),
           );
+          completedChunks += 1;
+          if (!cancelled) {
+            setLoadProgress({
+              phase: 'deviceStatus',
+              completedChunks,
+              totalChunks,
+            });
+          }
+        }
+
+        if (!cancelled) {
+          setLoadProgress({
+            phase: 'treatments',
+            completedChunks,
+            totalChunks,
+          });
         }
 
         for (const range of treatmentRanges) {
           treatments = treatments.concat(
             await fetchTreatmentsForDateRangeUncached(range.start, range.end),
           );
+          completedChunks += 1;
+          if (!cancelled) {
+            setLoadProgress({
+              phase: 'treatments',
+              completedChunks,
+              totalChunks,
+            });
+          }
+        }
+
+        if (!cancelled) {
+          setLoadProgress({
+            phase: 'processing',
+            completedChunks,
+            totalChunks,
+          });
         }
 
         const normalized = [
@@ -80,6 +129,11 @@ export function useLoopModeStats({
           setEvents(normalized);
           setEventsRangeKey(rangeKey);
           setFetchError(null);
+          setLoadProgress({
+            phase: 'done',
+            completedChunks: totalChunks,
+            totalChunks,
+          });
         }
       } catch (error: any) {
         if (!cancelled) {
@@ -87,6 +141,10 @@ export function useLoopModeStats({
           setEvents([]);
           setEventsRangeKey(rangeKey);
           setFetchError(error?.message ?? String(error ?? 'Unknown error'));
+          setLoadProgress(current => ({
+            ...current,
+            phase: 'error',
+          }));
         }
       } finally {
         if (!cancelled) {
@@ -118,5 +176,7 @@ export function useLoopModeStats({
     isLoading: isLoading || !hasCurrentRangeData,
     fetchError,
     rowsFetched: hasCurrentRangeData ? rowsFetched : 0,
+    loadProgress:
+      hasCurrentRangeData || isLoading ? loadProgress : IDLE_LOAD_PROGRESS,
   };
 }

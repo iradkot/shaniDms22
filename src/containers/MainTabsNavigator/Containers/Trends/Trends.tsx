@@ -119,6 +119,7 @@ const Trends: React.FC = () => {
     isLoading: isLoopModeStatsLoading,
     fetchError: loopModeStatsError,
     rowsFetched: loopModeRowsFetched,
+    loadProgress: loopModeLoadProgress,
   } = useLoopModeStats({start, end, bgData});
 
   const hypoInvestigationNavLockRef = useRef(false);
@@ -419,6 +420,7 @@ const Trends: React.FC = () => {
             isLoading={isLoopModeStatsLoading}
             fetchError={loopModeStatsError}
             rowsFetched={loopModeRowsFetched}
+            loadProgress={loopModeLoadProgress}
           />
           {/* (d) AGP Summary */}
           <View style={{marginBottom: theme.spacing.lg - 1}}>

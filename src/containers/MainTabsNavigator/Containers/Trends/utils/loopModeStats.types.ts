@@ -67,3 +67,17 @@ export type LoopDataFetchRange = {
   start: Date;
   end: Date;
 };
+
+export type LoopDataLoadPhase =
+  | 'idle'
+  | 'deviceStatus'
+  | 'treatments'
+  | 'processing'
+  | 'done'
+  | 'error';
+
+export type LoopDataLoadProgress = {
+  phase: LoopDataLoadPhase;
+  completedChunks: number;
+  totalChunks: number;
+};

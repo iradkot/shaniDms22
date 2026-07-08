@@ -9,6 +9,7 @@ import {addOpacity} from 'app/style/styling.utils';
 import {SectionTitle} from '../styles/Trends.styles';
 import {
   LoopMode,
+  LoopDataLoadProgress,
   LoopModeStats,
 } from '../utils/loopModeStats';
 
@@ -19,6 +20,7 @@ type LoopStatsSectionProps = {
   isLoading: boolean;
   fetchError: string | null;
   rowsFetched: number;
+  loadProgress: LoopDataLoadProgress;
 };
 
 const LOOP_MODE_COLORS: Record<LoopMode, string> = {
@@ -37,17 +39,63 @@ const formatLoopHours = (minutes: number) => {
 const formatLoopValue = (value: number | null | undefined, decimals = 0) =>
   value == null || !Number.isFinite(value) ? '-' : value.toFixed(decimals);
 
+const getLoopLoadPhaseLabel = (
+  progress: LoopDataLoadProgress,
+  language: string,
+) => {
+  if (language === 'he') {
+    switch (progress.phase) {
+      case 'deviceStatus':
+        return 'טוען devicestatus';
+      case 'treatments':
+        return 'טוען טיפולי בזאל';
+      case 'processing':
+        return 'מחשב כיסוי לופ';
+      case 'done':
+        return 'הסתיים';
+      case 'error':
+        return 'הטעינה נכשלה';
+      default:
+        return 'מתכונן לטעינה';
+    }
+  }
+
+  switch (progress.phase) {
+    case 'deviceStatus':
+      return 'Loading devicestatus';
+    case 'treatments':
+      return 'Loading basal treatments';
+    case 'processing':
+      return 'Calculating loop coverage';
+    case 'done':
+      return 'Done';
+    case 'error':
+      return 'Loading failed';
+    default:
+      return 'Preparing load';
+  }
+};
+
 export function LoopStatsSection({
   stats,
   isLoading,
   fetchError,
   rowsFetched,
+  loadProgress,
 }: LoopStatsSectionProps) {
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
   const isRTL = language === 'he';
   const [loopViewMode, setLoopViewMode] = useState<LoopViewMode>('both');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const totalLoadChunks = Math.max(loadProgress.totalChunks, 0);
+  const completedLoadChunks = Math.min(
+    Math.max(loadProgress.completedChunks, 0),
+    totalLoadChunks,
+  );
+  const loadProgressPct =
+    totalLoadChunks > 0 ? completedLoadChunks / totalLoadChunks : 0;
+  const loadProgressLabel = getLoopLoadPhaseLabel(loadProgress, language);
 
   const renderLoopMetricTile = ({
     icon,
@@ -474,9 +522,7 @@ export function LoopStatsSection({
                     textAlign: isRTL ? 'right' : 'left',
                   }}>
                   {isLoading
-                    ? language === 'he'
-                      ? 'טוען devicestatus...'
-                      : 'Loading devicestatus...'
+                    ? `${loadProgressLabel}...`
                     : language === 'he'
                     ? `לא ידוע ${stats.unknownPct.toFixed(1)}%`
                     : `Unknown ${stats.unknownPct.toFixed(1)}%`}
@@ -521,13 +567,11 @@ export function LoopStatsSection({
           </View>
 
           {isLoading ? (
-            <InlineLoopNotice
-              icon="hourglass-empty"
-              text={
-                language === 'he'
-                  ? 'טוען נתוני לופ מהשרת...'
-                  : 'Loading loop data from the server...'
-              }
+            <LoopLoadProgress
+              phaseLabel={loadProgressLabel}
+              completedChunks={completedLoadChunks}
+              totalChunks={totalLoadChunks}
+              progressPct={loadProgressPct}
             />
           ) : (
             <>
@@ -731,13 +775,11 @@ export function LoopStatsSection({
           </View>
 
           {isLoading ? (
-            <InlineLoopNotice
-              icon="hourglass-empty"
-              text={
-                language === 'he'
-                  ? 'טוען נתוני בזאל...'
-                  : 'Loading basal data...'
-              }
+            <LoopLoadProgress
+              phaseLabel={loadProgressLabel}
+              completedChunks={completedLoadChunks}
+              totalChunks={totalLoadChunks}
+              progressPct={loadProgressPct}
             />
           ) : (
             <View
@@ -780,6 +822,98 @@ export function LoopStatsSection({
         </View>
       </View>
     </>
+  );
+}
+
+function LoopLoadProgress({
+  phaseLabel,
+  completedChunks,
+  totalChunks,
+  progressPct,
+}: {
+  phaseLabel: string;
+  completedChunks: number;
+  totalChunks: number;
+  progressPct: number;
+}) {
+  const theme = useTheme() as ThemeType;
+  const {language} = useAppLanguage();
+  const isRTL = language === 'he';
+  const percent = Math.round(progressPct * 100);
+
+  return (
+    <View
+      style={{
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 9,
+        backgroundColor: addOpacity(theme.textColor, 0.055),
+        gap: 8,
+      }}>
+      <View
+        style={{
+          flexDirection: isRTL ? 'row-reverse' : 'row',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+        <MaterialIcons
+          name="hourglass-empty"
+          size={17}
+          color={addOpacity(theme.textColor, 0.72)}
+        />
+        <Text
+          style={{
+            flex: 1,
+            color: addOpacity(theme.textColor, 0.76),
+            fontSize: 13,
+            fontWeight: '800',
+            textAlign: isRTL ? 'right' : 'left',
+          }}>
+          {phaseLabel}
+        </Text>
+        <Text
+          style={{
+            color: addOpacity(theme.textColor, 0.7),
+            fontSize: 12,
+            fontWeight: '800',
+          }}>
+          {totalChunks > 0 ? `${percent}%` : '...'}
+        </Text>
+      </View>
+
+      <View
+        style={{
+          height: 7,
+          borderRadius: 999,
+          overflow: 'hidden',
+          backgroundColor: addOpacity(theme.textColor, 0.08),
+        }}>
+        <View
+          style={{
+            width: `${Math.max(4, percent)}%`,
+            height: '100%',
+            borderRadius: 999,
+            backgroundColor: theme.primaryColor,
+          }}
+        />
+      </View>
+
+      <Text
+        style={{
+          color: addOpacity(theme.textColor, 0.62),
+          fontSize: 12,
+          fontWeight: '700',
+          textAlign: isRTL ? 'right' : 'left',
+        }}>
+        {totalChunks > 0
+          ? language === 'he'
+            ? `${completedChunks} מתוך ${totalChunks} חלקים נטענו`
+            : `${completedChunks} of ${totalChunks} chunks loaded`
+          : language === 'he'
+            ? 'מתחיל טעינת נתוני לופ...'
+            : 'Starting loop data load...'}
+      </Text>
+    </View>
   );
 }
 
