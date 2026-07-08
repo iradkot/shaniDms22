@@ -22,6 +22,18 @@ export const LOOP_TREATMENT_LOOKBACK_MINUTES = 180;
 export const MIN_LOOP_KNOWN_COVERAGE_PCT = 70;
 export const MIN_BG_SAMPLES_PER_LOOP_MODE = 3;
 
+export type LoopHourlyModeProfile = {
+  hour: number;
+  openMinutes: number;
+  closedMinutes: number;
+  unknownMinutes: number;
+  totalMinutes: number;
+  openPct: number;
+  closedPct: number;
+  unknownPct: number;
+  dominantMode: LoopMode;
+};
+
 export interface LoopModeStats {
   openMinutes: number;
   closedMinutes: number;
@@ -47,6 +59,7 @@ export interface LoopModeStats {
   openMetricsReliable: boolean;
   closedMetricsReliable: boolean;
   canCompareOpenClosed: boolean;
+  hourlyModeProfile: LoopHourlyModeProfile[];
   diagnostics: {
     eventsFetched: number;
     eventsClassified: number;
@@ -302,6 +315,20 @@ export function computeLoopModeStats({
   const startMs = start.getTime();
   const endMs = Math.min(end.getTime(), Date.now());
   const totalMinutes = Math.max(1, Math.round((endMs - startMs) / 60000));
+  const buildEmptyHourlyModeProfile = (): LoopHourlyModeProfile[] =>
+    Array.from({length: 24}, (_, hour) => ({
+      hour,
+      openMinutes: 0,
+      closedMinutes: 0,
+      unknownMinutes: 0,
+      totalMinutes: 0,
+      openPct: 0,
+      closedPct: 0,
+      unknownPct: 0,
+      dominantMode: 'unknown',
+    }));
+
+  const hourlyModeBuckets = buildEmptyHourlyModeProfile();
   const maxCarryForwardMs =
     Number.isFinite(maxCarryForwardMinutes) && maxCarryForwardMinutes >= 0
       ? maxCarryForwardMinutes * 60000
@@ -342,6 +369,7 @@ export function computeLoopModeStats({
       openMetricsReliable: false,
       closedMetricsReliable: false,
       canCompareOpenClosed: false,
+      hourlyModeProfile: buildEmptyHourlyModeProfile(),
       diagnostics: {
         eventsFetched: 0,
         eventsClassified: 0,
@@ -397,6 +425,42 @@ export function computeLoopModeStats({
   let openMinutes = 0;
   let closedMinutes = 0;
   let unknownMinutes = 0;
+  const addModeSegment = (fromMs: number, toMs: number, mode: LoopMode) => {
+    const clampedFrom = Math.max(startMs, fromMs);
+    const clampedTo = Math.min(endMs, toMs);
+    if (clampedTo <= clampedFrom) {
+      return;
+    }
+
+    const deltaMin = Math.max(0, Math.round((clampedTo - clampedFrom) / 60000));
+    if (mode === 'open') {
+      openMinutes += deltaMin;
+    } else if (mode === 'closed') {
+      closedMinutes += deltaMin;
+    } else {
+      unknownMinutes += deltaMin;
+    }
+
+    let bucketCursor = clampedFrom;
+    while (bucketCursor < clampedTo) {
+      const bucketDate = new Date(bucketCursor);
+      const hour = bucketDate.getHours();
+      const nextHour = new Date(bucketCursor);
+      nextHour.setHours(hour + 1, 0, 0, 0);
+      const bucketEnd = Math.min(clampedTo, nextHour.getTime());
+      const bucketMinutes = Math.max(0, (bucketEnd - bucketCursor) / 60000);
+      const bucket = hourlyModeBuckets[hour];
+      bucket.totalMinutes += bucketMinutes;
+      if (mode === 'open') {
+        bucket.openMinutes += bucketMinutes;
+      } else if (mode === 'closed') {
+        bucket.closedMinutes += bucketMinutes;
+      } else {
+        bucket.unknownMinutes += bucketMinutes;
+      }
+      bucketCursor = bucketEnd;
+    }
+  };
 
   for (const e of sortedModeEvents) {
     if (e.timestamp <= startMs || e.timestamp >= endMs) {
@@ -407,19 +471,9 @@ export function computeLoopModeStats({
       maxCarryForwardMs === Infinity
         ? e.timestamp
         : Math.min(e.timestamp, currentModeUntil);
-    const deltaMin = Math.max(0, Math.round((segmentEnd - cursor) / 60000));
-    if (currentMode === 'open') {
-      openMinutes += deltaMin;
-    } else if (currentMode === 'closed') {
-      closedMinutes += deltaMin;
-    } else {
-      unknownMinutes += deltaMin;
-    }
+    addModeSegment(cursor, segmentEnd, currentMode);
     if (segmentEnd < e.timestamp) {
-      unknownMinutes += Math.max(
-        0,
-        Math.round((e.timestamp - segmentEnd) / 60000),
-      );
+      addModeSegment(segmentEnd, e.timestamp, 'unknown');
     }
 
     const nextModeUntil = getModeCoverageEnd(e);
@@ -436,16 +490,9 @@ export function computeLoopModeStats({
     maxCarryForwardMs === Infinity
       ? endMs
       : Math.min(endMs, currentModeUntil);
-  const tailMin = Math.max(0, Math.round((tailEnd - cursor) / 60000));
-  if (currentMode === 'open') {
-    openMinutes += tailMin;
-  } else if (currentMode === 'closed') {
-    closedMinutes += tailMin;
-  } else {
-    unknownMinutes += tailMin;
-  }
+  addModeSegment(cursor, tailEnd, currentMode);
   if (tailEnd < endMs) {
-    unknownMinutes += Math.max(0, Math.round((endMs - tailEnd) / 60000));
+    addModeSegment(tailEnd, endMs, 'unknown');
   }
 
   const basalTimeline: BasalMode[] = Array.from(
@@ -574,6 +621,31 @@ export function computeLoopModeStats({
   const closedMetricsReliable =
     hasEnoughLoopCoverage &&
     closedSamples.length >= MIN_BG_SAMPLES_PER_LOOP_MODE;
+  const hourlyModeProfile = hourlyModeBuckets.map(bucket => {
+    const total = Math.max(0, bucket.totalMinutes);
+    const openPct = total > 0 ? (bucket.openMinutes / total) * 100 : 0;
+    const closedPct = total > 0 ? (bucket.closedMinutes / total) * 100 : 0;
+    const bucketUnknownPct =
+      total > 0 ? (bucket.unknownMinutes / total) * 100 : 0;
+    const dominantMode: LoopMode =
+      closedPct >= openPct && closedPct >= bucketUnknownPct
+        ? 'closed'
+        : openPct >= bucketUnknownPct
+          ? 'open'
+          : 'unknown';
+
+    return {
+      hour: bucket.hour,
+      openMinutes: Math.round(bucket.openMinutes),
+      closedMinutes: Math.round(bucket.closedMinutes),
+      unknownMinutes: Math.round(bucket.unknownMinutes),
+      totalMinutes: Math.round(bucket.totalMinutes),
+      openPct,
+      closedPct,
+      unknownPct: bucketUnknownPct,
+      dominantMode,
+    };
+  });
 
   return {
     openMinutes,
@@ -600,6 +672,7 @@ export function computeLoopModeStats({
     openMetricsReliable,
     closedMetricsReliable,
     canCompareOpenClosed: openMetricsReliable && closedMetricsReliable,
+    hourlyModeProfile,
     diagnostics: {
       eventsFetched: sortedEvents.length,
       eventsClassified: sortedModeEvents.length,

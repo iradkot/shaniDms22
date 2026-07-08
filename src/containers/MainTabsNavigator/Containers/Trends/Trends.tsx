@@ -502,6 +502,151 @@ const Trends: React.FC = () => {
     );
   };
 
+  const getLoopModeColor = (mode: 'open' | 'closed' | 'unknown') => {
+    if (mode === 'closed') return '#2ecc71';
+    if (mode === 'open') return '#f39c12';
+    return '#95a5a6';
+  };
+
+  const renderLoopModeProfile = () => {
+    const profile = loopModeStats.hourlyModeProfile;
+
+    return (
+      <View
+        style={{
+          borderRadius: 12,
+          padding: 12,
+          backgroundColor: addOpacity(theme.textColor, 0.045),
+          gap: 10,
+        }}>
+        <View
+          style={{
+            flexDirection: isRTL ? 'row-reverse' : 'row',
+            alignItems: 'center',
+            gap: 7,
+          }}>
+          <MaterialIcons
+            name="view-week"
+            size={17}
+            color={theme.primaryColor}
+          />
+          <Text
+            style={{
+              flex: 1,
+              color: theme.textColor,
+              fontSize: 14,
+              fontWeight: '800',
+              textAlign: isRTL ? 'right' : 'left',
+            }}>
+            {language === 'he'
+              ? 'דפוס לופ לפי שעה'
+              : 'Loop pattern by hour'}
+          </Text>
+        </View>
+
+        <View
+          style={{
+            flexDirection: 'row',
+            gap: 2,
+            height: 30,
+          }}>
+          {profile.map(hour => {
+            const dominantPct = Math.max(
+              hour.openPct,
+              hour.closedPct,
+              hour.unknownPct,
+            );
+            const opacity = 0.22 + (dominantPct / 100) * 0.68;
+            return (
+              <View
+                key={hour.hour}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  borderRadius: 4,
+                  backgroundColor: addOpacity(
+                    getLoopModeColor(hour.dominantMode),
+                    opacity,
+                  ),
+                  borderWidth: 1,
+                  borderColor: addOpacity(
+                    getLoopModeColor(hour.dominantMode),
+                    0.35,
+                  ),
+                }}
+              />
+            );
+          })}
+        </View>
+
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+          }}>
+          {['00', '06', '12', '18', '24'].map(label => (
+            <Text
+              key={label}
+              style={{
+                color: addOpacity(theme.textColor, 0.58),
+                fontSize: 10,
+                fontWeight: '700',
+              }}>
+              {label}
+            </Text>
+          ))}
+        </View>
+
+        <View
+          style={{
+            flexDirection: isRTL ? 'row-reverse' : 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+          }}>
+          {[
+            {
+              mode: 'closed' as const,
+              label: language === 'he' ? 'סגור' : 'Closed',
+            },
+            {
+              mode: 'open' as const,
+              label: language === 'he' ? 'פתוח' : 'Open',
+            },
+            {
+              mode: 'unknown' as const,
+              label: language === 'he' ? 'לא ידוע' : 'Unknown',
+            },
+          ].map(item => (
+            <View
+              key={item.mode}
+              style={{
+                flexDirection: isRTL ? 'row-reverse' : 'row',
+                alignItems: 'center',
+                gap: 5,
+              }}>
+              <View
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 5,
+                  backgroundColor: getLoopModeColor(item.mode),
+                }}
+              />
+              <Text
+                style={{
+                  color: addOpacity(theme.textColor, 0.66),
+                  fontSize: 11,
+                  fontWeight: '700',
+                }}>
+                {item.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
   const renderBasalPill = ({
     icon,
     label,
@@ -888,6 +1033,8 @@ const Trends: React.FC = () => {
 
                   {(loopViewMode === 'both' || loopViewMode === 'closed') &&
                     renderLoopModeCard('closed')}
+
+                  {renderLoopModeProfile()}
 
                   {!loopModeStats.hasEnoughLoopCoverage && (
                     <View

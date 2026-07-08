@@ -165,6 +165,42 @@ describe('computeLoopModeStats', () => {
     expect(stats.openAvgBg).toBe(130);
   });
 
+  it('builds an hourly open closed unknown mode profile for the chart', () => {
+    const start = new Date('2026-04-01T00:00:00Z');
+    const end = new Date('2026-04-01T03:00:00Z');
+
+    const stats = computeLoopModeStats({
+      start,
+      end,
+      maxCarryForwardMinutes: 60,
+      events: [
+        {
+          timestamp: start.getTime(),
+          mode: 'closed',
+          basalMode: 'planned',
+        },
+        {
+          timestamp: start.getTime() + 60 * 60000,
+          mode: 'open',
+          basalMode: 'planned',
+        },
+      ],
+      bgData: [],
+    });
+
+    const firstHour = start.getHours();
+    const secondHour = (firstHour + 1) % 24;
+    const thirdHour = (firstHour + 2) % 24;
+
+    expect(stats.hourlyModeProfile).toHaveLength(24);
+    expect(stats.hourlyModeProfile[firstHour].dominantMode).toBe('closed');
+    expect(stats.hourlyModeProfile[firstHour].closedPct).toBeCloseTo(100, 1);
+    expect(stats.hourlyModeProfile[secondHour].dominantMode).toBe('open');
+    expect(stats.hourlyModeProfile[secondHour].openPct).toBeCloseTo(100, 1);
+    expect(stats.hourlyModeProfile[thirdHour].dominantMode).toBe('unknown');
+    expect(stats.hourlyModeProfile[thirdHour].unknownPct).toBeCloseTo(100, 1);
+  });
+
   it('does not count future minutes from today as unknown loop time', () => {
     const start = new Date('2026-04-01T00:00:00Z');
     const now = new Date('2026-04-01T01:00:00Z');
