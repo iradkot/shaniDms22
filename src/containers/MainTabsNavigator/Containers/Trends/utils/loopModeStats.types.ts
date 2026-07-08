@@ -81,3 +81,8 @@ export type LoopDataLoadProgress = {
   completedChunks: number;
   totalChunks: number;
 };
+
+export type LoopStatsTimeWindow = {
+  startHour: number;
+  endHour: number;
+};

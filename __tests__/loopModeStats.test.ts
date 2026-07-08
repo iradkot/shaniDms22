@@ -231,6 +231,43 @@ describe('computeLoopModeStats', () => {
     expect(stats.hourlyModeProfile[thirdHour].unknownPct).toBeCloseTo(100, 1);
   });
 
+  it('can limit Loop metrics and BG attribution to selected hours of day', () => {
+    const start = new Date(2026, 3, 1, 0, 0, 0);
+    const end = new Date(2026, 3, 1, 4, 0, 0);
+
+    const stats = computeLoopModeStats({
+      start,
+      end,
+      timeWindow: {startHour: 1, endHour: 3},
+      events: [
+        {
+          timestamp: start.getTime(),
+          mode: 'open',
+          basalMode: 'planned',
+        },
+        {
+          timestamp: start.getTime() + 2 * 60 * 60000,
+          mode: 'closed',
+          basalMode: 'planned',
+        },
+      ],
+      bgData: [
+        {date: start.getTime() + 30 * 60000, sgv: 210},
+        {date: start.getTime() + 90 * 60000, sgv: 140},
+        {date: start.getTime() + 150 * 60000, sgv: 100},
+        {date: start.getTime() + 210 * 60000, sgv: 80},
+      ] as any[],
+    });
+
+    expect(stats.openMinutes).toBe(60);
+    expect(stats.closedMinutes).toBe(60);
+    expect(stats.knownCoveragePct).toBeCloseTo(100, 1);
+    expect(stats.openAvgBg).toBe(140);
+    expect(stats.closedAvgBg).toBe(100);
+    expect(stats.diagnostics.openSamples).toBe(1);
+    expect(stats.diagnostics.closedSamples).toBe(1);
+  });
+
   it('does not count future minutes from today as unknown loop time', () => {
     const start = new Date('2026-04-01T00:00:00Z');
     const now = new Date('2026-04-01T01:00:00Z');

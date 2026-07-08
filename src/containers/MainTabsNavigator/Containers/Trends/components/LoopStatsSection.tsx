@@ -14,6 +14,12 @@ import {
 } from '../utils/loopModeStats';
 
 type LoopViewMode = 'both' | 'open' | 'closed';
+export type LoopStatsTimeFilterKey =
+  | 'all'
+  | 'morning'
+  | 'afternoon'
+  | 'evening'
+  | 'night';
 
 type LoopStatsSectionProps = {
   stats: LoopModeStats;
@@ -21,6 +27,8 @@ type LoopStatsSectionProps = {
   fetchError: string | null;
   rowsFetched: number;
   loadProgress: LoopDataLoadProgress;
+  timeFilterKey: LoopStatsTimeFilterKey;
+  onTimeFilterChange: (key: LoopStatsTimeFilterKey) => void;
 };
 
 const LOOP_MODE_COLORS: Record<LoopMode, string> = {
@@ -82,6 +90,8 @@ export function LoopStatsSection({
   fetchError,
   rowsFetched,
   loadProgress,
+  timeFilterKey,
+  onTimeFilterChange,
 }: LoopStatsSectionProps) {
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
@@ -96,6 +106,17 @@ export function LoopStatsSection({
   const loadProgressPct =
     totalLoadChunks > 0 ? completedLoadChunks / totalLoadChunks : 0;
   const loadProgressLabel = getLoopLoadPhaseLabel(loadProgress, language);
+  const timeFilterOptions: Array<{
+    key: LoopStatsTimeFilterKey;
+    labelHe: string;
+    labelEn: string;
+  }> = [
+    {key: 'all', labelHe: 'כל היום', labelEn: 'All day'},
+    {key: 'morning', labelHe: 'בוקר', labelEn: 'Morning'},
+    {key: 'afternoon', labelHe: 'צהריים', labelEn: 'Afternoon'},
+    {key: 'evening', labelHe: 'ערב', labelEn: 'Evening'},
+    {key: 'night', labelHe: 'לילה', labelEn: 'Night'},
+  ];
 
   const renderLoopMetricTile = ({
     icon,
@@ -459,6 +480,44 @@ export function LoopStatsSection({
                   style={{
                     color: theme.textColor,
                     fontWeight: active ? '700' : '500',
+                  }}>
+                  {language === 'he' ? opt.labelHe : opt.labelEn}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View
+          style={{
+            flexDirection: isRTL ? 'row-reverse' : 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginBottom: 10,
+          }}>
+          {timeFilterOptions.map(opt => {
+            const active = timeFilterKey === opt.key;
+            return (
+              <Pressable
+                key={opt.key}
+                onPress={() => onTimeFilterChange(opt.key)}
+                style={{
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: active
+                    ? theme.primaryColor
+                    : addOpacity(theme.textColor, 0.2),
+                  backgroundColor: active
+                    ? addOpacity(theme.primaryColor, 0.18)
+                    : addOpacity(theme.textColor, 0.035),
+                  paddingHorizontal: 11,
+                  paddingVertical: 7,
+                }}>
+                <Text
+                  style={{
+                    color: theme.textColor,
+                    fontSize: 12,
+                    fontWeight: active ? '800' : '600',
                   }}>
                   {language === 'he' ? opt.labelHe : opt.labelEn}
                 </Text>

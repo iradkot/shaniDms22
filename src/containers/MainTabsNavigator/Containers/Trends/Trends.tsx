@@ -19,7 +19,10 @@ import {BgSample} from 'app/types/day_bgs.types';
 import {DataFetchStatus} from './components/DataFetchStatus';
 import {DateRangeSelector} from './components/DateRangeSelector';
 import {CompareSection} from './components/CompareSection';
-import {LoopStatsSection} from './components/LoopStatsSection';
+import {
+  LoopStatsSection,
+  LoopStatsTimeFilterKey,
+} from './components/LoopStatsSection';
 import TimeInRangeRow from 'app/containers/MainTabsNavigator/Containers/Home/components/TimeInRangeRow';
 // (If you have insulin data, pass it in above.)
 
@@ -39,6 +42,7 @@ import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {HYPO_INVESTIGATION_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
+import {LoopStatsTimeWindow} from './utils/loopModeStats';
 
 const Trends: React.FC = () => {
   const theme = useTheme() as ThemeType;
@@ -48,6 +52,8 @@ const Trends: React.FC = () => {
   const [presetDays, setPresetDays] = useState<number>(7);
   const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
   const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
+  const [loopTimeFilterKey, setLoopTimeFilterKey] =
+    useState<LoopStatsTimeFilterKey>('all');
   const isCustomRange = useMemo(
     () => Boolean(customStartDate && customEndDate),
     [customEndDate, customStartDate],
@@ -114,13 +120,32 @@ const Trends: React.FC = () => {
     end,
     rangeDays,
   });
+  const loopStatsTimeWindow = useMemo<LoopStatsTimeWindow | null>(() => {
+    switch (loopTimeFilterKey) {
+      case 'morning':
+        return {startHour: 6, endHour: 12};
+      case 'afternoon':
+        return {startHour: 12, endHour: 18};
+      case 'evening':
+        return {startHour: 18, endHour: 24};
+      case 'night':
+        return {startHour: 0, endHour: 6};
+      default:
+        return null;
+    }
+  }, [loopTimeFilterKey]);
   const {
     stats: loopModeStats,
     isLoading: isLoopModeStatsLoading,
     fetchError: loopModeStatsError,
     rowsFetched: loopModeRowsFetched,
     loadProgress: loopModeLoadProgress,
-  } = useLoopModeStats({start, end, bgData});
+  } = useLoopModeStats({
+    start,
+    end,
+    bgData,
+    timeWindow: loopStatsTimeWindow,
+  });
 
   const hypoInvestigationNavLockRef = useRef(false);
   const hypoInvestigationUnlockTimeoutRef = useRef<ReturnType<
@@ -421,6 +446,8 @@ const Trends: React.FC = () => {
             fetchError={loopModeStatsError}
             rowsFetched={loopModeRowsFetched}
             loadProgress={loopModeLoadProgress}
+            timeFilterKey={loopTimeFilterKey}
+            onTimeFilterChange={setLoopTimeFilterKey}
           />
           {/* (d) AGP Summary */}
           <View style={{marginBottom: theme.spacing.lg - 1}}>

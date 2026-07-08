@@ -5,6 +5,7 @@ import {
   LoopMode,
   LoopModeEvent,
   LoopModeStats,
+  LoopStatsTimeWindow,
   MIN_BG_SAMPLES_PER_LOOP_MODE,
   MIN_LOOP_KNOWN_COVERAGE_PCT,
 } from './loopModeStats.types';
@@ -41,11 +42,61 @@ function buildEmptyHourlyModeProfile(): LoopHourlyModeProfile[] {
   }));
 }
 
+function normalizeHour(hour: number): number {
+  return Math.max(0, Math.min(24, Math.floor(hour)));
+}
+
+function isHourInTimeWindow(
+  hour: number,
+  timeWindow?: LoopStatsTimeWindow | null,
+): boolean {
+  if (!timeWindow) {
+    return true;
+  }
+
+  const startHour = normalizeHour(timeWindow.startHour);
+  const endHour = normalizeHour(timeWindow.endHour);
+  if (startHour === endHour) {
+    return true;
+  }
+
+  return startHour < endHour
+    ? hour >= startHour && hour < endHour
+    : hour >= startHour || hour < endHour;
+}
+
+function countMinutesInTimeWindow(
+  fromMs: number,
+  toMs: number,
+  timeWindow?: LoopStatsTimeWindow | null,
+): number {
+  if (toMs <= fromMs) {
+    return 0;
+  }
+
+  let total = 0;
+  let cursor = fromMs;
+  while (cursor < toMs) {
+    const cursorDate = new Date(cursor);
+    const hour = cursorDate.getHours();
+    const nextHour = new Date(cursor);
+    nextHour.setHours(hour + 1, 0, 0, 0);
+    const segmentEnd = Math.min(toMs, nextHour.getTime());
+    if (isHourInTimeWindow(hour, timeWindow)) {
+      total += (segmentEnd - cursor) / 60000;
+    }
+    cursor = segmentEnd;
+  }
+
+  return Math.max(0, Math.round(total));
+}
+
 export function computeLoopModeStats({
   start,
   end,
   bgData,
   events,
+  timeWindow,
   maxCarryForwardMinutes = Infinity,
   initialContextLookbackMinutes = maxCarryForwardMinutes,
 }: {
@@ -53,12 +104,17 @@ export function computeLoopModeStats({
   end: Date;
   bgData: BgSample[];
   events: LoopModeEvent[];
+  timeWindow?: LoopStatsTimeWindow | null;
   maxCarryForwardMinutes?: number;
   initialContextLookbackMinutes?: number;
 }): LoopModeStats {
   const startMs = start.getTime();
   const endMs = Math.min(end.getTime(), Date.now());
-  const totalMinutes = Math.max(1, Math.round((endMs - startMs) / 60000));
+  const rangeMinutes = Math.max(1, Math.round((endMs - startMs) / 60000));
+  const totalMinutes = Math.max(
+    1,
+    countMinutesInTimeWindow(startMs, endMs, timeWindow),
+  );
   const hourlyModeBuckets = buildEmptyHourlyModeProfile();
   const maxCarryForwardMs =
     Number.isFinite(maxCarryForwardMinutes) && maxCarryForwardMinutes >= 0
@@ -165,7 +221,11 @@ export function computeLoopModeStats({
       return;
     }
 
-    const deltaMin = Math.max(0, Math.round((clampedTo - clampedFrom) / 60000));
+    const deltaMin = countMinutesInTimeWindow(
+      clampedFrom,
+      clampedTo,
+      timeWindow,
+    );
     if (mode === 'open') {
       openMinutes += deltaMin;
     } else if (mode === 'closed') {
@@ -181,6 +241,11 @@ export function computeLoopModeStats({
       const nextHour = new Date(bucketCursor);
       nextHour.setHours(hour + 1, 0, 0, 0);
       const bucketEnd = Math.min(clampedTo, nextHour.getTime());
+      if (!isHourInTimeWindow(hour, timeWindow)) {
+        bucketCursor = bucketEnd;
+        continue;
+      }
+
       const bucketMinutes = Math.max(0, (bucketEnd - bucketCursor) / 60000);
       const bucket = hourlyModeBuckets[hour];
       bucket.totalMinutes += bucketMinutes;
@@ -229,7 +294,7 @@ export function computeLoopModeStats({
   }
 
   const basalTimeline: BasalMode[] = Array.from(
-    {length: totalMinutes},
+    {length: rangeMinutes},
     () => 'unknown',
   );
   const markBasalMinutes = (
@@ -247,11 +312,16 @@ export function computeLoopModeStats({
       Math.floor((Math.max(startMs, fromMs) - startMs) / 60000),
     );
     const toMinute = Math.min(
-      totalMinutes,
+      rangeMinutes,
       Math.ceil((Math.min(endMs, toMs) - startMs) / 60000),
     );
 
     for (let minute = fromMinute; minute < toMinute; minute += 1) {
+      const minuteHour = new Date(startMs + minute * 60000).getHours();
+      if (!isHourInTimeWindow(minuteHour, timeWindow)) {
+        continue;
+      }
+
       if (overwriteTemp || basalTimeline[minute] === 'unknown') {
         basalTimeline[minute] = mode;
       }
@@ -304,14 +374,19 @@ export function computeLoopModeStats({
     );
   }
 
-  const tempBasalMinutes = basalTimeline.filter(mode => mode === 'temp').length;
-  const suspendedMinutes = basalTimeline.filter(
+  const selectedBasalTimeline = basalTimeline.filter((_, minute) =>
+    isHourInTimeWindow(new Date(startMs + minute * 60000).getHours(), timeWindow),
+  );
+  const tempBasalMinutes = selectedBasalTimeline.filter(
+    mode => mode === 'temp',
+  ).length;
+  const suspendedMinutes = selectedBasalTimeline.filter(
     mode => mode === 'suspended',
   ).length;
-  const plannedBasalMinutes = basalTimeline.filter(
+  const plannedBasalMinutes = selectedBasalTimeline.filter(
     mode => mode === 'planned',
   ).length;
-  const unknownBasalMinutes = basalTimeline.filter(
+  const unknownBasalMinutes = selectedBasalTimeline.filter(
     mode => mode === 'unknown',
   ).length;
 
@@ -340,10 +415,20 @@ export function computeLoopModeStats({
   };
 
   const openSamples = bgData
-    .filter(s => isValidBgSample(s) && modeAt(s.date) === 'open')
+    .filter(
+      s =>
+        isValidBgSample(s) &&
+        isHourInTimeWindow(new Date(s.date).getHours(), timeWindow) &&
+        modeAt(s.date) === 'open',
+    )
     .map(s => s.sgv);
   const closedSamples = bgData
-    .filter(s => isValidBgSample(s) && modeAt(s.date) === 'closed')
+    .filter(
+      s =>
+        isValidBgSample(s) &&
+        isHourInTimeWindow(new Date(s.date).getHours(), timeWindow) &&
+        modeAt(s.date) === 'closed',
+    )
     .map(s => s.sgv);
   const knownMinutes = openMinutes + closedMinutes;
   const knownCoveragePct = (knownMinutes / totalMinutes) * 100;

@@ -11,6 +11,7 @@ import {
   LOOP_TREATMENT_LOOKBACK_MINUTES,
   LoopDataLoadProgress,
   LoopModeEvent,
+  LoopStatsTimeWindow,
   buildLoopDataFetchRanges,
   buildLoopModeEventsFromDeviceStatus,
   buildLoopModeEventsFromTreatments,
@@ -29,10 +30,12 @@ export function useLoopModeStats({
   start,
   end,
   bgData,
+  timeWindow,
 }: {
   start: Date;
   end: Date;
   bgData: BgSample[];
+  timeWindow?: LoopStatsTimeWindow | null;
 }) {
   const [events, setEvents] = useState<LoopModeEvent[]>([]);
   const [eventsRangeKey, setEventsRangeKey] = useState<string | null>(null);
@@ -166,10 +169,11 @@ export function useLoopModeStats({
       end,
       bgData,
       events: hasCurrentRangeData ? events : [],
+      timeWindow,
       maxCarryForwardMinutes: LOOP_STATUS_CARRY_FORWARD_MINUTES,
       initialContextLookbackMinutes: LOOP_CONTEXT_LOOKBACK_MINUTES,
     });
-  }, [bgData, end, events, hasCurrentRangeData, start]);
+  }, [bgData, end, events, hasCurrentRangeData, start, timeWindow]);
 
   return {
     stats,
