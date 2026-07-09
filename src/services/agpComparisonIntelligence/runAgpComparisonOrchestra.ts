@@ -2,6 +2,7 @@ import type {LlmChatMessage, LlmProvider} from 'app/services/llm/llmTypes';
 
 import {analyzeAgpSegments} from './agpSegmentAnalyzer';
 import {analyzeCorrections} from './correctionAnalyzer';
+import {analyzeLoopContext} from './loopContextAnalyzer';
 import {analyzeMealComparisons} from './mealComparisonAnalyzer';
 import {
   buildAgpComparisonSystemPrompt,
@@ -34,6 +35,9 @@ export async function runAgpComparisonOrchestra(
   params.onProgress?.('Checking corrections');
   const correctionInsights = analyzeCorrections(params.evidence);
 
+  params.onProgress?.('Checking Loop context');
+  const loopInsights = analyzeLoopContext(params.evidence);
+
   params.onProgress?.('Comparing settings');
   const settingsInsights = analyzeSettingsDiffs(params.evidence);
 
@@ -41,6 +45,7 @@ export async function runAgpComparisonOrchestra(
     ...agpInsights,
     ...mealInsights,
     ...correctionInsights,
+    ...loopInsights,
     ...settingsInsights,
   ]);
 

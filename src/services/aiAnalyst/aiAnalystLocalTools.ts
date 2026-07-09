@@ -45,6 +45,7 @@ import {
   buildAgpComparisonEvidence,
   runAgpComparisonOrchestra,
 } from 'app/services/agpComparisonIntelligence';
+import {buildLoopModeSummary} from 'app/services/aiAnalyst/loopModeSummaryTool';
 import {TimeValueEntry} from 'app/types/insulin.types';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW} from 'app/constants/GLUCOSE_WINDOWS';
@@ -1189,12 +1190,25 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           }),
           fetchTreatmentsForDateRangeUncached(currentRange.start, currentRange.end),
           fetchTreatmentsForDateRangeUncached(previousRange.start, previousRange.end),
-          getUserProfileFromNightscout(currentRange.start.toISOString()).catch(
+          getUserProfileFromNightscout(currentRange.end.toISOString()).catch(
             () => null,
           ),
-          getUserProfileFromNightscout(previousRange.start.toISOString()).catch(
+          getUserProfileFromNightscout(previousRange.end.toISOString()).catch(
             () => null,
           ),
+        ]);
+
+        const [currentLoopMode, previousLoopMode] = await Promise.all([
+          buildLoopModeSummary({
+            start: currentRange.start,
+            end: currentRange.end,
+            bgData: currentBgData,
+          }).catch(() => null),
+          buildLoopModeSummary({
+            start: previousRange.start,
+            end: previousRange.end,
+            bgData: previousBgData,
+          }).catch(() => null),
         ]);
 
         const evidence = buildAgpComparisonEvidence({
@@ -1206,6 +1220,8 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
           previousTreatments,
           currentProfile,
           previousProfile,
+          currentLoopMode,
+          previousLoopMode,
         });
         const analysis = await runAgpComparisonOrchestra({evidence});
 
@@ -1219,6 +1235,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
             topSegments: analysis.evidence.segments.slice(0, 6),
             meals: analysis.evidence.meals,
             corrections: analysis.evidence.corrections,
+            loopMode: analysis.evidence.loopMode,
             settingsDiffs: analysis.evidence.settingsDiffs.slice(0, 20),
           },
         };

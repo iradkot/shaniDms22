@@ -67,6 +67,26 @@ describe('AGP comparison intelligence', () => {
     );
     expect(result.summaryHe).toContain('נמצאו');
   });
+
+  it('adds loop-context insights when closed-loop coverage changes', async () => {
+    const previousBgData = buildPeriodSamples(range.previous.start, 130, 130);
+    const currentBgData = buildPeriodSamples(range.current.start, 130, 130);
+    const evidence = buildAgpComparisonEvidence({
+      currentRange: range.current,
+      previousRange: range.previous,
+      currentBgData,
+      previousBgData,
+      currentLoopMode: loopMode({closedPct: 82, openPct: 12}),
+      previousLoopMode: loopMode({closedPct: 48, openPct: 44}),
+    });
+
+    const result = await runAgpComparisonOrchestra({evidence});
+
+    expect(
+      result.insights.some(insight => insight.category === 'loop_context'),
+    ).toBe(true);
+    expect(result.evidence.loopMode?.deltas.closedPct).toBeGreaterThan(30);
+  });
 });
 
 function buildPeriodSamples(
@@ -171,6 +191,21 @@ function profileWith(params: {carbRatioMidday: number}) {
     },
   };
   return [profile];
+}
+
+function loopMode(params: {closedPct: number; openPct: number}) {
+  return {
+    closedPct: params.closedPct,
+    openPct: params.openPct,
+    unknownPct: 100 - params.closedPct - params.openPct,
+    knownCoveragePct: params.closedPct + params.openPct,
+    openHours: 8,
+    closedHours: 16,
+    openTirPct: 60,
+    closedTirPct: 74,
+    hasEnoughLoopCoverage: true,
+    canCompareOpenClosed: true,
+  };
 }
 
 function sample(ts: number, sgv: number): BgSample {

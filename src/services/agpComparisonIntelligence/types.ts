@@ -113,6 +113,31 @@ export type AgpSettingsValueDiff = {
   delta: number | null;
 };
 
+export type AgpLoopModePeriodSummary = {
+  openPct: number | null;
+  closedPct: number | null;
+  unknownPct: number | null;
+  knownCoveragePct: number | null;
+  openHours: number | null;
+  closedHours: number | null;
+  openTirPct: number | null;
+  closedTirPct: number | null;
+  hasEnoughLoopCoverage: boolean;
+  canCompareOpenClosed: boolean;
+};
+
+export type AgpLoopModeComparison = {
+  current: AgpLoopModePeriodSummary;
+  previous: AgpLoopModePeriodSummary;
+  deltas: {
+    openPct: number | null;
+    closedPct: number | null;
+    knownCoveragePct: number | null;
+    closedTirPct: number | null;
+    openTirPct: number | null;
+  };
+};
+
 export type AgpPeriodEvidence = {
   key: AgpComparisonPeriodKey;
   range: {startMs: number; endMs: number};
@@ -128,6 +153,7 @@ export type AgpComparisonEvidence = {
   meals: AgpMealComparison[];
   corrections: AgpCorrectionComparison;
   settingsDiffs: AgpSettingsValueDiff[];
+  loopMode: AgpLoopModeComparison | null;
   dataQuality: {
     currentCoveragePct: number;
     previousCoveragePct: number;

@@ -1,4 +1,4 @@
-import {useCallback, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {
   fetchTreatmentsForDateRangeUncached,
@@ -11,6 +11,7 @@ import {
   buildAgpComparisonEvidence,
   runAgpComparisonOrchestra,
 } from 'app/services/agpComparisonIntelligence';
+import {buildLoopModeSummary} from 'app/services/aiAnalyst/loopModeSummaryTool';
 import {BgSample} from 'app/types/day_bgs.types';
 
 type InsightState =
@@ -38,6 +39,28 @@ export function useAgpComparisonInsights(params: {
     progress: '',
   });
   const runSeqRef = useRef(0);
+  const inputSignature = useMemo(
+    () =>
+      [
+        params.currentDateRange.start.getTime(),
+        params.currentDateRange.end.getTime(),
+        params.comparisonDateRange?.start.getTime() ?? 0,
+        params.comparisonDateRange?.end.getTime() ?? 0,
+        params.currentBgData.length,
+        params.currentBgData[0]?.date ?? 0,
+        params.currentBgData[params.currentBgData.length - 1]?.date ?? 0,
+        params.previousBgData.length,
+        params.previousBgData[0]?.date ?? 0,
+        params.previousBgData[params.previousBgData.length - 1]?.date ?? 0,
+      ].join('|'),
+    [
+      params.comparisonDateRange,
+      params.currentBgData,
+      params.currentDateRange,
+      params.previousBgData,
+    ],
+  );
+  const lastInputSignatureRef = useRef(inputSignature);
 
   const provider = useMemo(() => {
     if (!aiSettings.enabled || !(aiSettings.apiKey ?? '').trim()) {
@@ -49,6 +72,15 @@ export function useAgpComparisonInsights(params: {
       return null;
     }
   }, [aiSettings]);
+
+  useEffect(() => {
+    if (lastInputSignatureRef.current === inputSignature) {
+      return;
+    }
+    lastInputSignatureRef.current = inputSignature;
+    runSeqRef.current += 1;
+    setState({status: 'idle', result: null, error: null, progress: ''});
+  }, [inputSignature]);
 
   const run = useCallback(async () => {
     if (!params.comparisonDateRange) {
@@ -65,7 +97,9 @@ export function useAgpComparisonInsights(params: {
     const updateProgress = (progress: string) => {
       if (runSeqRef.current === runId) {
         setState(prev =>
-          prev.status === 'loading' ? {...prev, progress} : prev,
+          prev.status === 'loading'
+            ? {...prev, progress: localizeProgress(progress)}
+            : prev,
         );
       }
     };
@@ -77,6 +111,8 @@ export function useAgpComparisonInsights(params: {
         previousTreatments,
         currentProfile,
         previousProfile,
+        currentLoopMode,
+        previousLoopMode,
       ] = await Promise.all([
         fetchTreatmentsForDateRangeUncached(
           params.currentDateRange.start,
@@ -87,11 +123,21 @@ export function useAgpComparisonInsights(params: {
           params.comparisonDateRange.end,
         ),
         getUserProfileFromNightscout(
-          params.currentDateRange.start.toISOString(),
+          params.currentDateRange.end.toISOString(),
         ).catch(() => null),
         getUserProfileFromNightscout(
-          params.comparisonDateRange.start.toISOString(),
+          params.comparisonDateRange.end.toISOString(),
         ).catch(() => null),
+        buildLoopModeSummary({
+          start: params.currentDateRange.start,
+          end: params.currentDateRange.end,
+          bgData: params.currentBgData,
+        }).catch(() => null),
+        buildLoopModeSummary({
+          start: params.comparisonDateRange.start,
+          end: params.comparisonDateRange.end,
+          bgData: params.previousBgData,
+        }).catch(() => null),
       ]);
 
       updateProgress('מחשב ראיות לפי חלונות AGP...');
@@ -104,6 +150,8 @@ export function useAgpComparisonInsights(params: {
         previousTreatments,
         currentProfile,
         previousProfile,
+        currentLoopMode,
+        previousLoopMode,
       });
 
       const result = await runAgpComparisonOrchestra({
@@ -156,4 +204,16 @@ export function useAgpComparisonInsights(params: {
     run,
     reset,
   };
+}
+
+function localizeProgress(progress: string) {
+  const labels: Record<string, string> = {
+    'Analyzing AGP pattern': 'מנתח את צורת ה-AGP...',
+    'Checking meals': 'בודק ארוחות ותזמון בולוס...',
+    'Checking corrections': 'בודק תיקונים ורגישות לאינסולין...',
+    'Checking Loop context': 'בודק הקשר לופ פתוח/סגור...',
+    'Comparing settings': 'משווה בין התכניות...',
+    'Writing final analysis': 'מסכם תובנות...',
+  };
+  return labels[progress] ?? progress;
 }

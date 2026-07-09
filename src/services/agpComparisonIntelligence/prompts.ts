@@ -34,6 +34,7 @@ function compactEvidence(evidence: AgpComparisonEvidence) {
       meal => meal.currentCount > 0 || meal.previousCount > 0,
     ),
     corrections: evidence.corrections,
+    loopMode: evidence.loopMode,
     settingsDiffs: evidence.settingsDiffs.slice(0, 20),
   };
 }

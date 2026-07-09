@@ -10,6 +10,8 @@ import {
   AgpComparisonEvidence,
   AgpComparisonPeriodKey,
   AgpCorrectionComparison,
+  AgpLoopModeComparison,
+  AgpLoopModePeriodSummary,
   AgpMealComparison,
   AgpMealEvent,
   AgpPeriodEvidence,
@@ -87,6 +89,8 @@ export type BuildComparisonEvidenceParams = {
   previousTreatments?: unknown[];
   currentProfile?: ProfileDataType | null;
   previousProfile?: ProfileDataType | null;
+  currentLoopMode?: AgpLoopModePeriodSummary | null;
+  previousLoopMode?: AgpLoopModePeriodSummary | null;
 };
 
 export function buildAgpComparisonEvidence(
@@ -131,7 +135,35 @@ export function buildAgpComparisonEvidence(
       currentProfile: params.currentProfile ?? null,
       previousProfile: params.previousProfile ?? null,
     }),
+    loopMode: buildLoopModeComparison(
+      params.currentLoopMode ?? null,
+      params.previousLoopMode ?? null,
+    ),
     dataQuality: buildDataQuality(current, previous),
+  };
+}
+
+function buildLoopModeComparison(
+  current: AgpLoopModePeriodSummary | null,
+  previous: AgpLoopModePeriodSummary | null,
+): AgpLoopModeComparison | null {
+  if (!current || !previous) {
+    return null;
+  }
+
+  return {
+    current,
+    previous,
+    deltas: {
+      openPct: diffNullable(current.openPct, previous.openPct),
+      closedPct: diffNullable(current.closedPct, previous.closedPct),
+      knownCoveragePct: diffNullable(
+        current.knownCoveragePct,
+        previous.knownCoveragePct,
+      ),
+      closedTirPct: diffNullable(current.closedTirPct, previous.closedTirPct),
+      openTirPct: diffNullable(current.openTirPct, previous.openTirPct),
+    },
   };
 }
 
