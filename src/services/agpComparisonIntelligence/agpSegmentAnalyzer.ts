@@ -94,12 +94,14 @@ function buildSegmentInsight(
       isHigher ? 'higher' : 'lower'
     } in the current period`,
     whatChangedHe: [
-      tirDelta != null ? `TIR השתנה ב-${formatSigned(tirDelta)} נקודות` : null,
+      tirDelta != null
+        ? `זמן בטווח השתנה ב־${formatSigned(tirDelta)} נקודות`
+        : null,
       avgDelta != null
-        ? `ממוצע הסוכר השתנה ב-${formatSigned(avgDelta)} mg/dL`
+        ? `ממוצע הסוכר השתנה ב־${formatSigned(avgDelta)} מ״ג/ד״ל`
         : null,
       bandDelta != null
-        ? `רוחב הפיזור P10-P90 השתנה ב-${formatSigned(bandDelta)} mg/dL`
+        ? `רוחב הפיזור השתנה ב־${formatSigned(bandDelta)} מ״ג/ד״ל`
         : null,
     ]
       .filter(Boolean)
@@ -120,8 +122,8 @@ function buildSegmentInsight(
     possibleDriversHe,
     possibleDriversEn,
     evidenceHe: [
-      `נוכחי: ${formatStats(segment.current)}`,
-      `קודם: ${formatStats(segment.previous)}`,
+      `נוכחי: ${formatStatsHe(segment.current)}`,
+      `קודם: ${formatStatsHe(segment.previous)}`,
     ],
     evidenceEn: [
       `Current: ${formatStats(segment.current)}`,
@@ -167,7 +169,7 @@ function settingsContextForSegment(
     .slice(0, 3)
     .map(
       diff =>
-        `${diff.labelHe}: ${formatValue(diff.previous)} -> ${formatValue(
+        `${diff.labelHe}: מ־${formatValue(diff.previous)} ל־${formatValue(
           diff.current,
         )}`,
     )
@@ -190,6 +192,17 @@ function formatStats(stats: AgpSegmentComparison['current']) {
     stats.averageBg != null ? `avg ${stats.averageBg.toFixed(0)}` : null,
     stats.medianBg != null ? `median ${stats.medianBg.toFixed(0)}` : null,
     `${stats.sampleCount} samples`,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+function formatStatsHe(stats: AgpSegmentComparison['current']) {
+  return [
+    stats.tirPct != null ? `זמן בטווח ${stats.tirPct.toFixed(0)}%` : null,
+    stats.averageBg != null ? `ממוצע ${stats.averageBg.toFixed(0)}` : null,
+    stats.medianBg != null ? `חציון ${stats.medianBg.toFixed(0)}` : null,
+    `${stats.sampleCount} קריאות`,
   ]
     .filter(Boolean)
     .join(', ');

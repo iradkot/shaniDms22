@@ -82,13 +82,13 @@ function buildMealInsight(meal: AgpMealComparison): AgpComparisonInsight {
         ? 'בפועל: הסוכר נוטה לעלות יותר אחרי הארוחה או להישאר יותר זמן מחוץ לטווח'
         : 'בפועל: אחרי הארוחה יש נטייה לעלייה מתונה יותר או חזרה טובה יותר לטווח',
       riseDelta != null
-        ? `עלייה ממוצעת השתנתה ב-${formatSigned(riseDelta)} mg/dL`
+        ? `העלייה הממוצעת השתנתה ב־${formatSigned(riseDelta)} מ״ג/ד״ל`
         : null,
       peakDelta != null
-        ? `peak השתנה ב-${formatSigned(peakDelta)} mg/dL`
+        ? `שיא הסוכר אחרי האוכל השתנה ב־${formatSigned(peakDelta)} מ״ג/ד״ל`
         : null,
       timingDelta != null
-        ? `תזמון בולוס השתנה ב-${formatSigned(timingDelta)} דקות לפני האוכל`
+        ? `תזמון הבולוס השתנה ב־${formatSigned(timingDelta)} דקות לפני האוכל`
         : null,
     ]
       .filter(Boolean)
@@ -117,7 +117,7 @@ function buildMealInsight(meal: AgpMealComparison): AgpComparisonInsight {
       `${meal.currentCount} ארוחות בתקופה הנוכחית מול ${meal.previousCount} בתקופה הקודמת`,
       `פחמימות ממוצעות: ${formatNullable(
         meal.currentAvgCarbs,
-      )}g מול ${formatNullable(meal.previousAvgCarbs)}g`,
+      )} גרם מול ${formatNullable(meal.previousAvgCarbs)} גרם`,
     ],
     evidenceEn: [
       `${meal.currentCount} current meals vs ${meal.previousCount} previous meals`,

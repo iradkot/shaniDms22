@@ -21,17 +21,17 @@ export function analyzeLoopContext(
     {
       id: 'loop-context',
       category: 'loop_context',
-      titleHe: `הקשר לופ: ${moreClosed ? 'יותר' : 'פחות'} זמן ב-closed loop`,
+      titleHe: `הקשר לופ: ${moreClosed ? 'יותר' : 'פחות'} זמן בלופ סגור`,
       titleEn: `Loop context: ${moreClosed ? 'more' : 'less'} closed-loop time`,
       whatChangedHe: [
         closedDelta != null
-          ? `closed loop השתנה ב-${formatSigned(closedDelta)} נקודות`
+          ? `זמן בלופ סגור השתנה ב־${formatSigned(closedDelta)} נקודות`
           : null,
         knownDelta != null
-          ? `כיסוי ידוע השתנה ב-${formatSigned(knownDelta)} נקודות`
+          ? `כיסוי לופ ידוע השתנה ב־${formatSigned(knownDelta)} נקודות`
           : null,
         closedTirDelta != null
-          ? `TIR בזמן closed loop השתנה ב-${formatSigned(
+          ? `זמן בטווח בזמן לופ סגור השתנה ב־${formatSigned(
               closedTirDelta,
             )} נקודות`
           : null,
@@ -62,16 +62,16 @@ export function analyzeLoopContext(
         'When Loop coverage is limited, avoid attributing the change only to carb ratio or ISF',
       ],
       evidenceHe: [
-        `נוכחי: closed ${formatPct(
+        `נוכחי: לופ סגור ${formatPct(
           loopMode.current.closedPct,
-        )}, open ${formatPct(loopMode.current.openPct)}, known ${formatPct(
-          loopMode.current.knownCoveragePct,
-        )}`,
-        `קודם: closed ${formatPct(
+        )}, לופ פתוח ${formatPct(
+          loopMode.current.openPct,
+        )}, כיסוי ידוע ${formatPct(loopMode.current.knownCoveragePct)}`,
+        `קודם: לופ סגור ${formatPct(
           loopMode.previous.closedPct,
-        )}, open ${formatPct(loopMode.previous.openPct)}, known ${formatPct(
-          loopMode.previous.knownCoveragePct,
-        )}`,
+        )}, לופ פתוח ${formatPct(
+          loopMode.previous.openPct,
+        )}, כיסוי ידוע ${formatPct(loopMode.previous.knownCoveragePct)}`,
       ],
       evidenceEn: [
         `Current: closed ${formatPct(

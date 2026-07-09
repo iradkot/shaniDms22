@@ -218,16 +218,12 @@ const InsightCard: React.FC<{insight: AgpComparisonInsight}> = ({insight}) => {
         />
       </View>
 
-      <Text
-        style={{
-          color: theme.textColor,
-          fontSize: 12,
-          lineHeight: 18,
-          marginTop: theme.spacing.xs,
-          textAlign: isHe ? 'right' : 'left',
-        }}>
-        {changed}
-      </Text>
+      <TextBlock
+        title={isHe ? 'מה השתנה' : 'What changed'}
+        values={splitInsightText(changed)}
+        muted={theme.textColor}
+        isHe={isHe}
+      />
 
       <TextBlock
         title={isHe ? 'כדאי לבדוק' : 'Worth checking'}
@@ -251,6 +247,7 @@ const InsightCard: React.FC<{insight: AgpComparisonInsight}> = ({insight}) => {
                 lineHeight: 18,
                 marginTop: theme.spacing.xs,
                 textAlign: isHe ? 'right' : 'left',
+                writingDirection: isHe ? 'rtl' : 'ltr',
               }}>
               {isHe ? 'הקשר תכנית: ' : 'Plan context: '}
               {settings}
@@ -329,6 +326,7 @@ const TextBlock: React.FC<{
           fontSize: 12,
           fontWeight: '700',
           textAlign: isHe ? 'right' : 'left',
+          writingDirection: isHe ? 'rtl' : 'ltr',
         }}>
         {title}
       </Text>
@@ -341,6 +339,7 @@ const TextBlock: React.FC<{
             lineHeight: 18,
             marginTop: 2,
             textAlign: isHe ? 'right' : 'left',
+            writingDirection: isHe ? 'rtl' : 'ltr',
           }}>
           {isHe ? '• ' : '- '}
           {value}
@@ -349,6 +348,13 @@ const TextBlock: React.FC<{
     </View>
   );
 };
+
+function splitInsightText(text: string) {
+  return text
+    .split(' · ')
+    .map(part => part.trim())
+    .filter(Boolean);
+}
 
 function categoryLabel(
   category: AgpComparisonInsight['category'],

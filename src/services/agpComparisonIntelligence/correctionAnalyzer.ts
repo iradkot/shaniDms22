@@ -29,6 +29,14 @@ export function analyzeCorrections(
     corrections.previousAvgDrop3h,
     corrections.previousLowAfterCorrectionPct,
   );
+  const currentStrHe = correctionSummaryHe(
+    corrections.currentAvgDrop3h,
+    corrections.currentLowAfterCorrectionPct,
+  );
+  const previousStrHe = correctionSummaryHe(
+    corrections.previousAvgDrop3h,
+    corrections.previousLowAfterCorrectionPct,
+  );
 
   const tooStrong = (dropDelta ?? 0) > 25 || (lowDelta ?? 0) > 15;
 
@@ -42,10 +50,10 @@ export function analyzeCorrections(
       titleEn: `Corrections: ${tooStrong ? 'look stronger' : 'look weaker'}`,
       whatChangedHe: [
         dropDelta != null
-          ? `ירידה אחרי 3 שעות השתנתה ב-${formatSigned(dropDelta)} mg/dL`
+          ? `הירידה אחרי 3 שעות השתנתה ב־${formatSigned(dropDelta)} מ״ג/ד״ל`
           : null,
         lowDelta != null
-          ? `low אחרי תיקון השתנה ב-${formatSigned(lowDelta)} נקודות`
+          ? `זמן נמוך אחרי תיקון השתנה ב־${formatSigned(lowDelta)} נקודות`
           : null,
       ]
         .filter(Boolean)
@@ -61,8 +69,11 @@ export function analyzeCorrections(
         .filter(Boolean)
         .join(' · '),
       possibleDriversHe: tooStrong
-        ? ['ISF חזק מדי', 'תיקון מוקדם מדי לפני סיום פעילות אינסולין קודמת']
-        : ['ISF חלש מדי', 'תיקון מאוחר מדי או לופ שמפצה לאט'],
+        ? [
+            'רגישות לאינסולין חזקה מדי',
+            'תיקון מוקדם מדי לפני סיום פעילות אינסולין קודמת',
+          ]
+        : ['רגישות לאינסולין חלשה מדי', 'תיקון מאוחר מדי או לופ שמפצה לאט'],
       possibleDriversEn: tooStrong
         ? [
             'ISF may be too strong',
@@ -73,8 +84,8 @@ export function analyzeCorrections(
             'Correction may be late or Loop may be compensating slowly',
           ],
       evidenceHe: [
-        `נוכחי: ${corrections.currentCount} תיקונים, ${currentStr}`,
-        `קודם: ${corrections.previousCount} תיקונים, ${previousStr}`,
+        `נוכחי: ${corrections.currentCount} תיקונים, ${currentStrHe}`,
+        `קודם: ${corrections.previousCount} תיקונים, ${previousStrHe}`,
       ],
       evidenceEn: [
         `Current: ${corrections.currentCount} corrections, ${currentStr}`,
@@ -92,6 +103,15 @@ function correctionSummary(drop: number | null, lowPct: number | null) {
   return [
     drop != null ? `drop ${drop.toFixed(0)} mg/dL` : null,
     lowPct != null ? `low ${lowPct.toFixed(0)}%` : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+function correctionSummaryHe(drop: number | null, lowPct: number | null) {
+  return [
+    drop != null ? `ירידה ${drop.toFixed(0)} מ״ג/ד״ל` : null,
+    lowPct != null ? `זמן נמוך ${lowPct.toFixed(0)}%` : null,
   ]
     .filter(Boolean)
     .join(', ');

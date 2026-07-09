@@ -56,7 +56,7 @@ function isImportantSettingDiff(diff: AgpSettingsValueDiff) {
 }
 
 function formatDiffHe(diff: AgpSettingsValueDiff) {
-  return `${diff.labelHe}: ${formatValue(diff.previous)} -> ${formatValue(
+  return `${diff.labelHe}: מ־${formatValue(diff.previous)} ל־${formatValue(
     diff.current,
   )}`;
 }
