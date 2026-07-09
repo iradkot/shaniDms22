@@ -1,5 +1,5 @@
-import React from 'react';
-import {ActivityIndicator, Button, Text, View} from 'react-native';
+import React, {useState} from 'react';
+import {ActivityIndicator, Pressable, Text, View} from 'react-native';
 import {useTheme} from 'styled-components/native';
 
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
@@ -65,12 +65,31 @@ export const AgpComparisonInsightsPanel: React.FC<{
               : 'Compares AGP windows, meals, corrections, and plan changes.'}
           </Text>
         </View>
-        <Button
-          title={isHe ? 'נתח' : 'Analyze'}
+        <Pressable
           onPress={onRun}
           disabled={!canRun || status === 'loading'}
-          color={theme.accentColor}
-        />
+          style={({pressed}) => ({
+            backgroundColor:
+              !canRun || status === 'loading'
+                ? addOpacity(theme.textColor, 0.16)
+                : pressed
+                ? addOpacity(theme.accentColor, 0.82)
+                : theme.accentColor,
+            borderRadius: 6,
+            minWidth: 92,
+            paddingHorizontal: theme.spacing.sm,
+            paddingVertical: theme.spacing.xs + 4,
+          })}>
+          <Text
+            style={{
+              color: '#FFFFFF',
+              fontSize: 13,
+              fontWeight: '700',
+              textAlign: 'center',
+            }}>
+            {isHe ? 'נתח הבדלים' : 'Analyze'}
+          </Text>
+        </Pressable>
       </View>
 
       {status === 'loading' && (
@@ -144,6 +163,7 @@ export const AgpComparisonInsightsPanel: React.FC<{
 const InsightCard: React.FC<{insight: AgpComparisonInsight}> = ({insight}) => {
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
+  const [expanded, setExpanded] = useState(false);
   const isHe = language === 'he';
   const muted = addOpacity(theme.textColor, 0.68);
   const chipBackground = confidenceColor(insight.confidence, theme, 0.13);
@@ -154,6 +174,7 @@ const InsightCard: React.FC<{insight: AgpComparisonInsight}> = ({insight}) => {
   const drivers = isHe ? insight.possibleDriversHe : insight.possibleDriversEn;
   const evidence = isHe ? insight.evidenceHe : insight.evidenceEn;
   const settings = isHe ? insight.settingsContextHe : insight.settingsContextEn;
+  const hasDetails = evidence.length > 0 || Boolean(settings);
 
   return (
     <View
@@ -170,33 +191,38 @@ const InsightCard: React.FC<{insight: AgpComparisonInsight}> = ({insight}) => {
           justifyContent: 'space-between',
           gap: theme.spacing.sm,
         }}>
-        <Text
-          style={{
-            color: theme.textColor,
-            flex: 1,
-            fontSize: 14,
-            fontWeight: '700',
-            textAlign: isHe ? 'right' : 'left',
-          }}>
-          {title}
-        </Text>
-        <View
-          style={{
-            backgroundColor: chipBackground,
-            borderRadius: 6,
-            paddingHorizontal: theme.spacing.xs + 2,
-            paddingVertical: 3,
-          }}>
-          <Text style={{color: chipColor, fontSize: 11, fontWeight: '700'}}>
-            {confidenceLabel(insight.confidence, isHe)}
+        <View style={{flex: 1}}>
+          <Text
+            style={{
+              color: theme.textColor,
+              fontSize: 14,
+              fontWeight: '700',
+              textAlign: isHe ? 'right' : 'left',
+            }}>
+            {title}
+          </Text>
+          <Text
+            style={{
+              color: muted,
+              fontSize: 11,
+              marginTop: 3,
+              textAlign: isHe ? 'right' : 'left',
+            }}>
+            {categoryLabel(insight.category, isHe)}
           </Text>
         </View>
+        <Chip
+          backgroundColor={chipBackground}
+          textColor={chipColor}
+          label={confidenceLabel(insight.confidence, isHe)}
+        />
       </View>
 
       <Text
         style={{
           color: theme.textColor,
           fontSize: 12,
+          lineHeight: 18,
           marginTop: theme.spacing.xs,
           textAlign: isHe ? 'right' : 'left',
         }}>
@@ -204,32 +230,83 @@ const InsightCard: React.FC<{insight: AgpComparisonInsight}> = ({insight}) => {
       </Text>
 
       <TextBlock
-        title={isHe ? 'יכול להעיד על' : 'May suggest'}
-        values={drivers}
+        title={isHe ? 'כדאי לבדוק' : 'Worth checking'}
+        values={expanded ? drivers : drivers.slice(0, 1)}
         muted={muted}
         isHe={isHe}
       />
-      <TextBlock
-        title={isHe ? 'ראיות' : 'Evidence'}
-        values={evidence}
-        muted={muted}
-        isHe={isHe}
-      />
-      {settings ? (
-        <Text
+      {expanded ? (
+        <>
+          <TextBlock
+            title={isHe ? 'ראיות' : 'Evidence'}
+            values={evidence}
+            muted={muted}
+            isHe={isHe}
+          />
+          {settings ? (
+            <Text
+              style={{
+                color: muted,
+                fontSize: 12,
+                lineHeight: 18,
+                marginTop: theme.spacing.xs,
+                textAlign: isHe ? 'right' : 'left',
+              }}>
+              {isHe ? 'הקשר תכנית: ' : 'Plan context: '}
+              {settings}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
+
+      {hasDetails ? (
+        <Pressable
+          onPress={() => setExpanded(value => !value)}
           style={{
-            color: muted,
-            fontSize: 12,
-            marginTop: theme.spacing.xs,
-            textAlign: isHe ? 'right' : 'left',
+            alignSelf: isHe ? 'flex-end' : 'flex-start',
+            backgroundColor: addOpacity(theme.accentColor, 0.1),
+            borderRadius: 6,
+            marginTop: theme.spacing.xs + 2,
+            paddingHorizontal: theme.spacing.xs + 2,
+            paddingVertical: 4,
           }}>
-          {isHe ? 'הקשר תכנית: ' : 'Plan context: '}
-          {settings}
-        </Text>
+          <Text
+            style={{
+              color: theme.accentColor,
+              fontSize: 12,
+              fontWeight: '700',
+            }}>
+            {expanded
+              ? isHe
+                ? 'הסתר פירוט'
+                : 'Hide details'
+              : isHe
+              ? 'פתח ראיות'
+              : 'Show evidence'}
+          </Text>
+        </Pressable>
       ) : null}
     </View>
   );
 };
+
+const Chip: React.FC<{
+  backgroundColor: string;
+  textColor: string;
+  label: string;
+}> = ({backgroundColor, textColor, label}) => (
+  <View
+    style={{
+      backgroundColor,
+      borderRadius: 6,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+    }}>
+    <Text style={{color: textColor, fontSize: 11, fontWeight: '700'}}>
+      {label}
+    </Text>
+  </View>
+);
 
 const TextBlock: React.FC<{
   title: string;
@@ -242,17 +319,52 @@ const TextBlock: React.FC<{
     return null;
   }
   return (
-    <Text
+    <View
       style={{
-        color: muted,
-        fontSize: 12,
         marginTop: theme.spacing.xs,
-        textAlign: isHe ? 'right' : 'left',
       }}>
-      {title}: {values.join(' · ')}
-    </Text>
+      <Text
+        style={{
+          color: muted,
+          fontSize: 12,
+          fontWeight: '700',
+          textAlign: isHe ? 'right' : 'left',
+        }}>
+        {title}
+      </Text>
+      {values.map(value => (
+        <Text
+          key={value}
+          style={{
+            color: muted,
+            fontSize: 12,
+            lineHeight: 18,
+            marginTop: 2,
+            textAlign: isHe ? 'right' : 'left',
+          }}>
+          {isHe ? '• ' : '- '}
+          {value}
+        </Text>
+      ))}
+    </View>
   );
 };
+
+function categoryLabel(
+  category: AgpComparisonInsight['category'],
+  isHe: boolean,
+) {
+  const labels = {
+    agp_pattern: ['דפוס AGP', 'AGP pattern'],
+    meal: ['ארוחות', 'Meals'],
+    correction: ['תיקונים', 'Corrections'],
+    overnight: ['לילה', 'Overnight'],
+    morning: ['בוקר', 'Morning'],
+    settings: ['תכנית', 'Plan'],
+    loop_context: ['לופ', 'Loop'],
+  } satisfies Record<AgpComparisonInsight['category'], [string, string]>;
+  return labels[category][isHe ? 0 : 1];
+}
 
 function confidenceLabel(
   confidence: AgpComparisonInsight['confidence'],

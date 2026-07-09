@@ -61,9 +61,13 @@ describe('AGP comparison intelligence', () => {
     });
 
     const result = await runAgpComparisonOrchestra({evidence});
+    const mealInsight = result.insights.find(
+      insight => insight.category === 'meal',
+    );
 
-    expect(result.insights.some(insight => insight.category === 'meal')).toBe(
-      true,
+    expect(mealInsight?.titleHe).toContain('פחות מאוזנת אחרי אוכל');
+    expect(mealInsight?.whatChangedHe).toContain(
+      'הסוכר נוטה לעלות יותר אחרי הארוחה',
     );
     expect(result.summaryHe).toContain('נמצאו');
   });

@@ -71,9 +71,16 @@ function buildMealInsight(meal: AgpMealComparison): AgpComparisonInsight {
   return {
     id: `meal-${meal.mealType}`,
     category: 'meal',
-    titleHe: `${labelHe}: תגובת ארוחה ${worse ? 'חלשה יותר' : 'טובה יותר'}`,
-    titleEn: `${labelEn}: ${worse ? 'weaker' : 'better'} meal response`,
+    titleHe: `${labelHe}: ${
+      worse ? 'פחות מאוזנת אחרי אוכל' : 'מאוזנת יותר אחרי אוכל'
+    }`,
+    titleEn: `${labelEn}: ${
+      worse ? 'less balanced after meals' : 'more balanced after meals'
+    }`,
     whatChangedHe: [
+      worse
+        ? 'בפועל: הסוכר נוטה לעלות יותר אחרי הארוחה או להישאר יותר זמן מחוץ לטווח'
+        : 'בפועל: אחרי הארוחה יש נטייה לעלייה מתונה יותר או חזרה טובה יותר לטווח',
       riseDelta != null
         ? `עלייה ממוצעת השתנתה ב-${formatSigned(riseDelta)} mg/dL`
         : null,
@@ -87,6 +94,9 @@ function buildMealInsight(meal: AgpMealComparison): AgpComparisonInsight {
       .filter(Boolean)
       .join(' · '),
     whatChangedEn: [
+      worse
+        ? 'In practice: glucose tends to rise more after the meal or stay out of range longer'
+        : 'In practice: the post-meal rise is milder or returns to range better',
       riseDelta != null
         ? `Average rise changed by ${formatSigned(riseDelta)} mg/dL`
         : null,
