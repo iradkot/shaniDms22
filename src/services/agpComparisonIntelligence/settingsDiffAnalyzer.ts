@@ -16,19 +16,20 @@ export function analyzeSettingsDiffs(
     {
       id: 'settings-diff',
       category: 'settings',
-      titleHe: 'הבדלים בתכנית שיכולים להסביר חלק מהשינוי',
-      titleEn: 'Plan differences that may explain part of the change',
+      titleHe: 'המלצות לבדיקה לפי שינויי התכנית',
+      titleEn: 'Plan-change review recommendations',
       whatChangedHe: diffs.slice(0, 4).map(formatDiffHe).join(' · '),
       whatChangedEn: diffs.slice(0, 4).map(formatDiffEn).join(' · '),
       possibleDriversHe: [
-        'אם שינוי AGP מופיע באותו חלון זמן, זה מועמד טוב להסבר',
-        'אם אין התאמה בזמן, כנראה שהגורם הוא התנהגות/ארוחות/לופ ולא ההגדרה הזו',
+        'להתחיל מהחלונות שבהם גם התכנית השתנתה וגם ה־AGP זז באותו כיוון',
+        'אם השינוי בתכנית לא יושב על אותו חלון זמן, לבדוק קודם ארוחות, בולוסים או מצב לופ',
+        'לא לשנות מינונים מתוך המסך; להשתמש בזה כרשימת בדיקה מול התכנית והרופא/הצוות',
       ],
       possibleDriversEn: [
         'If the AGP shift appears in the same window, this is a plausible driver',
         'If timing does not line up, behavior/meals/Loop context are more likely',
       ],
-      evidenceHe: [`נמצאו ${diffs.length} הבדלי settings בין התקופות`],
+      evidenceHe: [`נמצאו ${diffs.length} הבדלים בתכנית בין התקופות`],
       evidenceEn: [
         `Found ${diffs.length} settings differences between periods`,
       ],

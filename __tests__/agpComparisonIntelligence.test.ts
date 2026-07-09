@@ -16,7 +16,7 @@ const range = {
 };
 
 describe('AGP comparison intelligence', () => {
-  it('detects a meaningful AGP segment difference and related settings diff', () => {
+  it('detects a meaningful AGP segment difference and related settings diff', async () => {
     const previousBgData = buildPeriodSamples(range.previous.start, 130, 130);
     const currentBgData = buildPeriodSamples(range.current.start, 130, 215);
 
@@ -37,6 +37,19 @@ describe('AGP comparison intelligence', () => {
         diff => diff.setting === 'carbRatio' && diff.windowKey === 'midday',
       ),
     ).toBe(true);
+
+    const result = await runAgpComparisonOrchestra({evidence});
+    const middayInsight = result.insights.find(
+      insight => insight.id === 'agp-midday',
+    );
+    const settingsInsight = result.insights.find(
+      insight => insight.category === 'settings',
+    );
+
+    expect(middayInsight?.whatChangedHe).toContain('נקודות אחוז');
+    expect(middayInsight?.whatChangedHe).toContain('מ־');
+    expect(middayInsight?.whatChangedHe).toContain('ל־');
+    expect(settingsInsight?.titleHe).toContain('המלצות לבדיקה');
   });
 
   it('builds meal insights when post-meal rise changes between periods', async () => {
@@ -89,6 +102,14 @@ describe('AGP comparison intelligence', () => {
     expect(
       result.insights.some(insight => insight.category === 'loop_context'),
     ).toBe(true);
+    const loopInsight = result.insights.find(
+      insight => insight.category === 'loop_context',
+    );
+    expect(loopInsight?.whatChangedHe).toContain('נקודות אחוז');
+    expect(loopInsight?.whatChangedHe).not.toContain('כיסוי לופ ידוע');
+    expect(loopInsight?.possibleDriversHe.join(' ')).toContain(
+      'כמה מהזמן ידענו אם הלופ פתוח או סגור',
+    );
     expect(result.evidence.loopMode?.deltas.closedPct).toBeGreaterThan(30);
   });
 });

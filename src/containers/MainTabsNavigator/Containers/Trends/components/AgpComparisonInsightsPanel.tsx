@@ -23,6 +23,10 @@ export const AgpComparisonInsightsPanel: React.FC<{
   const isHe = language === 'he';
   const muted = addOpacity(theme.textColor, 0.68);
   const borderColor = addOpacity(theme.textColor, 0.12);
+  const settingsInsights =
+    result?.insights.filter(insight => insight.category === 'settings') ?? [];
+  const clinicalInsights =
+    result?.insights.filter(insight => insight.category !== 'settings') ?? [];
 
   return (
     <View
@@ -151,7 +155,37 @@ export const AgpComparisonInsightsPanel: React.FC<{
                 )}%`}
           </Text>
 
-          {result.insights.slice(0, 6).map(insight => (
+          {settingsInsights.length ? (
+            <View
+              style={{
+                backgroundColor: addOpacity(theme.accentColor, 0.08),
+                borderColor: addOpacity(theme.accentColor, 0.22),
+                borderRadius: 6,
+                borderWidth: 1,
+                marginTop: theme.spacing.sm,
+                paddingHorizontal: theme.spacing.sm,
+                paddingBottom: theme.spacing.xs,
+              }}>
+              <Text
+                style={{
+                  color: theme.textColor,
+                  fontSize: 13,
+                  fontWeight: '700',
+                  marginTop: theme.spacing.xs + 2,
+                  textAlign: isHe ? 'right' : 'left',
+                  writingDirection: isHe ? 'rtl' : 'ltr',
+                }}>
+                {isHe
+                  ? 'המלצות לפי שינויי תכנית'
+                  : 'Plan-change recommendations'}
+              </Text>
+              {settingsInsights.map(insight => (
+                <InsightCard key={insight.id} insight={insight} />
+              ))}
+            </View>
+          ) : null}
+
+          {clinicalInsights.slice(0, 6).map(insight => (
             <InsightCard key={insight.id} insight={insight} />
           ))}
         </View>

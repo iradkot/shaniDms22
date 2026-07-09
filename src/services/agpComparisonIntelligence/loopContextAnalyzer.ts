@@ -25,15 +25,25 @@ export function analyzeLoopContext(
       titleEn: `Loop context: ${moreClosed ? 'more' : 'less'} closed-loop time`,
       whatChangedHe: [
         closedDelta != null
-          ? `זמן בלופ סגור השתנה ב־${formatSigned(closedDelta)} נקודות`
+          ? `זמן בלופ סגור ${formatPercentChangeHe(
+              loopMode.previous.closedPct,
+              loopMode.current.closedPct,
+              closedDelta,
+            )}`
           : null,
         knownDelta != null
-          ? `כיסוי לופ ידוע השתנה ב־${formatSigned(knownDelta)} נקודות`
+          ? `אמינות נתוני הלופ ${formatPercentChangeHe(
+              loopMode.previous.knownCoveragePct,
+              loopMode.current.knownCoveragePct,
+              knownDelta,
+            )}`
           : null,
         closedTirDelta != null
-          ? `זמן בטווח בזמן לופ סגור השתנה ב־${formatSigned(
+          ? `זמן בטווח בזמן לופ סגור ${formatPercentChangeHe(
+              loopMode.previous.closedTirPct,
+              loopMode.current.closedTirPct,
               closedTirDelta,
-            )} נקודות`
+            )}`
           : null,
       ]
         .filter(Boolean)
@@ -53,8 +63,8 @@ export function analyzeLoopContext(
         .join(' · '),
       possibleDriversHe: [
         'הבדל בתפקוד/כיסוי הלופ בין התקופות',
-        'שינוי ב-settings יכול להיראות אחרת כשהלופ סגור יותר או פתוח יותר',
-        'אם כיסוי הלופ נמוך, צריך להיזהר מייחוס שינוי ליחסי פחמימות או ISF בלבד',
+        'אם הלופ היה סגור יותר, הוא יכול למסך או לתקן חלק מהשפעת התכנית',
+        'אמינות נתוני הלופ אומרת כמה מהזמן ידענו אם הלופ פתוח או סגור; כשהיא נמוכה צריך להיזהר במסקנות',
       ],
       possibleDriversEn: [
         'Different Loop operation or coverage between periods',
@@ -66,12 +76,12 @@ export function analyzeLoopContext(
           loopMode.current.closedPct,
         )}, לופ פתוח ${formatPct(
           loopMode.current.openPct,
-        )}, כיסוי ידוע ${formatPct(loopMode.current.knownCoveragePct)}`,
+        )}, אמינות נתוני לופ ${formatPct(loopMode.current.knownCoveragePct)}`,
         `קודם: לופ סגור ${formatPct(
           loopMode.previous.closedPct,
         )}, לופ פתוח ${formatPct(
           loopMode.previous.openPct,
-        )}, כיסוי ידוע ${formatPct(loopMode.previous.knownCoveragePct)}`,
+        )}, אמינות נתוני לופ ${formatPct(loopMode.previous.knownCoveragePct)}`,
       ],
       evidenceEn: [
         `Current: closed ${formatPct(
@@ -107,6 +117,19 @@ function hasMeaningfulLoopSignal(loopMode: AgpLoopModeComparison) {
 function formatSigned(value: number) {
   const rounded = Math.abs(value) >= 10 ? value.toFixed(0) : value.toFixed(1);
   return `${value > 0 ? '+' : ''}${rounded}`;
+}
+
+function formatPercentChangeHe(
+  previous: number | null,
+  current: number | null,
+  delta: number,
+) {
+  if (previous == null || current == null) {
+    return `השתנה ב־${formatSigned(delta)} נקודות אחוז`;
+  }
+  return `${delta >= 0 ? 'עלה' : 'ירד'} מ־${previous.toFixed(
+    0,
+  )}% ל־${current.toFixed(0)}% (${Math.abs(delta).toFixed(0)} נקודות אחוז)`;
 }
 
 function formatPct(value: number | null) {

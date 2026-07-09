@@ -95,13 +95,27 @@ function buildSegmentInsight(
     } in the current period`,
     whatChangedHe: [
       tirDelta != null
-        ? `זמן בטווח השתנה ב־${formatSigned(tirDelta)} נקודות`
+        ? `זמן בטווח ${formatPercentChangeHe(
+            segment.previous.tirPct,
+            segment.current.tirPct,
+            tirDelta,
+          )}`
         : null,
       avgDelta != null
-        ? `ממוצע הסוכר השתנה ב־${formatSigned(avgDelta)} מ״ג/ד״ל`
+        ? `ממוצע הסוכר ${formatNumberChangeHe(
+            segment.previous.averageBg,
+            segment.current.averageBg,
+            avgDelta,
+            'מ״ג/ד״ל',
+          )}`
         : null,
       bandDelta != null
-        ? `רוחב הפיזור השתנה ב־${formatSigned(bandDelta)} מ״ג/ד״ל`
+        ? `רוחב הפיזור ${formatNumberChangeHe(
+            segment.previous.variabilityBand,
+            segment.current.variabilityBand,
+            bandDelta,
+            'מ״ג/ד״ל',
+          )}`
         : null,
     ]
       .filter(Boolean)
@@ -211,6 +225,33 @@ function formatStatsHe(stats: AgpSegmentComparison['current']) {
 function formatSigned(value: number) {
   const rounded = Math.abs(value) >= 10 ? value.toFixed(0) : value.toFixed(1);
   return `${value > 0 ? '+' : ''}${rounded}`;
+}
+
+function formatPercentChangeHe(
+  previous: number | null,
+  current: number | null,
+  delta: number,
+) {
+  if (previous == null || current == null) {
+    return `השתנה ב־${formatSigned(delta)} נקודות אחוז`;
+  }
+  return `${delta >= 0 ? 'עלה' : 'ירד'} מ־${previous.toFixed(
+    0,
+  )}% ל־${current.toFixed(0)}% (${Math.abs(delta).toFixed(0)} נקודות אחוז)`;
+}
+
+function formatNumberChangeHe(
+  previous: number | null,
+  current: number | null,
+  delta: number,
+  unit: string,
+) {
+  if (previous == null || current == null) {
+    return `השתנה ב־${formatSigned(delta)} ${unit}`;
+  }
+  return `${delta >= 0 ? 'עלה' : 'ירד'} מ־${previous.toFixed(
+    0,
+  )} ל־${current.toFixed(0)} ${unit}`;
 }
 
 function formatValue(value: number | null) {
