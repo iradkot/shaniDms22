@@ -93,6 +93,16 @@ export const DEFAULT_AI_ORCHESTRA_AGENTS: AiAgentDefinition[] = [
     outputKind: 'settings_findings',
   },
   {
+    id: 'agp_comparison_agent',
+    role: 'pattern_analysis',
+    title: 'AGP comparison agent',
+    objective:
+      'Explain period-to-period AGP differences using segment, meal, correction, and settings evidence.',
+    required: false,
+    allowedTools: ['analyzeAgpPeriodComparison'],
+    outputKind: 'pattern_findings',
+  },
+  {
     id: 'behavior_agent',
     role: 'behavior_analysis',
     title: 'Behavior agent',
@@ -175,6 +185,16 @@ function agentsForMission(mission: AiOrchestraMission): string[] {
         'nightscout_data_agent',
         'pattern_agent',
         'settings_agent',
+        'safety_reviewer',
+        'final_writer',
+      ];
+    case 'agpPeriodComparison':
+      return [
+        'orchestrator',
+        'memory_curator',
+        'agp_comparison_agent',
+        'settings_agent',
+        'behavior_agent',
         'safety_reviewer',
         'final_writer',
       ];

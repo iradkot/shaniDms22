@@ -36,7 +36,8 @@ export type AiOrchestraMission =
   | 'hypoNow'
   | 'hypoDetective'
   | 'userBehavior'
-  | 'loopSettings';
+  | 'loopSettings'
+  | 'agpPeriodComparison';
 
 export type AiOrchestraPhase = {
   id: string;

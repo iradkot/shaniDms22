@@ -26,6 +26,8 @@ import {useAGPData} from 'app/components/charts/AGPGraph/hooks/useAGPData';
 import AGPChart from 'app/components/charts/AGPGraph/components/AGPChart';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {addOpacity} from 'app/style/styling.utils';
+import {AgpComparisonInsightsPanel} from './AgpComparisonInsightsPanel';
+import {useAgpComparisonInsights} from '../hooks/useAgpComparisonInsights';
 
 interface CompareSectionProps {
   showComparison: boolean;
@@ -174,6 +176,12 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
       rangeDays,
     ],
   );
+  const agpInsights = useAgpComparisonInsights({
+    currentDateRange,
+    comparisonDateRange,
+    currentBgData,
+    previousBgData,
+  });
 
   if (!currentMetrics.dailyDetails.length) return null;
 
@@ -217,6 +225,15 @@ export const CompareSection: React.FC<CompareSectionProps> = ({
               comparisonDateRange,
             )}
           </ComparisonDateRange>
+
+          <AgpComparisonInsightsPanel
+            canRun={agpInsights.canRun}
+            status={agpInsights.status}
+            progress={agpInsights.progress}
+            error={agpInsights.error}
+            result={agpInsights.result}
+            onRun={agpInsights.run}
+          />
 
           <View style={{marginBottom: theme.spacing.sm + 2}}>
             <ComparisonAgpChart

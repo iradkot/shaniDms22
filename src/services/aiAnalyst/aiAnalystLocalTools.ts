@@ -41,6 +41,10 @@ import {detectSettingsChanges} from 'app/services/loopAnalysis/settingsChangeDet
 import {analyzeSettingsImpact} from 'app/services/loopAnalysis/impactAnalysisService';
 import {generateImpactSummary} from 'app/services/loopAnalysis/impactAnalysis.utils';
 import {calculatePeriodStats} from 'app/services/loopAnalysis/impactAnalysis.utils';
+import {
+  buildAgpComparisonEvidence,
+  runAgpComparisonOrchestra,
+} from 'app/services/agpComparisonIntelligence';
 import {TimeValueEntry} from 'app/types/insulin.types';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW} from 'app/constants/GLUCOSE_WINDOWS';
@@ -58,6 +62,7 @@ export type AiAnalystToolName =
   | 'getPumpProfile'
   | 'getProfileChangeHistory'
   | 'analyzeSettingsImpact'
+  | 'analyzeAgpPeriodComparison'
   // Loop Settings Advisor tools (camelCase)
   | 'getGlucosePatterns'
   | 'analyzeTimeInRange'
@@ -76,6 +81,7 @@ export type AiAnalystToolName =
   | 'get_glucose_patterns'
   | 'analyze_time_in_range'
   | 'compare_periods'
+  | 'analyze_agp_period_comparison'
   | 'get_insulin_delivery_stats'
   | 'analyze_meal_responses'
   | 'get_settings_change_history'
@@ -109,6 +115,7 @@ function normalizeToolName(name: string): string {
     'get_glucose_patterns': 'getGlucosePatterns',
     'analyze_time_in_range': 'analyzeTimeInRange',
     'compare_periods': 'comparePeriods',
+    'analyze_agp_period_comparison': 'analyzeAgpPeriodComparison',
     'get_insulin_delivery_stats': 'getInsulinDeliveryStats',
     'analyze_meal_responses': 'analyzeMealResponses',
     'get_settings_change_history': 'getSettingsChangeHistory',
@@ -1134,6 +1141,85 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
               fewerHypos: stats2.hypoPercent < stats1.hypoPercent,
               fewerHypers: stats2.hyperPercent < stats1.hyperPercent,
             },
+          },
+        };
+      }
+
+      case 'analyzeAgpPeriodComparison': {
+        const currentStart = Date.parse(args?.currentStart ?? args?.period2Start);
+        const currentEnd = Date.parse(args?.currentEnd ?? args?.period2End);
+        const previousStart = Date.parse(args?.previousStart ?? args?.period1Start);
+        const previousEnd = Date.parse(args?.previousEnd ?? args?.period1End);
+
+        if (
+          !Number.isFinite(currentStart) ||
+          !Number.isFinite(currentEnd) ||
+          !Number.isFinite(previousStart) ||
+          !Number.isFinite(previousEnd)
+        ) {
+          return {
+            ok: false,
+            error:
+              'currentStart/currentEnd/previousStart/previousEnd are required ISO date strings',
+          };
+        }
+
+        const currentRange = {
+          start: new Date(currentStart),
+          end: new Date(currentEnd),
+        };
+        const previousRange = {
+          start: new Date(previousStart),
+          end: new Date(previousEnd),
+        };
+
+        const [
+          currentBgData,
+          previousBgData,
+          currentTreatments,
+          previousTreatments,
+          currentProfile,
+          previousProfile,
+        ] = await Promise.all([
+          fetchBgDataForDateRangeUncached(currentRange.start, currentRange.end, {
+            throwOnError: true,
+          }),
+          fetchBgDataForDateRangeUncached(previousRange.start, previousRange.end, {
+            throwOnError: true,
+          }),
+          fetchTreatmentsForDateRangeUncached(currentRange.start, currentRange.end),
+          fetchTreatmentsForDateRangeUncached(previousRange.start, previousRange.end),
+          getUserProfileFromNightscout(currentRange.start.toISOString()).catch(
+            () => null,
+          ),
+          getUserProfileFromNightscout(previousRange.start.toISOString()).catch(
+            () => null,
+          ),
+        ]);
+
+        const evidence = buildAgpComparisonEvidence({
+          currentRange,
+          previousRange,
+          currentBgData,
+          previousBgData,
+          currentTreatments,
+          previousTreatments,
+          currentProfile,
+          previousProfile,
+        });
+        const analysis = await runAgpComparisonOrchestra({evidence});
+
+        return {
+          ok: true,
+          result: {
+            summaryHe: analysis.summaryHe,
+            summaryEn: analysis.summaryEn,
+            insights: analysis.insights,
+            dataQuality: analysis.evidence.dataQuality,
+            topSegments: analysis.evidence.segments.slice(0, 6),
+            meals: analysis.evidence.meals,
+            corrections: analysis.evidence.corrections,
+            settingsDiffs: analysis.evidence.settingsDiffs.slice(0, 20),
           },
         };
       }
