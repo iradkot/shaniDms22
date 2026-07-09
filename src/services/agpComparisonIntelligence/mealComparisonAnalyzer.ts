@@ -11,7 +11,7 @@ export function analyzeMealComparisons(
     .filter(hasMealSignal)
     .sort((a, b) => mealScore(b) - mealScore(a))
     .slice(0, 3)
-    .map(buildMealInsight);
+    .map(meal => buildMealInsight(meal, evidence));
 }
 
 function hasMealSignal(meal: AgpMealComparison) {
@@ -30,7 +30,10 @@ function hasMealSignal(meal: AgpMealComparison) {
   );
 }
 
-function buildMealInsight(meal: AgpMealComparison): AgpComparisonInsight {
+function buildMealInsight(
+  meal: AgpMealComparison,
+  evidence: AgpComparisonEvidence,
+): AgpComparisonInsight {
   const riseDelta = diff(meal.currentAvgRise, meal.previousAvgRise);
   const peakDelta = diff(meal.currentAvgPeak, meal.previousAvgPeak);
   const timingDelta = diff(
@@ -125,9 +128,19 @@ function buildMealInsight(meal: AgpMealComparison): AgpComparisonInsight {
         meal.currentAvgCarbs,
       )}g vs ${formatNullable(meal.previousAvgCarbs)}g`,
     ],
-    confidence:
-      meal.currentCount >= 6 && meal.previousCount >= 6 ? 'medium' : 'low',
+    confidence: mealConfidence(meal, evidence),
   };
+}
+
+function mealConfidence(
+  meal: AgpMealComparison,
+  evidence: AgpComparisonEvidence,
+) {
+  const enoughMeals = meal.currentCount >= 6 && meal.previousCount >= 6;
+  const enoughCoverage =
+    evidence.dataQuality.currentCoveragePct >= 70 &&
+    evidence.dataQuality.previousCoveragePct >= 70;
+  return enoughMeals && enoughCoverage ? 'medium' : 'low';
 }
 
 function mealScore(meal: AgpMealComparison) {

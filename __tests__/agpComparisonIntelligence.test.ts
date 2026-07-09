@@ -112,6 +112,31 @@ describe('AGP comparison intelligence', () => {
     );
     expect(result.evidence.loopMode?.deltas.closedPct).toBeGreaterThan(30);
   });
+
+  it('keeps low confidence and cautious summary when data coverage is limited', async () => {
+    const previousStart = range.previous.start.getTime();
+    const currentStart = range.current.start.getTime();
+    const previousBgData = repeatedLunchResponses(previousStart, 110, 150);
+    const currentBgData = repeatedLunchResponses(currentStart, 110, 230);
+
+    const evidence = buildAgpComparisonEvidence({
+      currentRange: range.current,
+      previousRange: range.previous,
+      currentBgData,
+      previousBgData,
+      currentTreatments: repeatedLunchTreatments(currentStart),
+      previousTreatments: repeatedLunchTreatments(previousStart),
+    });
+
+    const result = await runAgpComparisonOrchestra({evidence});
+    const mealInsight = result.insights.find(
+      insight => insight.category === 'meal',
+    );
+
+    expect(evidence.dataQuality.currentCoveragePct).toBeLessThan(70);
+    expect(mealInsight?.confidence).toBe('low');
+    expect(result.summaryHe).toContain('כיסוי הנתונים חלקי');
+  });
 });
 
 function buildPeriodSamples(
@@ -182,6 +207,46 @@ function mealTreatments(startMs: number) {
       },
     ];
   });
+}
+
+function repeatedLunchResponses(
+  startMs: number,
+  mealBg: number,
+  peakBg: number,
+) {
+  const samples: BgSample[] = [];
+  for (let day = 0; day < 3; day++) {
+    for (const hour of [12, 13]) {
+      const mealTs = startMs + day * 24 * 60 * 60_000 + hour * 60 * 60_000;
+      samples.push(sample(mealTs, mealBg));
+      samples.push(sample(mealTs + 60 * 60_000, peakBg));
+      samples.push(sample(mealTs + 2 * 60 * 60_000, mealBg + 30));
+      samples.push(sample(mealTs + 3 * 60 * 60_000, mealBg + 10));
+    }
+  }
+  return samples;
+}
+
+function repeatedLunchTreatments(startMs: number) {
+  return [0, 1, 2].flatMap(day =>
+    [12, 13].flatMap(hour => {
+      const mealTs = startMs + day * 24 * 60 * 60_000 + hour * 60 * 60_000;
+      return [
+        {
+          _id: `carbs-${day}-${hour}`,
+          eventType: 'Carb Correction',
+          created_at: new Date(mealTs).toISOString(),
+          carbs: 45,
+        },
+        {
+          _id: `bolus-${day}-${hour}`,
+          eventType: 'Bolus',
+          created_at: new Date(mealTs - 10 * 60_000).toISOString(),
+          insulin: 4.5,
+        },
+      ];
+    }),
+  );
 }
 
 function profileWith(params: {carbRatioMidday: number}) {

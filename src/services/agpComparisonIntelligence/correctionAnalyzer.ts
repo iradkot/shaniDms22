@@ -50,10 +50,19 @@ export function analyzeCorrections(
       titleEn: `Corrections: ${tooStrong ? 'look stronger' : 'look weaker'}`,
       whatChangedHe: [
         dropDelta != null
-          ? `הירידה אחרי 3 שעות השתנתה ב־${formatSigned(dropDelta)} מ״ג/ד״ל`
+          ? `הירידה אחרי 3 שעות ${formatNumberChangeHe(
+              corrections.previousAvgDrop3h,
+              corrections.currentAvgDrop3h,
+              dropDelta,
+              'מ״ג/ד״ל',
+            )}`
           : null,
         lowDelta != null
-          ? `זמן נמוך אחרי תיקון השתנה ב־${formatSigned(lowDelta)} נקודות`
+          ? `זמן נמוך אחרי תיקון ${formatPercentChangeHe(
+              corrections.previousLowAfterCorrectionPct,
+              corrections.currentLowAfterCorrectionPct,
+              lowDelta,
+            )}`
           : null,
       ]
         .filter(Boolean)
@@ -91,12 +100,19 @@ export function analyzeCorrections(
         `Current: ${corrections.currentCount} corrections, ${currentStr}`,
         `Previous: ${corrections.previousCount} corrections, ${previousStr}`,
       ],
-      confidence:
-        corrections.currentCount >= 5 && corrections.previousCount >= 5
-          ? 'medium'
-          : 'low',
+      confidence: correctionConfidence(evidence),
     },
   ];
+}
+
+function correctionConfidence(evidence: AgpComparisonEvidence) {
+  const enoughCorrections =
+    evidence.corrections.currentCount >= 5 &&
+    evidence.corrections.previousCount >= 5;
+  const enoughCoverage =
+    evidence.dataQuality.currentCoveragePct >= 70 &&
+    evidence.dataQuality.previousCoveragePct >= 70;
+  return enoughCorrections && enoughCoverage ? 'medium' : 'low';
 }
 
 function correctionSummary(drop: number | null, lowPct: number | null) {
@@ -120,4 +136,31 @@ function correctionSummaryHe(drop: number | null, lowPct: number | null) {
 function formatSigned(value: number) {
   const rounded = Math.abs(value) >= 10 ? value.toFixed(0) : value.toFixed(1);
   return `${value > 0 ? '+' : ''}${rounded}`;
+}
+
+function formatPercentChangeHe(
+  previous: number | null,
+  current: number | null,
+  delta: number,
+) {
+  if (previous == null || current == null) {
+    return `השתנה ב־${formatSigned(delta)} נקודות אחוז`;
+  }
+  return `${delta >= 0 ? 'עלה' : 'ירד'} מ־${previous.toFixed(
+    0,
+  )}% ל־${current.toFixed(0)}% (${Math.abs(delta).toFixed(0)} נקודות אחוז)`;
+}
+
+function formatNumberChangeHe(
+  previous: number | null,
+  current: number | null,
+  delta: number,
+  unit: string,
+) {
+  if (previous == null || current == null) {
+    return `השתנתה ב־${formatSigned(delta)} ${unit}`;
+  }
+  return `${delta >= 0 ? 'עלתה' : 'ירדה'} מ־${previous.toFixed(
+    0,
+  )} ל־${current.toFixed(0)} ${unit}`;
 }

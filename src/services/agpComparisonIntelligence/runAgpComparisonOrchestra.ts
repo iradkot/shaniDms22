@@ -87,8 +87,8 @@ function buildResult(
   return {
     evidence,
     insights,
-    summaryHe: buildSummary(insights, 'he'),
-    summaryEn: buildSummary(insights, 'en'),
+    summaryHe: buildSummary(insights, evidence, 'he'),
+    summaryEn: buildSummary(insights, evidence, 'en'),
     generatedAt: Date.now(),
     usedLlm,
   };
@@ -183,7 +183,14 @@ function mergeWithFallback(
   };
 }
 
-function buildSummary(insights: AgpComparisonInsight[], language: 'he' | 'en') {
+function buildSummary(
+  insights: AgpComparisonInsight[],
+  evidence: AgpComparisonEvidence,
+  language: 'he' | 'en',
+) {
+  const limitedCoverage =
+    evidence.dataQuality.currentCoveragePct < 70 ||
+    evidence.dataQuality.previousCoveragePct < 70;
   if (!insights.length) {
     return language === 'he'
       ? 'לא נמצאו הבדלים משמעותיים מספיק להסבר אוטומטי בין התקופות.'
@@ -191,9 +198,16 @@ function buildSummary(insights: AgpComparisonInsight[], language: 'he' | 'en') {
   }
   const highOrMedium = insights.filter(insight => insight.confidence !== 'low');
   const count = highOrMedium.length || insights.length;
+  const base =
+    language === 'he'
+      ? `נמצאו ${count} הבדלים שווים בדיקה בין התקופות. כל ממצא מוצג עם ראיות ורמת ביטחון.`
+      : `Found ${count} period differences worth checking. Each finding includes evidence and confidence.`;
+  if (!limitedCoverage) {
+    return base;
+  }
   return language === 'he'
-    ? `נמצאו ${count} הבדלים שווים בדיקה בין התקופות. כל ממצא מוצג עם ראיות ורמת ביטחון.`
-    : `Found ${count} period differences worth checking. Each finding includes evidence and confidence.`;
+    ? `${base} כיסוי הנתונים חלקי, לכן מסקנות מוצגות בזהירות.`
+    : `${base} Data coverage is limited, so conclusions are intentionally cautious.`;
 }
 
 function dedupeInsights(insights: AgpComparisonInsight[]) {
