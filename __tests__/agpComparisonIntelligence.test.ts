@@ -50,6 +50,15 @@ describe('AGP comparison intelligence', () => {
     expect(middayInsight?.whatChangedHe).toContain('מ־');
     expect(middayInsight?.whatChangedHe).toContain('ל־');
     expect(settingsInsight?.titleHe).toContain('המלצות לבדיקה');
+    expect(settingsInsight?.possibleDriversHe.join(' ')).toContain(
+      'בפועל בחלון צהריים',
+    );
+    expect(settingsInsight?.possibleDriversHe.join(' ')).toContain(
+      'נראה החמרה',
+    );
+    expect(settingsInsight?.possibleDriversHe.join(' ')).toContain(
+      'יכול להיות קשור לשינוי בתכנית',
+    );
   });
 
   it('builds meal insights when post-meal rise changes between periods', async () => {

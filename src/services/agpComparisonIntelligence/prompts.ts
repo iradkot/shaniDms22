@@ -11,6 +11,8 @@ export function buildAgpComparisonSystemPrompt() {
     'For Hebrew output, avoid mixing English metric tokens inside RTL sentences. Prefer Hebrew terms such as זמן בטווח, מ״ג/ד״ל, לופ סגור, לופ פתוח, רגישות לאינסולין.',
     'When describing percentage changes in Hebrew, say נקודות אחוז and include from/to values when available. Do not write only נקודות.',
     'Treat plan/settings differences as separate review recommendations, not just another generic AGP finding.',
+    'For each plan/settings difference, state the actual outcome in the matching time window when available: improved, worse, or mixed/unclear, with from/to metrics.',
+    'For each plan/settings difference, explicitly say whether the direction is consistent with the plan change, and keep it as a possible relationship rather than a proven cause.',
     'Plan/settings differences are possible explanations only when their time window aligns with an AGP change; otherwise say to check meals, boluses, Loop context, and data quality first.',
     'Do not provide direct dosing instructions. Recommend clinical review for settings changes.',
     'Return compact JSON only with summaryHe, summaryEn, insights[]. Preserve ids and confidence when possible.',
