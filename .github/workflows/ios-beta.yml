@@ -10,9 +10,10 @@ on:
 
 jobs:
   beta:
-    runs-on: macos-15
+    runs-on: macos-latest
     env:
       NODE_OPTIONS: --max_old_space_size=4096
+      TOOLCHAINS: com.apple.dt.toolchain.XcodeDefault
       APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE || vars.APPLE_PROVISIONING_PROFILE }}
       APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 || vars.APPLE_CERTIFICATE_P12 }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD || vars.APPLE_CERTIFICATE_PASSWORD }}
@@ -41,6 +42,14 @@ jobs:
           ruby-version: '3.2'
           bundler-cache: true
           working-directory: ios
+
+      - name: Use Xcode default toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun --find clang
 
       - name: Preflight App Store Connect token
         working-directory: ios
