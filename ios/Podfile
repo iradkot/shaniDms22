@@ -44,15 +44,16 @@ target 'shaniDms22' do
     )
 
     # Xcode 26's clang rejects fmt 11's consteval compile-string path while
-    # compiling fmt's own format.cc. Disable that path for the fmt pod only.
-    installer.pods_project.targets.each do |target|
-      next unless target.name == 'fmt'
-
-      target.build_configurations.each do |build_config|
-        definitions = Array(build_config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)'])
-        definitions << 'FMT_USE_CONSTEVAL=0' unless definitions.include?('FMT_USE_CONSTEVAL=0')
-        build_config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = definitions
-      end
+    # compiling fmt's own format.cc. fmt 11 does not honor an external
+    # FMT_USE_CONSTEVAL=0 define here, so patch the generated header in Pods.
+    fmt_base_header = File.join(installer.sandbox.root.to_s, 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base_header)
+      original = File.read(fmt_base_header)
+      patched = original.gsub(
+        '#elif defined(__apple_build_version__) && __apple_build_version__ < 14000029L',
+        '#elif defined(__apple_build_version__)'
+      )
+      File.write(fmt_base_header, patched) if patched != original
     end
 
     # Firebase's umbrella header conditionally includes *-Swift.h when it sees the
