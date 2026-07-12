@@ -43,6 +43,18 @@ target 'shaniDms22' do
       # :ccache_enabled => true
     )
 
+    # Xcode 26's clang rejects fmt 11's consteval compile-string path while
+    # compiling fmt's own format.cc. Disable that path for the fmt pod only.
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'fmt'
+
+      target.build_configurations.each do |build_config|
+        definitions = Array(build_config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)'])
+        definitions << 'FMT_USE_CONSTEVAL=0' unless definitions.include?('FMT_USE_CONSTEVAL=0')
+        build_config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = definitions
+      end
+    end
+
     # Firebase's umbrella header conditionally includes *-Swift.h when it sees the
     # corresponding CocoaPods-generated *-umbrella.h. With static-library pods,
     # the generated Swift header may not exist at compile time, which breaks
