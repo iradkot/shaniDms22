@@ -48,7 +48,7 @@ const NightscoutConfigContext = createContext<NightscoutConfigContextValue>({
   activeProfile: null,
   isLoaded: false,
   addProfile: async () => {},
-  testProfileConnection: async () => ({ok: true, entriesCount: 0}),
+  testProfileConnection: async () => ({ok: true, entriesCount: 0, authMethod: 'query'}),
   setActiveProfileId: async () => {},
   updateProfile: async () => {},
   deleteProfile: async () => {},

@@ -408,6 +408,8 @@ const en = {
     testFailed: 'Nightscout connection test failed.',
     testSuccess: 'Connection works. Latest glucose data is available.',
     testSuccessNoEntries: 'Connection works, but no glucose entries were returned.',
+    showSecret: 'Show API secret',
+    hideSecret: 'Hide API secret',
     saveContinue: 'Save & Continue',
   },
   auth: {
@@ -940,6 +942,8 @@ const he: typeof en = {
     testFailed: 'בדיקת החיבור ל-Nightscout נכשלה.',
     testSuccess: 'החיבור תקין. נמצאו נתוני סוכר.',
     testSuccessNoEntries: 'החיבור תקין, אבל לא חזרו רשומות סוכר.',
+    showSecret: 'הצג סוד API',
+    hideSecret: 'הסתר סוד API',
     saveContinue: 'שמור והמשך',
   },
   auth: {

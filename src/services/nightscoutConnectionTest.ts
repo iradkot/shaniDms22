@@ -4,9 +4,17 @@ export type NightscoutConnectionTestResult = {
   ok: true;
   entriesCount: number;
   latestEntryDate?: number;
+  authMethod: 'query' | 'header';
 };
 
 const isNightscoutEntriesPayload = (value: unknown): value is any[] => Array.isArray(value);
+
+const buildEntriesUrl = (baseUrl: string, apiSecretSha1: string): string => {
+  const url = new URL('/api/v1/entries.json', `${baseUrl.replace(/\/+$/, '')}/`);
+  url.searchParams.set('count', '1');
+  url.searchParams.set('api_secret', apiSecretSha1);
+  return url.toString();
+};
 
 const messageFromError = (error: any): string => {
   const status = error?.response?.status;
@@ -33,36 +41,57 @@ const messageFromError = (error: any): string => {
   return error?.message ?? 'Could not verify the Nightscout connection.';
 };
 
+const parseConnectionResponse = (
+  data: unknown,
+  authMethod: NightscoutConnectionTestResult['authMethod'],
+): NightscoutConnectionTestResult => {
+  if (!isNightscoutEntriesPayload(data)) {
+    throw new Error('Nightscout responded, but not with glucose entries. Please check the site URL.');
+  }
+
+  const latest = data[0];
+  const latestEntryDate =
+    typeof latest?.date === 'number' && Number.isFinite(latest.date)
+      ? latest.date
+      : undefined;
+
+  return {
+    ok: true,
+    entriesCount: data.length,
+    latestEntryDate,
+    authMethod,
+  };
+};
+
 export const testNightscoutConnection = async (params: {
   baseUrl: string;
   apiSecretSha1: string;
 }): Promise<NightscoutConnectionTestResult> => {
+  const queryUrl = buildEntriesUrl(params.baseUrl, params.apiSecretSha1);
+
   try {
-    const response = await axios.get('/api/v1/entries.json?count=1', {
-      baseURL: params.baseUrl,
-      timeout: 7000,
+    const response = await axios.get(queryUrl, {
+      timeout: 12000,
       headers: {
-        'Content-Type': 'application/json',
-        'api-secret': params.apiSecretSha1,
+        Accept: 'application/json',
       },
     });
 
-    if (!isNightscoutEntriesPayload(response.data)) {
-      throw new Error('Nightscout responded, but not with glucose entries. Please check the site URL.');
+    return parseConnectionResponse(response.data, 'query');
+  } catch (queryError: any) {
+    try {
+      const response = await axios.get('/api/v1/entries.json?count=1', {
+        baseURL: params.baseUrl,
+        timeout: 12000,
+        headers: {
+          Accept: 'application/json',
+          'api-secret': params.apiSecretSha1,
+        },
+      });
+
+      return parseConnectionResponse(response.data, 'header');
+    } catch (headerError: any) {
+      throw new Error(messageFromError(headerError?.response ? headerError : queryError));
     }
-
-    const latest = response.data[0];
-    const latestEntryDate =
-      typeof latest?.date === 'number' && Number.isFinite(latest.date)
-        ? latest.date
-        : undefined;
-
-    return {
-      ok: true,
-      entriesCount: response.data.length,
-      latestEntryDate,
-    };
-  } catch (error: any) {
-    throw new Error(messageFromError(error));
   }
 };

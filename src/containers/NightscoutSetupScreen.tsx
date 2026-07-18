@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View} from 'react-native';
 import {NavigationProp, useNavigation, useRoute} from '@react-navigation/native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {theme} from 'app/style/theme';
 import {useNightscoutConfig} from 'app/contexts/NightscoutConfigContext';
 import {MAIN_TAB_NAVIGATOR} from 'app/constants/SCREEN_NAMES';
@@ -34,12 +35,13 @@ const NightscoutSetupScreen: React.FC = () => {
 
   const [urlInput, setUrlInput] = useState(editingProfile?.baseUrl ?? '');
   const [secretInput, setSecretInput] = useState('');
-    useEffect(() => {
-      // Prefill after async profile load, but don't clobber user edits.
-      if (editingProfile?.baseUrl && !urlInput.trim()) {
-        setUrlInput(editingProfile.baseUrl);
-      }
-    }, [editingProfile?.baseUrl, urlInput]);
+  const [showSecret, setShowSecret] = useState(false);
+  useEffect(() => {
+    // Prefill after async profile load, but don't clobber user edits.
+    if (editingProfile?.baseUrl && !urlInput.trim()) {
+      setUrlInput(editingProfile.baseUrl);
+    }
+  }, [editingProfile?.baseUrl, urlInput]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -140,20 +142,56 @@ const NightscoutSetupScreen: React.FC = () => {
       <Text style={{color: theme.textColor, marginBottom: theme.spacing.sm}}>
         {tr(language, 'nightscoutSetup.secretLabel')}
       </Text>
-      <TextInput
-        value={secretInput}
-        onChangeText={setSecretInput}
-        placeholder={
-          editingProfile
-            ? tr(language, 'nightscoutSetup.secretPlaceholderKeep')
-            : tr(language, 'nightscoutSetup.secretPlaceholder')
-        }
-        placeholderTextColor={theme.textColor}
-        autoCapitalize="none"
-        autoCorrect={false}
-        secureTextEntry
-        style={inputStyle}
-      />
+      <View
+        style={{
+          ...inputStyle,
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: 0,
+        }}
+      >
+        <TextInput
+          value={secretInput}
+          onChangeText={setSecretInput}
+          placeholder={
+            editingProfile
+              ? tr(language, 'nightscoutSetup.secretPlaceholderKeep')
+              : tr(language, 'nightscoutSetup.secretPlaceholder')
+          }
+          placeholderTextColor={theme.textColor}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType={showSecret ? 'visible-password' : 'default'}
+          secureTextEntry={!showSecret}
+          style={{
+            flex: 1,
+            paddingVertical: theme.spacing.sm,
+            color: theme.textColor,
+          }}
+        />
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={
+            showSecret
+              ? tr(language, 'nightscoutSetup.hideSecret')
+              : tr(language, 'nightscoutSetup.showSecret')
+          }
+          onPress={() => setShowSecret(v => !v)}
+          hitSlop={{top: 10, right: 10, bottom: 10, left: 10}}
+          style={{
+            width: 44,
+            height: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <MaterialIcons
+            name={showSecret ? 'visibility-off' : 'visibility'}
+            size={22}
+            color={theme.accentColor}
+          />
+        </TouchableOpacity>
+      </View>
 
       {error && (
         <Text style={{color: theme.belowRangeColor, marginTop: theme.spacing.md}}>
