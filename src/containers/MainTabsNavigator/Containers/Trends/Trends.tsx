@@ -50,6 +50,7 @@ const Trends: React.FC = () => {
   const {language} = useAppLanguage();
 
   const [presetDays, setPresetDays] = useState<number>(7);
+  const [presetEndDate, setPresetEndDate] = useState<Date | null>(null);
   const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
   const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
   const [loopTimeFilterKey, setLoopTimeFilterKey] =
@@ -92,13 +93,13 @@ const Trends: React.FC = () => {
       return {start, end, rangeDays: days};
     }
 
-    // Preset ranges (7/14/30)
-    const end = today;
+    // Preset ranges (7/14/30), optionally shifted back in time.
+    const end = normalizeEnd(presetEndDate ?? today);
     const start = new Date(end);
     start.setHours(0, 0, 0, 0);
     start.setDate(end.getDate() - (presetDays - 1));
     return {start, end, rangeDays: presetDays};
-  }, [customStartDate, customEndDate, presetDays]);
+  }, [customStartDate, customEndDate, presetDays, presetEndDate]);
 
   // 2) Use custom hook for BG data
   const {
@@ -283,6 +284,61 @@ const Trends: React.FC = () => {
     [resetComparison],
   );
 
+  const canShiftRangeForward = useMemo(() => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    return end.getTime() < today.getTime() - 1000;
+  }, [end]);
+
+  const shiftDateRange = useCallback(
+    (direction: 'back' | 'forward') => {
+      const deltaDays = direction === 'back' ? -rangeDays : rangeDays;
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+
+      const shiftDate = (date: Date) => {
+        const next = new Date(date);
+        next.setDate(next.getDate() + deltaDays);
+        return next;
+      };
+
+      if (isCustomRange && customStartDate && customEndDate) {
+        const shiftedStart = shiftDate(start);
+        const shiftedEnd = shiftDate(end);
+        if (direction === 'forward' && shiftedEnd.getTime() > today.getTime()) {
+          const clampedEnd = today;
+          const clampedStart = new Date(clampedEnd);
+          clampedStart.setDate(clampedEnd.getDate() - (rangeDays - 1));
+          clampedStart.setHours(0, 0, 0, 0);
+          setCustomStartDate(clampedStart);
+          setCustomEndDate(clampedEnd);
+        } else {
+          setCustomStartDate(shiftedStart);
+          setCustomEndDate(shiftedEnd);
+        }
+        resetComparison(rangeDays);
+        return;
+      }
+
+      const shiftedEnd = shiftDate(end);
+      setPresetEndDate(
+        direction === 'forward' && shiftedEnd.getTime() > today.getTime()
+          ? today
+          : shiftedEnd,
+      );
+      resetComparison(rangeDays);
+    },
+    [
+      customEndDate,
+      customStartDate,
+      end,
+      isCustomRange,
+      rangeDays,
+      resetComparison,
+      start,
+    ],
+  );
+
   const handleCustomStartChange = useCallback(
     (date: Date) => {
       setCustomStartDate(date);
@@ -372,6 +428,9 @@ const Trends: React.FC = () => {
         endDate={end}
         onStartDateChange={handleCustomStartChange}
         onEndDateChange={handleCustomEndChange}
+        onShiftRangeBack={() => shiftDateRange('back')}
+        onShiftRangeForward={() => shiftDateRange('forward')}
+        canShiftRangeForward={canShiftRangeForward}
       />
 
       {/* 3. Loading/Error/No data status */}

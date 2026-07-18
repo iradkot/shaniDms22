@@ -1319,7 +1319,7 @@ const Home: React.FC = () => {
           <Icon
             name={showDetailedStats ? 'chevron-up' : 'chart-bar'}
             size={16}
-            color={addOpacity('#000000', 0.5)}
+            color={addOpacity(theme.textColor, 0.58)}
           />
           <StatsToggleText>
             {showDetailedStats ? tr(language, 'home.hideDetailed') : tr(language, 'home.showDetailed')}

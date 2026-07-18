@@ -14,6 +14,7 @@ type UseStackedChartsTouchTooltipParams = {
   margin: ChartMargin;
   xDomain?: [Date, Date] | null;
   autoHideMs?: number;
+  scrollSafeEdgeWidth?: number;
   onTouchSessionChange?: (session: StackedChartsTouchSession | null) => void;
 };
 
@@ -23,6 +24,7 @@ export function useStackedChartsTouchTooltip({
   margin,
   xDomain,
   autoHideMs = 4000,
+  scrollSafeEdgeWidth = 0,
   onTouchSessionChange,
 }: UseStackedChartsTouchTooltipParams) {
   const [chartsTooltip, setChartsTooltip] =
@@ -112,6 +114,9 @@ export function useStackedChartsTouchTooltip({
       if (typeof rawX !== 'number' || !Number.isFinite(rawX)) {
         return null;
       }
+      if (scrollSafeEdgeWidth > 0 && rawX >= width - scrollSafeEdgeWidth) {
+        return null;
+      }
 
       return buildExternalTooltipPayloadFromLocationX({
         rawX,
@@ -120,7 +125,7 @@ export function useStackedChartsTouchTooltip({
         xScale,
       });
     },
-    [margin.left, plotWidth, xScale],
+    [margin.left, plotWidth, scrollSafeEdgeWidth, width, xScale],
   );
 
   const buildTooltipPayload = useCallback(

@@ -164,6 +164,7 @@ const AGPSummary: React.FC<AGPSummaryProps> = ({
           width={computedWidth}
           height={height}
           targetRange={cgmRange.TARGET}
+          enableTouch={false}
         />
         <View style={{marginTop: theme.spacing.sm}}>
           <ErrorText color={subtleText}>

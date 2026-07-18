@@ -21,6 +21,9 @@ interface Props {
   endDate: Date;
   onStartDateChange: (date: Date) => void;
   onEndDateChange: (date: Date) => void;
+  onShiftRangeBack: () => void;
+  onShiftRangeForward: () => void;
+  canShiftRangeForward: boolean;
 }
 
 export const DateRangeSelector: React.FC<Props> = ({
@@ -32,6 +35,9 @@ export const DateRangeSelector: React.FC<Props> = ({
   endDate,
   onStartDateChange,
   onEndDateChange,
+  onShiftRangeBack,
+  onShiftRangeForward,
+  canShiftRangeForward,
 }) => {
   const {language} = useAppLanguage();
   const today = useMemo(() => new Date(), []);
@@ -132,6 +138,20 @@ export const DateRangeSelector: React.FC<Props> = ({
         </Pill>
       </PillRow>
 
+      <ShiftRow>
+        <ShiftButton onPress={onShiftRangeBack}>
+          <ShiftButtonText>{`<< -${rangeDays}`}</ShiftButtonText>
+        </ShiftButton>
+        <ShiftButton
+          disabled={!canShiftRangeForward}
+          onPress={onShiftRangeForward}
+          $disabled={!canShiftRangeForward}>
+          <ShiftButtonText $disabled={!canShiftRangeForward}>
+            {`+${rangeDays} >>`}
+          </ShiftButtonText>
+        </ShiftButton>
+      </ShiftRow>
+
       <CustomRow>
         <RangeButton testID={E2E_TEST_IDS.trends.dateRangeFromButton} onPress={openStartPicker}>
           <RangeButtonText>{tr(language, 'trends.from', {date: startLabel})}</RangeButtonText>
@@ -187,6 +207,36 @@ const PillSegmentText = styled.Text<{selected?: boolean}>`
 const CustomRow = styled.View`
   flex-direction: row;
   justify-content: center;
+`;
+
+const ShiftRow = styled.View`
+  flex-direction: row;
+  justify-content: center;
+  margin-bottom: 8px;
+`;
+
+const ShiftButton = styled.TouchableOpacity<{$disabled?: boolean}>`
+  min-width: 82px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  margin: 0 5px;
+  align-items: center;
+  background-color: ${({theme, $disabled}) =>
+    $disabled
+      ? addOpacity(theme.textColor, 0.08)
+      : addOpacity(theme.accentColor, 0.12)};
+  border-width: 1px;
+  border-color: ${({theme, $disabled}) =>
+    $disabled
+      ? addOpacity(theme.textColor, 0.12)
+      : addOpacity(theme.accentColor, 0.35)};
+`;
+
+const ShiftButtonText = styled.Text<{$disabled?: boolean}>`
+  font-size: 13px;
+  font-weight: 800;
+  color: ${({theme, $disabled}) =>
+    $disabled ? addOpacity(theme.textColor, 0.38) : theme.textColor};
 `;
 
 const HelpText = styled.Text`

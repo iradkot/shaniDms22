@@ -26,6 +26,8 @@ import type {
   StackedHomeChartsProps,
 } from './StackedHomeCharts.types';
 
+const SCROLL_SAFE_EDGE_WIDTH = 44;
+
 const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   const {
     bgSamples,
@@ -72,6 +74,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     width,
     margin: stackedChartsMargin,
     xDomain,
+    scrollSafeEdgeWidth: SCROLL_SAFE_EDGE_WIDTH,
     onTouchSessionChange,
   });
 
@@ -241,6 +244,17 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
           handleTouchEvents={false}
           cursorTimeMs={cursorTimeMs}
         />
+
+        <ScrollSafeLane
+          pointerEvents="none"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants">
+          <ScrollSafeGrip>
+            <ScrollSafeDot />
+            <ScrollSafeDot />
+            <ScrollSafeDot />
+          </ScrollSafeGrip>
+        </ScrollSafeLane>
       </ChartStack>
 
       {/* Mini charts area — observe touch without taking over ScrollView's responder. */}
@@ -315,6 +329,38 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
 const ChartStack = styled.View`
   position: relative;
+`;
+
+const ScrollSafeLane = styled.View`
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: ${SCROLL_SAFE_EDGE_WIDTH}px;
+  align-items: center;
+  justify-content: center;
+`;
+
+const ScrollSafeGrip = styled.View`
+  width: 22px;
+  min-height: 72px;
+  border-radius: 11px;
+  align-items: center;
+  justify-content: center;
+  background-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.1)};
+  border-width: 1px;
+  border-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.16)};
+`;
+
+const ScrollSafeDot = styled.View`
+  width: 4px;
+  height: 4px;
+  border-radius: 2px;
+  margin-vertical: 3px;
+  background-color: ${({theme}: {theme: ThemeType}) =>
+    addOpacity(theme.textColor, 0.56)};
 `;
 
 const ChartTooltipOverlay = styled.View<{$placement: 'above' | 'inside'}>`

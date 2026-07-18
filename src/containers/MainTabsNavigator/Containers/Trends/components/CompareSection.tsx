@@ -107,6 +107,7 @@ const ComparisonAgpChart: React.FC<{
             targetRange={cgmRange.TARGET}
             activeTimeOfDay={activeTimeOfDay}
             onActiveTimeOfDayChange={onActiveTimeOfDayChange}
+            enableTouch={false}
           />
           <Text style={{color: muted, fontSize: 12, textAlign: 'center'}}>
             {dataCoverageLabel(

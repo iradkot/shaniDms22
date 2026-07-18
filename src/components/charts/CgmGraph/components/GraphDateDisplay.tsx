@@ -1,11 +1,10 @@
 import {formatDateToLocaleDateString} from 'app/utils/datetime.utils';
 import React, {useContext} from 'react';
 import {G, Text} from 'react-native-svg';
+import {useTheme} from 'styled-components/native';
 import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
-
-interface Props {
-  xScale: any;
-}
+import {addOpacity} from 'app/style/styling.utils';
+import type {ThemeType} from 'app/types/theme';
 
 interface ShownDay {
   date: Date;
@@ -37,6 +36,7 @@ const getShownDays: (xScale: any) => ShownDay[] = xScale => {
 
 const GraphDateDisplay = () => {
   const [{xScale}] = useContext(GraphStyleContext);
+  const theme = useTheme() as ThemeType;
   const shownDays = getShownDays(xScale);
   const minTicksAmount = 1;
   const maxTicksAmount = 4;
@@ -46,7 +46,12 @@ const GraphDateDisplay = () => {
   );
   const ticks = Array.from({length: ticksAmount}, (_, i) => i);
   const GridLabel = ({x, index}: {x: number; index: number}) => (
-    <Text x={x} y={0} fontSize={10} fill="black" textAnchor="middle">
+    <Text
+      x={x}
+      y={0}
+      fontSize={10}
+      fill={addOpacity(theme.textColor, 0.82)}
+      textAnchor="middle">
       {formatDateToLocaleDateString(shownDays[index].date)}
     </Text>
   );
