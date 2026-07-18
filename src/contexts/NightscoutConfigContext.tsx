@@ -18,6 +18,10 @@ import {
 } from 'app/services/nightscoutProfiles';
 import {clearNightscoutInstance, configureNightscoutInstance} from 'app/api/shaniNightscoutInstances';
 import {configureAndroidWidgetBackgroundSync} from 'app/services/androidGlucoseLiveSurface';
+import {
+  testNightscoutConnection,
+  NightscoutConnectionTestResult,
+} from 'app/services/nightscoutConnectionTest';
 
 export type NightscoutConfigContextValue = {
   profiles: NightscoutProfile[];
@@ -25,6 +29,12 @@ export type NightscoutConfigContextValue = {
   isLoaded: boolean;
   /** Adds a profile and selects it as active. Accepts loosely formatted URL/secret inputs. */
   addProfile: (params: {urlInput: string; secretInput: string}) => Promise<void>;
+  /** Verifies a Nightscout URL/secret without saving it. */
+  testProfileConnection: (params: {
+    urlInput: string;
+    secretInput?: string;
+    profileId?: string;
+  }) => Promise<NightscoutConnectionTestResult>;
   /** Switches the currently active profile by ID. */
   setActiveProfileId: (id: string) => Promise<void>;
   /** Updates an existing profile. If secretInput is empty, keeps the existing secret. */
@@ -38,6 +48,7 @@ const NightscoutConfigContext = createContext<NightscoutConfigContextValue>({
   activeProfile: null,
   isLoaded: false,
   addProfile: async () => {},
+  testProfileConnection: async () => ({ok: true, entriesCount: 0}),
   setActiveProfileId: async () => {},
   updateProfile: async () => {},
   deleteProfile: async () => {},
@@ -113,17 +124,45 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
     [profiles, activeProfileId],
   );
 
-  const addProfile = useCallback(
-    async (params: {urlInput: string; secretInput: string}) => {
+  const resolveConnectionInputs = useCallback(
+    (params: {urlInput: string; secretInput?: string; profileId?: string}) => {
       const normalizedUrl = normalizeNightscoutUrl(params.urlInput);
       if (!normalizedUrl) {
         throw new Error('Please enter a valid Nightscout URL (http/https).');
       }
 
-      const apiSecretSha1 = normalizeNightscoutApiSecretToSha1(params.secretInput);
+      const existingProfile = params.profileId
+        ? profilesRef.current.find(p => p.id === params.profileId)
+        : null;
+      const secretTrimmed = (params.secretInput ?? '').trim();
+      const apiSecretSha1 = secretTrimmed
+        ? normalizeNightscoutApiSecretToSha1(secretTrimmed)
+        : existingProfile?.apiSecretSha1 ?? null;
+
       if (!apiSecretSha1) {
         throw new Error('Please enter your Nightscout API secret/token.');
       }
+
+      return {normalizedUrl, apiSecretSha1};
+    },
+    [],
+  );
+
+  const testProfileConnection = useCallback(
+    async (params: {urlInput: string; secretInput?: string; profileId?: string}) => {
+      const {normalizedUrl, apiSecretSha1} = resolveConnectionInputs(params);
+      return testNightscoutConnection({
+        baseUrl: normalizedUrl,
+        apiSecretSha1,
+      });
+    },
+    [resolveConnectionInputs],
+  );
+
+  const addProfile = useCallback(
+    async (params: {urlInput: string; secretInput: string}) => {
+      const {normalizedUrl, apiSecretSha1} = resolveConnectionInputs(params);
+      await testNightscoutConnection({baseUrl: normalizedUrl, apiSecretSha1});
 
       const profile = createNightscoutProfile({
         baseUrl: normalizedUrl,
@@ -142,7 +181,7 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
       });
       await persistNightscoutProfiles(nextProfiles, profile.id);
     },
-    [],
+    [resolveConnectionInputs],
   );
 
   const setActiveProfileId = useCallback(
@@ -164,18 +203,11 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
 
   const updateProfile = useCallback(
     async (params: {profileId: string; urlInput: string; secretInput?: string}) => {
-      const normalizedUrl = normalizeNightscoutUrl(params.urlInput);
-      if (!normalizedUrl) {
-        throw new Error('Please enter a valid Nightscout URL (http/https).');
-      }
-
+      const {normalizedUrl, apiSecretSha1} = resolveConnectionInputs(params);
       const secretTrimmed = (params.secretInput ?? '').trim();
-      const nextSecretSha1 = secretTrimmed
-        ? normalizeNightscoutApiSecretToSha1(secretTrimmed)
-        : null;
-      if (secretTrimmed && !nextSecretSha1) {
-        throw new Error('Please enter a valid Nightscout API secret/token.');
-      }
+      const nextSecretSha1 = secretTrimmed ? apiSecretSha1 : null;
+
+      await testNightscoutConnection({baseUrl: normalizedUrl, apiSecretSha1});
 
       const currentProfiles = profilesRef.current;
       const nextProfiles = currentProfiles.map(p => {
@@ -211,7 +243,7 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
 
       await persistNightscoutProfiles(nextProfiles, activeProfileId);
     },
-    [activeProfileId],
+    [activeProfileId, resolveConnectionInputs],
   );
 
   const deleteProfile = useCallback(
@@ -251,11 +283,21 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
       activeProfile,
       isLoaded,
       addProfile,
+      testProfileConnection,
       setActiveProfileId,
       updateProfile,
       deleteProfile,
     }),
-    [profiles, activeProfile, isLoaded, addProfile, setActiveProfileId, updateProfile, deleteProfile],
+    [
+      profiles,
+      activeProfile,
+      isLoaded,
+      addProfile,
+      testProfileConnection,
+      setActiveProfileId,
+      updateProfile,
+      deleteProfile,
+    ],
   );
 
   return (

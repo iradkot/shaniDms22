@@ -26,7 +26,7 @@ const inputStyle = {
 const NightscoutSetupScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<any>>();
   const route = useRoute<any>();
-  const {addProfile, updateProfile, profiles} = useNightscoutConfig();
+  const {addProfile, updateProfile, profiles, testProfileConnection} = useNightscoutConfig();
   const {language} = useAppLanguage();
 
   const profileId: string | undefined = route?.params?.profileId;
@@ -41,12 +41,38 @@ const NightscoutSetupScreen: React.FC = () => {
       }
     }, [editingProfile?.baseUrl, urlInput]);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  const onTestConnection = async () => {
+    if (saving || testing) return;
+    setTesting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await testProfileConnection({
+        profileId: editingProfile?.id,
+        urlInput,
+        secretInput,
+      });
+      setSuccess(
+        result.entriesCount > 0
+          ? tr(language, 'nightscoutSetup.testSuccess')
+          : tr(language, 'nightscoutSetup.testSuccessNoEntries'),
+      );
+    } catch (e: any) {
+      setError(e?.message ?? tr(language, 'nightscoutSetup.testFailed'));
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const onSave = async () => {
-    if (saving) return;
+    if (saving || testing) return;
     setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
       if (editingProfile) {
         await updateProfile({profileId: editingProfile.id, urlInput, secretInput});
@@ -134,13 +160,42 @@ const NightscoutSetupScreen: React.FC = () => {
           {error}
         </Text>
       )}
+      {success && (
+        <Text style={{color: theme.inRangeColor, marginTop: theme.spacing.md}}>
+          {success}
+        </Text>
+      )}
+
+      <TouchableOpacity
+        accessibilityRole="button"
+        onPress={onTestConnection}
+        disabled={saving || testing}
+        style={{
+          marginTop: theme.spacing.xl,
+          paddingVertical: theme.spacing.md,
+          paddingHorizontal: theme.spacing.lg,
+          borderWidth: 1,
+          borderColor: theme.accentColor,
+          borderRadius: theme.borderRadius,
+          opacity: testing ? 0.7 : 1,
+          alignItems: 'center',
+        }}
+      >
+        {testing ? (
+          <ActivityIndicator color={theme.accentColor} />
+        ) : (
+          <Text style={{color: theme.accentColor, fontWeight: '600'}}>
+            {tr(language, 'nightscoutSetup.testConnection')}
+          </Text>
+        )}
+      </TouchableOpacity>
 
       <TouchableOpacity
         accessibilityRole="button"
         onPress={onSave}
-        disabled={saving}
+        disabled={saving || testing}
         style={{
-          marginTop: theme.spacing.xl,
+          marginTop: theme.spacing.md,
           paddingVertical: theme.spacing.md,
           paddingHorizontal: theme.spacing.lg,
           backgroundColor: theme.accentColor,

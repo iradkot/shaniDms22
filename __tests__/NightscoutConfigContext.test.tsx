@@ -7,6 +7,7 @@ import type {NightscoutConfigContextValue} from '../src/contexts/NightscoutConfi
 
 const mockConfigureNightscoutInstance = jest.fn();
 const mockClearNightscoutInstance = jest.fn();
+const mockTestNightscoutConnection = jest.fn();
 
 jest.mock('app/api/shaniNightscoutInstances', () => {
   return {
@@ -15,10 +16,18 @@ jest.mock('app/api/shaniNightscoutInstances', () => {
   };
 });
 
+jest.mock('app/services/nightscoutConnectionTest', () => {
+  return {
+    testNightscoutConnection: (...args: any[]) => mockTestNightscoutConnection(...args),
+  };
+});
+
 describe('NightscoutConfigContext', () => {
   beforeEach(async () => {
     mockConfigureNightscoutInstance.mockClear();
     mockClearNightscoutInstance.mockClear();
+    mockTestNightscoutConnection.mockReset();
+    mockTestNightscoutConnection.mockResolvedValue({ok: true, entriesCount: 1});
     await AsyncStorage.clear();
   });
 
@@ -58,6 +67,7 @@ describe('NightscoutConfigContext', () => {
     expect(ctx.activeProfile?.baseUrl).toBe('https://example.com');
 
     expect(mockConfigureNightscoutInstance).toHaveBeenCalledTimes(1);
+    expect(mockTestNightscoutConnection).toHaveBeenCalledTimes(1);
     const call = mockConfigureNightscoutInstance.mock.calls[0][0];
     expect(call.baseUrl).toBe('https://example.com');
     expect(typeof call.apiSecretSha1).toBe('string');
@@ -66,6 +76,38 @@ describe('NightscoutConfigContext', () => {
     // Verify it persisted.
     const stored = await AsyncStorage.getItem('nightscout.profiles.v1');
     expect(stored).toBeTruthy();
+  });
+
+  it('does not save a profile when the connection test fails', async () => {
+    let ctx: NightscoutConfigContextValue | null = null;
+
+    const Consumer = () => {
+      ctx = useNightscoutConfig();
+      return null;
+    };
+
+    await act(async () => {
+      renderer.create(
+        <NightscoutConfigProvider>
+          <Consumer />
+        </NightscoutConfigProvider>,
+      );
+    });
+
+    mockTestNightscoutConnection.mockRejectedValueOnce(new Error('Invalid Nightscout secret'));
+
+    await expect(
+      act(async () => {
+        await (ctx as unknown as NightscoutConfigContextValue).addProfile({
+          urlInput: 'example.com',
+          secretInput: 'wrong-secret',
+        });
+      }),
+    ).rejects.toThrow('Invalid Nightscout secret');
+
+    expect((ctx as unknown as NightscoutConfigContextValue).profiles).toHaveLength(0);
+    expect(mockConfigureNightscoutInstance).not.toHaveBeenCalled();
+    expect(await AsyncStorage.getItem('nightscout.profiles.v1')).toBeNull();
   });
 
   it('updates the active profile URL and keeps secret when blank', async () => {

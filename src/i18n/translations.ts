@@ -404,6 +404,10 @@ const en = {
     secretLabel: 'API secret / token',
     secretPlaceholderKeep: 'Leave blank to keep current',
     secretPlaceholder: 'API secret',
+    testConnection: 'Test connection',
+    testFailed: 'Nightscout connection test failed.',
+    testSuccess: 'Connection works. Latest glucose data is available.',
+    testSuccessNoEntries: 'Connection works, but no glucose entries were returned.',
     saveContinue: 'Save & Continue',
   },
   auth: {
@@ -932,6 +936,10 @@ const he: typeof en = {
     secretLabel: 'סוד API / טוקן',
     secretPlaceholderKeep: 'השאירו ריק כדי לשמור את הקיים',
     secretPlaceholder: 'סוד API',
+    testConnection: 'בדוק חיבור',
+    testFailed: 'בדיקת החיבור ל-Nightscout נכשלה.',
+    testSuccess: 'החיבור תקין. נמצאו נתוני סוכר.',
+    testSuccessNoEntries: 'החיבור תקין, אבל לא חזרו רשומות סוכר.',
     saveContinue: 'שמור והמשך',
   },
   auth: {
