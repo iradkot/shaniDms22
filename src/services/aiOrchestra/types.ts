@@ -8,6 +8,7 @@ export type AiAgentRole =
   | 'pattern_analysis'
   | 'settings_analysis'
   | 'behavior_analysis'
+  | 'clinical_reference'
   | 'final_writer';
 
 export type AiAgentOutputKind =
@@ -18,6 +19,7 @@ export type AiAgentOutputKind =
   | 'pattern_findings'
   | 'settings_findings'
   | 'behavior_findings'
+  | 'reference_findings'
   | 'patient_answer';
 
 export type AiAgentDefinition = {

@@ -118,6 +118,16 @@ export const DEFAULT_AI_ORCHESTRA_AGENTS: AiAgentDefinition[] = [
     outputKind: 'behavior_findings',
   },
   {
+    id: 'clinical_reference_agent',
+    role: 'clinical_reference',
+    title: 'Clinical reference agent',
+    objective:
+      'Ground Loop, overnight, and pregnancy-related answers in trusted reference guidance; distinguish app-observed patterns from medical facts.',
+    required: true,
+    allowedTools: [],
+    outputKind: 'reference_findings',
+  },
+  {
     id: 'final_writer',
     role: 'final_writer',
     title: 'Final writer',
@@ -142,7 +152,12 @@ const COMMON_PHASES: AiOrchestraPhase[] = [
     id: 'specialist_review',
     title: 'Specialist review',
     execution: 'parallel',
-    agentIds: ['pattern_agent', 'settings_agent', 'behavior_agent'],
+    agentIds: [
+      'pattern_agent',
+      'settings_agent',
+      'behavior_agent',
+      'clinical_reference_agent',
+    ],
     instruction:
       'Run only relevant specialists. Each specialist returns findings, confidence, evidence, and missing data.',
   },
@@ -165,6 +180,7 @@ function agentsForMission(mission: AiOrchestraMission): string[] {
         'nightscout_data_agent',
         'pattern_agent',
         'behavior_agent',
+        'clinical_reference_agent',
         'safety_reviewer',
         'final_writer',
       ];
@@ -175,6 +191,7 @@ function agentsForMission(mission: AiOrchestraMission): string[] {
         'memory_curator',
         'nightscout_data_agent',
         'pattern_agent',
+        'clinical_reference_agent',
         'safety_reviewer',
         'final_writer',
       ];
@@ -185,6 +202,7 @@ function agentsForMission(mission: AiOrchestraMission): string[] {
         'nightscout_data_agent',
         'pattern_agent',
         'settings_agent',
+        'clinical_reference_agent',
         'safety_reviewer',
         'final_writer',
       ];
@@ -195,6 +213,7 @@ function agentsForMission(mission: AiOrchestraMission): string[] {
         'agp_comparison_agent',
         'settings_agent',
         'behavior_agent',
+        'clinical_reference_agent',
         'safety_reviewer',
         'final_writer',
       ];
@@ -205,6 +224,7 @@ function agentsForMission(mission: AiOrchestraMission): string[] {
         'nightscout_data_agent',
         'pattern_agent',
         'behavior_agent',
+        'clinical_reference_agent',
         'safety_reviewer',
         'final_writer',
       ];

@@ -20,8 +20,12 @@ describe('default AI orchestra', () => {
   it('builds a serial safety/write phase after specialist review', () => {
     const plan = buildAiOrchestraPlan('openChat');
     const finalPhase = plan.phases[plan.phases.length - 1];
+    const specialistPhase = plan.phases.find(
+      phase => phase.id === 'specialist_review',
+    );
 
     expect(plan.finalWriterAgentId).toBe('final_writer');
+    expect(specialistPhase?.agentIds).toContain('clinical_reference_agent');
     expect(finalPhase.execution).toBe('serial');
     expect(finalPhase.agentIds).toEqual(['safety_reviewer', 'final_writer']);
   });
@@ -41,6 +45,7 @@ describe('default AI orchestra', () => {
 
     expect(block).toContain('mission: userBehavior');
     expect(block).toContain('behavior_agent');
+    expect(block).toContain('clinical_reference_agent');
     expect(block).toContain('Do not expose internal agent names');
   });
 });
