@@ -220,8 +220,8 @@ If a previous event row is tapped, an inline details card is rendered:
 
 Oracle uses two “data horizons”:
 
-1) A **recent window** (~3 hours) to build event candidates and compute the “current” line.
-2) A **90-day local cache** to match against and compute strategies/medians.
+1. A **recent window** (~3 hours) to build event candidates and compute the “current” line.
+2. A **90-day local cache** to match against and compute strategies/medians.
 
 ### 3.1 Live snapshot
 
@@ -352,10 +352,10 @@ Current parameters (hard-coded in the hook):
 
 Algorithm:
 
-1) Walk the recent BG points from newest → oldest.
-2) For each candidate time `t`, compute slope using least-squares regression (`slopeAtLeastSquares(recentSlim, t, { sampleCount: slopePointCount })`).
-3) Keep the point if it is at least 20 minutes away from the last kept event.
-4) Event kind is `trendBucket(slope)`.
+1. Walk the recent BG points from newest → oldest.
+2. For each candidate time `t`, compute slope using least-squares regression (`slopeAtLeastSquares(recentSlim, t, { sampleCount: slopePointCount })`).
+3. Keep the point if it is at least 20 minutes away from the last kept event.
+4. Event kind is `trendBucket(slope)`.
 
 If strict slope computation yields no events (e.g. sparse/gappy recent data):
 
@@ -466,17 +466,17 @@ We compute:
 
 We iterate each cached history entry `entry` with `t0 = entry.date` and apply:
 
-1) **Previous-only:** `t0 < nowTs`
-2) **Slope computable:** `pastSlope = slopeAt(history, t0)` must not be null
-3) **Filter A — Time-of-day proximity:**
+1. **Previous-only:** `t0 < nowTs`
+2. **Slope computable:** `pastSlope = slopeAt(history, t0)` must not be null
+3. **Filter A — Time-of-day proximity:**
    - `circularMinuteDiff(nowMinutes, pastMinutes) <= ORACLE_TIME_WINDOW_MIN`
-4) **Filter B — BG proximity:**
+4. **Filter B — BG proximity:**
    - `abs(nowSgv - entry.sgv) <= bgTol`
-5) **Filter C — Trend alignment:**
+5. **Filter C — Trend alignment:**
    - `trendBucket(pastSlope) == currentBucket`
    - `abs(currentSlope - pastSlope) <= ORACLE_SLOPE_TOLERANCE`
-6) **Trace availability:** we must have at least some data out to +4h in the cache
-7) **Optional Filter — Load proximity (when enabled):**
+6. **Trace availability:** we must have at least some data out to +4h in the cache
+7. **Optional Filter — Load proximity (when enabled):**
    - We compute best-effort anchor load and match load:
      - `anchorLoad = findLoadAtTs(deviceStatus, nowTs)`
      - `matchLoad = findLoadAtTs(deviceStatus, t0)`
@@ -529,7 +529,7 @@ This is rendered as `TIR(0–2h) {percent}` in the Previous Events list.
 
 ## 6) “What tended to work” strategy cards
 
-Strategies are built by grouping matches based on the *summarized 30-minute actions*.
+Strategies are built by grouping matches based on the _summarized 30-minute actions_.
 
 ### 6.1 Grouping rules (current)
 
@@ -632,7 +632,7 @@ Matching currently uses only `iob` and `cob` and ignores split IOB.
 
 Potential uses (not implemented):
 
-- Require similar *bolus IOB* rather than total IOB
+- Require similar _bolus IOB_ rather than total IOB
 - Expose “IOB composition” in UI to explain differences
 
 ### 8.4 Explainability (“why did this match?”)
@@ -672,11 +672,12 @@ E2E:
 Unit test:
 
 - `__tests__/oracleCgmGraphAdapter.test.ts` verifies conversion of matches to graph-ready data.
-   - **Cluster B (Moderate):** correction ~1.0u–2.0u
-   - **Cluster C (Aggressive):** correction > 3.0u
-   (Exact thresholds are product-configurable.)
-4) Compare outcomes (example metric): “BG at +2 hours” and “time in target (70–140)”.
-5) Present 2–3 strategy cards: what happened historically in each cluster.
+  - **Cluster B (Moderate):** correction ~1.0u–2.0u
+  - **Cluster C (Aggressive):** correction > 3.0u
+    (Exact thresholds are product-configurable.)
+
+4. Compare outcomes (example metric): “BG at +2 hours” and “time in target (70–140)”.
+5. Present 2–3 strategy cards: what happened historically in each cluster.
 
 ### 9.2 New data requirements
 
@@ -759,16 +760,20 @@ Important: the UI should present these as “historical clusters” not prescrip
 - Always present results as historical associations.
 - Consider showing uncertainty: match count, success rate, and a “low data” warning when matches are few.
 
-
-
 ## 10) Engineering notes / risks
 
-### 9.1 Secrets & configuration
+### 10.1 Secrets & configuration
 
-- Nightscout access currently uses a static `api-secret` header in the repo.
-- Recommend moving secrets to build-time configuration (env/CI secrets) and avoiding committing secrets into source.
+- The repository contains no runtime Nightscout secret. Native profile metadata
+  is local, while the credential itself stays in Keychain/Keystore.
+- The active signed-in profile is also queued for the encrypted ShaniDms backend
+  vault. Browser reads use the authenticated backend proxy and never receive the
+  stored credential.
+- Build and deployment secrets belong only in CI or the deployment platform.
+  The historical credential-rotation work is tracked separately in
+  `docs/SECRET_ROTATION_AND_HISTORY_REWRITE.md`.
 
-### 9.2 Performance
+### 10.2 Performance
 
 - Matching iterates over history entries and can be expensive at 90 days.
 - There is a warning log when computation exceeds 1500ms.
@@ -779,24 +784,22 @@ Possible improvements:
 - Reduce candidate anchors by downsampling
 - Cache computed features (slope, bucket) per entry
 
-### 9.3 Determinism / testing
+### 10.3 Determinism / testing
 
 - Maestro is currently used for smoke-level UI verification.
 - If we add richer event definitions, we should add:
   - Deterministic fixtures for treatments/events
   - Stable testIDs for event rows/details
 
-
 ## 11) Quick demo script (for PM review)
 
-1) Open the app (E2E build if needed).
-2) Go to **Oracle** tab.
-3) In **Pick an event**, tap the top event.
-4) Observe:
+1. Open the app (E2E build if needed).
+2. Go to **Oracle** tab.
+3. In **Pick an event**, tap the top event.
+4. Observe:
    - Graph overlays matched historical trajectories
    - Insight text changes
    - Previous events list shows historical anchors with outcomes
-
 
 ---
 

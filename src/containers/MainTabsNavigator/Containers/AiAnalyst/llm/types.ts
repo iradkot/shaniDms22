@@ -1,5 +1,6 @@
 import {LlmChatMessage} from 'app/services/llm/llmTypes';
 import {AiAnalystToolName} from 'app/services/aiAnalyst/aiAnalystLocalTools';
+import type {AiWorkspaceScope} from 'app/services/aiMemory/aiWorkspaceScope';
 
 // ---------------------------------------------------------------------------
 // Tool envelope – structured shape the LLM returns
@@ -48,6 +49,7 @@ export interface ToolLoopCallbacks {
 }
 
 export interface ToolLoopParams {
+  workspaceScope: AiWorkspaceScope;
   provider: LlmProvider;
   model: string;
   systemPrompt: string;

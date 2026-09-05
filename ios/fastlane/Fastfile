@@ -1,12 +1,32 @@
 require "base64"
 require "fileutils"
 require "plist"
+require "shellwords"
+require "uri"
 require "xcodeproj"
 
 PROJECT_ROOT = File.expand_path("..", __dir__)
 XCODEPROJ_PATH = File.join(PROJECT_ROOT, "shaniDms22.xcodeproj")
 XCWORKSPACE_PATH = File.join(PROJECT_ROOT, "shaniDms22.xcworkspace")
 DEFAULT_TEAM_ID = "8KHU9V3DTQ"
+
+def runtime_build_xcargs
+  backend_base_url = ENV.fetch("SHANI_BACKEND_BASE_URL", "").to_s.strip
+  rules_schema_version = ENV.fetch("FIRESTORE_RULES_SCHEMA_VERSION", "0").to_s.strip
+
+  unless backend_base_url.empty?
+    uri = URI.parse(backend_base_url)
+    UI.user_error!("SHANI_BACKEND_BASE_URL must be an HTTPS origin") unless uri.scheme == "https" && !uri.host.to_s.empty?
+  end
+  UI.user_error!("FIRESTORE_RULES_SCHEMA_VERSION must be a non-negative integer") unless rules_schema_version.match?(/\A[0-9]+\z/)
+
+  [
+    "SHANI_BACKEND_BASE_URL=#{Shellwords.escape(backend_base_url)}",
+    "FIRESTORE_RULES_SCHEMA_VERSION=#{rules_schema_version}"
+  ].join(" ")
+rescue URI::InvalidURIError
+  UI.user_error!("SHANI_BACKEND_BASE_URL must be a valid HTTPS origin")
+end
 
 # This file contains the fastlane.tools configuration
 # You can find the documentation at https://docs.fastlane.tools
@@ -91,7 +111,8 @@ def configure_signing_for_ci
   FileUtils.mkdir_p(builds_directory)
 
   keychain_name = ENV.fetch("CI_KEYCHAIN_NAME", "ci-signing")
-  keychain_password = ENV.fetch("CI_KEYCHAIN_PASSWORD", "ci-signing")
+  keychain_password = ENV["CI_KEYCHAIN_PASSWORD"].to_s
+  UI.user_error!("CI_KEYCHAIN_PASSWORD is required in CI") if keychain_password.strip.empty?
   runner_temp = ENV["RUNNER_TEMP"] || "/tmp"
   keychain_path = File.join(runner_temp, "#{keychain_name}.keychain-db")
 
@@ -388,6 +409,7 @@ platform :ios do
           "com.shanidms22" => (ENV["FL_EXPECTED_PROFILE_NAME"] || profile_name || "com.shanidms22 AppStore")
         }
       },
+      xcargs: runtime_build_xcargs,
       build_path: "./builds",
       output_directory: "./builds"
     )

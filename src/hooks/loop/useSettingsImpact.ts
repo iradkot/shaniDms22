@@ -191,7 +191,9 @@ export interface UseLoopAnalysisOptions {
  * Useful for screens that need both capabilities.
  */
 export function useLoopAnalysis(options: UseLoopAnalysisOptions = {}) {
-  const history = useProfileHistory({filter: options.historyFilter});
+  const history = useProfileHistory(
+    options.historyFilter ? {filter: options.historyFilter} : {},
+  );
   const impact = useSettingsImpact();
 
   const analyzeEvent = useCallback(

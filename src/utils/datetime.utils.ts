@@ -82,7 +82,9 @@ export const getRelativeDateText = (date: Date): string => {
   }
 };
 
-export const getFormattedStartEndOfDay = inputDate => {
+export const getFormattedStartEndOfDay = (
+  inputDate: Date | string | number,
+) => {
   const date = new Date(inputDate);
   const now = new Date();
 

@@ -4,6 +4,11 @@ import {fetchBgDataForDateRange} from 'app/api/apiRequests';
 import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
 import {BgSample} from 'app/types/day_bgs.types';
 import {TrendDirectionString} from 'app/types/notifications';
+import {useNightscoutConfig} from 'app/contexts/NightscoutConfigContext';
+import {
+  createNightscoutCacheScope,
+  type NightscoutCacheScope,
+} from 'app/services/nightscoutCacheScope';
 
 import {loadOracleCache, OracleCacheSyncProgress, syncOracleCache} from 'app/services/oracle/oracleCache';
 import {
@@ -43,6 +48,10 @@ const BEST_EFFORT_SLOPE_MIN_GAP_MINUTES = 5;
 const RECENT_EVENTS_MAX = 10;
 const RECENT_EVENTS_MIN_SPACING_MINUTES = 20;
 
+function slopeOptions(sampleCount: number | undefined): {sampleCount?: number} {
+  return sampleCount === undefined ? {} : {sampleCount};
+}
+
 function toSlim(entries: BgSample[]): OracleCachedBgEntry[] {
   return (entries ?? [])
     .filter(e => typeof e?.date === 'number' && typeof e?.sgv === 'number')
@@ -63,11 +72,13 @@ function buildRecentEvents(params: {
   // Walk from newest to oldest; keep a few spaced-out anchors to avoid spam.
   for (let i = recentSlim.length - 1; i >= 0; i--) {
     const e = recentSlim[i];
-    const slope = slopeAtLeastSquares(recentSlim, e.date, {sampleCount: slopePointCount});
+    if (!e) continue;
+    const slope = slopeAtLeastSquares(recentSlim, e.date, slopeOptions(slopePointCount));
     if (slope == null) continue;
 
+    const previousEvent = events[events.length - 1];
     const shouldKeep =
-      events.length === 0 || Math.abs(events[events.length - 1].date - e.date) >= spacingMs;
+      !previousEvent || Math.abs(previousEvent.date - e.date) >= spacingMs;
     if (!shouldKeep) continue;
 
     events.push({
@@ -88,7 +99,7 @@ function bestEffortSlopeAt(
   anchorTs: number,
   slopePointCount?: number,
 ): number | null {
-  const strict = slopeAtLeastSquares(entries, anchorTs, {sampleCount: slopePointCount});
+  const strict = slopeAtLeastSquares(entries, anchorTs, slopeOptions(slopePointCount));
   if (strict != null) return strict;
 
   // Fallback for sparse or gappy data: use the nearest earlier point within a short window.
@@ -101,10 +112,12 @@ function bestEffortSlopeAt(
   // Find a previous point within the lookback window.
   for (let i = entries.length - 1; i >= 1; i--) {
     const cur = entries[i];
+    if (!cur) continue;
     if (cur.date !== anchorTs) continue;
     // Find the closest previous point.
     for (let j = i - 1; j >= 0; j--) {
       const prev = entries[j];
+      if (!prev) continue;
       const dt = cur.date - prev.date;
       if (dt <= 0) continue;
       if (prev.date < targetStart) break;
@@ -170,6 +183,11 @@ export function useOracleInsights(params?: {
   /** Starts cache collection (optional) + analysis using the current UI settings. */
   execute: () => void;
 } {
+  const {activeProfile} = useNightscoutConfig();
+  const cacheScope = useMemo(
+    () => createNightscoutCacheScope(activeProfile?.baseUrl),
+    [activeProfile?.baseUrl],
+  );
   const selectedEventTs = params?.selectedEventTs ?? null;
   const includeLoadInMatching = params?.includeLoadInMatching !== false;
   const slopePointCount = params?.slopePointCount;
@@ -207,9 +225,21 @@ export function useOracleInsights(params?: {
   // Load whatever cache we have on disk. This is fast and does not hit the network.
   useEffect(() => {
     let active = true;
+
+    setHistory([]);
+    setTreatments([]);
+    setDeviceStatus([]);
+    setLastSyncedMs(null);
+
+    if (!cacheScope) {
+      return () => {
+        active = false;
+      };
+    }
+
     (async () => {
       try {
-        const cached = await loadOracleCache();
+        const cached = await loadOracleCache(cacheScope);
         if (!active) return;
         setHistory(cached.entries);
         setTreatments(cached.treatments);
@@ -224,7 +254,7 @@ export function useOracleInsights(params?: {
     return () => {
       active = false;
     };
-  }, []);
+  }, [cacheScope]);
 
   const anchorNow = useMemo(() => {
     // Prefer live snapshot when available.
@@ -240,6 +270,7 @@ export function useOracleInsights(params?: {
     // Offline fallback: use last cached BG point as a best-effort "now".
     if (history.length) {
       const last = history[history.length - 1];
+      if (!last) return null;
       return {
         sgv: last.sgv,
         date: last.date,
@@ -331,7 +362,7 @@ export function useOracleInsights(params?: {
       recentSlim: base,
       maxEvents: RECENT_EVENTS_MAX,
       minSpacingMinutes: RECENT_EVENTS_MIN_SPACING_MINUTES,
-      slopePointCount,
+      ...(slopePointCount !== undefined ? {slopePointCount} : {}),
     });
     if (raw.length) {
       return raw.map(e => {
@@ -344,11 +375,12 @@ export function useOracleInsights(params?: {
     const spacingMs = RECENT_EVENTS_MIN_SPACING_MINUTES * ORACLE_MINUTE_MS;
     for (let i = base.length - 1; i >= 0; i--) {
       const e = base[i];
+      if (!e) continue;
       const slope = bestEffortSlopeAt(base, e.date, slopePointCount);
       if (slope == null) continue;
+      const previousEvent = fallbackEvents[fallbackEvents.length - 1];
       const shouldKeep =
-        fallbackEvents.length === 0 ||
-        Math.abs(fallbackEvents[fallbackEvents.length - 1].date - e.date) >= spacingMs;
+        !previousEvent || Math.abs(previousEvent.date - e.date) >= spacingMs;
       if (!shouldKeep) continue;
       const load = findLoadAtTs(sortedDeviceStatus, e.date);
       fallbackEvents.push({
@@ -371,7 +403,7 @@ export function useOracleInsights(params?: {
       const found = events.find(e => e.date === selectedEventTs);
       if (found) return found;
     }
-    return events[0];
+    return events[0] ?? null;
   }, [events, selectedEventTs]);
 
   const [insights, setInsights] = useState<OracleInsights | null>(null);
@@ -396,6 +428,7 @@ export function useOracleInsights(params?: {
     slopePointCount: number | undefined;
     refreshCacheOnExecute: boolean;
     selectedEventTs: number | null;
+    cacheScope: NightscoutCacheScope;
   } | null>(null);
 
   // Refs to keep the Execute pipeline independent from render-driven dependencies.
@@ -427,6 +460,11 @@ export function useOracleInsights(params?: {
   }, [selectedEvent]);
 
   const execute = useCallback(() => {
+    if (!cacheScope) {
+      setSyncError(new Error('Connect a Nightscout Source before running analysis'));
+      return;
+    }
+
     // Snapshot config + the currently selected event.
     runConfigRef.current = {
       cacheDays,
@@ -434,8 +472,15 @@ export function useOracleInsights(params?: {
       slopePointCount: effectiveSlopePointCount,
       refreshCacheOnExecute,
       selectedEventTs: selectedEvent?.date ?? null,
+      cacheScope,
     };
-    setLastRunConfig(runConfigRef.current);
+    setLastRunConfig({
+      cacheDays,
+      includeLoadInMatching,
+      slopePointCount: effectiveSlopePointCount,
+      refreshCacheOnExecute,
+      selectedEventTs: selectedEvent?.date ?? null,
+    });
     setHasExecuted(true);
     runIdRef.current += 1;
     setRunNonce(n => n + 1);
@@ -445,6 +490,7 @@ export function useOracleInsights(params?: {
     includeLoadInMatching,
     refreshCacheOnExecute,
     selectedEvent?.date,
+    cacheScope,
   ]);
 
   // Main execution pipeline: cache sync -> compute insights.
@@ -478,6 +524,7 @@ export function useOracleInsights(params?: {
         setIsSyncing(true);
         try {
           const res = await syncOracleCache({
+            scope: cfg.cacheScope,
             days: cfg.cacheDays,
             chunkDays: 14,
             onProgress: p => {
@@ -538,7 +585,9 @@ export function useOracleInsights(params?: {
               treatments: nextTreatments,
               deviceStatus: nextDeviceStatus,
               includeLoadInMatching: cfg.includeLoadInMatching,
-              slopePointCount: cfg.slopePointCount,
+              ...(cfg.slopePointCount !== undefined
+                ? {slopePointCount: cfg.slopePointCount}
+                : {}),
             },
             {
               onProgress: p => {
@@ -566,7 +615,9 @@ export function useOracleInsights(params?: {
           treatments: nextTreatments,
           deviceStatus: nextDeviceStatus,
           includeLoadInMatching: cfg.includeLoadInMatching,
-          slopePointCount: cfg.slopePointCount,
+          ...(cfg.slopePointCount !== undefined
+            ? {slopePointCount: cfg.slopePointCount}
+            : {}),
         });
 
         if (!active || runIdRef.current !== runId) return;

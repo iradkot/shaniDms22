@@ -10,8 +10,11 @@ const nativeIsE2E = Boolean(
 );
 
 const envIsE2E =
-  typeof process !== 'undefined' &&
-  (process as unknown as {env?: Record<string, string>})?.env?.E2E === 'true';
+  (
+    globalThis as typeof globalThis & {
+      process?: {env?: Readonly<Record<string, string | undefined>>};
+    }
+  ).process?.env?.E2E === 'true';
 
 /**
  * True when the app is running in E2E mode.

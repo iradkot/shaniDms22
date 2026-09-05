@@ -2,6 +2,32 @@
 
 #import <FirebaseCore/FirebaseCore.h>
 #import <React/RCTBundleURLProvider.h>
+#import <React/RCTBridgeModule.h>
+
+@interface ShaniDmsRuntimeConfig : NSObject <RCTBridgeModule>
+@end
+
+@implementation ShaniDmsRuntimeConfig
+
+RCT_EXPORT_MODULE();
+
++ (BOOL)requiresMainQueueSetup
+{
+  return NO;
+}
+
+- (NSDictionary *)constantsToExport
+{
+  NSBundle *bundle = [NSBundle mainBundle];
+  NSString *backendBaseUrl = [bundle objectForInfoDictionaryKey:@"ShaniBackendBaseURL"] ?: @"";
+  id rulesSchemaVersion = [bundle objectForInfoDictionaryKey:@"ShaniFirestoreRulesSchemaVersion"] ?: @0;
+  return @{
+    @"backendBaseUrl": backendBaseUrl,
+    @"firestoreRulesSchemaVersion": rulesSchemaVersion,
+  };
+}
+
+@end
 
 @implementation AppDelegate
 

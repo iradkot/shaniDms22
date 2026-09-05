@@ -1,0 +1,3 @@
+# Use task-shaped Journal Interfaces over a shared engine
+
+Meal and Activity callers use separate task-shaped Interfaces such as capture, finish, list, link, trash, and restore, while their Implementation delegates identity, revisions, local durability, outbox, conflicts, media, and external-link rules to one shared Journal engine. A generic command/query protocol and a minimal union-based `change` Interface were rejected as the product-facing Seam because they maximise theoretical extension at the cost of discoverability; runtime plugin protocols may still exist behind the Journal engine for approved first-party contributions.

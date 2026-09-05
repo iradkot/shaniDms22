@@ -23,7 +23,10 @@ type Props = {
 
 function formatCarbRow(item: FoodItemDTO | formattedFoodItemDTO): string {
   const grams = typeof item.carbs === 'number' ? item.carbs : 0;
-  const time = typeof item.timestamp === 'number' ? formatDateToLocaleTimeString(item.timestamp) : '';
+  const time =
+    typeof item.timestamp === 'number'
+      ? formatDateToLocaleTimeString(item.timestamp)
+      : '';
   return `Carbs: ${Math.round(grams)}g${time ? ` @ ${time}` : ''}`;
 }
 
@@ -39,7 +42,8 @@ const CombinedBgBolusTooltip: React.FC<Props> = ({
 
   const rows = useMemo(() => {
     const bgRow = `BG: ${bgSample.sgv} mg/dL`;
-    const bolusAmt = typeof bolusEvent.amount === 'number' ? bolusEvent.amount : 0;
+    const bolusAmt =
+      typeof bolusEvent.amount === 'number' ? bolusEvent.amount : 0;
     const bolusTime = bolusEvent.timestamp
       ? formatDateToLocaleTimeString(bolusEvent.timestamp)
       : '';
@@ -52,7 +56,11 @@ const CombinedBgBolusTooltip: React.FC<Props> = ({
   const tooltipWidth = 240;
   const fontSize = theme.typography.size.xs;
 
-  const {textX, rowYs, height: tooltipHeight} = getSvgTooltipTextLayout({
+  const {
+    textX,
+    rowYs,
+    height: tooltipHeight,
+  } = getSvgTooltipTextLayout({
     rows: rows.length,
     fontSize,
     lineHeightMultiplier: theme.typography.lineHeight.normal,
@@ -74,7 +82,11 @@ const CombinedBgBolusTooltip: React.FC<Props> = ({
   const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
 
   return (
-    <Tooltip x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}>
+    <Tooltip
+      x={tooltipX}
+      y={tooltipY}
+      width={tooltipWidth}
+      height={tooltipHeight}>
       <SvgTooltipBox width={tooltipWidth} height={tooltipHeight} />
       {rows.map((row, idx) => {
         const isBgRow = idx === 0;
@@ -83,13 +95,12 @@ const CombinedBgBolusTooltip: React.FC<Props> = ({
           <Text
             key={String(idx)}
             x={textX}
-            y={rowYs[idx]}
+            y={rowYs[idx]!}
             fontSize={String(fontSize)}
             fontFamily={theme.typography.fontFamily}
             fill={isBgRow ? bgColor : theme.textColor}
             opacity={isFooter ? 0.85 : isBgRow ? 0.95 : 0.9}
-            textAnchor="start"
-          >
+            textAnchor="start">
             {row}
           </Text>
         );

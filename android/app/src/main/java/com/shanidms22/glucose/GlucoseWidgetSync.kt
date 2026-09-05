@@ -8,12 +8,19 @@ import org.json.JSONArray
 
 internal object GlucoseWidgetSync {
   fun syncOnce(context: Context): Boolean {
+    val configuration = when (val stored = GlucoseWidgetCredentialStore.readSyncConfiguration(context)) {
+      is WidgetSyncConfiguration.Ready -> stored
+      WidgetSyncConfiguration.Disabled -> return false
+      WidgetSyncConfiguration.CredentialUnavailable -> {
+        // The vault already disabled the preference. Stop alarms, work, and live mode too.
+        // Recheck under the configuration lock so a concurrent reconfiguration is not canceled.
+        GlucoseSyncScheduler.cancelIfConfigurationUnavailable(context)
+        return false
+      }
+    }
     val prefs = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
-    val enabled = prefs.getBoolean(GlucoseSyncWorker.KEY_ENABLED, false)
-    val baseUrl = prefs.getString(GlucoseSyncWorker.KEY_BASE_URL, null)?.trim().orEmpty()
-    if (!enabled || baseUrl.isBlank()) return false
-
-    val secret = prefs.getString(GlucoseSyncWorker.KEY_API_SECRET_SHA1, null)
+    val baseUrl = configuration.baseUrl
+    val secret = configuration.apiSecretSha1
     val sparklineHours = prefs.getInt(GlucoseSyncWorker.KEY_SPARKLINE_HOURS, 3).coerceIn(1, 12)
     val entries = fetchRecentEntries(baseUrl, secret, sparklineHours)
     val latest = latestWidgetBgFromEntries(entries) ?: return false

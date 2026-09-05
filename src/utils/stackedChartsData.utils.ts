@@ -48,13 +48,19 @@ export function buildFullScreenStackedChartsParams(params: {
 }): FullScreenStackedChartsParams {
   return {
     mode: 'stackedCharts',
-    title: params.title,
     bgSamples: params.bgSamples,
     foodItems: params.foodItems,
-    insulinData: params.insulinData,
-    basalProfileData: params.basalProfileData,
-    xDomainMs: params.xDomainMs,
-    fallbackAnchorTimeMs: params.fallbackAnchorTimeMs,
+    ...(params.title !== undefined ? {title: params.title} : {}),
+    ...(params.insulinData !== undefined
+      ? {insulinData: params.insulinData}
+      : {}),
+    ...(params.basalProfileData !== undefined
+      ? {basalProfileData: params.basalProfileData}
+      : {}),
+    ...(params.xDomainMs !== undefined ? {xDomainMs: params.xDomainMs} : {}),
+    ...(params.fallbackAnchorTimeMs !== undefined
+      ? {fallbackAnchorTimeMs: params.fallbackAnchorTimeMs}
+      : {}),
   };
 }
 

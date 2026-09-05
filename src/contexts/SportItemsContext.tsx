@@ -1,17 +1,17 @@
 // SportItemsContext.tsx
 import React, {createContext, useContext, useState, useEffect} from 'react';
-import {SportItemDTO} from 'app/types/sport.types';
+import {SportItemsByRelativeDate} from 'app/types/sport.types';
 import useGetSportItems from 'app/hooks/sport/useGetSportItems';
 
 interface SportItemsContextValue {
-  sportItems: SportItemDTO[];
-  setSportItems: (items: SportItemDTO[]) => void;
+  sportItems: SportItemsByRelativeDate;
+  setSportItems: (items: SportItemsByRelativeDate) => void;
   isLoading: boolean;
   isError: boolean;
 }
 
 const SportItemsContext = createContext<SportItemsContextValue>({
-  sportItems: [],
+  sportItems: {},
   setSportItems: () => {},
   isLoading: false,
   isError: false,
@@ -22,18 +22,16 @@ export const useSportItems = () => {
 };
 
 // Provide sport items context to children
-export const SportItemsProvider = ({ children }: { children: React.ReactNode }) => {
-  const [sportItems, setSportItems] = useState<SportItemDTO[]>([]);
+export const SportItemsProvider = ({children}: {children: React.ReactNode}) => {
+  const [sportItems, setSportItems] = useState<SportItemsByRelativeDate>({});
   const {
     sportItems: fetchedSportItems,
     isLoading,
     isError,
   } = useGetSportItems();
-  console.log('SportItemsProvider: render, isLoading=', isLoading, 'isError=', isError);
-
   useEffect(() => {
-    if (fetchedSportItems && Array.isArray(fetchedSportItems)) {
-      setSportItems(fetchedSportItems as SportItemDTO[]);
+    if (fetchedSportItems) {
+      setSportItems(fetchedSportItems);
     }
   }, [fetchedSportItems]);
 

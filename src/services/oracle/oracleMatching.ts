@@ -54,7 +54,7 @@ function lowerBoundByDate(entries: Array<{date: number}>, ts: number): number {
   let hi = entries.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (entries[mid].date < ts) lo = mid + 1;
+    if (entries[mid]!.date < ts) lo = mid + 1;
     else hi = mid;
   }
   return lo;
@@ -65,7 +65,7 @@ function lowerBoundByTs(entries: Array<{ts: number}>, ts: number): number {
   let hi = entries.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (entries[mid].ts < ts) lo = mid + 1;
+    if (entries[mid]!.ts < ts) lo = mid + 1;
     else hi = mid;
   }
   return lo;
@@ -73,7 +73,7 @@ function lowerBoundByTs(entries: Array<{ts: number}>, ts: number): number {
 
 function isSortedBy<T>(items: T[], getKey: (v: T) => number): boolean {
   for (let i = 1; i < items.length; i++) {
-    if (getKey(items[i]) < getKey(items[i - 1])) return false;
+    if (getKey(items[i]!) < getKey(items[i - 1]!)) return false;
   }
   return true;
 }
@@ -174,6 +174,10 @@ export function slopeAtLeastSquares(
   return num / den;
 }
 
+function slopeOptions(sampleCount: number | undefined): {sampleCount?: number} {
+  return sampleCount === undefined ? {} : {sampleCount};
+}
+
 /**
  * Buckets a slope (mg/dL/min) into a stable event kind.
  *
@@ -189,8 +193,8 @@ export function trendBucket(slope: number): OracleEventKind {
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 1) return sorted[mid];
-  return (sorted[mid - 1] + sorted[mid]) / 2;
+  if (sorted.length % 2 === 1) return sorted[mid]!;
+  return (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
 function buildTrace(
@@ -426,6 +430,7 @@ function buildStrategies(matches: OracleMatchTrace[]): OracleStrategyCard[] {
   let bestScore = Number.NEGATIVE_INFINITY;
   for (let i = 0; i < top.length; i++) {
     const c = top[i];
+    if (!c) continue;
     const sr = c.successRate ?? -1;
     const avg = c.avgBg2h;
     const closeness =
@@ -436,7 +441,8 @@ function buildStrategies(matches: OracleMatchTrace[]): OracleStrategyCard[] {
       bestIdx = i;
     }
   }
-  if (bestIdx >= 0) top[bestIdx] = {...top[bestIdx], isBest: true};
+  const best = bestIdx >= 0 ? top[bestIdx] : undefined;
+  if (best) top[bestIdx] = {...best, isBest: true};
 
   return top;
 }
@@ -506,7 +512,7 @@ export function computeOracleInsights(params: {
 
   const slopeSource = recentSlim.length ? recentSlim : sortedHistory;
   const currentSlope =
-    slopeAtLeastSquares(slopeSource, nowTs, {sampleCount: slopePointCount}) ?? 0;
+    slopeAtLeastSquares(slopeSource, nowTs, slopeOptions(slopePointCount)) ?? 0;
   const currentBucket = trendBucket(currentSlope);
 
   const nowMinutes = minutesFromMidnightLocal(nowTs);
@@ -525,7 +531,7 @@ export function computeOracleInsights(params: {
     if (t0 >= nowTs) continue;
 
     // Must be able to compute slope for the past entry.
-    const pastSlope = slopeAtLeastSquares(sortedHistory, t0, {sampleCount: slopePointCount});
+    const pastSlope = slopeAtLeastSquares(sortedHistory, t0, slopeOptions(slopePointCount));
     if (pastSlope === null) continue;
 
     // Filter A: Time of day.
@@ -605,11 +611,11 @@ export function computeOracleInsights(params: {
       ...trace,
       iob: typeof matchLoad.iob === 'number' ? matchLoad.iob : null,
       cob: typeof matchLoad.cob === 'number' ? matchLoad.cob : null,
-      treatments30m: relevant.length ? relevant : undefined,
+      ...(relevant.length ? {treatments30m: relevant} : {}),
       actions30m: {insulin: Number(insulin.toFixed(2)), carbs: Number(carbs.toFixed(2))},
       actionCounts30m: {boluses: bolusCount, carbs: carbsCount},
       tir2h,
-      actionMarkers: markers.length ? markers : undefined,
+      ...(markers.length ? {actionMarkers: markers} : {}),
     });
   }
 
@@ -762,7 +768,7 @@ export async function computeOracleInsightsProgressive(
 
   const slopeSource = recentSlim.length ? recentSlim : sortedHistory;
   const currentSlope =
-    slopeAtLeastSquares(slopeSource, nowTs, {sampleCount: slopePointCount}) ?? 0;
+    slopeAtLeastSquares(slopeSource, nowTs, slopeOptions(slopePointCount)) ?? 0;
   const currentBucket = trendBucket(currentSlope);
 
   const nowMinutes = minutesFromMidnightLocal(nowTs);
@@ -824,10 +830,11 @@ export async function computeOracleInsightsProgressive(
     if (opts?.shouldAbort?.()) break;
 
     const entry = sortedHistory[idx];
+    if (!entry) continue;
     const t0 = entry.date;
 
     // Must be able to compute slope for the past entry.
-    const pastSlope = slopeAtLeastSquares(sortedHistory, t0, {sampleCount: slopePointCount});
+    const pastSlope = slopeAtLeastSquares(sortedHistory, t0, slopeOptions(slopePointCount));
     if (pastSlope === null) {
       scanned += 1;
       continue;
@@ -930,11 +937,11 @@ export async function computeOracleInsightsProgressive(
       ...trace,
       iob: typeof matchLoad.iob === 'number' ? matchLoad.iob : null,
       cob: typeof matchLoad.cob === 'number' ? matchLoad.cob : null,
-      treatments30m: relevant.length ? relevant : undefined,
+      ...(relevant.length ? {treatments30m: relevant} : {}),
       actions30m: {insulin: Number(insulin.toFixed(2)), carbs: Number(carbs.toFixed(2))},
       actionCounts30m: {boluses: bolusCount, carbs: carbsCount},
       tir2h,
-      actionMarkers: markers.length ? markers : undefined,
+      ...(markers.length ? {actionMarkers: markers} : {}),
     });
 
     scanned += 1;

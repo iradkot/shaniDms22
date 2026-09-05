@@ -191,7 +191,6 @@ export function validateAnalysisWindow(
   }
 
   // Check if post-period is mostly in the future
-  const postEndMs = changeTimestamp + windowMs;
   const availablePostMs = Math.max(0, now - changeTimestamp);
   const postCoverage = availablePostMs / windowMs;
 

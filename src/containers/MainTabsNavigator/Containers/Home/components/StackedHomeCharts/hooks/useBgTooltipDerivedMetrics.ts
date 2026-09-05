@@ -1,6 +1,7 @@
 import {useMemo} from 'react';
 
 import type {BgSample} from 'app/types/day_bgs.types';
+import {getSampleIobTotal} from 'app/utils/chartLoadSeries.utils';
 
 export type BgTooltipDerivedMetrics = {
   activeInsulinU: number | null;
@@ -21,39 +22,16 @@ export type BgTooltipDerivedMetrics = {
 export function useBgTooltipDerivedMetrics(
   bgSample: BgSample | null,
 ): BgTooltipDerivedMetrics {
-  const activeInsulinU = useMemo(() => {
-    if (!bgSample) {
-      return null;
-    }
-    if (typeof bgSample.iob === 'number' && Number.isFinite(bgSample.iob)) {
-      return bgSample.iob;
-    }
-
-    if (
-      typeof bgSample.iobBolus === 'number' ||
-      typeof bgSample.iobBasal === 'number'
-    ) {
-      const bolus =
-        typeof bgSample.iobBolus === 'number' &&
-        Number.isFinite(bgSample.iobBolus)
-          ? bgSample.iobBolus
-          : 0;
-      const basal =
-        typeof bgSample.iobBasal === 'number' &&
-        Number.isFinite(bgSample.iobBasal)
-          ? bgSample.iobBasal
-          : 0;
-      return bolus + basal;
-    }
-
-    return null;
-  }, [bgSample]);
+  const activeInsulinU = useMemo(
+    () => (bgSample ? getSampleIobTotal(bgSample) : null),
+    [bgSample],
+  );
 
   const activeInsulinBolusU = useMemo(() => {
     if (!bgSample) {
       return null;
     }
-    const v = (bgSample as any).iobBolus;
+    const v = bgSample.iobBolus;
     return typeof v === 'number' && Number.isFinite(v) ? v : null;
   }, [bgSample]);
 
@@ -61,7 +39,7 @@ export function useBgTooltipDerivedMetrics(
     if (!bgSample) {
       return null;
     }
-    const v = (bgSample as any).iobBasal;
+    const v = bgSample.iobBasal;
     return typeof v === 'number' && Number.isFinite(v) ? v : null;
   }, [bgSample]);
 
@@ -69,7 +47,7 @@ export function useBgTooltipDerivedMetrics(
     if (!bgSample) {
       return null;
     }
-    const v = (bgSample as any).cob;
+    const v = bgSample.cob;
     return typeof v === 'number' && Number.isFinite(v) ? v : null;
   }, [bgSample]);
 

@@ -14,14 +14,17 @@ export const findClosestBgSample = (
 
   let start = 0;
   let end = bgSamples.length - 1;
-  const ascending = bgSamples[0].date <= bgSamples[end].date;
+  const firstSample = bgSamples[0]!;
+  const lastSample = bgSamples[end]!;
+  const ascending = firstSample.date <= lastSample.date;
 
   while (start <= end) {
     const mid = Math.floor((start + end) / 2);
-    const midDate = bgSamples[mid].date;
+    const midSample = bgSamples[mid]!;
+    const midDate = midSample.date;
 
     if (midDate === x) {
-      return bgSamples[mid];
+      return midSample;
     } else if ((ascending && midDate < x) || (!ascending && midDate > x)) {
       start = mid + 1;
     } else {
@@ -33,10 +36,10 @@ export const findClosestBgSample = (
     (sample): sample is BgSample =>
       sample != null && Number.isFinite(sample.date),
   );
-  if (!candidates.length) return null;
+  if (!candidates.length) {
+    return null;
+  }
   return candidates.reduce((closest, sample) =>
-    Math.abs(sample.date - x) < Math.abs(closest.date - x)
-      ? sample
-      : closest,
+    Math.abs(sample.date - x) < Math.abs(closest.date - x) ? sample : closest,
   );
 };

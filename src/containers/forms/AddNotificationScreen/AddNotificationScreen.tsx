@@ -10,7 +10,8 @@ import {Alert, Keyboard, Platform, ToastAndroid} from 'react-native';
 import {NotificationRequest} from 'app/types/notifications';
 import {useAddNotification} from 'app/hooks/notifications/useAddNotification';
 import {
-  MAIN_TAB_NAVIGATOR,
+  LEGACY_TAB_NAVIGATOR,
+  PRODUCT_EXPERIENCE_SCREEN,
   NOTIFICATION_TAB_SCREEN,
 } from 'app/constants/SCREEN_NAMES';
 import NotificationForm from 'app/components/forms/NotificationForm/NotificationForm';
@@ -39,12 +40,13 @@ const AddNotificationScreen: FC = () => {
     Alert.alert(message);
   };
   const goBack = () => {
-    // Reset to MAIN_TAB_NAVIGATOR and set the initial tab to NotificationTabScreen
+    // Keep the new Hub below the preserved notification module.
     navigation.reset({
-      index: 0,
+      index: 1,
       routes: [
+        {name: PRODUCT_EXPERIENCE_SCREEN},
         {
-          name: MAIN_TAB_NAVIGATOR,
+          name: LEGACY_TAB_NAVIGATOR,
           params: {screen: NOTIFICATION_TAB_SCREEN},
         },
       ],

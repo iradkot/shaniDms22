@@ -17,7 +17,11 @@ export interface UserTypes {
 }
 
 export interface FSUser {
-  createdAt: string;
+  schemaVersion: 1;
+  ownerProductUserId: string;
   userId: string;
-  phoneToken: string;
+  email: string;
+  phoneTokens: string[];
+  createdAt: unknown;
+  updatedAt: unknown;
 }

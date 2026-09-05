@@ -3,16 +3,10 @@ import {useMemo} from 'react';
 import type {BgSample} from 'app/types/day_bgs.types';
 import type {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import type {InsulinDataEntry} from 'app/types/insulin.types';
+import {MAX_LOAD_CURSOR_DISTANCE_MS} from 'app/utils/chartLoadSeries.utils';
 
 import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
-import {
-  findBolusEventsInTooltipWindow,
-  findClosestBolus,
-} from 'app/components/charts/CgmGraph/utils/bolusUtils';
-import {
-  findCarbEventsInTooltipWindow,
-  findClosestCarbEvent,
-} from 'app/components/charts/CgmGraph/utils/carbsUtils';
+import {BOLUS_DETECTION_WINDOW_MS} from 'app/components/charts/CgmGraph/constants/bolusHoverConfig';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
@@ -24,10 +18,10 @@ export type StackedChartsTooltipInput = {
 
   bgSamples: BgSample[];
   foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
-  insulinData?: InsulinDataEntry[];
+  insulinData?: InsulinDataEntry[] | undefined;
 
   /** If provided, anchors the cursor when there is no touch interaction. */
-  fallbackAnchorTimeMs?: number;
+  fallbackAnchorTimeMs?: number | undefined;
 
   /** Used only for `tooltipAlign="auto"` calculations. */
   width: number;
@@ -37,9 +31,10 @@ export type StackedChartsTooltipInput = {
   marginRight: number;
 
   /** Used only for `tooltipAlign="auto"` calculations. */
-  xDomain?: [Date, Date] | null;
+  xDomain?: [Date, Date] | null | undefined;
 
   tooltipAlign?: TooltipAlign;
+  showFallback?: boolean;
 };
 
 export type StackedChartsTooltipModel = {
@@ -56,8 +51,7 @@ export type StackedChartsTooltipModel = {
   /**
    * Time (ms) used to gather nearby bolus/carb events.
    *
-   * This may snap to the closest event to capture clusters reliably,
-   * but must not influence `cgmAnchorTimeMs`.
+   * Uses the same raw cursor and five-minute window as the bolus lane.
    */
   eventsAnchorTimeMs: number;
 
@@ -86,7 +80,7 @@ export type StackedChartsTooltipModel = {
  * Why this exists:
  * - We show a unified tooltip for multiple charts (CGM + minis).
  * - Users must be able to scrub every CGM sample (no snapping to events).
- * - We still want to cluster nearby boluses/carbs (snapping is allowed for event windowing only).
+ * - Event summaries and the dose lane use the same time window.
  */
 export function useStackedChartsTooltipModel(
   input: StackedChartsTooltipInput,
@@ -102,9 +96,10 @@ export function useStackedChartsTooltipModel(
     marginRight,
     xDomain,
     tooltipAlign = 'left',
+    showFallback = false,
   } = input;
 
-  const shouldShowTooltip = chartsTooltip != null;
+  const shouldShowTooltip = chartsTooltip != null || showFallback;
 
   const fallbackAnchorResolvedMs = useMemo(() => {
     return typeof fallbackAnchorTimeMs === 'number' &&
@@ -139,38 +134,11 @@ export function useStackedChartsTooltipModel(
     return latestBgTimeMs;
   }, [chartsTooltip?.touchTimeMs, fallbackAnchorResolvedMs, latestBgTimeMs]);
 
-  const eventsAnchorTimeMs = useMemo(() => {
-    if (chartsTooltip?.touchTimeMs != null) {
-      const touchTimeMs = chartsTooltip.touchTimeMs;
-
-      const closestBolus = insulinData?.length
-        ? findClosestBolus(touchTimeMs, insulinData)
-        : null;
-      const closestCarb = foodItems?.length
-        ? findClosestCarbEvent(touchTimeMs, foodItems)
-        : null;
-      const bolusTimeMs = closestBolus?.timestamp
-        ? Date.parse(closestBolus.timestamp)
-        : NaN;
-      const carbTimeMs = closestCarb?.timestamp ?? NaN;
-      const candidates = [bolusTimeMs, carbTimeMs].filter(Number.isFinite);
-      if (candidates.length) {
-        return candidates.reduce((closest, candidate) =>
-          Math.abs(candidate - touchTimeMs) < Math.abs(closest - touchTimeMs)
-            ? candidate
-            : closest,
-        );
-      }
-
-      return touchTimeMs;
-    }
-
-    return cgmAnchorTimeMs;
-  }, [cgmAnchorTimeMs, chartsTooltip?.touchTimeMs, foodItems, insulinData]);
+  const eventsAnchorTimeMs = cgmAnchorTimeMs;
 
   const cursorTimeMs = useMemo(() => {
-    return shouldShowTooltip ? cgmAnchorTimeMs : null;
-  }, [cgmAnchorTimeMs, shouldShowTooltip]);
+    return chartsTooltip ? cgmAnchorTimeMs : null;
+  }, [cgmAnchorTimeMs, chartsTooltip]);
 
   const resolvedTooltipAlign = useMemo<'left' | 'right'>(() => {
     if (tooltipAlign !== 'auto') {
@@ -213,7 +181,11 @@ export function useStackedChartsTooltipModel(
     if (!bgSamples?.length) {
       return null;
     }
-    return findClosestBgSample(cgmAnchorTimeMs, bgSamples);
+    const sample = findClosestBgSample(cgmAnchorTimeMs, bgSamples);
+    return sample &&
+      Math.abs(sample.date - cgmAnchorTimeMs) <= MAX_LOAD_CURSOR_DISTANCE_MS
+      ? sample
+      : null;
   }, [bgSamples, cgmAnchorTimeMs, shouldShowTooltip]);
 
   const tooltipBolusEvents = useMemo(() => {
@@ -223,10 +195,24 @@ export function useStackedChartsTooltipModel(
     if (!insulinData?.length) {
       return [];
     }
-    return findBolusEventsInTooltipWindow({
-      anchorTimeMs: eventsAnchorTimeMs,
-      insulinData,
-    });
+    return insulinData
+      .filter(
+        (
+          entry,
+        ): entry is InsulinDataEntry & {
+          type: 'bolus';
+          amount: number;
+          timestamp: string;
+        } =>
+          entry.type === 'bolus' &&
+          typeof entry.amount === 'number' &&
+          Number.isFinite(entry.amount) &&
+          entry.amount > 0 &&
+          typeof entry.timestamp === 'string' &&
+          Math.abs(Date.parse(entry.timestamp) - eventsAnchorTimeMs) <=
+            BOLUS_DETECTION_WINDOW_MS,
+      )
+      .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
   }, [eventsAnchorTimeMs, insulinData, shouldShowTooltip]);
 
   const tooltipCarbEvents = useMemo(() => {
@@ -236,10 +222,23 @@ export function useStackedChartsTooltipModel(
     if (!foodItems?.length) {
       return [];
     }
-    return findCarbEventsInTooltipWindow({
-      anchorTimeMs: eventsAnchorTimeMs,
-      foodItems,
-    });
+    return foodItems
+      .filter(
+        (
+          entry,
+        ): entry is (FoodItemDTO | formattedFoodItemDTO) & {
+          id: string;
+          timestamp: number;
+          carbs: number;
+        } =>
+          typeof entry.timestamp === 'number' &&
+          Math.abs(entry.timestamp - eventsAnchorTimeMs) <=
+            BOLUS_DETECTION_WINDOW_MS &&
+          typeof entry.carbs === 'number' &&
+          Number.isFinite(entry.carbs) &&
+          entry.carbs > 0,
+      )
+      .sort((a, b) => a.timestamp - b.timestamp);
   }, [eventsAnchorTimeMs, foodItems, shouldShowTooltip]);
 
   return {

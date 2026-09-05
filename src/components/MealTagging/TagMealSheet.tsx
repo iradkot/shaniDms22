@@ -2,7 +2,8 @@
  * TagMealSheet — modal overlay for tagging a meal.
  *
  * Shows current tags as removable chips, a TagInput for adding new tags,
- * and a Save button. Saves locally + syncs to Nightscout on confirm.
+ * and a Save button. Saves App-Owned tags locally on confirm; Nightscout is
+ * read-only.
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Modal, KeyboardAvoidingView, Platform} from 'react-native';

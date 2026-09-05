@@ -95,11 +95,11 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
         onRefresh={getNotificationsData}
         ListEmptyComponent={
           <View style={{padding: 24, alignItems: 'center'}}>
-            <Text>No notification rules yet</Text>
+            <Text>{tr(language, 'notificationsUi.noRules')}</Text>
           </View>
         }
-        contentContainerStyle={{ paddingBottom: 80 }}
-        style={{ flex: 1 }}
+        contentContainerStyle={{paddingBottom: 80}}
+        style={{flex: 1}}
       />
     );
   };
@@ -107,11 +107,10 @@ const NotificationsManager: React.FC<{navigation: NavigationProp<any>}> = ({
   return (
     <NotificationsManagerContainer testID={E2E_TEST_IDS.screens.notifications}>
       <InfoCard>
-        <InfoTitle>Internal alerts are active</InfoTitle>
-        <InfoBody>
-          These rules now run locally in the app (Notifee) based on live Nightscout glucose,
-          with per-rule cooldown to reduce alert spam.
-        </InfoBody>
+        <InfoTitle>
+          {tr(language, 'notificationsUi.localAlertsTitle')}
+        </InfoTitle>
+        <InfoBody>{tr(language, 'notificationsUi.localAlertsBody')}</InfoBody>
       </InfoCard>
       {renderNotifications()}
       <AddNotificationButton
@@ -134,7 +133,10 @@ const AddNotificationButtonText = styled.Text`
   font-size: 18px;
 `;
 
-const AddNotificationButton: FC<{callback: () => void; label: string}> = ({callback, label}) => {
+const AddNotificationButton: FC<{callback: () => void; label: string}> = ({
+  callback,
+  label,
+}) => {
   return (
     <AddNotificationButtonContainer
       testID={E2E_TEST_IDS.notifications.addButton}

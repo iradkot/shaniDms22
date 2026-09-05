@@ -63,7 +63,9 @@ const estimateZeroTempBasalMinutes = (d: any): number => {
 
 const toMinutes = (time: string | undefined): number => {
   if (!time) return 0;
-  const [h, m] = String(time).split(':').map(Number);
+  const [h = Number.NaN, m = Number.NaN] = String(time)
+    .split(':')
+    .map(Number);
   if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
   return h * 60 + m;
 };
@@ -250,7 +252,7 @@ export function buildLoopAssistAiContext(params: {
     if (drop >= 50 && recovery >= 35) {
       const carbsNear = txList.some(t => {
         const ts = toTs(t?.created_at);
-        if (!Number.isFinite(ts)) {
+        if (ts === null || !Number.isFinite(ts)) {
           return false;
         }
         return ts >= low.ts - 10 * 60 * 1000 && ts <= low.ts + 45 * 60 * 1000 && Number(t?.carbs ?? 0) > 0;

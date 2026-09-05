@@ -1,0 +1,93 @@
+appId: com.shanidms22
+tags:
+  - product
+---
+# Rebuilt product smoke. This is intentionally independent of Firebase and
+# Nightscout: it verifies the navigation shell and progressive Hub disclosure.
+- launchApp:
+    clearState: true
+
+- extendedWaitUntil:
+    visible:
+      id: product-shell
+    timeout: 30000
+
+- assertVisible:
+    id: product-hub
+
+- scrollUntilVisible:
+    element:
+      id: hub-category-grid
+    direction: DOWN
+    timeout: 15000
+
+- scrollUntilVisible:
+    element:
+      id: hub-category-record
+    direction: DOWN
+    timeout: 15000
+
+- tapOn:
+    id: hub-category-record
+
+- scrollUntilVisible:
+    element:
+      id: hub-grid-record-tile-core.activity
+    direction: DOWN
+    timeout: 15000
+
+- tapOn:
+    id: hub-grid-record-tile-core.activity
+
+- assertNotVisible:
+    id: product-hub
+- assertVisible:
+    id: shell-control-back
+- assertVisible:
+    id: shell-control-hub
+- assertVisible:
+    id: shell-control-forward
+
+# Back returns to the exact Hub root.
+- tapOn:
+    id: shell-control-back
+- extendedWaitUntil:
+    visible:
+      id: product-hub
+    timeout: 15000
+
+# Forward restores the exact Module that Back just left.
+- tapOn:
+    id: shell-control-forward
+- assertNotVisible:
+    id: product-hub
+- tapOn:
+    id: shell-control-hub
+- extendedWaitUntil:
+    visible:
+      id: product-hub
+    timeout: 15000
+
+# Opening the same Module again and using Hub also resets to the Hub root.
+- scrollUntilVisible:
+    element:
+      id: hub-category-record
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: hub-category-record
+- scrollUntilVisible:
+    element:
+      id: hub-grid-record-tile-core.activity
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: hub-grid-record-tile-core.activity
+- tapOn:
+    id: shell-control-hub
+- extendedWaitUntil:
+    visible:
+      id: product-hub
+    timeout: 15000
+
+- takeScreenshot: product-hub-record-navigation

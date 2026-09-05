@@ -1,4 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  aiWorkspaceStorageKey,
+  type AiWorkspaceScope,
+} from 'app/services/aiMemory/aiWorkspaceScope';
 
 export type AiHistoryRole = 'user' | 'assistant';
 
@@ -17,7 +21,17 @@ export type AiConversationHistoryItem = {
   messages: AiHistoryMessage[];
 };
 
-const STORAGE_KEY = 'aiAnalyst.history.v1';
+const historyStorageKey = (scope: AiWorkspaceScope): string =>
+  aiWorkspaceStorageKey('history', scope);
+const LEGACY_UNSCOPED_HISTORY_KEY = 'aiAnalyst.history.v1';
+
+const purgeLegacyUnscopedHistory = async (): Promise<void> => {
+  try {
+    await AsyncStorage.removeItem(LEGACY_UNSCOPED_HISTORY_KEY);
+  } catch {
+    // A legacy record is never assigned to whichever Workspace is active now.
+  }
+};
 
 const MAX_CONVERSATIONS = 25;
 const MAX_MESSAGES_PER_CONVO = 80;
@@ -66,9 +80,12 @@ function deriveTitle(params: {mission?: string; messages: Array<{role: AiHistory
   return 'Conversation';
 }
 
-export async function loadAiAnalystHistory(): Promise<AiConversationHistoryItem[]> {
+export async function loadAiAnalystHistory(
+  scope: AiWorkspaceScope,
+): Promise<AiConversationHistoryItem[]> {
+  await purgeLegacyUnscopedHistory();
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(historyStorageKey(scope));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -98,34 +115,45 @@ export async function loadAiAnalystHistory(): Promise<AiConversationHistoryItem[
   }
 }
 
-async function saveAiAnalystHistory(items: AiConversationHistoryItem[]): Promise<void> {
+async function saveAiAnalystHistory(
+  scope: AiWorkspaceScope,
+  items: AiConversationHistoryItem[],
+): Promise<void> {
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    await AsyncStorage.setItem(historyStorageKey(scope), JSON.stringify(items));
   } catch {
     // ignore (storage may be full)
   }
 }
 
-export async function upsertAiAnalystConversationSnapshot(params: {
-  id: string;
-  mission?: string;
-  messages: Array<{role: AiHistoryRole; content: string}>;
-}): Promise<void> {
+export async function upsertAiAnalystConversationSnapshot(
+  scope: AiWorkspaceScope,
+  params: {
+    id: string;
+    mission?: string;
+    messages: Array<{role: AiHistoryRole; content: string}>;
+  },
+): Promise<void> {
   const id = safeString(params.id);
   if (!id) return;
 
   const now = Date.now();
   const sanitizedMessages = sanitizeMessages(params.messages);
-  const title = deriveTitle({mission: params.mission, messages: sanitizedMessages});
+  const title = deriveTitle({
+    ...(params.mission !== undefined ? {mission: params.mission} : {}),
+    messages: sanitizedMessages,
+  });
 
-  const existing = await loadAiAnalystHistory();
+  const existing = await loadAiAnalystHistory(scope);
   const idx = existing.findIndex(c => c.id === id);
 
-  const nextItem: AiConversationHistoryItem = idx >= 0
+  const previous = idx >= 0 ? existing[idx] : undefined;
+  const mission = params.mission ?? previous?.mission;
+  const nextItem: AiConversationHistoryItem = previous
     ? {
-        ...existing[idx],
+        ...previous,
         updatedAt: now,
-        mission: params.mission ?? existing[idx].mission,
+        ...(mission !== undefined ? {mission} : {}),
         title,
         messages: sanitizedMessages,
       }
@@ -133,24 +161,32 @@ export async function upsertAiAnalystConversationSnapshot(params: {
         id,
         createdAt: now,
         updatedAt: now,
-        mission: params.mission,
+        ...(mission !== undefined ? {mission} : {}),
         title,
         messages: sanitizedMessages,
       };
 
   const without = existing.filter(c => c.id !== id);
   const next = [nextItem, ...without].slice(0, MAX_CONVERSATIONS);
-  await saveAiAnalystHistory(next);
+  await saveAiAnalystHistory(scope, next);
 }
 
-export async function deleteAiAnalystConversation(id: string): Promise<void> {
-  const existing = await loadAiAnalystHistory();
-  await saveAiAnalystHistory(existing.filter(c => c.id !== id));
+export async function deleteAiAnalystConversation(
+  scope: AiWorkspaceScope,
+  id: string,
+): Promise<void> {
+  const existing = await loadAiAnalystHistory(scope);
+  await saveAiAnalystHistory(scope, existing.filter(c => c.id !== id));
 }
 
-export async function clearAiAnalystHistory(): Promise<void> {
+export async function clearAiAnalystHistory(
+  scope: AiWorkspaceScope,
+): Promise<void> {
   try {
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    await Promise.all([
+      AsyncStorage.removeItem(historyStorageKey(scope)),
+      AsyncStorage.removeItem(LEGACY_UNSCOPED_HISTORY_KEY),
+    ]);
   } catch {
     // ignore
   }

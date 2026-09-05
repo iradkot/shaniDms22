@@ -30,6 +30,7 @@ build/
 local.properties
 *.iml
 *.hprof
+hs_err_pid*.log
 .cxx/
 
 # node.js
@@ -37,11 +38,16 @@ local.properties
 node_modules/
 npm-debug.log
 yarn-error.log
+firebase-debug.log
+firestore-debug.log
+firebase-debug.*.log
 
 # Env files (secrets)
 .env
 .env.*
 !.env.example
+/secrets
+/client_secret_*.apps.googleusercontent.com.json
 
 # npm lockfile (repo uses Yarn)
 /package-lock.json
@@ -126,6 +132,8 @@ keys/*
 
 # testing
 /coverage
+/artifacts/
+/.codex-remote-attachments/
 
 # Yarn
 .yarn/*

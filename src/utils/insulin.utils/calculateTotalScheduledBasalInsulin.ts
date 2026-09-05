@@ -10,8 +10,9 @@ export const calculateTotalScheduledBasalInsulin = (
       profile.store?.[profile.defaultProfile]?.basal;
     if (basalRates) {
       basalRates.forEach(rate => {
+        const rateStartSeconds = rate.timeAsSeconds ?? 0;
         const duration =
-          (rate.timeAsSeconds - (basalRates[0]?.timeAsSeconds || 0)) / 3600; // Convert seconds to hours
+          (rateStartSeconds - (basalRates[0]?.timeAsSeconds ?? 0)) / 3600; // Convert seconds to hours
         totalScheduledBasalInsulin += rate.value * duration;
       });
     }

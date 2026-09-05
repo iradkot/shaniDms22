@@ -143,8 +143,9 @@ function buildSegmentInsight(
       `Current: ${formatStats(segment.current)}`,
       `Previous: ${formatStats(segment.previous)}`,
     ],
-    settingsContextHe: settings?.he,
-    settingsContextEn: settings?.en,
+    ...(settings
+      ? {settingsContextHe: settings.he, settingsContextEn: settings.en}
+      : {}),
     confidence,
     segmentKey: segment.key,
   };

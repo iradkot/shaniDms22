@@ -1,3 +1,5 @@
+import groovy.json.JsonOutput
+
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
@@ -85,6 +87,28 @@ android {
     def releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: project.findProperty("RELEASE_KEY_ALIAS")
     def releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: project.findProperty("RELEASE_KEY_PASSWORD")
     def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+    def releaseSigningValues = [releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword]
+    def suppliedReleaseSigningValues = releaseSigningValues.count { it }
+    if (suppliedReleaseSigningValues > 0 && !hasReleaseSigning) {
+        throw new GradleException("Android release signing is only partially configured. Provide the keystore path, store password, alias, and key password together.")
+    }
+    def allowDebugReleaseSigning = ((System.getenv("ALLOW_DEBUG_RELEASE_SIGNING") ?: project.findProperty("ALLOW_DEBUG_RELEASE_SIGNING")) ?: "false").toBoolean()
+    def configuredVersionCode = ((System.getenv("ANDROID_VERSION_CODE") ?: project.findProperty("VERSION_CODE")) ?: "1").toString().trim()
+    def configuredVersionName = ((System.getenv("ANDROID_VERSION_NAME") ?: project.findProperty("VERSION_NAME")) ?: "1.0").toString().trim()
+    def configuredBackendBaseUrl = ((System.getenv("SHANI_BACKEND_BASE_URL") ?: project.findProperty("SHANI_BACKEND_BASE_URL")) ?: "").toString().trim()
+    def configuredFirestoreRulesSchemaVersion = ((System.getenv("FIRESTORE_RULES_SCHEMA_VERSION") ?: project.findProperty("FIRESTORE_RULES_SCHEMA_VERSION")) ?: "0").toString().trim()
+    if (!(configuredVersionCode ==~ /[1-9][0-9]*/)) {
+        throw new GradleException("Android VERSION_CODE must be a positive integer.")
+    }
+    if (configuredVersionName.isEmpty()) {
+        throw new GradleException("Android VERSION_NAME cannot be empty.")
+    }
+    if (!configuredBackendBaseUrl.isEmpty() && !configuredBackendBaseUrl.startsWith("https://")) {
+        throw new GradleException("SHANI_BACKEND_BASE_URL must use HTTPS.")
+    }
+    if (!(configuredFirestoreRulesSchemaVersion ==~ /[0-9]+/)) {
+        throw new GradleException("FIRESTORE_RULES_SCHEMA_VERSION must be a non-negative integer.")
+    }
 
     namespace "com.shanidms22"
     def targetAbi = project.findProperty("TARGET_ABI")?.toString()?.trim()
@@ -93,11 +117,13 @@ android {
         applicationId "com.shanidms22"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode configuredVersionCode.toInteger()
+        versionName configuredVersionName
 
         def e2eEnabled = (System.getenv("E2E") ?: "false").toBoolean()
         buildConfigField "boolean", "E2E", e2eEnabled ? "true" : "false"
+        buildConfigField "String", "SHANI_BACKEND_BASE_URL", JsonOutput.toJson(configuredBackendBaseUrl)
+        buildConfigField "int", "FIRESTORE_RULES_SCHEMA_VERSION", configuredFirestoreRulesSchemaVersion
     }
 
     splits {
@@ -134,9 +160,14 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
+            // Debug signing is explicit and preview-only. Production builds must
+            // provide all four release-signing values.
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            } else if (allowDebugReleaseSigning) {
+                logger.warn("Building a preview release with the Android debug certificate. Do not upload it to Play.")
+                signingConfig signingConfigs.debug
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
@@ -152,6 +183,8 @@ dependencies {
 
     // Background widget refresh
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    testImplementation("junit:junit:4.13.2")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

@@ -98,6 +98,7 @@ const MISSION_TITLES: Record<string, string> = {
   loopSettings: 'Loop Settings Advisor',
   userBehavior: 'User Behavior Tips',
   hypoDetective: 'Hypo Detective',
+  mealAnalysis: 'Meal Analysis',
 };
 
 export function getMissionTitle(mission: string | undefined): string {

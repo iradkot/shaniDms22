@@ -5,21 +5,9 @@ appId: com.shanidms22
 #
 # This uses the app's built-in Nightscout base URL + api-secret.
 
-- launchApp:
-    clearState: true
+- runFlow: subflows/enter-legacy.yaml
 
-# Deterministic E2E login.
-- extendedWaitUntil:
-    visible:
-      id: login.e2eButton
-    timeout: 15000
-    optional: true
-
-- tapOn:
-    id: login.e2eButton
-    optional: true
-
-# Wait for Home.
+# The compatibility bridge lands on Home.
 - extendedWaitUntil:
     visible:
       id: screen.home

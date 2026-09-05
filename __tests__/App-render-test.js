@@ -6,11 +6,14 @@
 import 'react-native';
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
+import messaging from '@react-native-firebase/messaging';
 
 // App logs quite a bit; silence it for this integration smoke test.
 const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+const consoleErrorSpy = jest
+  .spyOn(console, 'error')
+  .mockImplementation(() => {});
 
 jest.mock('app/components/ErrorBoundary', () => {
   const React = require('react');
@@ -25,17 +28,37 @@ jest.mock('app/containers/Login', () => 'Login');
 
 jest.mock('app/containers/initScreen', () => 'AppInitScreen');
 
-jest.mock('app/containers/MainTabsNavigator/MainTabsNavigator', () => 'MainTabsNavigator');
+jest.mock(
+  'app/containers/MainTabsNavigator/MainTabsNavigator',
+  () => 'MainTabsNavigator',
+);
 
-jest.mock('app/containers/FullScreen/FullScreenViewScreen', () => 'FullScreenViewScreen');
+jest.mock(
+  'app/containers/ProductExperienceScreen',
+  () => 'ProductExperienceScreen',
+);
 
-jest.mock('app/containers/forms/AddNotificationScreen/AddNotificationScreen', () => 'AddNotificationScreen');
+jest.mock(
+  'app/containers/FullScreen/FullScreenViewScreen',
+  () => 'FullScreenViewScreen',
+);
 
-jest.mock('app/containers/forms/EditNotificationScreen/EditNotificationScreen', () => 'EditNotificationScreen');
+jest.mock(
+  'app/containers/forms/AddNotificationScreen/AddNotificationScreen',
+  () => 'AddNotificationScreen',
+);
+
+jest.mock(
+  'app/containers/forms/EditNotificationScreen/EditNotificationScreen',
+  () => 'EditNotificationScreen',
+);
 
 jest.mock('app/containers/forms/Food/AddFoodItem', () => 'AddFoodItemScreen');
 
-jest.mock('app/containers/forms/Food/EditFoodItemScreen', () => 'EditFoodItemScreen');
+jest.mock(
+  'app/containers/forms/Food/EditFoodItemScreen',
+  () => 'EditFoodItemScreen',
+);
 
 jest.mock('app/containers/forms/Sport/AddSportItem', () => 'AddSportItem');
 
@@ -44,14 +67,16 @@ jest.mock('app/containers/forms/Sport/EditSportItem', () => 'EditSportItem');
 jest.mock('app/contexts/SportItemsContext', () => {
   const React = require('react');
   return {
-    SportItemsProvider: ({children}) => React.createElement(React.Fragment, null, children),
+    SportItemsProvider: ({children}) =>
+      React.createElement(React.Fragment, null, children),
   };
 });
 
 jest.mock('app/components/charts/CgmGraph/contextStores/TouchContext', () => {
   const React = require('react');
   return {
-    TouchProvider: ({children}) => React.createElement(React.Fragment, null, children),
+    TouchProvider: ({children}) =>
+      React.createElement(React.Fragment, null, children),
   };
 });
 
@@ -59,6 +84,31 @@ jest.mock('app/services/rebaseService', () => ({
   registerDeviceToken: jest.fn(),
   unregisterDeviceToken: jest.fn(),
   syncTokenIfNeeded: jest.fn(),
+}));
+
+jest.mock('app/hooks/useLatestNightscoutSnapshot', () => ({
+  useLatestNightscoutSnapshot: () => ({
+    snapshot: null,
+    isLoading: false,
+    error: null,
+    refresh: jest.fn(),
+  }),
+}));
+
+jest.mock('app/hooks/useHypoNowMvp', () => ({
+  useHypoNowMvp: jest.fn(),
+}));
+
+jest.mock('app/hooks/useDailyBriefNotifications', () => ({
+  useDailyBriefNotifications: jest.fn(),
+}));
+
+jest.mock('app/hooks/useAndroidGlucoseLiveSurface', () => ({
+  useAndroidGlucoseLiveSurface: jest.fn(),
+}));
+
+jest.mock('app/hooks/useGlucoseRuleNotifications', () => ({
+  useGlucoseRuleNotifications: jest.fn(),
 }));
 
 import App from '../src/App';
@@ -75,6 +125,47 @@ describe('App (integration)', () => {
     act(() => {
       tree = renderer.create(<App />);
     });
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('does not write a foreground notification payload to logs', async () => {
+    consoleLogSpy.mockClear();
+    let tree;
+    await act(async () => {
+      tree = renderer.create(<App />);
+    });
+
+    const onMessage = messaging().onMessage;
+    const foregroundHandler = onMessage.mock.calls.at(-1)?.[0];
+    expect(foregroundHandler).toEqual(expect.any(Function));
+
+    const privatePayload = {
+      messageId: 'private-message-id',
+      data: {
+        uid: 'private-firebase-uid',
+        token: 'private-fcm-token',
+      },
+      notification: {
+        title: 'private notification title',
+        body: 'private notification body',
+      },
+    };
+
+    await act(async () => {
+      await foregroundHandler(privatePayload);
+    });
+
+    const output = consoleLogSpy.mock.calls
+      .map(call => JSON.stringify(call))
+      .join('\n');
+    expect(output).not.toContain(privatePayload.messageId);
+    expect(output).not.toContain(privatePayload.data.uid);
+    expect(output).not.toContain(privatePayload.data.token);
+    expect(output).not.toContain(privatePayload.notification.title);
+    expect(output).not.toContain(privatePayload.notification.body);
+
     act(() => {
       tree.unmount();
     });

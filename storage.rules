@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedInAs(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function safeId(value) {
+      return value.matches('^[A-Za-z0-9_-]{1,128}$');
+    }
+
+    function safeMealImageName(value) {
+      return value.matches('^image_[0-9a-f]{32}[.](jpg|png|webp|heic|heif)$');
+    }
+
+    function validMealImageCreate(uid, workspaceId, mealId, fileName) {
+      return request.resource != null
+        && safeId(workspaceId)
+        && safeId(mealId)
+        && safeMealImageName(fileName)
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('^image/(jpeg|png|webp|heic|heif)$')
+        && request.resource.metadata.schemaVersion == '1'
+        && request.resource.metadata.ownerProductUserId == uid
+        && request.resource.metadata.workspaceId == workspaceId
+        && request.resource.metadata.mealId == mealId
+        && request.resource.metadata.objectName == fileName;
+    }
+
+    match /users/{uid}/workspaces/{workspaceId}/mealImages/{mealId}/{fileName} {
+      allow read: if signedInAs(uid);
+      allow create: if signedInAs(uid)
+        && resource == null
+        && validMealImageCreate(uid, workspaceId, mealId, fileName);
+      // Immutable objects make upload retries idempotent and prevent overwrite races.
+      allow update: if false;
+      allow delete: if signedInAs(uid);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

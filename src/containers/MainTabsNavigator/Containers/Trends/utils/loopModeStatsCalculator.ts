@@ -248,6 +248,10 @@ export function computeLoopModeStats({
 
       const bucketMinutes = Math.max(0, (bucketEnd - bucketCursor) / 60000);
       const bucket = hourlyModeBuckets[hour];
+      if (!bucket) {
+        bucketCursor = bucketEnd;
+        continue;
+      }
       bucket.totalMinutes += bucketMinutes;
       if (mode === 'open') {
         bucket.openMinutes += bucketMinutes;
@@ -330,6 +334,9 @@ export function computeLoopModeStats({
 
   for (let i = 0; i < sortedEvents.length; i += 1) {
     const event = sortedEvents[i];
+    if (!event) {
+      continue;
+    }
     if (event.timestamp >= endMs) {
       break;
     }

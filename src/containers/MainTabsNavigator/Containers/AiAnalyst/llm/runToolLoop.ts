@@ -18,6 +18,15 @@ import {TOOL_TIMEOUT_MS, LLM_TIMEOUT_MS, TOOL_LIMIT_MESSAGE} from './constants';
 import {tryParseToolEnvelope} from './parseToolEnvelope';
 import {withTimeout} from './withTimeout';
 import {maybeRewriteLoopSettingsResponse, maybeReflectAsEndoExpert} from './guardrails';
+import {
+  buildLoopSettingsEvidenceRequest,
+  canMeetLoopSettingsEvidenceMinimum,
+  createLoopSettingsEvidenceState,
+  hasMinimumLoopSettingsEvidence,
+  isLoopSettingsReadOnlyTool,
+  LOOP_SETTINGS_EVIDENCE_SAFETY_RESPONSE,
+  recordLoopSettingsEvidence,
+} from './guardrails/loopSettingsEvidenceGate';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -33,6 +42,7 @@ import {maybeRewriteLoopSettingsResponse, maybeReflectAsEndoExpert} from './guar
  */
 export async function runLlmToolLoop(params: ToolLoopParams): Promise<ToolLoopResult> {
   const {
+    workspaceScope,
     provider,
     model,
     systemPrompt,
@@ -53,9 +63,14 @@ export async function runLlmToolLoop(params: ToolLoopParams): Promise<ToolLoopRe
   let structuredQuestion: ToolLoopResult['structuredQuestion'];
   let didRetryAfterIncomplete = false;
   let effectiveMaxOutputTokens = maxOutputTokens;
+  let loopSettingsEvidence = createLoopSettingsEvidenceState();
+  let prematureFinalAttempts = 0;
 
   // ── Main loop: send → parse → maybe execute tool → repeat ────────────
   while (finalText == null) {
+    if (callbacks.isCancelled() || abortSignal?.aborted) {
+      return {finalText: '', llmMessages: workingMessages};
+    }
     let raw: string;
     try {
       raw = await sendLlmRequest(
@@ -111,9 +126,28 @@ export async function runLlmToolLoop(params: ToolLoopParams): Promise<ToolLoopRe
       toolCalls += 1;
       console.log(`[AiAnalyst] Tool call #${toolCalls}: ${envelope.name}`, envelope.args);
 
-      const toolResult = await executeToolCall(
-        envelope.name, envelope.args, callbacks, allowedTools,
-      );
+      const toolResult =
+        isLoopSettingsMode && !isLoopSettingsReadOnlyTool(envelope.name)
+          ? {
+              ok: false as const,
+              error:
+                'Denied: Loop Settings Advisor may use read-only analysis tools only.',
+            }
+          : await executeToolCall(
+              workspaceScope,
+              envelope.name,
+              envelope.args,
+              callbacks,
+              allowedTools,
+            );
+
+      if (isLoopSettingsMode) {
+        loopSettingsEvidence = recordLoopSettingsEvidence(
+          loopSettingsEvidence,
+          envelope.name,
+          toolResult,
+        );
+      }
 
       if (callbacks.isCancelled()) {
         return {finalText: '', llmMessages: workingMessages};
@@ -138,10 +172,49 @@ export async function runLlmToolLoop(params: ToolLoopParams): Promise<ToolLoopRe
       break;
     }
 
+    // A Loop Settings recommendation is never returned before the engine has
+    // gathered enough successful evidence. The instruction is enforced here,
+    // independently of the system prompt.
+    if (
+      isLoopSettingsMode &&
+      envelope?.type !== 'tool_call' &&
+      !hasMinimumLoopSettingsEvidence(loopSettingsEvidence)
+    ) {
+      const remainingToolCalls = Math.max(0, maxToolCalls - toolCalls);
+      if (
+        prematureFinalAttempts >= 2 ||
+        !canMeetLoopSettingsEvidenceMinimum(
+          loopSettingsEvidence,
+          remainingToolCalls,
+        )
+      ) {
+        finalText = LOOP_SETTINGS_EVIDENCE_SAFETY_RESPONSE;
+        workingMessages = [
+          ...workingMessages,
+          {role: 'assistant', content: finalText},
+        ];
+        break;
+      }
+      prematureFinalAttempts += 1;
+      workingMessages = [
+        ...workingMessages,
+        {role: 'assistant', content: raw},
+        {
+          role: 'user',
+          content: buildLoopSettingsEvidenceRequest(loopSettingsEvidence),
+        },
+      ];
+      continue;
+    }
+
     // -- Tool call but budget exhausted --
     if (envelope?.type === 'tool_call') {
       console.warn(`[AiAnalyst] Tool call limit reached (${maxToolCalls})`);
-      finalText = TOOL_LIMIT_MESSAGE;
+      finalText =
+        isLoopSettingsMode &&
+        !hasMinimumLoopSettingsEvidence(loopSettingsEvidence)
+          ? LOOP_SETTINGS_EVIDENCE_SAFETY_RESPONSE
+          : TOOL_LIMIT_MESSAGE;
     } else {
       finalText = envelope?.type === 'final' ? envelope.content : raw;
     }
@@ -178,7 +251,7 @@ export async function runLlmToolLoop(params: ToolLoopParams): Promise<ToolLoopRe
     ];
   }
 
-  return {finalText: finalText.trim(), llmMessages: workingMessages, structuredQuestion};
+  return {finalText: finalText.trim(), llmMessages: workingMessages, ...(structuredQuestion !== undefined ? {structuredQuestion} : {})};
 }
 
 // ---------------------------------------------------------------------------
@@ -199,9 +272,9 @@ async function sendLlmRequest(
     provider.sendChat({
       model,
       messages: [{role: 'system', content: systemPrompt}, ...messages],
-      temperature,
+      ...(temperature !== undefined ? {temperature} : {}),
       maxOutputTokens,
-      abortSignal,
+      ...(abortSignal !== undefined ? {abortSignal} : {}),
     }),
     LLM_TIMEOUT_MS,
     'LLM response',
@@ -212,6 +285,7 @@ async function sendLlmRequest(
 
 /** Execute a local tool call with a timeout and fire callbacks. */
 async function executeToolCall(
+  workspaceScope: ToolLoopParams['workspaceScope'],
   toolName: AiAnalystToolName,
   toolArgs: any,
   callbacks: ToolLoopParams['callbacks'],
@@ -219,7 +293,7 @@ async function executeToolCall(
 ): Promise<any> {
   const normalizedToolName = normalizeAllowedToolName(toolName);
   if (
-    allowedTools?.length &&
+    allowedTools !== undefined &&
     !allowedTools.includes(toolName) &&
     !allowedTools.includes(normalizedToolName)
   ) {
@@ -229,7 +303,7 @@ async function executeToolCall(
   callbacks.onToolStart?.(toolName);
 
   const result = await withTimeout(
-    runAiAnalystTool(toolName, toolArgs),
+    runAiAnalystTool(workspaceScope, toolName, toolArgs),
     TOOL_TIMEOUT_MS,
     `Tool ${toolName}`,
   );

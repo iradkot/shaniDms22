@@ -21,7 +21,8 @@
     "target": "esnext",
     /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
     "lib": [
-      "es2017",
+      "es2021",
+      "es2021.intl",
       "dom"
     ],
     /* Specify a set of bundled library declaration files that describe the target runtime environment. */

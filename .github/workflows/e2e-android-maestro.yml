@@ -7,6 +7,9 @@ on:
 jobs:
   maestro-android:
     runs-on: ubuntu-latest
+    env:
+      SHANI_BACKEND_BASE_URL: ${{ vars.SHANI_BACKEND_BASE_URL }}
+      FIRESTORE_RULES_SCHEMA_VERSION: ${{ vars.FIRESTORE_RULES_SCHEMA_VERSION }}
 
     steps:
       - name: Checkout
@@ -27,14 +30,14 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
           cache: yarn
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -48,6 +51,15 @@ jobs:
       - name: Install JS dependencies
         run: yarn install --immutable
 
+      - name: Install backend dependencies
+        run: npm ci --prefix functions
+
+      - name: Verify app, web, backend, rules, and credential policy
+        run: yarn verify:all
+
+      - name: Verify E2E entry and flow contracts
+        run: yarn jest __tests__/e2e --runInBand
+
       - name: Install Maestro
         shell: bash
         run: |
@@ -58,14 +70,16 @@ jobs:
       - name: Build E2E release APK
         working-directory: android
         env:
-          E2E: "true"
+          E2E: 'true'
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: x86_64
+          ORG_GRADLE_PROJECT_TARGET_ABI: x86_64
         shell: bash
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew --no-daemon --stacktrace :app:assembleRelease
+          ./gradlew --no-daemon --stacktrace -PALLOW_DEBUG_RELEASE_SIGNING=true :app:assembleRelease
 
-      - name: Run Maestro smoke (emulator)
+      - name: Run Product smoke and preserved legacy regressions (emulator)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -75,7 +89,11 @@ jobs:
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -accel off -gpu swiftshader_indirect -partition-size 2048
           script: |
             set -euo pipefail
-            APK_PATH=$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)
+            APK_PATH="android/app/build/outputs/apk/release/app-x86_64-release.apk"
+            test -f "${APK_PATH}"
             echo "Using APK: ${APK_PATH}"
             adb install -r "${APK_PATH}"
-            maestro test e2e/maestro
+            # Release gate: prove the rebuilt ProductExperience/Hub path first.
+            maestro test e2e/maestro/product-hub-smoke.yaml
+            # Keep every detailed legacy regression while Product modules migrate.
+            maestro test e2e/maestro --exclude-tags=product

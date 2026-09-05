@@ -23,8 +23,10 @@ import ADIcon from 'react-native-vector-icons/AntDesign';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import {AI_MEMORY_SCREEN, NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {validateOpenAiApiKey} from 'app/services/llm/providers/openaiProvider';
+import {isServerVaultCredentialMarker} from 'app/services/llm/shaniLlmProxy';
 import {sendDailyBriefNow} from 'app/services/proactiveCare/dailyBrief';
 import {clearAllMemory, getMemoryStats} from 'app/services/aiMemory/aiMemoryStore';
+import {useActiveAiWorkspaceScope} from 'app/services/aiMemory/useActiveAiWorkspaceScope';
 import {NightscoutSection} from './sections/NightscoutSection';
 import {
   getIconContainerStyle,
@@ -51,6 +53,12 @@ const Settings: React.FC = () => {
   const {settings: proactiveSettings, setSetting: setProactiveSetting} = useProactiveCareSettings();
   const {language, setLanguage} = useAppLanguage();
   const {themeId, setThemeId} = useThemeSettings();
+  const aiWorkspaceScope = useActiveAiWorkspaceScope();
+  const aiWorkspaceIdentity = aiWorkspaceScope
+    ? `${aiWorkspaceScope.productUserId}\n${aiWorkspaceScope.workspaceId}`
+    : null;
+  const currentAiWorkspaceIdentityRef = React.useRef(aiWorkspaceIdentity);
+  currentAiWorkspaceIdentityRef.current = aiWorkspaceIdentity;
 
   const [showDisplayedTabs, setShowDisplayedTabs] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
@@ -133,7 +141,11 @@ const Settings: React.FC = () => {
   useEffect(() => {
     if (!aiLoaded) return;
 
-    setAiApiKeyText(aiSettings.apiKey || '');
+    setAiApiKeyText(
+      isServerVaultCredentialMarker(aiSettings.apiKey)
+        ? ''
+        : aiSettings.apiKey || '',
+    );
 
     const storedModel = (aiSettings.openAiModel || '').trim();
     const presetIds = new Set(openAiModelOptions.map(o => o.id));
@@ -157,12 +169,12 @@ const Settings: React.FC = () => {
   useEffect(() => {
     refreshMemoryStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [aiWorkspaceScope]);
 
   useEffect(() => {
     if (showAi) refreshMemoryStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAi]);
+  }, [aiWorkspaceScope, showAi]);
 
   useEffect(() => {
     let isMounted = true;
@@ -460,7 +472,14 @@ const Settings: React.FC = () => {
   const triggerDailyBriefNow = async () => {
     try {
       setDailyBriefStatus(tr(language, 'settings.sendingBrief'));
-      await sendDailyBriefNow(glucoseSettings, aiSettings);
+      if (!aiWorkspaceScope) {
+        throw new Error('Workspace is unavailable.');
+      }
+      await sendDailyBriefNow(
+        aiWorkspaceScope.workspaceId,
+        glucoseSettings,
+        aiSettings,
+      );
       setDailyBriefStatus(tr(language, 'settings.briefSent'));
     } catch (e) {
       setDailyBriefStatus(tr(language, 'settings.briefSendFailed'));
@@ -468,34 +487,61 @@ const Settings: React.FC = () => {
   };
 
   const refreshMemoryStats = async () => {
+    if (!aiWorkspaceScope) {
+      setMemoryStats(null);
+      return;
+    }
+    const requestedWorkspaceIdentity = aiWorkspaceIdentity;
     try {
       setMemoryBusy(true);
-      const stats = await getMemoryStats();
-      setMemoryStats(stats as any);
+      const stats = await getMemoryStats(aiWorkspaceScope);
+      if (currentAiWorkspaceIdentityRef.current === requestedWorkspaceIdentity) {
+        setMemoryStats(stats as any);
+      }
     } finally {
-      setMemoryBusy(false);
+      if (currentAiWorkspaceIdentityRef.current === requestedWorkspaceIdentity) {
+        setMemoryBusy(false);
+      }
     }
   };
 
   const clearMemoryNow = async () => {
+    if (!aiWorkspaceScope) return;
+    const requestedWorkspaceIdentity = aiWorkspaceIdentity;
     try {
       setMemoryBusy(true);
-      await clearAllMemory();
-      setMemoryStats({total: 0, byType: {profile: 0, episode: 0, chat_summary: 0}, latestUpdatedAt: null});
+      await clearAllMemory(aiWorkspaceScope);
+      if (currentAiWorkspaceIdentityRef.current === requestedWorkspaceIdentity) {
+        setMemoryStats({total: 0, byType: {profile: 0, episode: 0, chat_summary: 0}, latestUpdatedAt: null});
+      }
     } finally {
-      setMemoryBusy(false);
+      if (currentAiWorkspaceIdentityRef.current === requestedWorkspaceIdentity) {
+        setMemoryBusy(false);
+      }
     }
   };
 
-  const persistAiSettings = () => {
+  const persistAiSettings = async (): Promise<boolean> => {
     const trimmedKey = (aiApiKeyText ?? '').trim();
     const selectedModel =
       aiModelPreset === 'custom' ? (aiModelText ?? '').trim() : (aiModelPreset ?? '').trim();
 
-    setAiSetting('provider', 'openai');
-    setAiSetting('apiKey', trimmedKey);
-    if (selectedModel) {
-      setAiSetting('openAiModel', selectedModel);
+    try {
+      await setAiSetting('provider', 'openai');
+      if (trimmedKey || !isServerVaultCredentialMarker(aiSettings.apiKey)) {
+        await setAiSetting('apiKey', trimmedKey);
+      }
+      if (selectedModel) {
+        await setAiSetting('openAiModel', selectedModel);
+      }
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : tr(language, 'settings.keyCouldNotVerify');
+      setAiKeyStatus({state: 'error', message});
+      return false;
     }
   };
 
@@ -510,8 +556,9 @@ const Settings: React.FC = () => {
     const result = await validateOpenAiApiKey(trimmedKey);
 
     if (result.ok) {
-      persistAiSettings();
-      setAiKeyStatus({state: 'valid', message: tr(language, 'settings.keyValidSaved')});
+      if (await persistAiSettings()) {
+        setAiKeyStatus({state: 'valid', message: tr(language, 'settings.keyValidSaved')});
+      }
       return;
     }
 
@@ -521,11 +568,12 @@ const Settings: React.FC = () => {
     }
 
     if (result.reason === 'rate_limited') {
-      persistAiSettings();
-      setAiKeyStatus({
-        state: 'valid',
-        message: tr(language, 'settings.keyRateLimited'),
-      });
+      if (await persistAiSettings()) {
+        setAiKeyStatus({
+          state: 'valid',
+          message: tr(language, 'settings.keyRateLimited'),
+        });
+      }
       return;
     }
 

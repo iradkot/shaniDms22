@@ -12,13 +12,19 @@ import FullScreenViewScreen, {
   updateStackedRangeSelectionForThumb,
 } from '../src/containers/FullScreen/FullScreenViewScreen';
 import StackedHomeCharts from '../src/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
+import MiniChartLane from '../src/components/charts/MiniChartLane';
 import {theme} from '../src/style/theme';
+
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({width: 360, height: 720, scale: 1, fontScale: 1})),
+}));
 
 describe('FullScreenViewScreen stackedCharts mode', () => {
   beforeEach(() => {
     jest.useFakeTimers();
 
-    jest.spyOn(RN, 'useWindowDimensions').mockReturnValue({
+    jest.mocked(RN.useWindowDimensions).mockReturnValue({
       width: 360,
       height: 720,
       scale: 1,
@@ -198,13 +204,94 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
 
     const stackedAfter = tree!.root.findByType(StackedHomeCharts);
     expect(stackedAfter.props.miniChartHeight).not.toBe(beforeMini);
-    expect(
-      stackedAfter.props.cgmHeight + stackedAfter.props.miniChartHeight * 2.5,
-    ).toBeLessThanOrEqual(520);
+    expect(stackedAfter.props.cgmHeight).toBeGreaterThanOrEqual(220);
+    expect(stackedAfter.props.miniChartHeight).toBeGreaterThanOrEqual(110);
+    const chartScroll = tree!.root
+      .findAllByType(RN.ScrollView)
+      .find(node => node.props.testID === 'fullscreen.stackedChartScroll');
+    expect(chartScroll!.props.scrollEnabled).toBe(true);
 
     await act(async () => {
       tree!.unmount();
     });
+  });
+
+  it('keeps every insulin lane and range control reachable in a short landscape viewport', async () => {
+    jest
+      .mocked(RN.useWindowDimensions)
+      .mockReturnValue({width: 640, height: 320, scale: 1, fontScale: 1});
+    const now = Date.UTC(2026, 0, 7, 12);
+    const bgSamples = [now - 300_000, now].map(date => ({
+      date,
+      dateString: new Date(date).toISOString(),
+      sgv: 110,
+      iob: 1,
+      cob: 10,
+      trend: 0,
+      direction: 'Flat',
+      device: 'fixture',
+      type: 'sgv',
+    }));
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(
+        <ThemeProvider theme={theme}>
+          <FullScreenViewScreen
+            navigation={{canGoBack: () => true, goBack: jest.fn()}}
+            route={{
+              params: {
+                mode: 'stackedCharts',
+                bgSamples,
+                foodItems: [],
+                basalProfileData: [{time: '00:00', value: 1}],
+                insulinData: [
+                  {
+                    type: 'bolus',
+                    amount: 2,
+                    timestamp: new Date(now).toISOString(),
+                  },
+                ],
+              },
+            }}
+          />
+        </ThemeProvider>,
+      );
+    });
+    const scrolls = tree!.root.findAllByType(RN.ScrollView);
+    const chartScroll = scrolls.find(
+      node => node.props.testID === 'fullscreen.stackedChartScroll',
+    )!;
+    const railScroll = scrolls.find(
+      node => node.props.testID === 'fullscreen.stackedRailScroll',
+    )!;
+    expect(chartScroll.props.scrollEnabled).toBe(true);
+    expect(chartScroll.props.removeClippedSubviews).toBe(false);
+    expect(railScroll.props.scrollEnabled).toBe(true);
+    const lanes = chartScroll.findAllByType(MiniChartLane);
+    expect(lanes).toHaveLength(4);
+    const laneHeight = lanes.reduce(
+      (total, lane) =>
+        total +
+        RN.StyleSheet.flatten(lane.findAllByType(RN.View)[0]!.props.style)
+          .height,
+      0,
+    );
+    const charts = chartScroll.findByType(StackedHomeCharts);
+    expect(laneHeight + charts.props.cgmHeight).toBeGreaterThan(320);
+    expect(charts.props.cgmHeight).toBeGreaterThanOrEqual(150);
+    expect(charts.props.miniChartHeight).toBeGreaterThanOrEqual(110);
+    expect(
+      railScroll.findAllByProps({testID: 'fullscreen.stackedChartScroll'}),
+    ).toHaveLength(0);
+    expect(
+      railScroll.findAllByProps({testID: 'fullscreen.stackedRangeStartSlider'})
+        .length,
+    ).toBeGreaterThan(0);
+    expect(
+      railScroll.findAllByProps({testID: 'fullscreen.stackedRangeEndSlider'})
+        .length,
+    ).toBeGreaterThan(0);
+    act(() => tree!.unmount());
   });
 
   it('reserves a tooltip rail for stacked charts in landscape only', () => {
@@ -268,12 +355,8 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
       rangeSelection: {start: 2 / 14, end: 8 / 14},
     });
 
-    expect(selectedMiddle?.[0].getTime()).toBe(
-      startMs + 2 * 60 * 60 * 1000,
-    );
-    expect(selectedMiddle?.[1].getTime()).toBe(
-      startMs + 8 * 60 * 60 * 1000,
-    );
+    expect(selectedMiddle?.[0].getTime()).toBe(startMs + 2 * 60 * 60 * 1000);
+    expect(selectedMiddle?.[1].getTime()).toBe(startMs + 8 * 60 * 60 * 1000);
 
     const full = getStackedDisplayDomain({
       baseDomain: [new Date(startMs), new Date(endMs)],
@@ -290,9 +373,7 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
       rangeSelection: {start: 0.9, end: 0.1},
     });
 
-    expect(clamped?.[1].getTime()).toBeGreaterThan(
-      clamped?.[0].getTime() ?? 0,
-    );
+    expect(clamped?.[1].getTime()).toBeGreaterThan(clamped?.[0].getTime() ?? 0);
   });
 
   it('normalizes stacked range selections with the same minimum as the display domain', () => {

@@ -15,13 +15,24 @@ import {
   extractLoad,
   getDeviceStatusTimestampMs,
 } from 'app/utils/mergeDeviceStatusIntoBgSamples.utils';
+import {
+  assertActiveNightscoutCacheScope,
+  nightscoutCacheKey,
+  type NightscoutCacheScope,
+} from 'app/services/nightscoutCacheScope';
 
-const ORACLE_CACHE_ENTRIES_KEY = 'oracle.entries.v2';
-const ORACLE_CACHE_TREATMENTS_KEY = 'oracle.treatments.v1';
-const ORACLE_CACHE_DEVICE_STATUS_KEY = 'oracle.deviceStatus.v1';
-const ORACLE_CACHE_META_KEY = 'oracle.meta.v2';
+const ORACLE_CACHE_ENTRIES_RESOURCE = 'oracle.entries.v2';
+const ORACLE_CACHE_TREATMENTS_RESOURCE = 'oracle.treatments.v1';
+const ORACLE_CACHE_DEVICE_STATUS_RESOURCE = 'oracle.deviceStatus.v1';
+const ORACLE_CACHE_META_RESOURCE = 'oracle.meta.v2';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const assertActiveScope = (expected: NightscoutCacheScope): void =>
+  assertActiveNightscoutCacheScope(
+    expected,
+    'Nightscout Source changed during cache sync',
+  );
 
 export type OracleCacheSyncProgress = {
   stage: 'bg' | 'treatments' | 'deviceStatus' | 'saving';
@@ -94,18 +105,26 @@ function clampNonNegativeNumber(value: unknown): number | undefined {
   return Math.max(0, value);
 }
 
-export async function loadOracleCache(): Promise<{
+const oracleCacheKeys = (scope: NightscoutCacheScope) => ({
+  entries: nightscoutCacheKey(scope, ORACLE_CACHE_ENTRIES_RESOURCE),
+  treatments: nightscoutCacheKey(scope, ORACLE_CACHE_TREATMENTS_RESOURCE),
+  deviceStatus: nightscoutCacheKey(scope, ORACLE_CACHE_DEVICE_STATUS_RESOURCE),
+  meta: nightscoutCacheKey(scope, ORACLE_CACHE_META_RESOURCE),
+});
+
+export async function loadOracleCache(scope: NightscoutCacheScope): Promise<{
   entries: OracleCachedBgEntry[];
   treatments: OracleCachedTreatment[];
   deviceStatus: OracleCachedDeviceStatus[];
   meta: OracleCacheMeta | null;
 }> {
   try {
+    const keys = oracleCacheKeys(scope);
     const [rawEntries, rawTreatments, rawDeviceStatus, rawMeta] = await Promise.all([
-      AsyncStorage.getItem(ORACLE_CACHE_ENTRIES_KEY),
-      AsyncStorage.getItem(ORACLE_CACHE_TREATMENTS_KEY),
-      AsyncStorage.getItem(ORACLE_CACHE_DEVICE_STATUS_KEY),
-      AsyncStorage.getItem(ORACLE_CACHE_META_KEY),
+      AsyncStorage.getItem(keys.entries),
+      AsyncStorage.getItem(keys.treatments),
+      AsyncStorage.getItem(keys.deviceStatus),
+      AsyncStorage.getItem(keys.meta),
     ]);
 
     const entries = rawEntries ? (JSON.parse(rawEntries) as OracleCachedBgEntry[]) : [];
@@ -130,21 +149,23 @@ export async function loadOracleCache(): Promise<{
 }
 
 async function saveOracleCache(params: {
+  scope: NightscoutCacheScope;
   entries: OracleCachedBgEntry[];
   treatments: OracleCachedTreatment[];
   deviceStatus: OracleCachedDeviceStatus[];
   meta: OracleCacheMeta;
 }): Promise<void> {
-  const {entries, treatments, deviceStatus, meta} = params;
+  const {scope, entries, treatments, deviceStatus, meta} = params;
   try {
+    const keys = oracleCacheKeys(scope);
     await Promise.all([
-      AsyncStorage.setItem(ORACLE_CACHE_ENTRIES_KEY, JSON.stringify(entries)),
-      AsyncStorage.setItem(ORACLE_CACHE_TREATMENTS_KEY, JSON.stringify(treatments)),
+      AsyncStorage.setItem(keys.entries, JSON.stringify(entries)),
+      AsyncStorage.setItem(keys.treatments, JSON.stringify(treatments)),
       AsyncStorage.setItem(
-        ORACLE_CACHE_DEVICE_STATUS_KEY,
+        keys.deviceStatus,
         JSON.stringify(deviceStatus),
       ),
-      AsyncStorage.setItem(ORACLE_CACHE_META_KEY, JSON.stringify(meta)),
+      AsyncStorage.setItem(keys.meta, JSON.stringify(meta)),
     ]);
   } catch (e) {
     console.warn('saveOracleCache: Failed writing cache', e);
@@ -152,6 +173,7 @@ async function saveOracleCache(params: {
 }
 
 export async function syncOracleCache(params: {
+  scope: NightscoutCacheScope;
   nowMs?: number;
   days?: number;
   /** Chunk size (days) for network fetches; smaller = more progress updates. */
@@ -159,13 +181,15 @@ export async function syncOracleCache(params: {
   onProgress?: (p: OracleCacheSyncProgress) => void;
   /** Return true to cancel this sync. */
   shouldAbort?: () => boolean;
-} = {}): Promise<{
+}): Promise<{
   entries: OracleCachedBgEntry[];
   treatments: OracleCachedTreatment[];
   deviceStatus: OracleCachedDeviceStatus[];
   meta: OracleCacheMeta;
   didFullSync: boolean;
 }> {
+  const {scope} = params;
+  assertActiveScope(scope);
   const nowMs = clampFiniteNumber(params.nowMs) ?? Date.now();
   const days = clampFiniteNumber(params.days) ?? 90;
   const chunkDays = clampFiniteNumber(params.chunkDays) ?? 14;
@@ -177,7 +201,7 @@ export async function syncOracleCache(params: {
     treatments: cachedTreatments,
     deviceStatus: cachedDeviceStatus,
     meta: cachedMeta,
-  } = await loadOracleCache();
+  } = await loadOracleCache(scope);
 
   const lastSyncedMs = cachedMeta?.lastSyncedMs;
   const hasUsableCache =
@@ -250,6 +274,7 @@ export async function syncOracleCache(params: {
       // For 90 days we expect ~26k points; keep some slack.
       count: 100000,
     });
+    assertActiveScope(scope);
     fetchedSlimAll.push(
       ...fetched
         .filter(e => typeof e?.date === 'number' && typeof e?.sgv === 'number')
@@ -260,6 +285,7 @@ export async function syncOracleCache(params: {
     if (params.shouldAbort?.()) throw new Error('Oracle cache sync aborted');
     report('treatments', chunkIndex, rangeStartMs, rangeEndMs);
     const fetchedTreatments = await fetchTreatmentsForDateRangeUncached(fetchStart, fetchEnd);
+    assertActiveScope(scope);
     const fetchedTreatmentsSlim: OracleCachedTreatment[] = fetchedTreatments
       .map(t => {
         const ts = parseTreatmentTsMs(t);
@@ -268,7 +294,12 @@ export async function syncOracleCache(params: {
           clampNonNegativeNumber(t?.insulin) ?? clampNonNegativeNumber(t?.amount);
         const carbs = clampNonNegativeNumber(t?.carbs);
         const eventType = typeof t?.eventType === 'string' ? t.eventType : undefined;
-        return {ts, insulin, carbs, eventType} satisfies OracleCachedTreatment;
+        return {
+          ts,
+          ...(insulin != null ? {insulin} : {}),
+          ...(carbs != null ? {carbs} : {}),
+          ...(eventType !== undefined ? {eventType} : {}),
+        } satisfies OracleCachedTreatment;
       })
       .filter(Boolean) as OracleCachedTreatment[];
     fetchedTreatmentsSlimAll.push(...fetchedTreatmentsSlim);
@@ -277,6 +308,7 @@ export async function syncOracleCache(params: {
     if (params.shouldAbort?.()) throw new Error('Oracle cache sync aborted');
     report('deviceStatus', chunkIndex, rangeStartMs, rangeEndMs);
     const fetchedDeviceStatus = await fetchDeviceStatusForDateRangeUncached(fetchStart, fetchEnd);
+    assertActiveScope(scope);
     const fetchedDeviceStatusSlim: OracleCachedDeviceStatus[] = fetchedDeviceStatus
       .map(s => {
         const ts = getDeviceStatusTimestampMs(s);
@@ -292,10 +324,10 @@ export async function syncOracleCache(params: {
         }
         return {
           ts,
-          iob: load.iob,
-          iobBolus: load.iobBolus,
-          iobBasal: load.iobBasal,
-          cob: load.cob,
+          ...(load.iob != null ? {iob: load.iob} : {}),
+          ...(load.iobBolus != null ? {iobBolus: load.iobBolus} : {}),
+          ...(load.iobBasal != null ? {iobBasal: load.iobBasal} : {}),
+          ...(load.cob != null ? {cob: load.cob} : {}),
         } satisfies OracleCachedDeviceStatus;
       })
       .filter(Boolean) as OracleCachedDeviceStatus[];
@@ -325,7 +357,9 @@ export async function syncOracleCache(params: {
   report('saving', chunkCount - 1, fetchStartMs, fetchEndMs);
   workDone += 1;
 
+  assertActiveScope(scope);
   await saveOracleCache({
+    scope,
     entries: mergedAll,
     treatments: mergedTreatments,
     deviceStatus: mergedDeviceStatus,

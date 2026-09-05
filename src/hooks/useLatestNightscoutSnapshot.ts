@@ -1,15 +1,31 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 
 import {
   fetchLatestBgEntry,
   fetchLatestDeviceStatusEntry,
 } from 'app/api/apiRequests';
+import {
+  getNightscoutBaseUrl,
+  subscribeNightscoutConfiguration,
+} from 'app/api/shaniNightscoutInstances';
 import {BgSample} from 'app/types/day_bgs.types';
 import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
 import {
   extractLoad,
   getDeviceStatusTimestampMs,
 } from 'app/utils/mergeDeviceStatusIntoBgSamples.utils';
+import {
+  assertActiveNightscoutCacheScope,
+  createNightscoutCacheScope,
+} from 'app/services/nightscoutCacheScope';
 
 const POLL_INTERVAL_MS = 60 * 1000;
 const EMPTY_STATE_RETRY_MS = 15 * 1000;
@@ -68,7 +84,9 @@ function extractPredictionPoints(params: {
   const values = Array.isArray(predicted?.values) ? predicted?.values : undefined;
   if (!values?.length) return [];
 
-  const tsRaw = Array.isArray(predicted?.timestamps) ? predicted.timestamps : undefined;
+  const tsRaw = Array.isArray(predicted?.timestamps)
+    ? predicted?.timestamps
+    : undefined;
   const deviceTs = deviceStatus ? getDeviceStatusTimestampMs(deviceStatus) : undefined;
   const baseTs = deviceTs ?? nowMs;
 
@@ -109,25 +127,70 @@ export function useLatestNightscoutSnapshot(params: {
   refresh: () => Promise<void>;
 } {
   const {pollingEnabled} = params;
+  const configuredBaseUrl = useSyncExternalStore(
+    subscribeNightscoutConfiguration,
+    getNightscoutBaseUrl,
+    getNightscoutBaseUrl,
+  );
+  const cacheScope = useMemo(
+    () => createNightscoutCacheScope(configuredBaseUrl),
+    [configuredBaseUrl],
+  );
+  const sourceIdentity = cacheScope?.sourceIdentity ?? null;
 
   const [snapshot, setSnapshot] = useState<LatestNightscoutSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
-  const inFlightRef = useRef(false);
+  const generationRef = useRef(0);
+  const requestIdRef = useRef(0);
+  const inFlightRef = useRef<{
+    sourceIdentity: string;
+    requestId: number;
+  } | null>(null);
+
+  // Reset before paint so a newly selected Workspace can never render the
+  // previous Data Subject's snapshot while its own request is starting.
+  useLayoutEffect(() => {
+    generationRef.current += 1;
+    inFlightRef.current = null;
+    setSnapshot(null);
+    setIsLoading(false);
+    setError(null);
+  }, [sourceIdentity]);
 
   const refresh = useCallback(async () => {
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
+    if (!cacheScope) return;
+    if (inFlightRef.current?.sourceIdentity === cacheScope.sourceIdentity) {
+      return;
+    }
+
+    const generation = generationRef.current;
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    const request = {
+      sourceIdentity: cacheScope.sourceIdentity,
+      requestId,
+    };
+    inFlightRef.current = request;
+
+    const isCurrentRequest = () =>
+      generationRef.current === generation &&
+      inFlightRef.current?.sourceIdentity === request.sourceIdentity &&
+      inFlightRef.current?.requestId === request.requestId;
 
     setIsLoading(true);
     setError(null);
 
     try {
+      assertActiveNightscoutCacheScope(cacheScope);
       const [bg, deviceStatus] = await Promise.all([
         fetchLatestBgEntry(),
         fetchLatestDeviceStatusEntry(),
       ]);
+
+      if (!isCurrentRequest()) return;
+      assertActiveNightscoutCacheScope(cacheScope);
 
       if (!bg) {
         setSnapshot(null);
@@ -164,12 +227,16 @@ export function useLatestNightscoutSnapshot(params: {
         staleLevel,
       });
     } catch (e) {
-      setError(e);
+      if (isCurrentRequest()) {
+        setError(e);
+      }
     } finally {
-      setIsLoading(false);
-      inFlightRef.current = false;
+      if (isCurrentRequest()) {
+        setIsLoading(false);
+        inFlightRef.current = null;
+      }
     }
-  }, []);
+  }, [cacheScope]);
 
   useEffect(() => {
     refresh();

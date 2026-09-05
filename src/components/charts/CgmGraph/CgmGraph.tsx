@@ -24,6 +24,7 @@ import MultiBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltip
 import CombinedBgBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/CombinedBgBolusTooltip';
 import CombinedBgMultiBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/CombinedBgMultiBolusTooltip';
 import {addOpacity} from 'app/style/styling.utils';
+import {MAX_LOAD_CURSOR_DISTANCE_MS} from 'app/utils/chartLoadSeries.utils';
 
 import type {
   CgmGraphProps,
@@ -42,6 +43,28 @@ const StyledSvg = styled(Svg)`
   width: 100%;
 `;
 
+const NavigationFullScreenButton = ({
+  payload,
+}: {
+  readonly payload: {
+    readonly mode: 'cgmGraph';
+    readonly bgSamples: CgmGraphProps['bgSamples'];
+    readonly foodItems: CgmGraphProps['foodItems'];
+    readonly insulinData: CgmGraphProps['insulinData'];
+  };
+}) => {
+  const navigation = useNavigation();
+  const openFullScreen = useCallback(() => {
+    pushFullScreenViewScreen({navigation, payload});
+  }, [navigation, payload]);
+  return (
+    <FullScreenButton
+      testID={E2E_TEST_IDS.charts.cgmGraphFullScreenButton}
+      onPress={openFullScreen}
+    />
+  );
+};
+
 const CGMGraph: React.FC<CgmGraphProps> = ({
   bgSamples,
   width,
@@ -54,6 +77,8 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   variant = 'default',
   showDateLabels = true,
   showYLabels = true,
+  showBolusMarkers = true,
+  highlightedCarbIds,
   yTicksAmount = 6,
   interactive = true,
   handleTouchEvents = true,
@@ -83,7 +108,6 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
     useGraphStyleContext(width, height, bgSamples, xDomain, margin);
   const touchContext = useTouchContext();
   const theme = useTheme() as ThemeType;
-  const navigation = useNavigation();
 
   const {
     isTouchActive,
@@ -149,11 +173,6 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
     [bgSamples, foodItems, insulinData],
   );
 
-  const openFullScreen = useMemo(() => {
-    return () => {
-      pushFullScreenViewScreen({navigation, payload: fullScreenPayload});
-    };
-  }, [fullScreenPayload, navigation]);
   const emitExternalTooltipFromEvent = useCallback(
     (event: any) => {
       if (tooltipMode !== 'external' || !onTooltipChange) {
@@ -297,10 +316,12 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
             x={graphStyleContextValue.margin?.left}
             y={graphStyleContextValue.margin?.top}>
             <XGridAndAxis
-              xTickLabelFormatter={xTickLabelFormatter ?? undefined}
+              {...(xTickLabelFormatter ? {xTickLabelFormatter} : {})}
             />
             <YGridAndAxis
-              highestBgThreshold={300}
+              highestBgThreshold={
+                graphStyleContextValue.yScale.domain()[1] ?? 300
+              }
               ticksAmount={resolvedYTicksAmount}
               showLabels={resolvedShowYLabels}
             />
@@ -308,16 +329,25 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
 
             <G clipPath="url(#cgmPlotClip)">
               <CGMSamplesRenderer
-                focusedSampleDateString={closestBgSample?.dateString}
+                focusedSampleDateString={
+                  closestBgSample &&
+                  cgmAnchorTimeMs != null &&
+                  Math.abs(closestBgSample.date - cgmAnchorTimeMs) <=
+                    MAX_LOAD_CURSOR_DISTANCE_MS
+                    ? closestBgSample.dateString
+                    : undefined
+                }
               />
               <FoodItemsRenderer
                 foodItems={foodItems}
-                focusedFoodItemIds={focusedFoodItemIds}
+                focusedFoodItemIds={highlightedCarbIds ?? focusedFoodItemIds}
               />
-              <BolusItemsRenderer
-                insulinData={insulinData}
-                focusedBolusTimestamps={focusedBolusTimestamps}
-              />
+              {showBolusMarkers ? (
+                <BolusItemsRenderer
+                  insulinData={insulinData}
+                  focusedBolusTimestamps={focusedBolusTimestamps}
+                />
+              ) : null}
               {shouldShowFocus && (
                 <>
                   <Line
@@ -362,7 +392,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
                         />
                       )}
 
-                      {showCombined && (
+                      {showCombined && tooltipBolusEvents[0] ? (
                         <CombinedBgBolusTooltip
                           x={xTouchPosition}
                           y={yTouchPosition}
@@ -370,7 +400,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
                           bolusEvent={tooltipBolusEvents[0]}
                           carbEvents={tooltipCarbEvents}
                         />
-                      )}
+                      ) : null}
 
                       {showBgOnly && (
                         <SgvTooltip
@@ -389,10 +419,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
 
         {showFullScreenButton ? (
           <FullScreenButtonOverlay>
-            <FullScreenButton
-              testID={E2E_TEST_IDS.charts.cgmGraphFullScreenButton}
-              onPress={openFullScreen}
-            />
+            <NavigationFullScreenButton payload={fullScreenPayload} />
           </FullScreenButtonOverlay>
         ) : null}
       </GraphContainer>

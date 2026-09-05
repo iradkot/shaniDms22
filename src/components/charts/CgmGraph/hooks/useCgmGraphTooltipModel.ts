@@ -58,7 +58,7 @@ export type CgmGraphTooltipModel = {
 
 export function resolveCgmTooltipInteractionTime(params: {
   tooltipMode: CgmGraphTooltipMode;
-  cursorTimeMs?: number | null;
+  cursorTimeMs?: number | null | undefined;
   isTouchActive: boolean;
   touchTimeMs: number | null;
 }) {
@@ -88,10 +88,10 @@ export function resolveCgmTooltipInteractionTime(params: {
 export function useCgmGraphTooltipModel(params: {
   bgSamples: BgSample[];
   foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
-  insulinData?: InsulinDataEntry[];
+  insulinData?: InsulinDataEntry[] | undefined;
 
   tooltipMode: CgmGraphTooltipMode;
-  cursorTimeMs?: number | null;
+  cursorTimeMs?: number | null | undefined;
 
   isTouchActive: boolean;
   touchTimeMs: number | null;

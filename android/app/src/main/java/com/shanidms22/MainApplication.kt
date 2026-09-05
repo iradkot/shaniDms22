@@ -14,6 +14,7 @@ import com.facebook.soloader.SoLoader
 import com.reactcommunity.rndatetimepicker.RNDateTimePickerPackage
 import com.shanidms22.e2e.E2EConfigPackage
 import com.shanidms22.glucose.GlucoseLivePackage
+import com.shanidms22.runtime.ShaniDmsRuntimeConfigPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -29,6 +30,7 @@ class MainApplication : Application(), ReactApplication {
               }
               add(E2EConfigPackage())
               add(GlucoseLivePackage())
+              add(ShaniDmsRuntimeConfigPackage())
             }
 
         override fun getJSMainModuleName(): String = "index"

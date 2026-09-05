@@ -19,8 +19,8 @@ function parseProfileSeconds(time: string, timeAsSeconds?: number): number {
   }
 
   const [hoursRaw, minutesRaw] = String(time).split(':');
-  const hours = Number.parseInt(hoursRaw, 10);
-  const minutes = Number.parseInt(minutesRaw, 10);
+  const hours = Number.parseInt(hoursRaw ?? '', 10);
+  const minutes = Number.parseInt(minutesRaw ?? '', 10);
   return Math.max(
     0,
     Math.min(
@@ -46,14 +46,16 @@ export function getScheduledBasalRateAt(
   timeMs: number,
 ): number {
   const profile = getSortedProfile(basalProfile);
-  if (!profile.length || !Number.isFinite(timeMs)) return 0;
+  if (!profile.length || !Number.isFinite(timeMs)) {
+    return 0;
+  }
 
   const date = new Date(timeMs);
   const seconds =
     date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds();
   const match =
     [...profile].reverse().find(entry => entry.seconds <= seconds) ??
-    profile[profile.length - 1];
+    profile[profile.length - 1]!;
   return match.rate;
 }
 
@@ -65,7 +67,9 @@ function parseEntryStart(entry: InsulinDataEntry): number {
 function parseEntryEnd(entry: InsulinDataEntry, startMs: number): number {
   if (entry.endTime) {
     const explicitEnd = Date.parse(entry.endTime);
-    if (Number.isFinite(explicitEnd)) return explicitEnd;
+    if (Number.isFinite(explicitEnd)) {
+      return explicitEnd;
+    }
   }
   if (typeof entry.duration === 'number' && Number.isFinite(entry.duration)) {
     return startMs + Math.max(0, entry.duration) * MINUTE_MS;
@@ -78,28 +82,32 @@ function buildOverrides(
   rangeStartMs: number,
   rangeEndMs: number,
 ): BasalOverride[] {
-  const raw = insulinData
-    .map((entry, order) => {
-      if (entry.type !== 'tempBasal' && entry.type !== 'suspendPump') return null;
-      const startMs = parseEntryStart(entry);
-      if (!Number.isFinite(startMs)) return null;
-
-      const rate =
-        entry.type === 'suspendPump'
-          ? 0
-          : typeof entry.rate === 'number' && Number.isFinite(entry.rate)
-            ? Math.max(0, entry.rate)
-            : 0;
-      return {
-        startMs,
-        endMs: parseEntryEnd(entry, startMs),
-        rate,
-        source: entry.type,
-        order,
-      } satisfies BasalOverride;
-    })
-    .filter((entry): entry is BasalOverride => entry !== null)
-    .sort((a, b) => a.startMs - b.startMs || a.order - b.order);
+  const raw: BasalOverride[] = [];
+  insulinData.forEach((entry, order) => {
+    if (entry.type !== 'tempBasal' && entry.type !== 'suspendPump') {
+      return;
+    }
+    const startMs = parseEntryStart(entry);
+    if (!Number.isFinite(startMs)) {
+      return;
+    }
+    const rate =
+      entry.type === 'suspendPump'
+        ? 0
+        : typeof entry.rate === 'number' && Number.isFinite(entry.rate)
+        ? Math.max(0, entry.rate)
+        : 0;
+    raw.push({
+      startMs,
+      endMs: parseEntryEnd(entry, startMs),
+      rate,
+      source: entry.type,
+      order,
+    });
+  });
+  raw.sort((left, right) =>
+    left.startMs - right.startMs || left.order - right.order,
+  );
 
   return raw
     .map((entry, index) => {
@@ -125,7 +133,9 @@ function addProfileBoundaries(
   rangeEndMs: number,
 ) {
   const profile = getSortedProfile(basalProfile);
-  if (!profile.length) return;
+  if (!profile.length) {
+    return;
+  }
 
   const cursor = new Date(rangeStartMs);
   cursor.setHours(0, 0, 0, 0);
@@ -177,7 +187,12 @@ export function buildBasalDeliveryTimeline(params: {
   for (let index = 0; index < points.length - 1; index++) {
     const startMs = points[index];
     const endMs = points[index + 1];
-    if (endMs <= startMs) continue;
+    if (startMs === undefined || endMs === undefined) {
+      continue;
+    }
+    if (endMs <= startMs) {
+      continue;
+    }
 
     const activeOverride = overrides.find(
       entry => entry.startMs <= startMs && entry.endMs > startMs,
@@ -226,10 +241,12 @@ export function getEffectiveBasalRateAt(params: {
   timeMs: number;
 }): number | null {
   const {basalProfile, insulinData, timeMs} = params;
-  if (!Number.isFinite(timeMs)) return null;
+  if (!Number.isFinite(timeMs)) {
+    return null;
+  }
   const segment = buildBasalDeliveryTimeline({
     basalProfile,
-    insulinData,
+    ...(insulinData === undefined ? {} : {insulinData}),
     startDate: new Date(timeMs),
     endDate: new Date(timeMs + 1),
   })[0];

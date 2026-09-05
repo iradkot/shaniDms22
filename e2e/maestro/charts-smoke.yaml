@@ -6,28 +6,10 @@ appId: com.shanidms22
 # - We validate the *presence* of chart containers via stable `testID` selectors.
 # - This keeps the test resilient even if SVG internals/layout change.
 #
-# Note: The app must be built/installed in E2E mode for deterministic auth.
+# Note: The app must be built/installed in E2E mode for deterministic routing.
 # See docs/E2E.md (Build flag: E2E=true).
 
-- launchApp:
-    clearState: true
-
-# Always use the deterministic E2E login.
-- extendedWaitUntil:
-    visible:
-      id: login.e2eButton
-    timeout: 15000
-    optional: true
-
-- tapOn:
-    id: login.e2eButton
-    optional: true
-
-# Wait for tabs to be available.
-- extendedWaitUntil:
-    visible:
-      id: tabs.navigator
-    timeout: 30000
+- runFlow: subflows/enter-legacy.yaml
 
 # --- CGM graph (Home) ---
 - tapOn:

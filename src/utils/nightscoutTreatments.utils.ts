@@ -95,6 +95,7 @@ export function mapNightscoutTreatmentsToInsulinDataEntries(
   );
   for (let index = 0; index < sorted.length; index++) {
     const entry = sorted[index];
+    if (!entry) continue;
     if (entry.type !== 'suspendPump' || entry.endTime) continue;
     const startMs = insulinEntryStartMs(entry);
     const nextBasalControlMs = sorted

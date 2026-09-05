@@ -1,12 +1,21 @@
 import React, {useMemo} from 'react';
 
-import {Pressable, View} from 'react-native';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import styled, {useTheme} from 'styled-components/native';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
+import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 
 import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import BasalMiniGraph from 'app/components/charts/BasalMiniGraph/BasalMiniGraph';
+import BolusMiniGraph from 'app/components/charts/BolusMiniGraph/BolusMiniGraph';
 import ActiveInsulinMiniGraph from 'app/components/charts/ActiveInsulinMiniGraph/ActiveInsulinMiniGraph';
 import CobMiniGraph from 'app/components/charts/CobMiniGraph/CobMiniGraph';
 import MixedMiniChart from 'app/components/charts/MixedMiniChart/MixedMiniChart';
@@ -26,10 +35,9 @@ import type {
   StackedHomeChartsProps,
 } from './StackedHomeCharts.types';
 
-const SCROLL_SAFE_EDGE_WIDTH = 44;
-
 const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   const {
+    locale,
     bgSamples,
     foodItems,
     insulinData,
@@ -53,6 +61,9 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   } = props;
 
   const theme = useTheme() as ThemeType;
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const {language} = useAppLanguage();
+  const resolvedLocale = locale ?? language;
 
   const stackedChartsMargin = useMemo<ChartMargin>(
     () =>
@@ -69,12 +80,12 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     chartsTooltip,
     handleTooltipChange,
     touchHandlers: stackedTouchHandlers,
+    mouseHandlers,
   } = useStackedChartsTouchTooltip({
     bgSamples,
     width,
     margin: stackedChartsMargin,
     xDomain,
-    scrollSafeEdgeWidth: SCROLL_SAFE_EDGE_WIDTH,
     onTouchSessionChange,
   });
 
@@ -97,6 +108,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     marginRight: stackedChartsMargin.right,
     xDomain,
     tooltipAlign,
+    showFallback: tooltipPlacement === 'panel',
   });
 
   const {activeInsulinU, activeInsulinBolusU, activeInsulinBasalU, cobG} =
@@ -157,38 +169,84 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     onTooltipModelChange,
   });
 
+  // Every placement uses the same inspector model and renderer.
+  const inspector = (
+    <HomeChartsTooltip
+      {...emittedTooltipModel}
+      locale={resolvedLocale}
+      compact={tooltipPlacement === 'panel'}
+    />
+  );
+
   // Whether to render the tooltip inside this component
   const renderTooltipInternally = tooltipPlacement !== 'none';
+  const hasVisibleGlucose = bgSamples.some(
+    sample =>
+      Number.isFinite(sample.sgv) &&
+      sample.sgv > 0 &&
+      (!xDomain || (sample.date >= +xDomain[0] && sample.date <= +xDomain[1])),
+  );
 
   return (
     <View testID={testID}>
+      {tooltipPlacement === 'panel' ? (
+        <View testID={tooltipDockTestID}>{inspector}</View>
+      ) : null}
       {/* 'top' placement: tooltip in normal flow ABOVE the chart stack */}
       {renderTooltipInternally &&
       tooltipPlacement === 'top' &&
       shouldShowTooltip ? (
         <TooltipDock testID={tooltipDockTestID} $align={resolvedTooltipAlign}>
-          <HomeChartsTooltip
-            anchorTimeMs={cgmAnchorTimeMs}
-            bgSample={tooltipBgSample}
-            activeInsulinU={activeInsulinU}
-            activeInsulinBolusU={activeInsulinBolusU}
-            activeInsulinBasalU={activeInsulinBasalU}
-            cobG={cobG}
-            basalRateUhr={basalRateUhr}
-            bolusSummary={bolusSummary}
-            carbsSummary={carbsSummary}
-            bolusEvents={tooltipBolusEvents}
-            carbEvents={tooltipCarbEvents}
-            fullWidth={tooltipFullWidth}
-            maxWidthPx={tooltipMaxWidthPx}
-          />
+          {inspector}
         </TooltipDock>
       ) : null}
 
-      <ChartStack testID={cgmTouchAreaTestID} {...stackedTouchHandlers}>
+      <View
+        style={[
+          styles.chartHeader,
+          showFullScreenButton && styles.headerWithButton,
+        ]}>
+        <Text
+          style={[
+            styles.glucoseTitle,
+            {color: theme.textColor},
+            resolvedLocale === 'he' ? styles.rtl : styles.ltr,
+          ]}>
+          {resolvedLocale === 'he' ? 'סוכר' : 'Glucose'} · mg/dL
+        </Text>
+        {!!foodItems?.length && (
+          <Text
+            style={[
+              styles.carbKey,
+              {color: theme.colors.carbs},
+              resolvedLocale === 'he' ? styles.rtl : styles.ltr,
+            ]}>
+            {resolvedLocale === 'he' ? '● פחמימות שנרשמו' : '● Recorded carbs'}
+          </Text>
+        )}
+        {showFullScreenButton && onPressFullScreen ? (
+          <FullScreenButtonOverlay>
+            <FullScreenButton
+              testID={E2E_TEST_IDS.charts.cgmGraphFullScreenButton}
+              onPress={onPressFullScreen}
+              accessibilityRole="button"
+              accessibilityLabel={
+                resolvedLocale === 'he' ? 'מסך מלא' : 'Full screen'
+              }>
+              <Icon name="fullscreen" size={22} color={theme.textColor} />
+            </FullScreenButton>
+          </FullScreenButtonOverlay>
+        ) : null}
+      </View>
+      <ChartStack
+        testID={cgmTouchAreaTestID}
+        {...stackedTouchHandlers}
+        {...mouseHandlers}
+        style={touchSurfaceStyle}>
         {/* 'above' / 'inside' placement: absolute overlay inside ChartStack */}
         {renderTooltipInternally &&
         tooltipPlacement !== 'top' &&
+        tooltipPlacement !== 'panel' &&
         shouldShowTooltip ? (
           <ChartTooltipOverlay
             $placement={tooltipPlacement === 'inside' ? 'inside' : 'above'}
@@ -197,171 +255,176 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
             <TooltipDock
               testID={tooltipDockTestID}
               $align={resolvedTooltipAlign}>
-              <HomeChartsTooltip
-                anchorTimeMs={cgmAnchorTimeMs}
-                bgSample={tooltipBgSample}
-                activeInsulinU={activeInsulinU}
-                activeInsulinBolusU={activeInsulinBolusU}
-                activeInsulinBasalU={activeInsulinBasalU}
-                cobG={cobG}
-                basalRateUhr={basalRateUhr}
-                bolusSummary={bolusSummary}
-                carbsSummary={carbsSummary}
-                bolusEvents={tooltipBolusEvents}
-                carbEvents={tooltipCarbEvents}
-                fullWidth={tooltipFullWidth}
-                maxWidthPx={tooltipMaxWidthPx}
-              />
+              {inspector}
             </TooltipDock>
           </ChartTooltipOverlay>
         ) : null}
 
-        {showFullScreenButton && onPressFullScreen ? (
-          <FullScreenButtonOverlay>
-            <FullScreenButton
-              testID={E2E_TEST_IDS.charts.cgmGraphFullScreenButton}
-              onPress={onPressFullScreen}
-              accessibilityRole="button"
-              accessibilityLabel="Full screen"
-              hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-              <Icon name="fullscreen" size={20} color={theme.textColor} />
-            </FullScreenButton>
-          </FullScreenButtonOverlay>
-        ) : null}
-
-        <BgGraph
-          bgSamples={bgSamples}
-          width={width}
-          height={cgmHeight}
-          foodItems={foodItems}
-          insulinData={insulinData}
-          xDomain={xDomain}
-          margin={stackedChartsMargin}
-          testID={testID}
-          showFullScreenButton={false}
-          tooltipMode="external"
-          onTooltipChange={handleTooltipChange}
-          handleTouchEvents={false}
-          cursorTimeMs={cursorTimeMs}
-        />
-
-        <ScrollSafeLane
-          pointerEvents="none"
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants">
-          <ScrollSafeGrip>
-            <ScrollSafeDot />
-            <ScrollSafeDot />
-            <ScrollSafeDot />
-          </ScrollSafeGrip>
-        </ScrollSafeLane>
+        <View pointerEvents="none">
+          {hasVisibleGlucose ? (
+            <BgGraph
+              bgSamples={bgSamples}
+              width={width}
+              height={cgmHeight}
+              foodItems={foodItems}
+              insulinData={insulinData}
+              xDomain={xDomain}
+              margin={stackedChartsMargin}
+              testID={testID ? `${testID}.glucose` : undefined}
+              showFullScreenButton={false}
+              showDateLabels={false}
+              showBolusMarkers={false}
+              highlightedCarbIds={tooltipCarbEvents.map(event => event.id)}
+              tooltipMode="external"
+              onTooltipChange={handleTooltipChange}
+              handleTouchEvents={false}
+              cursorTimeMs={cursorTimeMs}
+            />
+          ) : (
+            <View
+              style={styles.emptyGlucose}
+              testID={testID ? `${testID}.glucoseEmpty` : undefined}>
+              <Text
+                style={[
+                  {color: theme.textColor},
+                  resolvedLocale === 'he' ? styles.rtl : styles.ltr,
+                ]}>
+                {resolvedLocale === 'he'
+                  ? 'אין מדידות סוכר בטווח שנבחר'
+                  : 'No glucose readings in this time range'}
+              </Text>
+            </View>
+          )}
+        </View>
       </ChartStack>
 
       {/* Mini charts area — observe touch without taking over ScrollView's responder. */}
-      <View {...stackedTouchHandlers}>
-        {chartMode === 'mixed' ? (
-          <MixedMiniChart
+      <View
+        {...stackedTouchHandlers}
+        {...mouseHandlers}
+        style={touchSurfaceStyle}
+        testID={testID ? `${testID}.insulinTouchArea` : undefined}>
+        <View pointerEvents="none">
+          <BolusMiniGraph
+            locale={resolvedLocale}
             bgSamples={bgSamples}
             insulinData={insulinData}
-            basalProfileData={basalProfileData}
             width={width}
-            height={miniChartHeight * 2.5}
+            height={Math.max(100, miniChartHeight)}
             xDomain={xDomain}
-            margin={{
-              top: 16,
-              right: stackedChartsMargin.right,
-              bottom: 16,
-              left: stackedChartsMargin.left,
-            }}
+            margin={stackedChartsMargin}
             cursorTimeMs={cursorTimeMs}
+            testID={testID ? `${testID}.bolus` : undefined}
           />
-        ) : (
-          <>
-            <BasalMiniGraph
+          {chartMode === 'mixed' ? (
+            <MixedMiniChart
+              locale={resolvedLocale}
               bgSamples={bgSamples}
               insulinData={insulinData}
               basalProfileData={basalProfileData}
               width={width}
-              height={miniChartHeight}
+              height={Math.max(300, miniChartHeight * 3)}
               xDomain={xDomain}
               margin={{
-                top: 8,
+                top: 16,
                 right: stackedChartsMargin.right,
-                bottom: 12,
+                bottom: 16,
                 left: stackedChartsMargin.left,
               }}
               cursorTimeMs={cursorTimeMs}
+              testID={testID ? `${testID}.mixed` : undefined}
             />
+          ) : (
+            <>
+              <BasalMiniGraph
+                locale={resolvedLocale}
+                bgSamples={bgSamples}
+                insulinData={insulinData}
+                basalProfileData={basalProfileData}
+                width={width}
+                height={miniChartHeight}
+                xDomain={xDomain}
+                margin={{
+                  top: 8,
+                  right: stackedChartsMargin.right,
+                  bottom: 12,
+                  left: stackedChartsMargin.left,
+                }}
+                cursorTimeMs={cursorTimeMs}
+                testID={testID ? `${testID}.basal` : undefined}
+              />
 
-            <ActiveInsulinMiniGraph
-              bgSamples={bgSamples}
-              width={width}
-              height={miniChartHeight}
-              xDomain={xDomain}
-              margin={{
-                top: 18,
-                right: stackedChartsMargin.right,
-                bottom: 12,
-                left: stackedChartsMargin.left,
-              }}
-              cursorTimeMs={cursorTimeMs}
-            />
+              <ActiveInsulinMiniGraph
+                locale={resolvedLocale}
+                bgSamples={bgSamples}
+                width={width}
+                height={miniChartHeight}
+                xDomain={xDomain}
+                margin={{
+                  top: 18,
+                  right: stackedChartsMargin.right,
+                  bottom: 12,
+                  left: stackedChartsMargin.left,
+                }}
+                cursorTimeMs={cursorTimeMs}
+                testID={testID ? `${testID}.iob` : undefined}
+              />
 
-            <CobMiniGraph
-              bgSamples={bgSamples}
-              width={width}
-              height={miniChartHeight}
-              xDomain={xDomain}
-              margin={{
-                top: 18,
-                right: stackedChartsMargin.right,
-                bottom: 12,
-                left: stackedChartsMargin.left,
-              }}
-              cursorTimeMs={cursorTimeMs}
-            />
-          </>
-        )}
+              <CobMiniGraph
+                locale={resolvedLocale}
+                bgSamples={bgSamples}
+                width={width}
+                height={miniChartHeight}
+                xDomain={xDomain}
+                margin={{
+                  top: 18,
+                  right: stackedChartsMargin.right,
+                  bottom: 12,
+                  left: stackedChartsMargin.left,
+                }}
+                cursorTimeMs={cursorTimeMs}
+                testID={testID ? `${testID}.cob` : undefined}
+              />
+            </>
+          )}
+        </View>
       </View>
     </View>
   );
 };
 
+const touchSurfaceStyle =
+  Platform.OS === 'web'
+    ? ({touchAction: 'pan-y pinch-zoom', userSelect: 'none'} as ViewStyle)
+    : undefined;
+
 const ChartStack = styled.View`
   position: relative;
 `;
 
-const ScrollSafeLane = styled.View`
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: ${SCROLL_SAFE_EDGE_WIDTH}px;
-  align-items: center;
-  justify-content: center;
-`;
-
-const ScrollSafeGrip = styled.View`
-  width: 22px;
-  min-height: 72px;
-  border-radius: 11px;
-  align-items: center;
-  justify-content: center;
-  background-color: ${({theme}: {theme: ThemeType}) =>
-    addOpacity(theme.textColor, 0.1)};
-  border-width: 1px;
-  border-color: ${({theme}: {theme: ThemeType}) =>
-    addOpacity(theme.textColor, 0.16)};
-`;
-
-const ScrollSafeDot = styled.View`
-  width: 4px;
-  height: 4px;
-  border-radius: 2px;
-  margin-vertical: 3px;
-  background-color: ${({theme}: {theme: ThemeType}) =>
-    addOpacity(theme.textColor, 0.56)};
-`;
+const createStyles = (theme: ThemeType) =>
+  StyleSheet.create({
+    chartHeader: {
+      paddingHorizontal: theme.spacing.md,
+      paddingTop: 10,
+      minHeight: 58,
+      justifyContent: 'center',
+    },
+    headerWithButton: {paddingRight: 64},
+    glucoseTitle: {
+      fontWeight: '700',
+      fontFamily: theme.fontFamily,
+      fontSize: theme.typography.size.sm,
+    },
+    carbKey: {
+      fontFamily: theme.fontFamily,
+      fontSize: theme.typography.size.xs,
+      marginTop: 4,
+    },
+    emptyGlucose: {minHeight: 64, padding: 12},
+    rtl: {textAlign: 'right'},
+    ltr: {textAlign: 'left'},
+  });
 
 const ChartTooltipOverlay = styled.View<{$placement: 'above' | 'inside'}>`
   position: absolute;
@@ -389,9 +452,9 @@ const FullScreenButtonOverlay = styled.View`
 `;
 
 const FullScreenButton = styled(Pressable)`
-  width: 40px;
-  height: 40px;
-  border-radius: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
   align-items: center;
   justify-content: center;
   background-color: ${({theme}: {theme: ThemeType}) =>

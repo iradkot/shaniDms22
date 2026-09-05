@@ -22,9 +22,10 @@ function isValidCarbEvent(item: CarbEvent): item is CarbEvent & {
   );
 }
 
-export function findClosestCarbEvent(touchTimeMs: number, foodItems: CarbEvent[]):
-  | (CarbEvent & {id: string; timestamp: number; carbs: number})
-  | null {
+export function findClosestCarbEvent(
+  touchTimeMs: number,
+  foodItems: CarbEvent[],
+): (CarbEvent & {id: string; timestamp: number; carbs: number}) | null {
   if (!foodItems?.length) {
     return null;
   }
@@ -34,7 +35,7 @@ export function findClosestCarbEvent(touchTimeMs: number, foodItems: CarbEvent[]
     return null;
   }
 
-  let closest = carbs[0];
+  let closest = carbs[0]!;
   let minDiff = Math.abs(closest.timestamp - touchTimeMs);
 
   for (const item of carbs) {

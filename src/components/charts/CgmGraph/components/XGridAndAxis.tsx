@@ -2,42 +2,45 @@ import React, {useContext} from 'react';
 import XTick from 'app/components/charts/CgmGraph/components/XTick';
 import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 
-const XGridAndAxis = (props: {xTickLabelFormatter?: ((d: Date) => string) | null}) => {
-  const [{xScale}] = useContext(GraphStyleContext);
-  const getTicksAmount = (duration: number) => {
-    const durationInHours = duration / 1000 / 60 / 60;
-    if (durationInHours < 1) {
-      return 2;
-    } else if (durationInHours < 2) {
-      return 2;
-    } else if (durationInHours < 3) {
-      return 4;
-    } else {
-      return 5;
-    }
-  };
-
+const XGridAndAxis = (props: {
+  xTickLabelFormatter?: ((d: Date) => string) | null | undefined;
+}) => {
+  const [{xScale, graphWidth}] = useContext(GraphStyleContext);
+  const naturalTicks = xScale.ticks(
+    Math.max(2, Math.min(6, Math.floor(graphWidth / 80))),
+  );
   const domain = xScale.domain();
-  const duration =
-    Date.parse(domain[1].toString()) - Date.parse(domain[0].toString());
-
-  const ticksAmount = getTicksAmount(duration);
-  const ticks = Array.from({length: ticksAmount}, (_, i) => i);
+  const start = domain[0];
+  const end = domain[domain.length - 1];
+  if (!start || !end || end.getTime() <= start.getTime()) {
+    return null;
+  }
+  // Always identify the visible time window, and leave enough room for a
+  // complete time label between its edges and the intermediate hour ticks.
+  const minimumLabelSpacing = 54;
+  const ticks = [start];
+  for (const tick of naturalTicks) {
+    const last = ticks[ticks.length - 1]!;
+    if (
+      xScale(tick) - xScale(last) >= minimumLabelSpacing &&
+      xScale(end) - xScale(tick) >= minimumLabelSpacing
+    ) {
+      ticks.push(tick);
+    }
+  }
+  ticks.push(end);
 
   return (
     <>
-      {ticks.map((_, index) => {
-        const tickX =
-          xScale.range()[0] +
-          ((xScale.range()[1] - xScale.range()[0]) / (ticksAmount - 1)) * index;
-
+      {ticks.map(tick => {
         return (
           <XTick
-            key={index}
-            x={tickX}
+            key={tick.getTime()}
+            x={xScale(tick)}
             withDate
-            roundTicks
-            labelFormatter={props.xTickLabelFormatter ?? undefined}
+            {...(props.xTickLabelFormatter
+              ? {labelFormatter: props.xTickLabelFormatter}
+              : {})}
           />
         );
       })}

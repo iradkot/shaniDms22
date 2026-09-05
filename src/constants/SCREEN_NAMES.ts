@@ -1,5 +1,10 @@
-export const MAIN_TAB_NAVIGATOR: string = 'HomeScreen';
+export const PRODUCT_EXPERIENCE_SCREEN: string = 'ProductExperienceScreen';
+/** @deprecated Compatibility alias for code outside this repository. */
+export const MAIN_TAB_NAVIGATOR: string = PRODUCT_EXPERIENCE_SCREEN;
+/** Temporary bridge to the preserved application while modules are rebuilt. */
+export const LEGACY_TAB_NAVIGATOR: string = 'LegacyTabs';
 export const HOME_TAB_SCREEN: string = 'HomeTabScreen';
+export const TRENDS_TAB_SCREEN: string = 'TRENDS';
 export const SETTINGS_TAB_SCREEN: string = 'SettingsTabScreen';
 export const NOTIFICATION_TAB_SCREEN: string = 'NotificationTabScreen';
 export const LOGIN_SCREEN: string = 'LoginScreen';

@@ -4,6 +4,18 @@
  * Keeping these in one place helps avoid accidental selector changes.
  */
 export const E2E_TEST_IDS = {
+  product: {
+    shell: 'product-shell',
+    hub: 'product-hub',
+    categoryGrid: 'hub-category-grid',
+    categoryRecord: 'hub-category-record',
+    dayGraphTile: 'hub-grid-today-tile-core.day-graph',
+    activityTile: 'hub-grid-record-tile-core.activity',
+    moduleBridge: 'product-module-bridge',
+    back: 'shell-control-back',
+    hubControl: 'shell-control-hub',
+  },
+
   login: {
     screen: 'login.screen',
     googleButton: 'login.googleButton',

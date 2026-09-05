@@ -1,0 +1,44 @@
+name: Product quality
+
+on:
+  pull_request:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+concurrency:
+  group: product-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - name: Set up Java for Firebase emulators
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install app dependencies
+        run: yarn install --immutable
+
+      - name: Install backend dependencies
+        run: npm ci --prefix functions
+
+      - name: Verify app, web, backend, rules, and credential policy
+        run: yarn verify:all

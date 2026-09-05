@@ -1,9 +1,9 @@
-import {Text, Rect} from 'react-native-svg';
+import {Text} from 'react-native-svg';
 // Ensure XTick is correctly imported if it's a custom component
 // If XTick is not an SVG component, adjust its usage accordingly
 
 // Import statements for other dependencies
-import React, {useContext, useState} from 'react';
+import React, {useMemo} from 'react';
 import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
@@ -37,16 +37,17 @@ export const FoodItem = ({
       prevItem?.id === foodItem.id ? null : foodItem,
     );
   };
+  const focusedLineStyle = useMemo(
+    () => ({stroke: appTheme.accentColor, strokeWidth: 2}),
+    [appTheme.accentColor],
+  );
 
   return (
-    <TouchableOpacity
-      onPress={handlePress}
-      style={{
-        position: 'absolute',
-        left: x + margin.left,
-        top: y + margin.top,
-        zIndex: isFocused ? 100 : 5,
-      }}>
+    <FoodTouchable
+      $left={x + margin.left}
+      $top={y + margin.top}
+      $zIndex={isFocused ? 100 : 5}
+      onPress={handlePress}>
       <Container isFocused={isFocused}>
         <StyledIcon
           name="restaurant"
@@ -62,10 +63,7 @@ export const FoodItem = ({
                 {formatDateToLocaleTimeString(foodItem.timestamp)}
               </ItemDetails>
             </FoodItemDetails>
-            <XTick
-              x={x}
-              lineStyle={{stroke: appTheme.accentColor, strokeWidth: 2}}
-            />
+            <XTick x={x} lineStyle={focusedLineStyle} />
             <Text
               x={x}
               y={y + 20} // Adjust based on your actual layout needs
@@ -77,7 +75,7 @@ export const FoodItem = ({
           </>
         )}
       </Container>
-    </TouchableOpacity>
+    </FoodTouchable>
   );
 };
 
@@ -94,6 +92,17 @@ const Container = styled.View<{isFocused: boolean}>`
   background-color: ${({theme, isFocused}) =>
     isFocused ? theme.backgroundColor : 'transparent'};
   ${({theme, isFocused}) => isFocused && theme.shadow.default};
+`;
+
+const FoodTouchable = styled(TouchableOpacity)<{
+  $left: number;
+  $top: number;
+  $zIndex: number;
+}>`
+  position: absolute;
+  left: ${({$left}) => $left}px;
+  top: ${({$top}) => $top}px;
+  z-index: ${({$zIndex}) => $zIndex};
 `;
 
 const FoodItemDetails = styled.View`

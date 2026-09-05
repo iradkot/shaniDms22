@@ -93,7 +93,10 @@ export function extractLoad(entry: DeviceStatusEntry): {
   if (typeof iob === 'number' && (iobBolus == null || iobBasal == null)) {
     // Many setups only provide total IOB. Avoid inventing a basal/bolus split
     // (it makes consumers think basal IOB is really 0).
-    return {iob, cob};
+    return {
+      iob,
+      ...(cob !== undefined ? {cob} : {}),
+    };
   }
 
   const total =
@@ -101,10 +104,14 @@ export function extractLoad(entry: DeviceStatusEntry): {
     (typeof iobBasal === 'number' ? iobBasal : 0);
 
   return {
-    iob: typeof iob === 'number' ? iob : total !== 0 ? total : undefined,
-    iobBolus,
-    iobBasal,
-    cob,
+    ...(typeof iob === 'number'
+      ? {iob}
+      : total !== 0
+        ? {iob: total}
+        : {}),
+    ...(iobBolus !== undefined ? {iobBolus} : {}),
+    ...(iobBasal !== undefined ? {iobBasal} : {}),
+    ...(cob !== undefined ? {cob} : {}),
   };
 }
 
@@ -135,7 +142,7 @@ export function mergeDeviceStatusIntoBgSamples(params: {
   // BG is usually sorted newest->oldest in this app; handle either order.
   const isAscending =
     inputBgSamples.length >= SORT_ORDER_CHECK_COUNT
-      ? inputBgSamples[0].date < inputBgSamples[1].date
+      ? (inputBgSamples[0]?.date ?? 0) < (inputBgSamples[1]?.date ?? 0)
       : true;
   const ordered = isAscending ? inputBgSamples : [...inputBgSamples].reverse();
 
@@ -145,7 +152,10 @@ export function mergeDeviceStatusIntoBgSamples(params: {
     const targetTs = sample.date;
 
     // Advance to the last status with ts <= targetTs
-    while (dsIndex + 1 < deviceStatus.length && deviceStatus[dsIndex + 1].ts <= targetTs) {
+    while (
+      dsIndex + 1 < deviceStatus.length &&
+      (deviceStatus[dsIndex + 1]?.ts ?? Number.POSITIVE_INFINITY) <= targetTs
+    ) {
       dsIndex += 1;
     }
 

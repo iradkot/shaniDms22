@@ -64,6 +64,7 @@ export function findBiggestChangesInTimeRange(
   for (let i = 1; i < sortedBgSamples.length; i++) {
     const bgSample = sortedBgSamples[i];
     const prevBgSample = sortedBgSamples[i - 1];
+    if (!bgSample || !prevBgSample) continue;
 
     // Calculate the difference between the current bgSample's sgv value and the previous bgSample's sgv value
     const change = bgSample.sgv - prevBgSample.sgv;

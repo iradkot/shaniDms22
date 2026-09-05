@@ -1,3 +1,4 @@
+import type {AiWorkspaceScope} from '../../src/services/aiMemory/aiWorkspaceScope';
 import {runAiAnalystAgentOrchestra} from '../../src/containers/MainTabsNavigator/Containers/AiAnalyst/llm/runAgentOrchestra';
 
 describe('runAiAnalystAgentOrchestra', () => {
@@ -11,7 +12,9 @@ describe('runAiAnalystAgentOrchestra', () => {
         const systemPrompt = String(messages?.[0]?.content ?? '');
         systemPrompts.push(systemPrompt);
 
-        if (systemPrompt.includes('strict diabetes-tech recommendation reviewer')) {
+        if (
+          systemPrompt.includes('strict diabetes-tech recommendation reviewer')
+        ) {
           reviewCalls += 1;
           return {
             content:
@@ -44,6 +47,10 @@ describe('runAiAnalystAgentOrchestra', () => {
     };
 
     const result = await runAiAnalystAgentOrchestra({
+      workspaceScope: {
+        productUserId: 'test-user',
+        workspaceId: 'test-workspace',
+      } as AiWorkspaceScope,
       provider,
       model: 'gpt-test',
       mission: 'openChat',
@@ -52,7 +59,6 @@ describe('runAiAnalystAgentOrchestra', () => {
       maxToolCalls: 4,
       maxOutputTokens: 1200,
       temperature: 0.1,
-      abortSignal: undefined,
       callbacks: {isCancelled: () => false},
     });
 

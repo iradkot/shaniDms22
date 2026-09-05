@@ -37,6 +37,7 @@ const COMMON_THEME_PART: Omit<
   | 'white'
   | 'black'
   | 'colors'
+  | 'chart'
   | 'borderColor'
   | 'determineBgColorByGlucoseValue'
   | 'getShadowStyles'
@@ -99,6 +100,7 @@ const createTheme = (tokens: {
   black: string;
   borderColor: string;
   colors: ThemeType['colors'];
+  chart: ThemeType['chart'];
   loadBars: ThemeType['loadBars'];
 }): ThemeType => ({
   ...COMMON_THEME_PART,
@@ -108,7 +110,11 @@ const createTheme = (tokens: {
   },
   get getShadowStyles() {
     return (elevation: number, color?: string) =>
-      shadowStyles({elevation, color, theme: this});
+      shadowStyles({
+        elevation,
+        theme: this,
+        ...(color !== undefined ? {color} : {}),
+      });
   },
   get shadow() {
     return {
@@ -141,6 +147,12 @@ export const getThemeById = (id: AppThemeId): ThemeType => {
         white: '#1F2937',
         black: '#F9FAFB',
         borderColor: '#374151',
+        chart: {
+          basal: '#71B7FF',
+          bolus: '#C2A1FF',
+          iob: '#4DD9C0',
+          cob: '#F6BE4F',
+        },
         colors: {
           insulin: colors.cyan[300],
           insulinSecondary: colors.cyan[500],
@@ -178,6 +190,12 @@ export const getThemeById = (id: AppThemeId): ThemeType => {
         white: colors.white,
         black: '#111111',
         borderColor: '#F0CFCF',
+        chart: {
+          basal: colors.blue[900],
+          bolus: colors.purple[900],
+          iob: colors.teal[900],
+          cob: '#8A4B05',
+        },
         colors: {
           insulin: colors.blue[800],
           insulinSecondary: colors.blue[500],
@@ -215,6 +233,12 @@ export const getThemeById = (id: AppThemeId): ThemeType => {
         white: '#FFFDFE',
         black: '#2C1B2C',
         borderColor: '#F0DCE7',
+        chart: {
+          basal: colors.indigo[700],
+          bolus: colors.purple[800],
+          iob: colors.teal[900],
+          cob: '#9A4510',
+        },
         colors: {
           insulin: colors.purple[700],
           insulinSecondary: colors.indigo[400],
@@ -253,6 +277,12 @@ export const getThemeById = (id: AppThemeId): ThemeType => {
         white: colors.white,
         black: colors.black,
         borderColor: colors.gray[300],
+        chart: {
+          basal: '#2463C2',
+          bolus: '#823EC7',
+          iob: '#087E79',
+          cob: '#A86408',
+        },
         colors: {
           insulin: colors.blue[800],
           insulinSecondary: colors.blue[400],
@@ -280,6 +310,7 @@ export const applyThemeToSingleton = (id: AppThemeId): ThemeType => {
   const next = getThemeById(id);
   Object.assign(theme, next);
   theme.colors = {...next.colors};
+  theme.chart = {...next.chart};
   theme.loadBars = {
     iob: {...next.loadBars.iob},
     cob: {...next.loadBars.cob},

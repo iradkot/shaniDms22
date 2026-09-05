@@ -1,0 +1,39 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["es2021", "es2021.intl", "dom"],
+    "allowJs": false,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": [
+    "src/types/styled-components.d.ts",
+    "src/modules/**/*.ts",
+    "src/modules/**/*.tsx",
+    "src/api/**/*.ts",
+    "src/api/**/*.tsx",
+    "src/contexts/**/*.ts",
+    "src/contexts/**/*.tsx",
+    "src/hooks/**/*.ts",
+    "src/hooks/**/*.tsx",
+    "src/services/**/*.ts",
+    "src/services/**/*.tsx",
+    "src/product/**/*.ts",
+    "src/product/**/*.tsx",
+    "src/platform/**/*.ts",
+    "src/platform/**/*.tsx",
+    "src/containers/ProductExperienceScreen.tsx",
+    "src/containers/Login.tsx",
+    "src/containers/initScreen.tsx",
+    "src/containers/NightscoutSetupScreen.tsx",
+    "__tests__/modules/**/*.ts",
+    "__tests__/modules/**/*.tsx",
+    "__tests__/product/**/*.ts",
+    "__tests__/product/**/*.tsx"
+  ],
+  "exclude": ["node_modules"]
+}

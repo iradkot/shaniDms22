@@ -135,8 +135,9 @@ export interface SettingsChangeEvent {
 export async function fetchNightscoutProfiles(params: {
   limit?: number;
   beforeDate?: Date;
+  throwOnError?: boolean;
 }): Promise<ProfileDataEntry[]> {
-  const {limit = 50, beforeDate} = params;
+  const {limit = 50, beforeDate, throwOnError = false} = params;
 
   let apiUrl = `/api/v1/profiles?sort[startDate]=-1&count=${limit}`;
 
@@ -149,6 +150,9 @@ export async function fetchNightscoutProfiles(params: {
     return response.data ?? [];
   } catch (error) {
     console.error('[settingsChangeDetection] Failed to fetch profiles:', error);
+    if (throwOnError) {
+      throw error;
+    }
     return [];
   }
 }
@@ -356,10 +360,12 @@ export async function detectSettingsChanges(params?: {
   minEvents?: number;
   beforeTimestamp?: number;
   sourceFilter?: ChangeSourceFilter;
+  throwOnError?: boolean;
 }): Promise<SettingsChangeEvent[]> {
   const minEvents = params?.minEvents ?? 20;
   const beforeTimestamp = params?.beforeTimestamp;
   const sourceFilter = params?.sourceFilter ?? 'all';
+  const throwOnError = params?.throwOnError ?? false;
 
   const events: SettingsChangeEvent[] = [];
   let profiles: ProfileDataEntry[] = [];
@@ -373,7 +379,8 @@ export async function detectSettingsChanges(params?: {
 
     const batch = await fetchNightscoutProfiles({
       limit: 50,
-      beforeDate: fetchBefore,
+      ...(fetchBefore === undefined ? {} : {beforeDate: fetchBefore}),
+      throwOnError,
     });
 
     if (batch.length === 0) break;
@@ -382,6 +389,7 @@ export async function detectSettingsChanges(params?: {
 
     // Update cursor for next fetch
     const lastProfile = batch[batch.length - 1];
+    if (!lastProfile) break;
     const lastTs = getProfileTimestamp(lastProfile);
     if (lastTs > 0) {
       fetchBefore = new Date(lastTs - 1);
@@ -399,6 +407,7 @@ export async function detectSettingsChanges(params?: {
 
     for (let i = 0; i < sortedProfiles.length; i++) {
       const current = sortedProfiles[i];
+      if (!current) continue;
       const previous = sortedProfiles[i + 1] ?? null;
 
       const changes = compareProfiles(previous, current);

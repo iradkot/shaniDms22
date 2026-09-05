@@ -1,9 +1,19 @@
-import React, {createContext, useCallback, useContext, useEffect, useMemo, useState} from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW} from 'app/constants/GLUCOSE_WINDOWS';
 import {setAndroidWidgetThresholds} from 'app/services/androidGlucoseLiveSurface';
+import {nativeNightscoutVaultAuthSession} from 'app/services/backend/nativeNightscoutVaultSync';
+import type {NightscoutVaultAuthSession} from 'app/services/backend/nightscoutVaultSynchronizer';
 
 export type GlucoseSettings = {
   /** mg/dL; values <= this are considered severe low. */
@@ -35,6 +45,9 @@ type GlucoseSettingsContextValue = {
 
 const STORAGE_KEY = 'glucose.settings.v1';
 
+const scopedStorageKey = (userId: string | null): string =>
+  `${STORAGE_KEY}:${encodeURIComponent(userId?.trim() || 'signed-out')}`;
+
 const DEFAULT_SETTINGS: GlucoseSettings = {
   severeHypo: cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number,
   hypo: cgmRange.TARGET.min,
@@ -50,7 +63,9 @@ const DEFAULT_SETTINGS: GlucoseSettings = {
 };
 
 function toFiniteNumber(v: unknown): number | null {
-  if (typeof v !== 'number') return null;
+  if (typeof v !== 'number') {
+    return null;
+  }
   return Number.isFinite(v) ? v : null;
 }
 
@@ -137,17 +152,54 @@ const GlucoseSettingsContext = createContext<GlucoseSettingsContextValue>({
 
 export const useGlucoseSettings = () => useContext(GlucoseSettingsContext);
 
-export const GlucoseSettingsProvider = ({children}: {children: React.ReactNode}) => {
+export const GlucoseSettingsProvider = ({
+  children,
+  authSession = nativeNightscoutVaultAuthSession,
+}: {
+  children: React.ReactNode;
+  authSession?: NightscoutVaultAuthSession;
+}) => {
   const [settings, setSettings] = useState<GlucoseSettings>(DEFAULT_SETTINGS);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [ownerUserId, setOwnerUserId] = useState<string | null>(() =>
+    authSession.getCurrentUserId()?.trim() || null,
+  );
+  const ownerUserIdRef = useRef(ownerUserId);
+
+  useEffect(
+    () =>
+      authSession.subscribe(userId => {
+        const nextOwner = userId?.trim() || null;
+        if (nextOwner === ownerUserIdRef.current) {
+          return;
+        }
+        ownerUserIdRef.current = nextOwner;
+        setSettings(DEFAULT_SETTINGS);
+        applyToGlobals(DEFAULT_SETTINGS);
+        setAndroidWidgetThresholds(DEFAULT_SETTINGS.hypo, DEFAULT_SETTINGS.hyper);
+        setIsLoaded(false);
+        setOwnerUserId(nextOwner);
+      }),
+    [authSession],
+  );
 
   useEffect(() => {
     let isMounted = true;
 
     const load = async () => {
       try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
-        if (!isMounted) return;
+        const scopedKey = scopedStorageKey(ownerUserId);
+        let stored = await AsyncStorage.getItem(scopedKey);
+        if (stored === null && ownerUserId === null) {
+          stored = await AsyncStorage.getItem(STORAGE_KEY);
+          if (stored !== null) {
+            await AsyncStorage.setItem(scopedKey, stored);
+            await AsyncStorage.removeItem(STORAGE_KEY);
+          }
+        }
+        if (!isMounted || ownerUserIdRef.current !== ownerUserId) {
+          return;
+        }
 
         if (!stored) {
           applyToGlobals(DEFAULT_SETTINGS);
@@ -158,11 +210,15 @@ export const GlucoseSettingsProvider = ({children}: {children: React.ReactNode})
         const next = sanitize(parsed);
         setSettings(next);
         applyToGlobals(next);
-      } catch (e) {
+      } catch {
         // Best-effort: keep defaults.
-        applyToGlobals(DEFAULT_SETTINGS);
+        if (isMounted && ownerUserIdRef.current === ownerUserId) {
+          applyToGlobals(DEFAULT_SETTINGS);
+        }
       } finally {
-        if (isMounted) setIsLoaded(true);
+        if (isMounted && ownerUserIdRef.current === ownerUserId) {
+          setIsLoaded(true);
+        }
       }
     };
 
@@ -171,18 +227,28 @@ export const GlucoseSettingsProvider = ({children}: {children: React.ReactNode})
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [ownerUserId]);
 
-  const persist = useCallback(async (next: GlucoseSettings) => {
+  const persist = useCallback(async (
+    next: GlucoseSettings,
+    expectedOwnerUserId: string | null,
+  ) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch (e) {
+      await AsyncStorage.setItem(
+        scopedStorageKey(expectedOwnerUserId),
+        JSON.stringify(next),
+      );
+    } catch {
       // Best-effort persistence.
     }
   }, []);
 
   const setSetting = useCallback(
     <K extends keyof GlucoseSettings>(key: K, value: GlucoseSettings[K]) => {
+      const mutationOwner = ownerUserId;
+      if (ownerUserIdRef.current !== mutationOwner) {
+        return;
+      }
       setSettings(prev => {
         const candidate = {
           ...prev,
@@ -190,18 +256,22 @@ export const GlucoseSettingsProvider = ({children}: {children: React.ReactNode})
         } as GlucoseSettings;
         const next = sanitize(candidate);
         applyToGlobals(next);
-        persist(next);
+        persist(next, mutationOwner);
         return next;
       });
     },
-    [persist],
+    [ownerUserId, persist],
   );
 
   const resetToDefaults = useCallback(() => {
+    const mutationOwner = ownerUserId;
+    if (ownerUserIdRef.current !== mutationOwner) {
+      return;
+    }
     setSettings(DEFAULT_SETTINGS);
     applyToGlobals(DEFAULT_SETTINGS);
-    persist(DEFAULT_SETTINGS);
-  }, [persist]);
+    persist(DEFAULT_SETTINGS, mutationOwner);
+  }, [ownerUserId, persist]);
 
   useEffect(() => {
     setAndroidWidgetThresholds(settings.hypo, settings.hyper);

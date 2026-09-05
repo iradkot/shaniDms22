@@ -5,6 +5,7 @@ import notifee, {
 } from '@notifee/react-native';
 
 import {BgSample} from 'app/types/day_bgs.types';
+import {sha1} from 'js-sha1';
 
 const STORAGE_KEYS = {
   lastTriggeredAtMs: 'proactiveCare:hypoNow:lastTriggeredAtMs',
@@ -23,8 +24,24 @@ const CHANNEL_ID = 'hypo-alerts';
 const PRESS_ACTION_ID = 'open_hypo_investigation';
 
 export type HypoNowEvaluationInput = {
+  scopeId: string;
   latestBgSample: BgSample | null | undefined;
   nowMs?: number;
+};
+
+const scopedStorageKey = (key: string, scopeId: string): string => {
+  if (!/^[A-Za-z0-9._-]{1,160}$/.test(scopeId)) {
+    throw new Error('Hypo notification Workspace scope is invalid.');
+  }
+  return `${key}:${scopeId}`;
+};
+
+const notificationIds = (scopeId: string) => {
+  const token = sha1(scopeId);
+  return {
+    current: `hypo-now-${token}`,
+    followUp: `hypo-follow-up-${token}`,
+  };
 };
 
 export type HypoNowEvaluationResult = {
@@ -73,9 +90,10 @@ async function ensureNotificationChannel(): Promise<string> {
 }
 
 async function scheduleFollowUpNotification(params: {
+  scopeId: string;
   baseTimestampMs: number;
 }) {
-  const {baseTimestampMs} = params;
+  const {baseTimestampMs, scopeId} = params;
 
   const trigger = {
     type: TriggerType.TIMESTAMP,
@@ -88,6 +106,7 @@ async function scheduleFollowUpNotification(params: {
 
   await notifee.createTriggerNotification(
     {
+      id: notificationIds(scopeId).followUp,
       title,
       body,
       android: {
@@ -99,6 +118,8 @@ async function scheduleFollowUpNotification(params: {
       },
       data: {
         route: 'HypoInvestigationScreen',
+        source: 'hypo_follow_up',
+        workspaceScopeId: scopeId,
       },
     },
     trigger,
@@ -132,8 +153,12 @@ export async function evaluateHypoNowAndNotify(input: HypoNowEvaluationInput): P
   }
 
   const [lastTriggeredRaw, lastBgTimestampRaw] = await Promise.all([
-    AsyncStorage.getItem(STORAGE_KEYS.lastTriggeredAtMs),
-    AsyncStorage.getItem(STORAGE_KEYS.lastBgTimestampMs),
+    AsyncStorage.getItem(
+      scopedStorageKey(STORAGE_KEYS.lastTriggeredAtMs, input.scopeId),
+    ),
+    AsyncStorage.getItem(
+      scopedStorageKey(STORAGE_KEYS.lastBgTimestampMs, input.scopeId),
+    ),
   ]);
 
   const lastTriggeredAtMs = lastTriggeredRaw ? Number(lastTriggeredRaw) : null;
@@ -162,6 +187,7 @@ export async function evaluateHypoNowAndNotify(input: HypoNowEvaluationInput): P
   const startMs = nowMs - DEFAULTS.analysisWindowMs;
 
   await notifee.displayNotification({
+    id: notificationIds(input.scopeId).current,
     title: copy.title,
     body: copy.body,
     android: {
@@ -178,16 +204,24 @@ export async function evaluateHypoNowAndNotify(input: HypoNowEvaluationInput): P
       endMs: String(endMs),
       lowThreshold: String(DEFAULTS.lowThresholdMgDl),
       source: 'hypo_now_mvp',
+      workspaceScopeId: input.scopeId,
     },
   });
 
   await scheduleFollowUpNotification({
+    scopeId: input.scopeId,
     baseTimestampMs: nowMs,
   });
 
   await Promise.all([
-    AsyncStorage.setItem(STORAGE_KEYS.lastTriggeredAtMs, String(nowMs)),
-    AsyncStorage.setItem(STORAGE_KEYS.lastBgTimestampMs, String(sampleTimestampMs)),
+    AsyncStorage.setItem(
+      scopedStorageKey(STORAGE_KEYS.lastTriggeredAtMs, input.scopeId),
+      String(nowMs),
+    ),
+    AsyncStorage.setItem(
+      scopedStorageKey(STORAGE_KEYS.lastBgTimestampMs, input.scopeId),
+      String(sampleTimestampMs),
+    ),
   ]);
 
   return {
@@ -195,4 +229,13 @@ export async function evaluateHypoNowAndNotify(input: HypoNowEvaluationInput): P
     reason: 'notify_hypo_now',
     debug: {sgv, sampleTimestampMs, lowThreshold: DEFAULTS.lowThresholdMgDl},
   };
+}
+
+/** Cancels only notifications belonging to the Workspace being left. */
+export async function clearHypoNowNotifications(scopeId: string): Promise<void> {
+  const ids = notificationIds(scopeId);
+  await Promise.all([
+    notifee.cancelNotification(ids.current),
+    notifee.cancelNotification(ids.followUp),
+  ]);
 }

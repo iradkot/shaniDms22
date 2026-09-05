@@ -18,7 +18,7 @@ import {useOracleInsights} from 'app/hooks/useOracleInsights';
 import OracleGhostGraph from 'app/components/charts/OracleGhostGraph/OracleGhostGraph';
 import {addOpacity} from 'app/style/styling.utils';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
-import {t as tr} from 'app/i18n/translations';
+import {t as tr, Lang} from 'app/i18n/translations';
 import {
   ORACLE_SLOPE_POINTS_DEFAULT,
   ORACLE_SLOPE_POINTS_MAX,
@@ -29,15 +29,26 @@ import {
   formatDateToLocaleTimeString,
 } from 'app/utils/datetime.utils';
 
-import {OracleStatusBanner, Spacer, Card, CardSubtle, CardTitle} from './components/OracleCards';
-import {Row, RowLeft, RowMeta, RowRight, RowTitle} from './components/OracleRows';
+import {
+  OracleStatusBanner,
+  Spacer,
+  Card,
+  CardSubtle,
+  CardTitle,
+} from './components/OracleCards';
+import {
+  Row,
+  RowLeft,
+  RowMeta,
+  RowRight,
+  RowTitle,
+} from './components/OracleRows';
 import {OracleMatchDetailsCard} from './components/OracleMatchDetailsCard';
-import {OracleProgressBar, formatOracleProgressMeta} from './components/OracleProgress';
+import {OracleProgressBar} from './components/OracleProgress';
 import {
   fmtBg,
   fmtCob,
   fmtIob,
-  formatOracleKind,
   formatPercent,
   isWithinNext2Hours,
   summarizeMatch,
@@ -68,7 +79,8 @@ const StrategyCard = styled.View<{theme: ThemeType; $accent?: string}>`
   border-color: ${(p: {theme: ThemeType}) => p.theme.borderColor};
   padding: ${(p: {theme: ThemeType}) => p.theme.spacing.lg}px;
   border-left-width: 6px;
-  border-left-color: ${(p: {theme: ThemeType; $accent?: string}) => p.$accent ?? p.theme.borderColor};
+  border-left-color: ${(p: {theme: ThemeType; $accent?: string}) =>
+    p.$accent ?? p.theme.borderColor};
 `;
 
 const StrategyTitleRow = styled.View`
@@ -126,7 +138,8 @@ const SegmentRow = styled.View<{theme: ThemeType}>`
   margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
   flex-direction: row;
   border-width: 1px;
-  border-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.borderColor, 0.9)};
+  border-color: ${(p: {theme: ThemeType}) =>
+    addOpacity(p.theme.borderColor, 0.9)};
   border-radius: ${(p: {theme: ThemeType}) => p.theme.borderRadius}px;
   overflow: hidden;
 `;
@@ -147,7 +160,11 @@ const SegmentText = styled.Text<{theme: ThemeType; $active?: boolean}>`
     p.$active ? p.theme.accentColor : addOpacity(p.theme.textColor, 0.75)};
 `;
 
-function sgvNear(points: Array<{tMin: number; sgv: number}>, tMin: number, toleranceMin = 5): number | null {
+function sgvNear(
+  points: Array<{tMin: number; sgv: number}>,
+  tMin: number,
+  toleranceMin = 5,
+): number | null {
   let best: {tMin: number; sgv: number} | null = null;
   for (const p of points) {
     const d = Math.abs(p.tMin - tMin);
@@ -200,7 +217,8 @@ const StepperButton = styled(Pressable)<{theme: ThemeType}>`
   padding-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.sm}px;
   border-radius: ${(p: {theme: ThemeType}) => p.theme.borderRadius}px;
   border-width: 1px;
-  border-color: ${(p: {theme: ThemeType}) => addOpacity(p.theme.borderColor, 0.9)};
+  border-color: ${(p: {theme: ThemeType}) =>
+    addOpacity(p.theme.borderColor, 0.9)};
 `;
 
 const StepperButtonText = styled.Text<{theme: ThemeType}>`
@@ -209,7 +227,10 @@ const StepperButtonText = styled.Text<{theme: ThemeType}>`
   color: ${(p: {theme: ThemeType}) => p.theme.textColor};
 `;
 
-const ExecuteButton = styled(Pressable)<{theme: ThemeType; $disabled?: boolean}>`
+const ExecuteButton = styled(Pressable)<{
+  theme: ThemeType;
+  $disabled?: boolean;
+}>`
   margin-top: ${(p: {theme: ThemeType}) => p.theme.spacing.lg}px;
   padding-vertical: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
   padding-horizontal: ${(p: {theme: ThemeType}) => p.theme.spacing.md}px;
@@ -217,7 +238,9 @@ const ExecuteButton = styled(Pressable)<{theme: ThemeType; $disabled?: boolean}>
   align-items: center;
   justify-content: center;
   background-color: ${(p: {theme: ThemeType; $disabled?: boolean}) =>
-    p.$disabled ? addOpacity(p.theme.accentColor, 0.25) : addOpacity(p.theme.accentColor, 0.95)};
+    p.$disabled
+      ? addOpacity(p.theme.accentColor, 0.25)
+      : addOpacity(p.theme.accentColor, 0.95)};
 `;
 
 const ExecuteButtonText = styled.Text<{theme: ThemeType; $disabled?: boolean}>`
@@ -231,15 +254,27 @@ function clampInt(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(v)));
 }
 
+function formatLocalizedOracleKind(language: Lang, kind: string): string {
+  if (kind === 'rising') return tr(language, 'oracle.eventKindRising');
+  if (kind === 'falling') return tr(language, 'oracle.eventKindFalling');
+  if (kind === 'stable') return tr(language, 'oracle.eventKindStable');
+  return kind;
+}
+
 const Oracle: React.FC = () => {
   const {width} = useWindowDimensions();
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
   const [selectedEventTs, setSelectedEventTs] = useState<number | null>(null);
-  const [selectedPreviousTs, setSelectedPreviousTs] = useState<number | null>(null);
-  const [previousSortMode, setPreviousSortMode] = useState<PreviousSortMode>('recent');
+  const [selectedPreviousTs, setSelectedPreviousTs] = useState<number | null>(
+    null,
+  );
+  const [previousSortMode, setPreviousSortMode] =
+    useState<PreviousSortMode>('recent');
   const [includeLoadInMatching, setIncludeLoadInMatching] = useState(true);
-  const [slopePointCount, setSlopePointCount] = useState<number>(ORACLE_SLOPE_POINTS_DEFAULT);
+  const [slopePointCount, setSlopePointCount] = useState<number>(
+    ORACLE_SLOPE_POINTS_DEFAULT,
+  );
   const [cacheDays, setCacheDays] = useState<number>(90);
 
   useEffect(() => {
@@ -252,13 +287,29 @@ const Oracle: React.FC = () => {
         if (typeof parsed?.includeLoadInMatching === 'boolean') {
           setIncludeLoadInMatching(parsed.includeLoadInMatching);
         }
-        if (typeof parsed?.slopePointCount === 'number' && Number.isFinite(parsed.slopePointCount)) {
+        if (
+          typeof parsed?.slopePointCount === 'number' &&
+          Number.isFinite(parsed.slopePointCount)
+        ) {
           setSlopePointCount(
-            clampInt(parsed.slopePointCount, ORACLE_SLOPE_POINTS_MIN, ORACLE_SLOPE_POINTS_MAX),
+            clampInt(
+              parsed.slopePointCount,
+              ORACLE_SLOPE_POINTS_MIN,
+              ORACLE_SLOPE_POINTS_MAX,
+            ),
           );
         }
-        if (typeof parsed?.cacheDays === 'number' && Number.isFinite(parsed.cacheDays)) {
-          setCacheDays(clampInt(parsed.cacheDays, ORACLE_CACHE_DAYS_MIN, ORACLE_CACHE_DAYS_MAX));
+        if (
+          typeof parsed?.cacheDays === 'number' &&
+          Number.isFinite(parsed.cacheDays)
+        ) {
+          setCacheDays(
+            clampInt(
+              parsed.cacheDays,
+              ORACLE_CACHE_DAYS_MIN,
+              ORACLE_CACHE_DAYS_MAX,
+            ),
+          );
         }
       } catch {
         // Ignore settings load failures.
@@ -291,27 +342,26 @@ const Oracle: React.FC = () => {
     effectiveSlopePointCount,
     error,
     lastSyncedMs,
-    historyCount,
     isSyncing,
     status,
     hasExecuted,
     lastRunConfig,
     execute,
-  } =
-    useOracleInsights({
-      selectedEventTs,
-      includeLoadInMatching,
-      slopePointCount,
-      cacheDays,
-    });
+  } = useOracleInsights({
+    selectedEventTs,
+    includeLoadInMatching,
+    slopePointCount,
+    cacheDays,
+  });
 
   const isPendingSlope = effectiveSlopePointCount !== slopePointCount;
   const isBusy = isLoading || isComputingInsights;
 
   const [paramChangeHint, setParamChangeHint] = useState<string | null>(null);
-  const prevParamsRef = useRef<{slopePointCount: number; includeLoadInMatching: boolean} | null>(
-    null,
-  );
+  const prevParamsRef = useRef<{
+    slopePointCount: number;
+    includeLoadInMatching: boolean;
+  } | null>(null);
   useEffect(() => {
     const prev = prevParamsRef.current;
     prevParamsRef.current = {slopePointCount, includeLoadInMatching};
@@ -324,13 +374,24 @@ const Oracle: React.FC = () => {
     if (!changed) return;
 
     const pieces: string[] = [];
-    pieces.push(`Slope points: ${slopePointCount}`);
-    pieces.push(includeLoadInMatching ? 'Load matching: On' : 'Load matching: Off');
-    setParamChangeHint(`Updated • ${pieces.join(' • ')}`);
+    pieces.push(
+      tr(language, 'oracle.slopePointsValue', {count: slopePointCount}),
+    );
+    pieces.push(
+      tr(
+        language,
+        includeLoadInMatching
+          ? 'oracle.loadMatchingOn'
+          : 'oracle.loadMatchingOff',
+      ),
+    );
+    setParamChangeHint(
+      tr(language, 'oracle.settingsUpdated', {details: pieces.join(' • ')}),
+    );
 
     const t = setTimeout(() => setParamChangeHint(null), 2500);
     return () => clearTimeout(t);
-  }, [includeLoadInMatching, selectedEvent, slopePointCount]);
+  }, [includeLoadInMatching, language, selectedEvent, slopePointCount]);
 
   const prevMatchCountRef = useRef<number | null>(null);
   const [matchDeltaHint, setMatchDeltaHint] = useState<string | null>(null);
@@ -347,40 +408,64 @@ const Oracle: React.FC = () => {
     if (insights.matchCount <= prev) return;
 
     const delta = insights.matchCount - prev;
-    setMatchDeltaHint(`+${delta} new match${delta === 1 ? '' : 'es'} found`);
+    setMatchDeltaHint(tr(language, 'oracle.newMatchesFound', {count: delta}));
     const t = setTimeout(() => setMatchDeltaHint(null), 2500);
     return () => clearTimeout(t);
-  }, [insights]);
+  }, [insights, language]);
 
   const statusMessage = useMemo(() => {
     return 'message' in status ? status.message : '';
   }, [status]);
 
   const summaryText = useMemo(() => {
-    if (!selectedEvent) return 'Waiting for recent data…';
-    if (status.state === 'idle') return 'Adjust settings, then press Execute to run.';
+    if (!selectedEvent) return tr(language, 'oracle.waitingForRecentData');
+    if (status.state === 'idle')
+      return tr(language, 'oracle.adjustThenExecute');
     if (status.state === 'computing') return statusMessage;
-    if (isPendingSlope) return 'Applying slope change…';
-    if (!insights) return hasExecuted ? 'Ready to run again.' : 'Press Execute to start.';
-    if (isSyncing && insights.matchCount === 0) return 'Searching cached history…';
-    return `Found ${insights.matchCount} previous similar events.`;
-  }, [hasExecuted, insights, isPendingSlope, isSyncing, selectedEvent, status.state, statusMessage]);
+    if (isPendingSlope) return tr(language, 'oracle.applyingSlopeChange');
+    if (!insights) {
+      return tr(
+        language,
+        hasExecuted ? 'oracle.readyToRunAgain' : 'oracle.pressExecuteToStart',
+      );
+    }
+    if (isSyncing && insights.matchCount === 0) {
+      return tr(language, 'oracle.searchingCachedHistory');
+    }
+    return tr(language, 'oracle.foundSimilarEvents', {
+      count: insights.matchCount,
+    });
+  }, [
+    hasExecuted,
+    insights,
+    isPendingSlope,
+    isSyncing,
+    language,
+    selectedEvent,
+    status.state,
+    statusMessage,
+  ]);
 
   const computeMetaText = useMemo(() => {
     if (!computeProgress) return null;
-    return formatOracleProgressMeta({
+    return tr(language, 'oracle.progressMeta', {
+      percent:
+        computeProgress.total > 0
+          ? Math.round((computeProgress.scanned / computeProgress.total) * 100)
+          : 100,
       scanned: computeProgress.scanned,
       total: computeProgress.total,
-      matchCount: computeProgress.matchCount,
+      matches: computeProgress.matchCount,
     });
-  }, [computeProgress]);
+  }, [computeProgress, language]);
 
   const hasPendingChanges = useMemo(() => {
     if (!lastRunConfig) return false;
     return (
       lastRunConfig.cacheDays !== cacheDays ||
       lastRunConfig.includeLoadInMatching !== includeLoadInMatching ||
-      (lastRunConfig.slopePointCount ?? null) !== (effectiveSlopePointCount ?? null)
+      (lastRunConfig.slopePointCount ?? null) !==
+        (effectiveSlopePointCount ?? null)
     );
   }, [
     cacheDays,
@@ -391,34 +476,45 @@ const Oracle: React.FC = () => {
 
   const loadSummaryText = useMemo(() => {
     if (!selectedEvent) return 'IOB — • COB —';
-    if (!insights) return 'Calculating IOB/COB…';
-    return `IOB ${fmtIob(insights.anchorIob)} • COB ${fmtCob(insights.anchorCob)}`;
-  }, [insights, selectedEvent]);
+    if (!insights) return tr(language, 'oracle.calculatingLoad');
+    return tr(language, 'oracle.iobCobMeta', {
+      iob: fmtIob(insights.anchorIob),
+      cob: fmtCob(insights.anchorCob),
+    });
+  }, [insights, language, selectedEvent]);
 
   const loadMatchModeText = useMemo(() => {
     if (!selectedEvent) return '';
-    if (includeLoadInMatching) return 'Matching includes IOB/COB (when available).';
-    return 'Matching uses CGM pattern only.';
-  }, [includeLoadInMatching, selectedEvent]);
+    if (includeLoadInMatching)
+      return tr(language, 'oracle.matchingIncludesLoad');
+    return tr(language, 'oracle.matchingCgmOnly');
+  }, [includeLoadInMatching, language, selectedEvent]);
 
   const loadAvailabilityHint = useMemo(() => {
     if (!includeLoadInMatching) return '';
     if (!insights) return '';
-    const hasAny = typeof insights.anchorIob === 'number' || typeof insights.anchorCob === 'number';
+    const hasAny =
+      typeof insights.anchorIob === 'number' ||
+      typeof insights.anchorCob === 'number';
     if (hasAny) return '';
-    return 'IOB/COB not available for this event; matching will ignore load.';
-  }, [includeLoadInMatching, insights]);
+    return tr(language, 'oracle.loadUnavailable');
+  }, [includeLoadInMatching, insights, language]);
 
   const selectedLabel = useMemo(() => {
     if (!selectedEvent) return '';
     const when = formatDateToDateAndTimeString(selectedEvent.date);
-    return `${formatOracleKind(selectedEvent.kind)} event • ${when}`;
-  }, [selectedEvent]);
+    return tr(language, 'oracle.selectedEvent', {
+      kind: formatLocalizedOracleKind(language, selectedEvent.kind),
+      when,
+    });
+  }, [language, selectedEvent]);
 
   const selectedPrevious = useMemo(() => {
     if (!insights?.matches?.length) return null;
     if (typeof selectedPreviousTs !== 'number') return null;
-    return insights.matches.find(m => m.anchorTs === selectedPreviousTs) ?? null;
+    return (
+      insights.matches.find(m => m.anchorTs === selectedPreviousTs) ?? null
+    );
   }, [insights?.matches, selectedPreviousTs]);
 
   const previousMatchMeta = useMemo(() => {
@@ -430,7 +526,12 @@ const Oracle: React.FC = () => {
     // Compare the 60 minutes leading up to the event to estimate pattern similarity.
     // Both series are in tMin minutes relative to their own t=0 anchors.
     for (const m of insights.matches) {
-      const rmse = rmseOverWindow({a: m.points, b: insights.currentSeries, minTMin: -60, maxTMin: 0});
+      const rmse = rmseOverWindow({
+        a: m.points,
+        b: insights.currentSeries,
+        minTMin: -60,
+        maxTMin: 0,
+      });
       if (rmse != null) shapeRmseByAnchor.set(m.anchorTs, rmse);
 
       const dSgv = Math.abs(m.anchorSgv - selectedEvent.sgv);
@@ -502,11 +603,15 @@ const Oracle: React.FC = () => {
       return b.anchorTs - a.anchorTs;
     });
     return matches.slice(0, PREVIOUS_MATCHES_LIMIT);
-  }, [insights?.matches, previousMatchMeta?.distanceByAnchor, previousSortMode]);
+  }, [
+    insights?.matches,
+    previousMatchMeta?.distanceByAnchor,
+    previousSortMode,
+  ]);
 
   const bestOutcomeMatch = useMemo(() => {
     if (!insights?.matches?.length) return null;
-    let best: typeof insights.matches[number] | null = null;
+    let best: (typeof insights.matches)[number] | null = null;
     for (const m of insights.matches) {
       if (!best) {
         best = m;
@@ -535,7 +640,7 @@ const Oracle: React.FC = () => {
       if (bg2hM < bg2hBest) best = m;
     }
     return best;
-  }, [insights?.matches]);
+  }, [insights]);
 
   const closestMatch = useMemo(() => {
     if (!insights?.matches?.length) return null;
@@ -578,7 +683,9 @@ const Oracle: React.FC = () => {
         <Card>
           <CardTitle>{tr(language, 'oracle.investigateEvents')}</CardTitle>
           {!!selectedLabel && <CardSubtle>{selectedLabel}</CardSubtle>}
-          <CardSubtle testID={E2E_TEST_IDS.oracle.headerSummary}>{summaryText}</CardSubtle>
+          <CardSubtle testID={E2E_TEST_IDS.oracle.headerSummary}>
+            {summaryText}
+          </CardSubtle>
 
           {!!paramChangeHint && <CardSubtle>{paramChangeHint}</CardSubtle>}
           {!!matchDeltaHint && <CardSubtle>{matchDeltaHint}</CardSubtle>}
@@ -586,11 +693,13 @@ const Oracle: React.FC = () => {
           {hasExecuted && hasPendingChanges && !isBusy && (
             <OracleStatusBanner
               tone="info"
-              message="Settings changed (not applied yet). Press Execute to run with the new settings."
+              message={tr(language, 'oracle.settingsChangedPending')}
             />
           )}
 
-          {!!syncProgress && isSyncing && <CardSubtle>{syncProgress.message}</CardSubtle>}
+          {!!syncProgress && isSyncing && (
+            <CardSubtle>{syncProgress.message}</CardSubtle>
+          )}
 
           {status.state === 'computing' && !!selectedEvent && (
             <OracleStatusBanner
@@ -598,7 +707,10 @@ const Oracle: React.FC = () => {
               tone="info"
               message={
                 lastComputeMs != null
-                  ? `${statusMessage} (last ${Math.round(lastComputeMs)}ms)`
+                  ? tr(language, 'oracle.lastRunDuration', {
+                      message: statusMessage,
+                      duration: Math.round(lastComputeMs),
+                    })
                   : statusMessage
               }
             />
@@ -606,19 +718,26 @@ const Oracle: React.FC = () => {
 
           {status.state === 'computing' && !!computeProgress && (
             <View style={{marginTop: theme.spacing.md}}>
-              <OracleProgressBar percent={computeProgress.percent} meta={computeMetaText ?? undefined} />
+              <OracleProgressBar
+                percent={computeProgress.percent}
+                meta={computeMetaText ?? undefined}
+              />
             </View>
           )}
 
           {!!selectedEvent && (
             <>
-              <CardSubtle testID={E2E_TEST_IDS.oracle.loadSummary}>{loadSummaryText}</CardSubtle>
-              {!!loadMatchModeText && <CardSubtle>{loadMatchModeText}</CardSubtle>}
-              {!!loadAvailabilityHint && <CardSubtle>{loadAvailabilityHint}</CardSubtle>}
+              <CardSubtle testID={E2E_TEST_IDS.oracle.loadSummary}>
+                {loadSummaryText}
+              </CardSubtle>
+              {!!loadMatchModeText && (
+                <CardSubtle>{loadMatchModeText}</CardSubtle>
+              )}
+              {!!loadAvailabilityHint && (
+                <CardSubtle>{loadAvailabilityHint}</CardSubtle>
+              )}
               <ToggleRow>
-                <ToggleLabel>
-                  {tr(language, 'oracle.includeLoad')}
-                </ToggleLabel>
+                <ToggleLabel>{tr(language, 'oracle.includeLoad')}</ToggleLabel>
                 <Switch
                   testID={E2E_TEST_IDS.oracle.loadToggle}
                   accessibilityLabel={E2E_TEST_IDS.oracle.loadToggle}
@@ -629,7 +748,11 @@ const Oracle: React.FC = () => {
                     false: addOpacity(theme.textColor, 0.2),
                     true: addOpacity(theme.accentColor, 0.4),
                   }}
-                  thumbColor={includeLoadInMatching ? theme.accentColor : theme.borderColor}
+                  thumbColor={
+                    includeLoadInMatching
+                      ? theme.accentColor
+                      : theme.borderColor
+                  }
                 />
               </ToggleRow>
 
@@ -644,10 +767,13 @@ const Oracle: React.FC = () => {
                     disabled={isBusy}
                     onPress={() =>
                       setCacheDays(v =>
-                        clampInt(v - ORACLE_CACHE_DAYS_STEP, ORACLE_CACHE_DAYS_MIN, ORACLE_CACHE_DAYS_MAX),
+                        clampInt(
+                          v - ORACLE_CACHE_DAYS_STEP,
+                          ORACLE_CACHE_DAYS_MIN,
+                          ORACLE_CACHE_DAYS_MAX,
+                        ),
                       )
-                    }
-                  >
+                    }>
                     <StepperButtonText>−</StepperButtonText>
                   </StepperButton>
 
@@ -659,22 +785,21 @@ const Oracle: React.FC = () => {
                     disabled={isBusy}
                     onPress={() =>
                       setCacheDays(v =>
-                        clampInt(v + ORACLE_CACHE_DAYS_STEP, ORACLE_CACHE_DAYS_MIN, ORACLE_CACHE_DAYS_MAX),
+                        clampInt(
+                          v + ORACLE_CACHE_DAYS_STEP,
+                          ORACLE_CACHE_DAYS_MIN,
+                          ORACLE_CACHE_DAYS_MAX,
+                        ),
                       )
-                    }
-                  >
+                    }>
                     <StepperButtonText>+</StepperButtonText>
                   </StepperButton>
                 </StepperControls>
               </StepperRow>
-              <CardSubtle>
-                {tr(language, 'oracle.executeRuns')}
-              </CardSubtle>
+              <CardSubtle>{tr(language, 'oracle.executeRuns')}</CardSubtle>
 
               <StepperRow>
-                <ToggleLabel>
-                  {tr(language, 'oracle.slopePoints')}
-                </ToggleLabel>
+                <ToggleLabel>{tr(language, 'oracle.slopePoints')}</ToggleLabel>
                 <StepperControls>
                   <StepperButton
                     testID={E2E_TEST_IDS.oracle.slopeMinus}
@@ -684,8 +809,7 @@ const Oracle: React.FC = () => {
                       setSlopePointCount(v =>
                         Math.max(ORACLE_SLOPE_POINTS_MIN, v - 1),
                       )
-                    }
-                  >
+                    }>
                     <StepperButtonText>−</StepperButtonText>
                   </StepperButton>
 
@@ -699,19 +823,14 @@ const Oracle: React.FC = () => {
                       setSlopePointCount(v =>
                         Math.min(ORACLE_SLOPE_POINTS_MAX, v + 1),
                       )
-                    }
-                  >
+                    }>
                     <StepperButtonText>+</StepperButtonText>
                   </StepperButton>
                 </StepperControls>
               </StepperRow>
-              <CardSubtle>
-                {tr(language, 'oracle.slopeHint')}
-              </CardSubtle>
+              <CardSubtle>{tr(language, 'oracle.slopeHint')}</CardSubtle>
               {isPendingSlope && (
-                <CardSubtle>
-                  {tr(language, 'oracle.slopeUpdating')}
-                </CardSubtle>
+                <CardSubtle>{tr(language, 'oracle.slopeUpdating')}</CardSubtle>
               )}
             </>
           )}
@@ -721,22 +840,25 @@ const Oracle: React.FC = () => {
             accessibilityLabel={E2E_TEST_IDS.oracle.executeButton}
             $disabled={!selectedEvent || isBusy}
             disabled={!selectedEvent || isBusy}
-            onPress={execute}
-          >
+            onPress={execute}>
             <ExecuteButtonText $disabled={!selectedEvent || isBusy}>
-              {isBusy ? tr(language, 'oracle.running') : tr(language, 'oracle.execute')}
+              {isBusy
+                ? tr(language, 'oracle.running')
+                : tr(language, 'oracle.execute')}
             </ExecuteButtonText>
           </ExecuteButton>
 
           {typeof lastSyncedMs === 'number' && (
             <CardSubtle>
-              {tr(language, 'oracle.cacheUpdated', {time: formatDateToDateAndTimeString(lastSyncedMs)})}
+              {tr(language, 'oracle.cacheUpdated', {
+                time: formatDateToDateAndTimeString(lastSyncedMs),
+              })}
             </CardSubtle>
           )}
 
           {status.state === 'syncing' && !status.hasHistory && (
             <CardSubtle testID={E2E_TEST_IDS.oracle.historySyncHint}>
-              {status.message} Similar events may be empty for a moment.
+              {tr(language, 'oracle.syncHint', {message: status.message})}
             </CardSubtle>
           )}
 
@@ -745,7 +867,7 @@ const Oracle: React.FC = () => {
               testID={E2E_TEST_IDS.oracle.statusBanner}
               tone="error"
               message={status.message}
-              actionLabel="Execute"
+              actionLabel={tr(language, 'oracle.execute')}
               actionTestID={E2E_TEST_IDS.oracle.retryButton}
               onPressAction={execute}
             />
@@ -756,7 +878,7 @@ const Oracle: React.FC = () => {
               testID={E2E_TEST_IDS.oracle.statusBanner}
               tone="warn"
               message={tr(language, 'oracle.liveFetchUnavailable')}
-              actionLabel="Execute"
+              actionLabel={tr(language, 'oracle.execute')}
               actionTestID={E2E_TEST_IDS.oracle.retryButton}
               onPressAction={execute}
             />
@@ -766,7 +888,9 @@ const Oracle: React.FC = () => {
             <OracleStatusBanner
               testID={E2E_TEST_IDS.oracle.statusBanner}
               tone="info"
-              message={`${status.message} Matches may increase as the cache updates.`}
+              message={tr(language, 'oracle.syncingMatches', {
+                message: status.message,
+              })}
             />
           )}
         </Card>
@@ -794,9 +918,16 @@ const Oracle: React.FC = () => {
                     setSelectedPreviousTs(null);
                   }}>
                   <RowLeft>
-                    <RowTitle>{formatOracleKind(e.kind)}</RowTitle>
+                    <RowTitle>
+                      {formatLocalizedOracleKind(language, e.kind)}
+                    </RowTitle>
                     <RowMeta>
-                      {when} • slope {e.slope.toFixed(1)} mg/dL/min • IOB {fmtIob(e.iob)} • COB {fmtCob(e.cob)}
+                      {tr(language, 'oracle.eventMeta', {
+                        time: when,
+                        slope: e.slope.toFixed(1),
+                        iob: fmtIob(e.iob),
+                        cob: fmtCob(e.cob),
+                      })}
                     </RowMeta>
                   </RowLeft>
                   <RowRight>{e.sgv}</RowRight>
@@ -811,10 +942,16 @@ const Oracle: React.FC = () => {
         <Spacer h={theme.spacing.md} />
 
         {isBusy && !insights ? (
-          <View style={{alignItems: 'center', paddingVertical: LOADER_PADDING_VERTICAL_PX}}>
+          <View
+            style={{
+              alignItems: 'center',
+              paddingVertical: LOADER_PADDING_VERTICAL_PX,
+            }}>
             <Loader />
             {(status.state === 'loading' || status.state === 'computing') && (
-              <CardSubtle style={{marginTop: theme.spacing.md}}>{status.message}</CardSubtle>
+              <CardSubtle style={{marginTop: theme.spacing.md}}>
+                {status.message}
+              </CardSubtle>
             )}
           </View>
         ) : insights ? (
@@ -832,15 +969,18 @@ const Oracle: React.FC = () => {
 
             <Card testID={E2E_TEST_IDS.oracle.strategiesList}>
               <CardTitle>{tr(language, 'oracle.whatWorked')}</CardTitle>
-              <CardSubtle>
-                Strategy cards group similar past events by actions recorded in the first 30 minutes.
-                Historical associations only — not dosing advice.
-              </CardSubtle>
+              <CardSubtle>{tr(language, 'oracle.strategyHint')}</CardSubtle>
 
               {isComputingInsights && (
-                <View style={{marginTop: theme.spacing.sm, flexDirection: 'row', alignItems: 'center'}}>
+                <View
+                  style={{
+                    marginTop: theme.spacing.sm,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                  }}>
                   <ActivityIndicator size="small" color={theme.accentColor} />
-                  <CardSubtle style={{marginTop: 0, marginLeft: theme.spacing.sm}}>
+                  <CardSubtle
+                    style={{marginTop: 0, marginLeft: theme.spacing.sm}}>
                     {tr(language, 'oracle.scanningHistoryCards')}
                   </CardSubtle>
                 </View>
@@ -857,7 +997,9 @@ const Oracle: React.FC = () => {
 
                   const successText =
                     typeof s.successRate === 'number'
-                      ? tr(language, 'oracle.inRange2hFormat', {value: Math.round(s.successRate * 100)})
+                      ? tr(language, 'oracle.inRange2hFormat', {
+                          value: Math.round(s.successRate * 100),
+                        })
                       : tr(language, 'oracle.successUnavailable');
 
                   const accent =
@@ -868,17 +1010,19 @@ const Oracle: React.FC = () => {
                   return (
                     <View
                       key={s.key}
-                      style={{marginTop: idx === 0 ? 0 : theme.spacing.md}}
-                    >
+                      style={{marginTop: idx === 0 ? 0 : theme.spacing.md}}>
                       <StrategyCard
                         testID={`${E2E_TEST_IDS.oracle.strategyCard}.${idx}`}
                         accessibilityLabel={`${E2E_TEST_IDS.oracle.strategyCard}.${idx}`}
-                        $accent={accent}
-                      >
+                        $accent={accent}>
                         <StrategyTitleRow>
                           <StrategyTitle>{s.title}</StrategyTitle>
                           <StrategyBadge $best={!!s.isBest}>
-                            {s.isBest ? tr(language, 'oracle.bestHistoricalOutcome') : tr(language, 'oracle.matchesCount', {count: s.count})}
+                            {s.isBest
+                              ? tr(language, 'oracle.bestHistoricalOutcome')
+                              : tr(language, 'oracle.matchesCount', {
+                                  count: s.count,
+                                })}
                           </StrategyBadge>
                         </StrategyTitleRow>
                         <StrategyMeta>{s.actionSummary}</StrategyMeta>
@@ -908,37 +1052,46 @@ const Oracle: React.FC = () => {
 
             <Card testID={E2E_TEST_IDS.oracle.previousList}>
               <CardTitle>{tr(language, 'oracle.previousEvents')}</CardTitle>
-              <CardSubtle>{tr(language, 'oracle.previousEventsHint')}</CardSubtle>
+              <CardSubtle>
+                {tr(language, 'oracle.previousEventsHint')}
+              </CardSubtle>
 
               {!!insights.matches.length && (
                 <>
                   <SegmentRow>
                     <SegmentButton
                       $active={previousSortMode === 'recent'}
-                      onPress={() => setPreviousSortMode('recent')}
-                    >
-                      <SegmentText $active={previousSortMode === 'recent'}>{tr(language, 'oracle.recent')}</SegmentText>
+                      onPress={() => setPreviousSortMode('recent')}>
+                      <SegmentText $active={previousSortMode === 'recent'}>
+                        {tr(language, 'oracle.recent')}
+                      </SegmentText>
                     </SegmentButton>
                     <SegmentButton
                       $active={previousSortMode === 'closest'}
-                      onPress={() => setPreviousSortMode('closest')}
-                    >
-                      <SegmentText $active={previousSortMode === 'closest'}>{tr(language, 'oracle.closest')}</SegmentText>
+                      onPress={() => setPreviousSortMode('closest')}>
+                      <SegmentText $active={previousSortMode === 'closest'}>
+                        {tr(language, 'oracle.closest')}
+                      </SegmentText>
                     </SegmentButton>
                     <SegmentButton
                       $active={previousSortMode === 'bestOutcome'}
-                      onPress={() => setPreviousSortMode('bestOutcome')}
-                    >
-                      <SegmentText $active={previousSortMode === 'bestOutcome'}>{tr(language, 'oracle.bestOutcome')}</SegmentText>
+                      onPress={() => setPreviousSortMode('bestOutcome')}>
+                      <SegmentText $active={previousSortMode === 'bestOutcome'}>
+                        {tr(language, 'oracle.bestOutcome')}
+                      </SegmentText>
                     </SegmentButton>
                   </SegmentRow>
 
                   {(closestMatch || bestOutcomeMatch) && (
                     <CardSubtle>
                       {tr(language, 'oracle.quickPicksLine', {
-                        closest: closestMatch ? tr(language, 'oracle.closest') : '',
+                        closest: closestMatch
+                          ? tr(language, 'oracle.closest')
+                          : '',
                         sep: closestMatch && bestOutcomeMatch ? ' • ' : '',
-                        best: bestOutcomeMatch ? tr(language, 'oracle.bestOutcome') : '',
+                        best: bestOutcomeMatch
+                          ? tr(language, 'oracle.bestOutcome')
+                          : '',
                       })}
                     </CardSubtle>
                   )}
@@ -956,30 +1109,66 @@ const Oracle: React.FC = () => {
                   const s = summarizeMatch(m.points);
                   const within2h =
                     selectedEvent != null
-                      ? isWithinNext2Hours({anchorTs: selectedEvent.date, candidateTs: m.anchorTs})
+                      ? isWithinNext2Hours({
+                          anchorTs: selectedEvent.date,
+                          candidateTs: m.anchorTs,
+                        })
                       : false;
 
-                  const dBg = selectedEvent ? Math.round(Math.abs(m.anchorSgv - selectedEvent.sgv)) : null;
-                  const dSlope = selectedEvent ? Math.abs(m.slope - selectedEvent.slope) : null;
-                  const shapeRmse = previousMatchMeta?.shapeRmseByAnchor.get(m.anchorTs) ?? null;
+                  const dBg = selectedEvent
+                    ? Math.round(Math.abs(m.anchorSgv - selectedEvent.sgv))
+                    : null;
+                  const dSlope = selectedEvent
+                    ? Math.abs(m.slope - selectedEvent.slope)
+                    : null;
+                  const shapeRmse =
+                    previousMatchMeta?.shapeRmseByAnchor.get(m.anchorTs) ??
+                    null;
 
                   const metaParts: string[] = [];
                   if (s.min2h != null && s.max4h != null) {
-                    metaParts.push(tr(language, 'oracle.outcome2h4h', {min: fmtBg(s.min2h), max: fmtBg(s.max4h)}));
+                    metaParts.push(
+                      tr(language, 'oracle.outcome2h4h', {
+                        min: fmtBg(s.min2h),
+                        max: fmtBg(s.max4h),
+                      }),
+                    );
                   } else {
                     metaParts.push(tr(language, 'oracle.outcomeUnavailable'));
                   }
 
                   if (dBg != null && dSlope != null) {
-                    metaParts.push(tr(language, 'oracle.deltaBgSlope', {bg: dBg, slope: dSlope.toFixed(1)}));
+                    metaParts.push(
+                      tr(language, 'oracle.deltaBgSlope', {
+                        bg: dBg,
+                        slope: dSlope.toFixed(1),
+                      }),
+                    );
                   }
                   if (shapeRmse != null) {
-                    metaParts.push(tr(language, 'oracle.shape', {value: Math.round(shapeRmse)}));
+                    metaParts.push(
+                      tr(language, 'oracle.shape', {
+                        value: Math.round(shapeRmse),
+                      }),
+                    );
                   }
 
-                  metaParts.push(tr(language, 'oracle.iobCobMeta', {iob: fmtIob(m.iob ?? null), cob: fmtCob(m.cob ?? null)}));
-                  metaParts.push(tr(language, 'oracle.tir2h', {value: formatPercent(m.tir2h)}));
-                  metaParts.push(within2h ? tr(language, 'oracle.withinNext2h') : tr(language, 'oracle.outsideNext2h'));
+                  metaParts.push(
+                    tr(language, 'oracle.iobCobMeta', {
+                      iob: fmtIob(m.iob ?? null),
+                      cob: fmtCob(m.cob ?? null),
+                    }),
+                  );
+                  metaParts.push(
+                    tr(language, 'oracle.tir2h', {
+                      value: formatPercent(m.tir2h),
+                    }),
+                  );
+                  metaParts.push(
+                    within2h
+                      ? tr(language, 'oracle.withinNext2h')
+                      : tr(language, 'oracle.outsideNext2h'),
+                  );
 
                   const meta = metaParts.join(' • ');
 
@@ -1002,13 +1191,15 @@ const Oracle: React.FC = () => {
                 })
               ) : isComputingInsights ? (
                 <CardSubtle>
-                  Scanning history… matches will appear here as they’re found.
+                  {tr(language, 'oracle.scanningHistoryMatches')}
                 </CardSubtle>
               ) : isSyncing ? (
-                <CardSubtle>{tr(language, 'oracle.searchingHistory')}</CardSubtle>
+                <CardSubtle>
+                  {tr(language, 'oracle.searchingHistory')}
+                </CardSubtle>
               ) : (
                 <CardSubtle testID={E2E_TEST_IDS.oracle.noMatches}>
-                  No similar events found.
+                  {tr(language, 'oracle.noSimilarEvents')}
                 </CardSubtle>
               )}
 

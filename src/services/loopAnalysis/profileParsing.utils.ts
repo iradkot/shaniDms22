@@ -213,9 +213,9 @@ export function parseProfileChangeFromTreatment(
     timestamp,
     source,
     eventType,
-    profileName,
     summary,
-    durationMinutes,
+    ...(profileName !== undefined ? {profileName} : {}),
+    ...(durationMinutes !== undefined ? {durationMinutes} : {}),
     _raw: treatment,
   };
 }

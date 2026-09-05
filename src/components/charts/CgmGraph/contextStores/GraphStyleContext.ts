@@ -3,7 +3,12 @@ import {createContext, useCallback, useMemo} from 'react';
 import {BgSample} from 'app/types/day_bgs.types';
 import {xAccessor} from 'app/components/charts/CgmGraph/utils';
 
-export type ChartMargin = {top: number; right: number; bottom: number; left: number};
+export type ChartMargin = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
 
 interface GraphStyleContextInterface {
   width: number;
@@ -50,10 +55,17 @@ function computeXDomainFromSamples(bgSamples: BgSample[]): [Date, Date] {
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
   for (const s of bgSamples) {
-    const t = typeof s.date === 'number' ? s.date : new Date(xAccessor(s)).getTime();
-    if (!Number.isFinite(t)) continue;
-    if (t < min) min = t;
-    if (t > max) max = t;
+    const t =
+      typeof s.date === 'number' ? s.date : new Date(xAccessor(s)).getTime();
+    if (!Number.isFinite(t)) {
+      continue;
+    }
+    if (t < min) {
+      min = t;
+    }
+    if (t > max) {
+      max = t;
+    }
   }
 
   if (!Number.isFinite(min) || !Number.isFinite(max)) {
@@ -74,8 +86,10 @@ export const useGraphStyleContext = (
   GraphStyleContextInterface,
   (values: GraphStyleContextInterface) => void,
 ] => {
-  const highestBgThreshold = 300;
-  const margin = useMemo(() => marginOverride ?? DEFAULT_MARGIN, [marginOverride]);
+  const margin = useMemo(
+    () => marginOverride ?? DEFAULT_MARGIN,
+    [marginOverride],
+  );
 
   const graphWidth = Math.max(0, width - margin.left - margin.right);
   const graphHeight = Math.max(0, height - margin.top - margin.bottom);
@@ -85,15 +99,33 @@ export const useGraphStyleContext = (
   }, [bgSamples, xDomainOverride]);
 
   const xScale = useMemo(() => {
-    return d3.scaleTime<number, number>().domain(xDomain).range([0, graphWidth]);
+    return d3
+      .scaleTime<number, number>()
+      .domain(xDomain)
+      .range([0, graphWidth]);
   }, [graphWidth, xDomain]);
+
+  const highestBgThreshold = useMemo(() => {
+    const start = xDomain[0].getTime();
+    const end = xDomain[1].getTime();
+    const max = bgSamples.reduce(
+      (current, sample) =>
+        Number.isFinite(sample.sgv) &&
+        sample.date >= start &&
+        sample.date <= end
+          ? Math.max(current, sample.sgv)
+          : current,
+      0,
+    );
+    return Math.max(300, Math.ceil((max + 20) / 50) * 50);
+  }, [bgSamples, xDomain]);
 
   const yScale = useMemo(() => {
     return d3
       .scaleLinear<number, number>()
       .domain([0, highestBgThreshold])
       .range([graphHeight, 0]);
-  }, [graphHeight]);
+  }, [graphHeight, highestBgThreshold]);
 
   const graphStyleContextValue = useMemo<GraphStyleContextInterface>(() => {
     return {
@@ -106,7 +138,16 @@ export const useGraphStyleContext = (
       graphHeight,
       bgSamples,
     };
-  }, [bgSamples, graphHeight, graphWidth, height, margin, width, xScale, yScale]);
+  }, [
+    bgSamples,
+    graphHeight,
+    graphWidth,
+    height,
+    margin,
+    width,
+    xScale,
+    yScale,
+  ]);
 
   /**
    * Setter kept for API compatibility.
@@ -114,9 +155,12 @@ export const useGraphStyleContext = (
    * The chart styles are derived from `width`, `height`, `bgSamples`, `xDomainOverride`, and `marginOverride`.
    * We intentionally avoid internal state here to keep the context referentially stable during touch-move renders.
    */
-  const setGraphStyleContextValue = useCallback((_values: GraphStyleContextInterface) => {
-    // no-op by design
-  }, []);
+  const setGraphStyleContextValue = useCallback(
+    (_values: GraphStyleContextInterface) => {
+      // no-op by design
+    },
+    [],
+  );
 
   return [graphStyleContextValue, setGraphStyleContextValue];
 };

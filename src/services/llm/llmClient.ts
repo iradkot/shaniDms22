@@ -1,12 +1,15 @@
 import {LlmProvider} from './llmTypes';
-import {OpenAIProvider} from './providers/openaiProvider';
+import {ShaniLlmProxyProvider} from './shaniLlmProxy';
 import {AiSettings} from 'app/contexts/AiSettingsContext';
 
 type LlmProviderSettings = Pick<AiSettings, 'provider' | 'apiKey'>;
 
 export function createLlmProvider(settings: LlmProviderSettings): LlmProvider {
   if (settings.provider === 'openai') {
-    return new OpenAIProvider({apiKey: settings.apiKey});
+    return new ShaniLlmProxyProvider({
+      provider: 'openai',
+      e2eApiKey: settings.apiKey,
+    });
   }
 
   // Exhaustive guard for future providers.

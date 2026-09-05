@@ -8,7 +8,7 @@ export const useDebouncedState = <T>(
   delay: number,
 ): [T, React.Dispatch<React.SetStateAction<T>>] => {
   const [value, setValue] = useState(initialValue);
-  const timeout = useRef<NodeJS.Timeout>();
+  const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const debouncedSetState = useCallback(
     (newValue: React.SetStateAction<T>) => {
@@ -16,6 +16,7 @@ export const useDebouncedState = <T>(
         clearTimeout(timeout.current);
       }
       timeout.current = setTimeout(() => {
+        timeout.current = null;
         setValue(newValue);
       }, delay);
     },
@@ -26,6 +27,7 @@ export const useDebouncedState = <T>(
     return () => {
       if (timeout.current) {
         clearTimeout(timeout.current);
+        timeout.current = null;
       }
     };
   }, []);

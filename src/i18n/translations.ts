@@ -48,13 +48,15 @@ const en = {
     todayKeepRoutine: 'Today: keep same routine',
     tirVs7d: 'TIR {{tir}}% ({{delta}} vs 7d)',
     avgBg: 'Avg BG {{value}}',
-    insulinLine: 'Insulin {{value}}U ({{delta}} vs day before | avg {{avg}}U/day)',
+    insulinLine:
+      'Insulin {{value}}U ({{delta}} vs day before | avg {{avg}}U/day)',
     trendHypo: 'Focus: lower hypo risk today',
     trendStable: 'Trend: stable day, keep momentum',
     mealsToday: "Today's Meals",
     meals: 'Meals',
     noMealsTitle: 'No meals detected yet',
-    noMealsSub: 'Meals appear automatically when carb or bolus events are recorded in Nightscout.',
+    noMealsSub:
+      'Meals appear automatically when carb or bolus events are recorded in Nightscout.',
     preMealTitle: 'Before Your Next Meal',
     bgNow: 'BG Now',
     activeIob: 'Active IOB',
@@ -113,31 +115,40 @@ const en = {
     recommendationsAndAlerts: 'Alerts and recommendations',
     todayRecommendationTitle: 'Recommendation for right now',
     todayRecoHypoTitle: 'Low risk is high now',
-    todayRecoHypoBody: 'Treat low now (15g fast carbs) and recheck in 15 minutes before any bolus.',
+    todayRecoHypoBody:
+      'Treat low now (15g fast carbs) and recheck in 15 minutes before any bolus.',
     todayRecoWatchLowTitle: 'Watch for a near-low trend',
-    todayRecoWatchLowBody: 'You are near low and trending down. Avoid correction; recheck soon.',
+    todayRecoWatchLowBody:
+      'You are near low and trending down. Avoid correction; recheck soon.',
     todayRecoWalkTitle: 'Good window for a short walk',
-    todayRecoWalkBody: 'Post-meal looks stable with active insulin. A 10–15 min walk can support TIR.',
+    todayRecoWalkBody:
+      'Post-meal looks stable with active insulin. A 10–15 min walk can support TIR.',
     todayRecoHighTitle: 'Glucose is high with little active insulin',
-    todayRecoHighBody: 'Check meal timing/correction plan and monitor closely over the next hour.',
+    todayRecoHighBody:
+      'Check meal timing/correction plan and monitor closely over the next hour.',
     todayRecoMealPrepTitle: 'Meal prep reminder',
-    todayRecoMealPrepBody: 'If lunch is soon, plan carbs and bolus timing now to avoid a sharp rise.',
+    todayRecoMealPrepBody:
+      'If lunch is soon, plan carbs and bolus timing now to avoid a sharp rise.',
     todayRecoPostMealLoopTitle: 'Post-meal rise looks controlled by Loop',
-    todayRecoPostMealLoopBody: 'A mild rise is expected; no extra bolus now. Recheck in 20–30 minutes.',
+    todayRecoPostMealLoopBody:
+      'A mild rise is expected; no extra bolus now. Recheck in 20–30 minutes.',
     todayRecoStableTitle: 'You are on a stable track',
-    todayRecoStableBody: 'Keep the current routine and do one glucose check before the next meal.',
-    todayRecoDetails: 'Now {{now}} | Next {{next}} | IOB {{iob}}u | COB {{cob}}g',
+    todayRecoStableBody:
+      'Keep the current routine and do one glucose check before the next meal.',
+    todayRecoDetails:
+      'Now {{now}} | Next {{next}} | IOB {{iob}}u | COB {{cob}}g',
     recommendationRefresh: 'Refresh recommendation',
     recommendationRefreshing: 'Refreshing…',
     recommendationUpdatedAt: 'Updated at {{time}}',
     recommendationStartChat: 'Start chat about this',
     recommendationRequest: 'Request recommendation',
     recommendationNotRequestedYet: 'No recommendation requested yet for today.',
-    recommendationLoading: 'Loading latest recommendation…'
+    recommendationLoading: 'Loading latest recommendation…',
   },
   trends: {
     noBgData: 'No BG data available for this period.',
-    loadingCancelledPartial: 'Loading cancelled. Showing partial results for {{daysFetched}}/{{rangeDays}} days.',
+    loadingCancelledPartial:
+      'Loading cancelled. Showing partial results for {{daysFetched}}/{{rangeDays}} days.',
     keyGlucoseTrends: 'Key Glucose Trends',
     quickStats: 'Quick Stats',
     agp: 'AGP',
@@ -157,9 +168,11 @@ const en = {
     seriousHyposPerDay: 'Serious Hypos/Day',
     seriousHypersPerDay: 'Serious Hypers/Day',
     eventsPerDay: 'events/day',
-    compareInsight: 'Green indicates an improvement, while red suggests a decline. Use these insights to adjust your diabetes management plan.',
+    compareInsight:
+      'Green indicates an improvement, while red suggests a decline. Use these insights to adjust your diabetes management plan.',
     datePickerUnavailableTitle: 'Date picker unavailable',
-    datePickerUnavailableBody: 'The native date picker module is not available in this build. Please rebuild the Android app.',
+    datePickerUnavailableBody:
+      'The native date picker module is not available in this build. Please rebuild the Android app.',
     days7: '7 Days',
     days14: '14 Days',
     days30: '30 Days',
@@ -172,7 +185,8 @@ const en = {
     takingLonger: 'Taking longer than usual. You can wait or cancel.',
     veryLongLoading: 'Very long loading time. Maybe reduce the date range.',
     cancel: 'Cancel',
-    failedFetch: 'Failed to fetch data: {{error}}. Check your network and try again.',
+    failedFetch:
+      'Failed to fetch data: {{error}}. Check your network and try again.',
     overallAvgTitle: 'Average BG',
     overallAvgHint: 'Lower avg BG often means better control, but avoid hypos.',
     overallSeriousHyposTitle: 'Serious Hypos',
@@ -228,14 +242,16 @@ const en = {
     loadingActiveInsulin: 'Loading active insulin / device status…',
     ofClassified: '{{value}}% of classified',
     hyposCount: 'Hypos ({{count}})',
-    hypoTapHint: 'Tap a hypo to open a chart window: 3 hours before and 3 hours after the lowest reading.',
-    noSevereHypos: 'No severe hypos in this range.'
+    hypoTapHint:
+      'Tap a hypo to open a chart window: 3 hours before and 3 hours after the lowest reading.',
+    noSevereHypos: 'No severe hypos in this range.',
   },
   oracle: {
     investigateEvents: 'Investigate Events',
     includeLoad: 'Include IOB/COB in similar-event search',
     historyWindowDays: 'History window (days)',
-    executeRuns: 'Execute runs: (1) refresh cache, then (2) scan history, then (3) build strategies.',
+    executeRuns:
+      'Execute runs: (1) refresh cache, then (2) scan history, then (3) build strategies.',
     slopePoints: 'Slope points (noise smoothing)',
     slopeHint: 'Uses least-squares slope over the last 15 minutes.',
     slopeUpdating: 'Updating matches after you stop tapping…',
@@ -243,13 +259,15 @@ const en = {
     execute: 'Execute',
     cacheUpdated: 'Cache updated: {{time}}',
     syncHint: '{{message}} Similar events may be empty for a moment.',
-    liveFetchUnavailable: 'Live fetch unavailable; showing cached data when possible.',
+    liveFetchUnavailable:
+      'Live fetch unavailable; showing cached data when possible.',
     syncingMatches: '{{message}} Matches may increase as the cache updates.',
     pickEvent: 'Pick an event',
     pickEventHint: 'Choose a recent point to compare against history.',
     noRecentEvents: 'No recent events yet.',
     whatWorked: 'What tended to work',
-    strategyHint: 'Strategy cards group similar past events by actions recorded in the first 30 minutes. Historical associations only — not dosing advice.',
+    strategyHint:
+      'Strategy cards group similar past events by actions recorded in the first 30 minutes. Historical associations only — not dosing advice.',
     scanningHistoryCards: 'Scanning history and updating strategy cards…',
     avg2hUnavailable: 'Avg +2h BG unavailable',
     successUnavailable: 'Success rate unavailable',
@@ -258,16 +276,19 @@ const en = {
     strategiesAccumulating: 'Strategies will appear as matches accumulate…',
     noStrategies: 'No strategies yet (not enough similar events).',
     previousEvents: 'Previous events',
-    previousEventsHint: 'Compare historical matches by closeness and outcome. Tap a row to open a rich chart.',
+    previousEventsHint:
+      'Compare historical matches by closeness and outcome. Tap a row to open a rich chart.',
     recent: 'Recent',
     closest: 'Closest',
     bestOutcome: 'Best outcome',
-    quickPicks: 'Quick picks: {{items}} — tap the sort above to bring them to the top.',
+    quickPicks:
+      'Quick picks: {{items}} — tap the sort above to bring them to the top.',
     updatingList: 'Updating list…',
     outcomeUnavailable: 'Outcome unavailable',
     withinNext2h: 'Within next 2h',
     outsideNext2h: 'Outside next 2h',
-    scanningHistoryMatches: 'Scanning history… matches will appear here as they’re found.',
+    scanningHistoryMatches:
+      'Scanning history… matches will appear here as they’re found.',
     searchingHistory: 'Searching history…',
     noSimilarEvents: 'No similar events found.',
     eventDetails: 'Event details',
@@ -275,17 +296,48 @@ const en = {
     overlay: 'Overlay',
     loadAtCursor: 'Load at cursor: {{text}}',
     load: 'Load: {{text}}',
-    chartWindowHint: 'Chart shows -2h to +4h around the match; bolus/carbs markers are from 0–30m after the match.',
-    bolusCarbsSummary: 'Boluses (0–30m): {{boluses}} • Insulin: {{insulin}}U • Carbs: {{carbs}}g',
+    chartWindowHint:
+      'Chart shows -2h to +4h around the match; bolus/carbs markers are from 0–30m after the match.',
+    bolusCarbsSummary:
+      'Boluses (0–30m): {{boluses}} • Insulin: {{insulin}}U • Carbs: {{carbs}}g',
     iobCobAtEvent: 'IOB/COB at event: {{iob}} / {{cob}}',
     avg2hFormat: 'Avg +2h BG {{value}}',
     inRange2hFormat: '{{value}}% in 70–140 at +2h',
-    quickPicksLine: 'Quick picks: {{closest}}{{sep}}{{best}} — tap the sort above to bring them to the top.',
+    quickPicksLine:
+      'Quick picks: {{closest}}{{sep}}{{best}} — tap the sort above to bring them to the top.',
     outcome2h4h: '2h min {{min}} • 4h max {{max}}',
     deltaBgSlope: 'ΔBG {{bg}} • Δslope {{slope}}',
     shape: 'Shape {{value}}',
     iobCobMeta: 'IOB {{iob}} • COB {{cob}}',
-    tir2h: 'TIR(0–2h) {{value}}'
+    tir2h: 'TIR(0–2h) {{value}}',
+    slopePointsValue: 'Slope points: {{count}}',
+    loadMatchingOn: 'Load matching: On',
+    loadMatchingOff: 'Load matching: Off',
+    settingsUpdated: 'Updated • {{details}}',
+    newMatchesFound: '+{{count}} new matches found',
+    waitingForRecentData: 'Waiting for recent data…',
+    adjustThenExecute: 'Adjust settings, then press Execute to run.',
+    applyingSlopeChange: 'Applying slope change…',
+    readyToRunAgain: 'Ready to run again.',
+    pressExecuteToStart: 'Press Execute to start.',
+    searchingCachedHistory: 'Searching cached history…',
+    foundSimilarEvents: 'Found {{count}} previous similar events.',
+    calculatingLoad: 'Calculating IOB/COB…',
+    matchingIncludesLoad: 'Matching includes IOB/COB (when available).',
+    matchingCgmOnly: 'Matching uses CGM pattern only.',
+    loadUnavailable:
+      'IOB/COB is unavailable for this event, so matching will ignore load.',
+    eventKindRising: 'Rising',
+    eventKindFalling: 'Falling',
+    eventKindStable: 'Stable',
+    selectedEvent: '{{kind}} event • {{when}}',
+    settingsChangedPending:
+      'Settings changed but are not applied yet. Press Execute to use them.',
+    lastRunDuration: '{{message}} (last run: {{duration}} ms)',
+    eventMeta:
+      '{{time}} • slope {{slope}} mg/dL/min • IOB {{iob}} • COB {{cob}}',
+    progressMeta:
+      '{{percent}}% • scanned {{scanned}}/{{total}} • matches {{matches}}',
   },
   dailyReview: {
     title: 'Yesterday summary',
@@ -301,7 +353,8 @@ const en = {
     summaryLine: 'Yesterday TIR {{tir}}% • Avg glucose {{avg}}',
     lowsVsHighs: 'More lows than highs ({{lows}} vs {{highs}}).',
     highsVsLows: 'More highs than lows ({{highs}} vs {{lows}}).',
-    fallbackAction: '🎯 Today: keep a stable routine and avoid insulin stacking.'
+    fallbackAction:
+      '🎯 Today: keep a stable routine and avoid insulin stacking.',
   },
   settings: {
     title: 'Settings',
@@ -327,10 +380,12 @@ const en = {
     delete: 'Delete',
     edit: 'Edit',
     addNightscoutProfile: 'Add Nightscout profile',
-    nightscoutRequired: 'You need at least one Nightscout profile to view data.',
+    nightscoutRequired:
+      'You need at least one Nightscout profile to view data.',
     aiAnalyst: 'AI Analyst',
     enableAiAnalyst: 'Enable AI Analyst',
-    aiKeyHint: 'Requires your own OpenAI key. We don’t provide free LLM tokens.',
+    aiKeyHint:
+      'Requires your own OpenAI key. We don’t provide free LLM tokens.',
     openAiApiKey: 'OpenAI API key',
     checkKey: 'Check key',
     checking: 'Checking…',
@@ -346,7 +401,8 @@ const en = {
     morningBrief: 'Morning daily brief',
     briefTime: 'Brief time (HH:MM)',
     sendBriefNow: 'Send daily brief now',
-    briefIncludes: 'Brief includes: night status, yesterday summary, and one action for today.',
+    briefIncludes:
+      'Brief includes: night status, yesterday summary, and one action for today.',
     ranges: 'Ranges',
     severeHypo: 'Severe Hypo (mg/dL)',
     hypo: 'Hypo (mg/dL)',
@@ -361,14 +417,19 @@ const en = {
     lunchStart: 'Lunch start (0–23)',
     dinnerStart: 'Dinner start (0–23)',
     errEnterAllRanges: 'Please enter all range values.',
-    errRangeOrder: 'Ranges must be ordered: severe hypo < hypo < hyper < severe hyper.',
-    errNightHoursRequired: 'Please enter both night start and end hours (0–23).',
+    errRangeOrder:
+      'Ranges must be ordered: severe hypo < hypo < hyper < severe hyper.',
+    errNightHoursRequired:
+      'Please enter both night start and end hours (0–23).',
     errNightHoursRange: 'Night window hours must be between 0 and 23.',
-    errMealHoursRequired: 'Please enter breakfast, lunch, and dinner start hours (0–23).',
+    errMealHoursRequired:
+      'Please enter breakfast, lunch, and dinner start hours (0–23).',
     errMealHoursRange: 'Meal start hours must be between 0 and 23.',
-    errMealHoursOrder: 'Meal hours must be ordered: breakfast < lunch < dinner.',
+    errMealHoursOrder:
+      'Meal hours must be ordered: breakfast < lunch < dinner.',
     errBriefTimeRequired: 'Please enter daily brief time as HH:MM.',
-    errBriefTimeRange: 'Daily brief time must be valid (hour 0–23, minute 0–59).',
+    errBriefTimeRange:
+      'Daily brief time must be valid (hour 0–23, minute 0–59).',
     sendingBrief: 'Sending brief…',
     briefSent: 'Daily brief sent.',
     briefSendFailed: 'Failed to send daily brief now.',
@@ -376,7 +437,7 @@ const en = {
     keyValidSaved: 'Key looks valid. Saved.',
     keyInvalid: 'Invalid key (unauthorized). Please retry.',
     keyRateLimited: 'Key saved, but OpenAI returned 429 (quota/rate limit).',
-    keyCouldNotVerify: 'Could not verify key. Please retry.'
+    keyCouldNotVerify: 'Could not verify key. Please retry.',
   },
   foodForm: {
     imageRequiredTitle: 'Image Required',
@@ -399,6 +460,8 @@ const en = {
     connectTitle: 'Connect Nightscout',
     intro:
       'Enter your Nightscout URL and API secret. The app accepts either the full secret (e.g. {{example}}) or the SHA1 "minified" value (40 hex).',
+    readOnly:
+      'Shani reads from Nightscout. Journal entries remain app-owned and are never written back to Nightscout.',
     urlLabel: 'Nightscout URL',
     urlPlaceholder: 'https://your-nightscout-site.com',
     secretLabel: 'API secret / token',
@@ -407,13 +470,24 @@ const en = {
     testConnection: 'Test connection',
     testFailed: 'Nightscout connection test failed.',
     testSuccess: 'Connection works. Latest glucose data is available.',
-    testSuccessNoEntries: 'Connection works, but no glucose entries were returned.',
+    testSuccessNoEntries:
+      'Connection works, but no glucose entries were returned.',
     showSecret: 'Show API secret',
     hideSecret: 'Hide API secret',
+    invalidUrl: 'Enter a valid Nightscout http or https URL.',
+    invalidSecret: 'Enter a Nightscout API secret or token.',
     saveContinue: 'Save & Continue',
   },
   auth: {
-    getTokens: 'Get tokens',
+    brand: 'Shani Diabetes',
+    title: 'Your diabetes data, organised around you',
+    subtitle:
+      'Connect once, then choose the graph, summary, trends, journal, or AI view that helps you now.',
+    signIn: 'Continue with Google',
+    signInHint: 'Your Workspaces and app-owned data stay separated by account.',
+    signingIn: 'Signing in…',
+    signInFailed: 'Google sign-in could not be completed. Try again.',
+    language: 'Language',
     e2eLogin: 'E2E Login',
   },
   sport: {
@@ -431,6 +505,32 @@ const en = {
     range: 'Range:',
     trend: 'Trend:',
     deleteAccessibility: 'Delete notification',
+    noRules: 'No notification rules yet',
+    localAlertsTitle: 'Internal alerts are active',
+    localAlertsBody:
+      'These rules run locally in the app using live Nightscout glucose. A cooldown for each rule helps prevent repeated alerts.',
+  },
+  loopTuner: {
+    title: 'Settings History',
+    loadingSubtitle: 'Loading your Loop settings changes…',
+    trackSubtitle: 'Track changes to your Loop settings',
+    overviewSubtitle:
+      'See how changes to CR, ISF, targets, and basal affect your glucose',
+    filterAll: 'All',
+    filterCarbRatio: 'Carb Ratio',
+    filterIsf: 'ISF',
+    filterTargets: 'Targets',
+    filterBasal: 'Basal',
+    filterDia: 'DIA',
+    loadingMore: 'Loading more changes…',
+    allChangesLoaded: 'All {{count}} settings changes loaded',
+    noFilteredChanges:
+      'No {{filter}} changes found.\n\nSelect "All" to see other changes.',
+    emptyHint:
+      'Changes to Carb Ratio, ISF, targets, and basal will appear here.\n\nMake sure Loop uploads profiles to Nightscout.',
+    noChangesTitle: 'No Settings Changes Found',
+    total: '{{count}} total',
+    thisWeek: '{{count}} this week',
   },
   notificationForm: {
     nameLabel: 'Notification Name',
@@ -507,11 +607,44 @@ const en = {
     conversation: 'Conversation',
     copySuccess: 'Copied to clipboard',
     exportTitle: 'Export',
-    exportBody: 'Share a summary of this discussion (and the diabetes data used).',
+    exportBody:
+      'Share a summary of this discussion (and the diabetes data used).',
     shareSummary: 'Share Summary',
     shareDataJson: 'Share Data (JSON)',
     shareSummaryTitle: 'AI Analyst Summary',
-    shareDataTitle: 'AI Analyst Export (JSON)'
+    shareDataTitle: 'AI Analyst Export (JSON)',
+    failedMealEvidence: 'Failed to load meal evidence',
+    failedEvidenceData: 'Failed to load evidence data',
+    agpLastDays: 'AGP for the last {{days}} days',
+    mealResponseLastDays: 'Meal response for the last {{days}} days',
+    tirLastDays: 'Time in Range for the last {{days}} days',
+    focusedDate: 'Focused date: {{date}}',
+    topMeals: 'Top 3 meals driving the recommendation',
+    mealTypeMeal: 'Meal',
+    mealTypeBreakfast: 'Breakfast',
+    mealTypeLunch: 'Lunch',
+    mealTypeDinner: 'Dinner',
+    mealTypeSnack: 'Snack',
+    mealMetrics: 'BG at meal: {{bg}} | Peak: {{peak}} | Rise: {{rise}} mg/dL',
+    whyThisMatters: 'Why this matters: {{reason}}',
+    postMealVariability: 'post-meal variability',
+    recentMealResponses: 'Recent meal responses',
+    looksStable: 'Looks stable',
+    canImprove: 'Can improve',
+    needsAttention: 'Needs attention',
+    focused: 'Focused',
+    keepPattern: 'Keep this pattern.',
+    adjustCrTimingHint:
+      'This may relate to carb ratio or pre-bolus timing. Consider reviewing CR and timing carefully.',
+    reviewMealEntryHint:
+      'Review meal timing and carb entry accuracy for this meal.',
+    mealCarbs: '{{meal}} • {{carbs}}g carbs',
+    threeHourTir: '3h in-range score: {{score}}%',
+    whatToImprove: 'What to improve: {{hint}}',
+    mealsAnalyzed: 'Meals analyzed: {{count}}',
+    absorptionPartialNote:
+      'Note: Absorption (COB) data was partial, so this view uses glucose response after meals.',
+    basedOnReadings: 'Based on {{count}} glucose readings.',
   },
   brief: {
     title: 'Daily brief',
@@ -530,8 +663,9 @@ const en = {
     channelName: 'Daily briefs',
     notifReadyTitle: 'Come get your daily summary',
     notifReadyBody: 'Open the app to generate and view yesterday analysis.',
-    llmSystem: 'Write one short daily diabetes action line. Practical, specific, max 14 words. Start with "🎯 Today:".'
-  }
+    llmSystem:
+      'Write one short daily diabetes action line. Practical, specific, max 14 words. Start with "🎯 Today:".',
+  },
 };
 
 const he: typeof en = {
@@ -582,13 +716,15 @@ const he: typeof en = {
     todayKeepRoutine: 'היום: לשמור על אותה שגרה',
     tirVs7d: 'TIR {{tir}}% ({{delta}} מול 7 ימים)',
     avgBg: 'ממוצע סוכר {{value}}',
-    insulinLine: 'אינסולין {{value}} יח׳ ({{delta}} מול יום קודם | ממוצע {{avg}} יח׳/יום)',
+    insulinLine:
+      'אינסולין {{value}} יח׳ ({{delta}} מול יום קודם | ממוצע {{avg}} יח׳/יום)',
     trendHypo: 'פוקוס: להפחית סיכון לירידות היום',
     trendStable: 'מגמה: יום יציב, המשיכו כך',
     mealsToday: 'ארוחות היום',
     meals: 'ארוחות',
     noMealsTitle: 'עדיין לא זוהו ארוחות',
-    noMealsSub: 'ארוחות מופיעות אוטומטית כשנרשמים אירועי פחמימות או בולוס ב־Nightscout.',
+    noMealsSub:
+      'ארוחות מופיעות אוטומטית כשנרשמים אירועי פחמימות או בולוס ב־Nightscout.',
     preMealTitle: 'לפני הארוחה הבאה',
     bgNow: 'סוכר עכשיו',
     activeIob: 'IOB פעיל',
@@ -647,31 +783,39 @@ const he: typeof en = {
     recommendationsAndAlerts: 'התראות והמלצות',
     todayRecommendationTitle: 'המלצה לרגע זה',
     todayRecoHypoTitle: 'סיכון גבוה לנמוך כרגע',
-    todayRecoHypoBody: 'לטפל בנמוך עכשיו (15 גר׳ פחמימה מהירה) ולבדוק שוב תוך 15 דקות לפני תיקון.',
+    todayRecoHypoBody:
+      'לטפל בנמוך עכשיו (15 גר׳ פחמימה מהירה) ולבדוק שוב תוך 15 דקות לפני תיקון.',
     todayRecoWatchLowTitle: 'לשים לב לירידה מתקרבת',
-    todayRecoWatchLowBody: 'את/ה קרוב/ה לנמוך ובמגמת ירידה. להימנע מתיקון ולעשות בדיקה חוזרת בקרוב.',
+    todayRecoWatchLowBody:
+      'את/ה קרוב/ה לנמוך ובמגמת ירידה. להימנע מתיקון ולעשות בדיקה חוזרת בקרוב.',
     todayRecoWalkTitle: 'חלון טוב להליכה קצרה',
-    todayRecoWalkBody: 'אחרי הארוחה נראה יציב עם אינסולין פעיל. הליכה של 10–15 דק׳ יכולה לעזור ל‑TIR.',
+    todayRecoWalkBody:
+      'אחרי הארוחה נראה יציב עם אינסולין פעיל. הליכה של 10–15 דק׳ יכולה לעזור ל‑TIR.',
     todayRecoHighTitle: 'הסוכר גבוה עם מעט אינסולין פעיל',
     todayRecoHighBody: 'לבדוק תזמון ארוחה/תיקון ולעקוב מקרוב בשעה הקרובה.',
     todayRecoMealPrepTitle: 'תזכורת לקראת ארוחה',
-    todayRecoMealPrepBody: 'אם ארוחת צהריים בקרוב, לתכנן פחמימות ותזמון בולוס עכשיו כדי למנוע קפיצה.',
+    todayRecoMealPrepBody:
+      'אם ארוחת צהריים בקרוב, לתכנן פחמימות ותזמון בולוס עכשיו כדי למנוע קפיצה.',
     todayRecoPostMealLoopTitle: 'עלייה אחרי ארוחה נראית בשליטה של הלופ',
-    todayRecoPostMealLoopBody: 'עלייה קלה צפויה; כרגע בלי בולוס נוסף. לבצע בדיקה חוזרת בעוד 20–30 דקות.',
+    todayRecoPostMealLoopBody:
+      'עלייה קלה צפויה; כרגע בלי בולוס נוסף. לבצע בדיקה חוזרת בעוד 20–30 דקות.',
     todayRecoStableTitle: 'את/ה במסלול יציב',
-    todayRecoStableBody: 'להמשיך בשגרה הנוכחית ולעשות בדיקת סוכר אחת לפני הארוחה הבאה.',
-    todayRecoDetails: 'עכשיו {{now}} | תחזית {{next}} | IOB {{iob}}u | COB {{cob}}g',
+    todayRecoStableBody:
+      'להמשיך בשגרה הנוכחית ולעשות בדיקת סוכר אחת לפני הארוחה הבאה.',
+    todayRecoDetails:
+      'עכשיו {{now}} | תחזית {{next}} | IOB {{iob}}u | COB {{cob}}g',
     recommendationRefresh: 'רענן המלצה',
     recommendationRefreshing: 'מרענן…',
     recommendationUpdatedAt: 'עודכן ב־{{time}}',
     recommendationStartChat: 'התחל שיחה על זה',
     recommendationRequest: 'בקש המלצה',
     recommendationNotRequestedYet: 'עדיין לא ביקשת המלצה להיום.',
-    recommendationLoading: 'טוען המלצה אחרונה…'
+    recommendationLoading: 'טוען המלצה אחרונה…',
   },
   trends: {
     noBgData: 'אין נתוני סוכר לתקופה הזו.',
-    loadingCancelledPartial: 'הטעינה בוטלה. מוצגות תוצאות חלקיות עבור {{daysFetched}}/{{rangeDays}} ימים.',
+    loadingCancelledPartial:
+      'הטעינה בוטלה. מוצגות תוצאות חלקיות עבור {{daysFetched}}/{{rangeDays}} ימים.',
     keyGlucoseTrends: 'מגמות סוכר מרכזיות',
     quickStats: 'נתונים מהירים',
     agp: 'AGP',
@@ -691,9 +835,11 @@ const he: typeof en = {
     seriousHyposPerDay: 'היפו חמור ליום',
     seriousHypersPerDay: 'היפר חמור ליום',
     eventsPerDay: 'אירועים/יום',
-    compareInsight: 'ירוק מציין שיפור, ואדום מציין הידרדרות. השתמשו בתובנות כדי לכוון את הניהול היומי.',
+    compareInsight:
+      'ירוק מציין שיפור, ואדום מציין הידרדרות. השתמשו בתובנות כדי לכוון את הניהול היומי.',
     datePickerUnavailableTitle: 'בורר תאריכים לא זמין',
-    datePickerUnavailableBody: 'מודול בורר התאריכים לא זמין בבילד הזה. נא לבצע בנייה מחדש לאנדרואיד.',
+    datePickerUnavailableBody:
+      'מודול בורר התאריכים לא זמין בבילד הזה. נא לבצע בנייה מחדש לאנדרואיד.',
     days7: '7 ימים',
     days14: '14 ימים',
     days30: '30 ימים',
@@ -708,7 +854,8 @@ const he: typeof en = {
     cancel: 'ביטול',
     failedFetch: 'נכשלה טעינת הנתונים: {{error}}. בדקו רשת ונסו שוב.',
     overallAvgTitle: 'ממוצע סוכר',
-    overallAvgHint: 'ממוצע נמוך יותר לרוב מצביע על שליטה טובה יותר, אבל צריך להימנע מהיפו.',
+    overallAvgHint:
+      'ממוצע נמוך יותר לרוב מצביע על שליטה טובה יותר, אבל צריך להימנע מהיפו.',
     overallSeriousHyposTitle: 'היפו חמור',
     overallSeriousHyposHint: 'היפו מסוכן. המטרה היא להפחית את האירועים האלה.',
     avgTdd: 'ממוצע TDD',
@@ -762,14 +909,16 @@ const he: typeof en = {
     loadingActiveInsulin: 'טוען אינסולין פעיל / סטטוס מכשיר…',
     ofClassified: '{{value}}% מהאירועים המסווגים',
     hyposCount: 'היפו ({{count}})',
-    hypoTapHint: 'לחצו על אירוע היפו כדי לפתוח חלון גרף: 3 שעות לפני ו-3 שעות אחרי נקודת השפל.',
-    noSevereHypos: 'אין אירועי היפו חמורים בטווח הזה.'
+    hypoTapHint:
+      'לחצו על אירוע היפו כדי לפתוח חלון גרף: 3 שעות לפני ו-3 שעות אחרי נקודת השפל.',
+    noSevereHypos: 'אין אירועי היפו חמורים בטווח הזה.',
   },
   oracle: {
     investigateEvents: 'חקירת אירועים',
     includeLoad: 'לכלול IOB/COB בחיפוש אירועים דומים',
     historyWindowDays: 'חלון היסטוריה (ימים)',
-    executeRuns: 'Execute מריץ: (1) רענון מטמון, (2) סריקת היסטוריה, (3) בניית אסטרטגיות.',
+    executeRuns:
+      'Execute מריץ: (1) רענון מטמון, (2) סריקת היסטוריה, (3) בניית אסטרטגיות.',
     slopePoints: 'נקודות שיפוע (החלקת רעש)',
     slopeHint: 'משתמש בשיפוע least-squares על 15 הדקות האחרונות.',
     slopeUpdating: 'מעדכן התאמות אחרי שתפסיקו ללחוץ…',
@@ -783,7 +932,8 @@ const he: typeof en = {
     pickEventHint: 'בחרו נקודה אחרונה להשוואה מול ההיסטוריה.',
     noRecentEvents: 'עדיין אין אירועים אחרונים.',
     whatWorked: 'מה נטה לעבוד',
-    strategyHint: 'כרטיסי אסטרטגיה מקבצים אירועים דומים לפי פעולות שנרשמו ב-30 הדקות הראשונות. קשר היסטורי בלבד — לא המלצת מינון.',
+    strategyHint:
+      'כרטיסי אסטרטגיה מקבצים אירועים דומים לפי פעולות שנרשמו ב-30 הדקות הראשונות. קשר היסטורי בלבד — לא המלצת מינון.',
     scanningHistoryCards: 'סורק היסטוריה ומעדכן כרטיסי אסטרטגיה…',
     avg2hUnavailable: 'ממוצע +2ש׳ לא זמין',
     successUnavailable: 'שיעור הצלחה לא זמין',
@@ -792,11 +942,13 @@ const he: typeof en = {
     strategiesAccumulating: 'האסטרטגיות יופיעו ככל שיצטברו התאמות…',
     noStrategies: 'עדיין אין אסטרטגיות (אין מספיק אירועים דומים).',
     previousEvents: 'אירועים קודמים',
-    previousEventsHint: 'השוו התאמות היסטוריות לפי קרבה ותוצאה. לחצו על שורה לפתיחת גרף עשיר.',
+    previousEventsHint:
+      'השוו התאמות היסטוריות לפי קרבה ותוצאה. לחצו על שורה לפתיחת גרף עשיר.',
     recent: 'אחרונים',
     closest: 'הכי קרובים',
     bestOutcome: 'התוצאה הטובה ביותר',
-    quickPicks: 'בחירות מהירות: {{items}} — לחצו על המיון למעלה כדי להביא אותם לראש הרשימה.',
+    quickPicks:
+      'בחירות מהירות: {{items}} — לחצו על המיון למעלה כדי להביא אותם לראש הרשימה.',
     updatingList: 'מעדכן רשימה…',
     outcomeUnavailable: 'תוצאה לא זמינה',
     withinNext2h: 'בתוך 2 השעות הקרובות',
@@ -809,17 +961,47 @@ const he: typeof en = {
     overlay: 'שכבת השוואה',
     loadAtCursor: 'Load בנקודת הסמן: {{text}}',
     load: 'Load: {{text}}',
-    chartWindowHint: 'הגרף מציג -2ש׳ עד +4ש׳ סביב ההתאמה; סמני בולוס/פחמימות הם מ-0 עד 30 דקות אחרי ההתאמה.',
-    bolusCarbsSummary: 'בולוסים (0–30ד׳): {{boluses}} • אינסולין: {{insulin}}U • פחמימות: {{carbs}}g',
+    chartWindowHint:
+      'הגרף מציג -2ש׳ עד +4ש׳ סביב ההתאמה; סמני בולוס/פחמימות הם מ-0 עד 30 דקות אחרי ההתאמה.',
+    bolusCarbsSummary:
+      'בולוסים (0–30ד׳): {{boluses}} • אינסולין: {{insulin}}U • פחמימות: {{carbs}}g',
     iobCobAtEvent: 'IOB/COB בזמן האירוע: {{iob}} / {{cob}}',
     avg2hFormat: 'ממוצע +2ש׳ {{value}}',
     inRange2hFormat: '{{value}}% בטווח 70–140 אחרי +2ש׳',
-    quickPicksLine: 'בחירות מהירות: {{closest}}{{sep}}{{best}} — לחצו על המיון למעלה כדי להביא לראש הרשימה.',
+    quickPicksLine:
+      'בחירות מהירות: {{closest}}{{sep}}{{best}} — לחצו על המיון למעלה כדי להביא לראש הרשימה.',
     outcome2h4h: 'מינ׳ ב-2ש׳ {{min}} • מקס׳ ב-4ש׳ {{max}}',
     deltaBgSlope: 'ΔBG {{bg}} • Δשיפוע {{slope}}',
     shape: 'צורה {{value}}',
     iobCobMeta: 'IOB {{iob}} • COB {{cob}}',
-    tir2h: 'TIR(0–2ש׳) {{value}}'
+    tir2h: 'TIR(0–2ש׳) {{value}}',
+    slopePointsValue: 'נקודות שיפוע: {{count}}',
+    loadMatchingOn: 'השוואת IOB/COB: פעילה',
+    loadMatchingOff: 'השוואת IOB/COB: כבויה',
+    settingsUpdated: 'עודכן • {{details}}',
+    newMatchesFound: 'נמצאו {{count}} התאמות חדשות',
+    waitingForRecentData: 'ממתין לנתונים עדכניים…',
+    adjustThenExecute: 'שנו הגדרות ואז לחצו על הרצה.',
+    applyingSlopeChange: 'מחיל את שינוי השיפוע…',
+    readyToRunAgain: 'מוכן להרצה נוספת.',
+    pressExecuteToStart: 'לחצו על הרצה כדי להתחיל.',
+    searchingCachedHistory: 'מחפש בהיסטוריה השמורה…',
+    foundSimilarEvents: 'נמצאו {{count}} אירועים דומים מהעבר.',
+    calculatingLoad: 'מחשב IOB/COB…',
+    matchingIncludesLoad: 'החיפוש כולל IOB/COB כשהם זמינים.',
+    matchingCgmOnly: 'החיפוש מתבסס רק על דפוס CGM.',
+    loadUnavailable: 'אין IOB/COB לאירוע הזה, לכן החיפוש יתעלם מהם.',
+    eventKindRising: 'עלייה',
+    eventKindFalling: 'ירידה',
+    eventKindStable: 'יציב',
+    selectedEvent: 'אירוע {{kind}} • {{when}}',
+    settingsChangedPending:
+      'ההגדרות שונו אך עדיין לא הוחלו. לחצו על הרצה כדי להשתמש בהן.',
+    lastRunDuration: '{{message}} (הרצה אחרונה: {{duration}} מ״ש)',
+    eventMeta:
+      '{{time}} • שיפוע {{slope}} mg/dL/min • IOB {{iob}} • COB {{cob}}',
+    progressMeta:
+      '{{percent}}% • נסרקו {{scanned}}/{{total}} • {{matches}} התאמות',
   },
   dailyReview: {
     title: 'סיכום אתמול',
@@ -835,7 +1017,7 @@ const he: typeof en = {
     summaryLine: 'אתמול TIR {{tir}}% • ממוצע סוכר {{avg}}',
     lowsVsHighs: 'היו יותר ירידות מעליות ({{lows}} מול {{highs}}).',
     highsVsLows: 'היו יותר ערכים גבוהים מירידות ({{highs}} מול {{lows}}).',
-    fallbackAction: '🎯 היום: שמרו על שגרה יציבה והימנעו מערימת אינסולין.'
+    fallbackAction: '🎯 היום: שמרו על שגרה יציבה והימנעו מערימת אינסולין.',
   },
   settings: {
     title: 'הגדרות',
@@ -895,7 +1077,8 @@ const he: typeof en = {
     lunchStart: 'תחילת צהריים (0–23)',
     dinnerStart: 'תחילת ערב (0–23)',
     errEnterAllRanges: 'נא למלא את כל ערכי הטווח.',
-    errRangeOrder: 'הטווחים חייבים להיות בסדר: היפו חמור < היפו < היפר < היפר חמור.',
+    errRangeOrder:
+      'הטווחים חייבים להיות בסדר: היפו חמור < היפו < היפר < היפר חמור.',
     errNightHoursRequired: 'נא להזין גם שעת התחלה וגם שעת סיום (0–23).',
     errNightHoursRange: 'שעות חלון הלילה חייבות להיות בין 0 ל-23.',
     errMealHoursRequired: 'נא להזין את שעות ההתחלה לבוקר, צהריים וערב (0–23).',
@@ -910,7 +1093,7 @@ const he: typeof en = {
     keyValidSaved: 'המפתח תקין ונשמר.',
     keyInvalid: 'מפתח לא תקין (unauthorized). נא לנסות שוב.',
     keyRateLimited: 'המפתח נשמר, אבל OpenAI החזיר 429 (מכסה/קצב).',
-    keyCouldNotVerify: 'לא הצלחנו לאמת את המפתח. נסו שוב.'
+    keyCouldNotVerify: 'לא הצלחנו לאמת את המפתח. נסו שוב.',
   },
   foodForm: {
     imageRequiredTitle: 'נדרשת תמונה',
@@ -933,6 +1116,8 @@ const he: typeof en = {
     connectTitle: 'חיבור Nightscout',
     intro:
       'הזינו כתובת Nightscout וסוד API. אפשר להזין את הסוד המלא (למשל {{example}}) או ערך SHA1 "מיניפייד" (40 תווים הקסדצימליים).',
+    readOnly:
+      'Shani קוראת מ־Nightscout. רשומות היומן נשארות בבעלות האפליקציה ולעולם אינן נכתבות חזרה ל־Nightscout.',
     urlLabel: 'כתובת Nightscout',
     urlPlaceholder: 'https://your-nightscout-site.com',
     secretLabel: 'סוד API / טוקן',
@@ -944,10 +1129,20 @@ const he: typeof en = {
     testSuccessNoEntries: 'החיבור תקין, אבל לא חזרו רשומות סוכר.',
     showSecret: 'הצג סוד API',
     hideSecret: 'הסתר סוד API',
+    invalidUrl: 'יש להזין כתובת Nightscout תקינה מסוג http או https.',
+    invalidSecret: 'יש להזין סוד API או טוקן של Nightscout.',
     saveContinue: 'שמור והמשך',
   },
   auth: {
-    getTokens: 'קבל טוקנים',
+    brand: 'Shani Diabetes',
+    title: 'המידע על הסוכרת, מסודר בדרך שמתאימה לך',
+    subtitle:
+      'מתחברים פעם אחת ובוחרים בכל רגע את הגרף, הסיכום, המגמות, היומן או ה־AI שרוצים לראות.',
+    signIn: 'המשך עם Google',
+    signInHint: 'סביבות העבודה והמידע שיצרת נשמרים בנפרד לפי החשבון.',
+    signingIn: 'מתחבר…',
+    signInFailed: 'לא הצלחנו להתחבר עם Google. אפשר לנסות שוב.',
+    language: 'שפה',
     e2eLogin: 'התחברות E2E',
   },
   sport: {
@@ -965,6 +1160,31 @@ const he: typeof en = {
     range: 'טווח:',
     trend: 'מגמה:',
     deleteAccessibility: 'מחק התראה',
+    noRules: 'עדיין אין כללי התראה',
+    localAlertsTitle: 'התראות פנימיות פעילות',
+    localAlertsBody:
+      'הכללים פועלים מקומית באפליקציה לפי נתוני הסוכר העדכניים מ־Nightscout. זמן צינון לכל כלל מונע התראות חוזרות.',
+  },
+  loopTuner: {
+    title: 'היסטוריית הגדרות',
+    loadingSubtitle: 'טוען את שינויי ההגדרות ב־Loop…',
+    trackSubtitle: 'מעקב אחר שינויים בהגדרות Loop',
+    overviewSubtitle: 'ראו איך שינויים ב־CR, ISF, יעדים ובזאל משפיעים על הסוכר',
+    filterAll: 'הכל',
+    filterCarbRatio: 'יחס פחמימה',
+    filterIsf: 'ISF',
+    filterTargets: 'יעדים',
+    filterBasal: 'בזאל',
+    filterDia: 'DIA',
+    loadingMore: 'טוען עוד שינויים…',
+    allChangesLoaded: 'נטענו כל {{count}} שינויי ההגדרות',
+    noFilteredChanges:
+      'לא נמצאו שינויי {{filter}}.\n\nבחרו „הכל“ כדי לראות שינויים אחרים.',
+    emptyHint:
+      'שינויים ביחס פחמימה, ISF, יעדים ובזאל יופיעו כאן.\n\nודאו ש־Loop מעלה פרופילים ל־Nightscout.',
+    noChangesTitle: 'לא נמצאו שינויי הגדרות',
+    total: 'סה״כ {{count}}',
+    thisWeek: '{{count}} השבוע',
   },
   notificationForm: {
     nameLabel: 'שם ההתראה',
@@ -1045,7 +1265,38 @@ const he: typeof en = {
     shareSummary: 'שיתוף סיכום',
     shareDataJson: 'שיתוף נתונים (JSON)',
     shareSummaryTitle: 'סיכום AI Analyst',
-    shareDataTitle: 'ייצוא AI Analyst (JSON)'
+    shareDataTitle: 'ייצוא AI Analyst (JSON)',
+    failedMealEvidence: 'נכשלה טעינת נתוני הארוחות',
+    failedEvidenceData: 'נכשלה טעינת נתוני הראיות',
+    agpLastDays: 'AGP ל־{{days}} הימים האחרונים',
+    mealResponseLastDays: 'תגובה לארוחות ב־{{days}} הימים האחרונים',
+    tirLastDays: 'זמן בטווח ב־{{days}} הימים האחרונים',
+    focusedDate: 'תאריך במיקוד: {{date}}',
+    topMeals: 'שלוש הארוחות שהשפיעו ביותר על ההמלצה',
+    mealTypeMeal: 'ארוחה',
+    mealTypeBreakfast: 'ארוחת בוקר',
+    mealTypeLunch: 'ארוחת צהריים',
+    mealTypeDinner: 'ארוחת ערב',
+    mealTypeSnack: 'חטיף',
+    mealMetrics: 'סוכר בארוחה: {{bg}} | שיא: {{peak}} | עלייה: {{rise}} mg/dL',
+    whyThisMatters: 'למה זה חשוב: {{reason}}',
+    postMealVariability: 'שונות בסוכר אחרי הארוחה',
+    recentMealResponses: 'תגובות אחרונות לארוחות',
+    looksStable: 'נראה יציב',
+    canImprove: 'אפשר לשפר',
+    needsAttention: 'דורש תשומת לב',
+    focused: 'במיקוד',
+    keepPattern: 'כדאי לשמור על הדפוס הזה.',
+    adjustCrTimingHint:
+      'ייתכן שזה קשור ליחס פחמימה או לתזמון פרה־בולוס. כדאי לבדוק בזהירות את CR והתזמון.',
+    reviewMealEntryHint: 'כדאי לבדוק את תזמון הארוחה ואת דיוק הזנת הפחמימות.',
+    mealCarbs: '{{meal}} • {{carbs}} גרם פחמימות',
+    threeHourTir: 'ציון זמן בטווח ל־3 שעות: {{score}}%',
+    whatToImprove: 'מה לשפר: {{hint}}',
+    mealsAnalyzed: 'ארוחות שנותחו: {{count}}',
+    absorptionPartialNote:
+      'הערה: נתוני הספיגה (COB) היו חלקיים, לכן התצוגה מתבססת על תגובת הסוכר לאחר הארוחה.',
+    basedOnReadings: 'מבוסס על {{count}} קריאות סוכר.',
   },
   brief: {
     title: 'סיכום יומי',
@@ -1064,15 +1315,23 @@ const he: typeof en = {
     channelName: 'תדריכים יומיים',
     notifReadyTitle: 'בוא לקבל סיכום יומי',
     notifReadyBody: 'פתח את האפליקציה כדי לטעון ולהציג את ניתוח אתמול.',
-    llmSystem: 'כתוב שורת פעולה יומית קצרה לסוכרת. פרקטי וספציפי, עד 14 מילים. להתחיל ב-"🎯 היום:".'
-  }
+    llmSystem:
+      'כתוב שורת פעולה יומית קצרה לסוכרת. פרקטי וספציפי, עד 14 מילים. להתחיל ב-"🎯 היום:".',
+  },
 };
 
 export const translations = {en, he};
 
-export function t(lang: Lang, key: string, vars?: Record<string, string | number>): string {
+export function t(
+  lang: Lang,
+  key: string,
+  vars?: Record<string, string | number>,
+): string {
   const base = translations[lang] ?? translations.en;
-  const value = key.split('.').reduce<any>((obj, part) => (obj ? obj[part] : undefined), base) ?? key;
+  const value =
+    key
+      .split('.')
+      .reduce<any>((obj, part) => (obj ? obj[part] : undefined), base) ?? key;
   const text = String(value);
   if (!vars) return text;
   return text.replace(/\{\{(\w+)\}\}/g, (_, k) => String(vars[k] ?? ''));

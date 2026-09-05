@@ -115,7 +115,9 @@ export async function detectLoopAdjustmentTrend(params?: {
     const pre = rows.filter(r => r.ts <= mealTsItem && r.ts >= mealTsItem - 45 * 60 * 1000);
     const post = rows.filter(r => r.ts >= mealTsItem && r.ts <= mealTsItem + 3 * 60 * 60 * 1000);
     if (!pre.length || !post.length) continue;
-    const preBg = pre[pre.length - 1].sgv;
+    const lastPre = pre[pre.length - 1];
+    if (!lastPre) continue;
+    const preBg = lastPre.sgv;
     const peak = Math.max(...post.map(r => r.sgv));
     postLunchRiseVals.push(Math.max(0, Math.round(peak - preBg)));
   }
@@ -125,11 +127,14 @@ export async function detectLoopAdjustmentTrend(params?: {
   const overnightLowScore = overnightLowCount >= 6 ? 0.74 : overnightLowCount >= 3 ? 0.58 : 0;
   const lunchSpikeScore = postLunchRiseAvg >= 70 && lunchMealTs.length >= 2 ? 0.68 : postLunchRiseAvg >= 55 && lunchMealTs.length >= 2 ? 0.56 : 0;
 
-  const candidate = [
+  const candidates = [
     {type: 'morning_high' as const, score: morningHighScore},
     {type: 'overnight_low' as const, score: overnightLowScore},
     {type: 'post_lunch_spike' as const, score: lunchSpikeScore},
-  ].sort((a, b) => b.score - a.score)[0];
+  ];
+  const candidate = candidates.reduce((best, current) =>
+    current.score > best.score ? current : best,
+  );
 
   const detected = candidate.score >= 0.6;
   const confidence = clamp01(candidate.score + (tirPct < 65 ? 0.08 : 0));

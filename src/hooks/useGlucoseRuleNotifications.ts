@@ -1,86 +1,227 @@
 import {useEffect, useRef} from 'react';
 import notifee, {AndroidImportance} from '@notifee/react-native';
 
-import {BgSample} from 'app/types/day_bgs.types';
 import {getNotificationRules, markNotificationRuleCalled} from 'app/services/notifications/localNotificationsStore';
 import {isRuleSnoozed} from 'app/services/notifications/snoozeStore';
+import type {NotificationStoreScope} from 'app/services/notifications/localNotificationsStore';
+import {evaluateAlertRule} from 'app/modules/alerts';
+import type {AlertRule, AlertRuleTrend} from 'app/modules/alerts';
+import {
+  decodeLegacyAlertRule,
+  type NativeUpdateCenterRepository,
+} from 'app/platform/native/alerts/localNotificationRepositories';
 
 const CHANNEL_ID = 'glucose-rule-alerts';
 const RULE_COOLDOWN_MS = 20 * 60 * 1000;
+const MAX_ALERT_SAMPLE_AGE_MS = 10 * 60 * 1000;
+const MAX_ALERT_SAMPLE_FUTURE_SKEW_MS = 2 * 60 * 1000;
 
-function getMinutesOfDay(dateMs: number): number {
-  const d = new Date(dateMs);
-  return d.getHours() * 60 + d.getMinutes();
-}
+type GlucoseNotificationSample = {
+  readonly sgv: number;
+  readonly date: number;
+  readonly direction?: string;
+};
 
-function isInWindow(minute: number, from: number, to: number): boolean {
-  if (from <= to) return minute >= from && minute <= to;
-  return minute >= from || minute <= to;
-}
-
-function trendMatches(ruleTrend: string, bgTrend?: string): boolean {
-  if (!ruleTrend || ruleTrend === 'NOT COMPUTABLE' || ruleTrend === 'RATE OUT OF RANGE') {
-    return true;
+const extractNotificationSample = (
+  snapshot: unknown,
+): GlucoseNotificationSample | undefined => {
+  if (typeof snapshot !== 'object' || snapshot === null) {
+    return undefined;
   }
-  if (!bgTrend) return false;
-  return ruleTrend === bgTrend;
-}
-
-function shouldTriggerForRule(rule: any, sample: BgSample, nowMs: number): boolean {
-  if (!rule?.enabled) return false;
-  const sgv = typeof sample.sgv === 'number' ? sample.sgv : null;
-  if (sgv == null) return false;
-
-  const minute = getMinutesOfDay(nowMs);
-  if (!isInWindow(minute, Number(rule.hour_from_in_minutes), Number(rule.hour_to_in_minutes))) {
-    return false;
+  const enrichedBg = (snapshot as Record<string, unknown>).enrichedBg;
+  if (typeof enrichedBg !== 'object' || enrichedBg === null) {
+    return undefined;
   }
+  const candidate = enrichedBg as Record<string, unknown>;
+  if (
+    typeof candidate.sgv !== 'number' ||
+    !Number.isFinite(candidate.sgv) ||
+    typeof candidate.date !== 'number' ||
+    !Number.isFinite(candidate.date)
+  ) {
+    return undefined;
+  }
+  return {
+    sgv: candidate.sgv,
+    date: candidate.date,
+    ...(typeof candidate.direction === 'string'
+      ? {direction: candidate.direction}
+      : {}),
+  };
+};
 
-  const outOfRange = sgv < Number(rule.range_start) || sgv > Number(rule.range_end);
-  if (!outOfRange) return false;
+const OBSERVATION_TRENDS: Readonly<Record<string, AlertRuleTrend | undefined>> = {
+  DoubleDown: 'double-down',
+  SingleDown: 'single-down',
+  FortyFiveDown: 'forty-five-down',
+  FortyFiveUp: 'forty-five-up',
+  SingleUp: 'single-up',
+  DoubleUp: 'double-up',
+};
 
-  if (!trendMatches(rule.trend, sample.direction)) return false;
+const DIRECTION_SYMBOLS: Readonly<Record<string, string>> = {
+  DoubleDown: '↓↓',
+  SingleDown: '↓',
+  FortyFiveDown: '↘',
+  Flat: '→',
+  FortyFiveUp: '↗',
+  SingleUp: '↑',
+  DoubleUp: '↑↑',
+};
 
-  const lastCalled = Array.isArray(rule.times_called) && rule.times_called.length
-    ? Number(rule.times_called[rule.times_called.length - 1])
-    : 0;
+const NOTIFICATION_COPY = {
+  en: {
+    channel: 'Glucose alerts',
+    title: 'Glucose alert',
+    snooze: (minutes: number) => `Snooze ${minutes}m`,
+  },
+  he: {
+    channel: 'התראות סוכר',
+    title: 'התראת סוכר',
+    snooze: (minutes: number) => `נודניק ${minutes} דקות`,
+  },
+} as const;
 
-  if (lastCalled > 0 && nowMs - lastCalled < RULE_COOLDOWN_MS) return false;
-
-  return true;
-}
-
-async function ensureChannel() {
+async function ensureChannel(locale: 'en' | 'he') {
   await notifee.createChannel({
     id: CHANNEL_ID,
-    name: 'Glucose alerts',
+    name: NOTIFICATION_COPY[locale].channel,
     importance: AndroidImportance.HIGH,
   });
 }
 
-export function useGlucoseRuleNotifications(sample?: BgSample | null) {
-  const lastSampleTsRef = useRef<number | null>(null);
+export function useGlucoseRuleNotifications(
+  latestSnapshot?: unknown,
+  workspaceScopeId?: string,
+  updateCenterRepository?: Pick<NativeUpdateCenterRepository, 'append'>,
+  locale: 'en' | 'he' = 'en',
+) {
+  const lastSampleRef = useRef<string | null>(null);
 
   useEffect(() => {
+    let active = true;
     const run = async () => {
-      if (!sample || typeof sample.date !== 'number') return;
-      if (lastSampleTsRef.current === sample.date) return;
-      lastSampleTsRef.current = sample.date;
-
+      const sample = extractNotificationSample(latestSnapshot);
+      if (
+        !sample ||
+        !Number.isSafeInteger(sample.date) ||
+        sample.date <= 0 ||
+        workspaceScopeId === undefined
+      ) {
+        return;
+      }
       const nowMs = Date.now();
-      const rules = await getNotificationRules();
-      if (!rules.length) return;
+      const sampleAgeMs = nowMs - sample.date;
+      if (
+        sampleAgeMs > MAX_ALERT_SAMPLE_AGE_MS ||
+        sampleAgeMs < -MAX_ALERT_SAMPLE_FUTURE_SKEW_MS
+      ) {
+        return;
+      }
+      const sampleIdentity = `${workspaceScopeId}:${sample.date}`;
+      if (lastSampleRef.current === sampleIdentity) {
+        return;
+      }
+      lastSampleRef.current = sampleIdentity;
 
-      await ensureChannel();
+      const scope: NotificationStoreScope = {scopeId: workspaceScopeId};
+      const rules = await getNotificationRules(scope);
+      if (!active || !rules.length) {
+        return;
+      }
 
-      for (const rule of rules) {
-        const ruleId = String(rule.id);
-        if (await isRuleSnoozed(ruleId, nowMs)) continue;
-        if (!shouldTriggerForRule(rule, sample, nowMs)) continue;
+      await ensureChannel(locale);
+      if (!active) {
+        return;
+      }
 
-        const body = `${Math.round(sample.sgv)} mg/dL • ${sample.direction ?? '—'} • ${rule.name}`;
+      for (const storedRule of rules) {
+        if (!active) {
+          return;
+        }
+        let rule: AlertRule;
+        try {
+          rule = decodeLegacyAlertRule(storedRule);
+        } catch {
+          continue;
+        }
+        const ruleId = rule.id;
+        if (await isRuleSnoozed(ruleId, nowMs, scope)) {
+          continue;
+        }
+        if (!active) {
+          return;
+        }
+        const observationTrend =
+          sample.direction === undefined
+            ? undefined
+            : OBSERVATION_TRENDS[sample.direction];
+        const decision = evaluateAlertRule(
+          rule,
+          {
+            valueMgDl: sample.sgv,
+            ...(observationTrend === undefined
+              ? {}
+              : {trend: observationTrend}),
+          },
+          nowMs,
+          {cooldownMs: RULE_COOLDOWN_MS},
+        );
+        if (!decision.trigger) {
+          continue;
+        }
+        let occurrenceId = `rule-occurrence:${ruleId}:${nowMs}`;
+        if (updateCenterRepository !== undefined) {
+          if (!active) {
+            return;
+          }
+          try {
+            const occurrence = await updateCenterRepository.append({
+              kind: 'alert',
+              occurredAtMs: nowMs,
+              content: {
+                kind: 'alert-rule-occurrence',
+                rule: {
+                  id: rule.id,
+                  name: rule.name,
+                  lowerBoundMgDl: rule.lowerBoundMgDl,
+                  upperBoundMgDl: rule.upperBoundMgDl,
+                  activeFromMinute: rule.activeFromMinute,
+                  activeToMinute: rule.activeToMinute,
+                  trend: rule.trend,
+                },
+                observation: {
+                  valueMgDl: Math.round(sample.sgv),
+                  ...(observationTrend === undefined
+                    ? {}
+                    : {trend: observationTrend}),
+                },
+              },
+            });
+            occurrenceId = occurrence.id;
+          } catch (error) {
+            // Alert delivery stays available even if local history is full or
+            // temporarily unavailable.
+            console.warn(
+              'useGlucoseRuleNotifications: occurrence was not retained',
+              error,
+            );
+          }
+        }
+        if (!active) {
+          return;
+        }
+
+        const copy = NOTIFICATION_COPY[locale];
+        const direction =
+          sample.direction === undefined
+            ? '—'
+            : DIRECTION_SYMBOLS[sample.direction] ?? sample.direction;
+        const body = `${Math.round(sample.sgv)} mg/dL • ${direction} • ${
+          rule.name
+        }`;
         await notifee.displayNotification({
-          title: 'Glucose alert',
+          title: copy.title,
           body,
           android: {
             channelId: CHANNEL_ID,
@@ -88,23 +229,31 @@ export function useGlucoseRuleNotifications(sample?: BgSample | null) {
             importance: AndroidImportance.HIGH,
             pressAction: {id: 'default'},
             actions: [
-              {title: 'Snooze 10m', pressAction: {id: 'snooze_10'}},
-              {title: 'Snooze 20m', pressAction: {id: 'snooze_20'}},
-              {title: 'Snooze 30m', pressAction: {id: 'snooze_30'}},
+              {title: copy.snooze(10), pressAction: {id: 'snooze_10'}},
+              {title: copy.snooze(20), pressAction: {id: 'snooze_20'}},
+              {title: copy.snooze(30), pressAction: {id: 'snooze_30'}},
             ],
           },
           data: {
             source: 'rule_based',
             ruleId,
+            occurrenceId,
+            workspaceScopeId,
           },
         });
 
-        await markNotificationRuleCalled(ruleId, nowMs);
+        if (!active) {
+          return;
+        }
+        await markNotificationRuleCalled(ruleId, nowMs, scope);
       }
     };
 
     run().catch(err => {
       console.warn('useGlucoseRuleNotifications: evaluation failed', err);
     });
-  }, [sample]);
+    return () => {
+      active = false;
+    };
+  }, [latestSnapshot, locale, updateCenterRepository, workspaceScopeId]);
 }

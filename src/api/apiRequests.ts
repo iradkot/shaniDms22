@@ -5,17 +5,95 @@ import {
   ProfileDataType,
   TempBasalInsulinDataEntry,
 } from 'app/types/insulin.types';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {BgSample} from 'app/types/day_bgs.types';
 import {bgSortFunction} from 'app/utils/bg.utils';
 import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
 import {mapNightscoutTreatmentsToInsulinDataEntries} from 'app/utils/nightscoutTreatments.utils';
+import {
+  assertActiveNightscoutCacheScope,
+  getActiveNightscoutCacheScope,
+} from 'app/services/nightscoutCacheScope';
+import {
+  readNightscoutRangeCache,
+  writeNightscoutRangeCache,
+} from 'app/services/nightscoutRangeCache';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const DEFAULT_BG_COUNT = 1000;
 const MAX_BG_COUNT = 100000;
 const EXPECTED_READINGS_PER_DAY = 288; // 5-minute CGM
 const HIGH_FREQUENCY_READINGS_PER_DAY = 1440; // 1-minute CGM
+
+export type NightscoutRangeFreshness =
+  | {readonly kind: 'fresh'; readonly fetchedAtMs: number}
+  | {
+      readonly kind: 'stale';
+      readonly fetchedAtMs: number;
+      readonly reason: 'network-unavailable';
+    };
+
+export interface NightscoutRangeResult<T> {
+  readonly records: readonly T[];
+  readonly freshness: NightscoutRangeFreshness;
+}
+
+const objectRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const decodeBgSample = (value: unknown): BgSample | null => {
+  const record = objectRecord(value);
+  if (!record) {
+    return null;
+  }
+  const date =
+    typeof record.date === 'number'
+      ? record.date
+      : typeof record.date === 'string' && record.date.trim().length > 0
+      ? Number(record.date)
+      : Number.NaN;
+  const sgv =
+    typeof record.sgv === 'number'
+      ? record.sgv
+      : typeof record.sgv === 'string' && record.sgv.trim().length > 0
+      ? Number(record.sgv)
+      : Number.NaN;
+  if (!Number.isFinite(date) || !Number.isFinite(sgv) || sgv <= 0) {
+    return null;
+  }
+  return {...record, date, sgv} as unknown as BgSample;
+};
+
+const decodeObjectRecord = (value: unknown): Record<string, unknown> | null =>
+  objectRecord(value);
+
+const bgTimestamp = (record: BgSample): number | undefined => record.date;
+
+const nightscoutRecordTimestamp = (
+  record: Record<string, unknown>,
+): number | undefined => {
+  for (const candidate of [record.date, record.mills, record.timestamp]) {
+    const parsed =
+      typeof candidate === 'number'
+        ? candidate
+        : typeof candidate === 'string' && candidate.trim().length > 0
+        ? Number(candidate)
+        : Number.NaN;
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  for (const candidate of [record.created_at, record.dateString]) {
+    if (typeof candidate === 'string') {
+      const parsed = Date.parse(candidate);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+};
 
 const estimateBgCountForRange = (startDate: Date, endDate: Date) => {
   const days = Math.max(
@@ -32,56 +110,89 @@ const estimateBgCountForRange = (startDate: Date, endDate: Date) => {
   return Math.min(MAX_BG_COUNT, Math.max(DEFAULT_BG_COUNT, estimate));
 };
 
-export const fetchBgDataForDateRange = async (
+export const fetchBgDataForDateRangeWithMetadata = async (
   startDate: Date,
   endDate: Date,
-): Promise<BgSample[]> => {
+): Promise<NightscoutRangeResult<BgSample>> => {
   const startIso = startDate.toISOString();
   const endIso = endDate.toISOString();
   const count = estimateBgCountForRange(startDate, endDate);
-  const cacheKey: string = `bgData-${startIso}-${endIso}-v2-count=${count}`;
-  // Attempt to read from cache
-  let cachedData: string | null = null;
-  try {
-    cachedData = await AsyncStorage.getItem(cacheKey);
-    if (cachedData) {
-      return JSON.parse(cachedData);
-    }
-  } catch (e) {
-    console.warn('fetchBgDataForDateRange: Failed reading cache', e);
-  }
+  const cacheScope = getActiveNightscoutCacheScope();
   const apiUrl: string = `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=${count}`;
   try {
     const response = await nightscoutInstance.get<BgSample[]>(apiUrl);
-    const bgData: BgSample[] = response.data;
-    const sortedBgData: BgSample[] = bgData.sort(bgSortFunction(false));
-
-    // Attempt to cache results, with graceful handling if storage is full
-    try {
-      await AsyncStorage.setItem(cacheKey, JSON.stringify(sortedBgData));
-    } catch (e: any) {
-      console.warn('fetchBgDataForDateRange: Failed caching BG data', e);
-      // If storage is full, purge old BG cache entries
-      const errMsg = e.message || e;
-      if (errMsg.includes('SQLITE_FULL') || errMsg.includes('database or disk is full')) {
-        try {
-          const allKeys = await AsyncStorage.getAllKeys();
-          const bgKeys = allKeys.filter(key => key.startsWith('bgData-'));
-          if (bgKeys.length) {
-            await AsyncStorage.multiRemove(bgKeys);
-            console.info('fetchBgDataForDateRange: Cleared old BG cache entries');
-          }
-        } catch (purgeErr) {
-          console.error('fetchBgDataForDateRange: Failed to purge old cache', purgeErr);
-        }
+    if (cacheScope) {
+      assertActiveNightscoutCacheScope(cacheScope);
+    }
+    const sortedBgData = (Array.isArray(response.data) ? response.data : [])
+      .map(decodeBgSample)
+      .filter((sample): sample is BgSample => sample !== null)
+      .sort(bgSortFunction(false));
+    const fetchedAtMs = Date.now();
+    if (cacheScope) {
+      try {
+        await writeNightscoutRangeCache({
+          scope: cacheScope,
+          resource: 'bg-data.v3',
+          startMs: startDate.getTime(),
+          endMs: endDate.getTime(),
+          fetchedAtMs,
+          records: sortedBgData,
+          getTimestampMs: bgTimestamp,
+        });
+      } catch (e) {
+        console.warn('fetchBgDataForDateRange: Failed caching BG data', e);
       }
     }
-    return sortedBgData;
-  } catch (error: any) {
+    if (cacheScope) {
+      assertActiveNightscoutCacheScope(cacheScope);
+    }
+    return {
+      records: sortedBgData,
+      freshness: {kind: 'fresh', fetchedAtMs},
+    };
+  } catch (error: unknown) {
+    if (cacheScope) {
+      assertActiveNightscoutCacheScope(cacheScope);
+      try {
+        const cached = await readNightscoutRangeCache({
+          scope: cacheScope,
+          resource: 'bg-data.v3',
+          startMs: startDate.getTime(),
+          endMs: endDate.getTime(),
+          decodeRecord: decodeBgSample,
+          getTimestampMs: bgTimestamp,
+        });
+        assertActiveNightscoutCacheScope(cacheScope);
+        if (cached) {
+          console.warn(
+            'fetchBgDataForDateRange: Nightscout unavailable; using stale cache',
+          );
+          return {
+            records: [...cached.records].sort(bgSortFunction(false)),
+            freshness: {
+              kind: 'stale',
+              fetchedAtMs: cached.fetchedAtMs,
+              reason: 'network-unavailable',
+            },
+          };
+        }
+      } catch (cacheError) {
+        console.warn('fetchBgDataForDateRange: Failed reading cache', cacheError);
+      }
+      assertActiveNightscoutCacheScope(cacheScope);
+    }
     console.error('Error fetching BG data from Nightscout:', error);
     throw error;
   }
 };
+
+export const fetchBgDataForDateRange = async (
+  startDate: Date,
+  endDate: Date,
+): Promise<BgSample[]> => [
+  ...(await fetchBgDataForDateRangeWithMetadata(startDate, endDate)).records,
+];
 
 /**
  * Fetch BG entries for a range without writing to AsyncStorage.
@@ -239,54 +350,173 @@ export const fetchLatestDeviceStatusEntry = async (): Promise<DeviceStatusEntry 
   }
 };
 
-export const fetchDeviceStatusForDateRange = async (
+export const fetchDeviceStatusForDateRangeWithMetadata = async (
   startDate: Date,
   endDate: Date,
-): Promise<DeviceStatusEntry[]> => {
+): Promise<NightscoutRangeResult<DeviceStatusEntry>> => {
   const startIso = startDate.toISOString();
   const endIso = endDate.toISOString();
 
   // Device status is usually emitted every ~5 minutes.
   const count = estimateBgCountForRange(startDate, endDate);
-  const cacheKey: string = `deviceStatus-${startIso}-${endIso}-v1-count=${count}`;
-
-  try {
-    const cached = await AsyncStorage.getItem(cacheKey);
-    if (cached) {
-      return JSON.parse(cached);
-    }
-  } catch (e) {
-    console.warn('fetchDeviceStatusForDateRange: Failed reading cache', e);
-  }
+  const cacheScope = getActiveNightscoutCacheScope();
 
   const apiUrl = `/api/v1/devicestatus?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${count}`;
   try {
     const response = await nightscoutInstance.get<DeviceStatusEntry[]>(apiUrl);
-    const status = response.data ?? [];
-
-    try {
-      await AsyncStorage.setItem(cacheKey, JSON.stringify(status));
-    } catch (e: any) {
-      console.warn('fetchDeviceStatusForDateRange: Failed caching device status', e);
-      const errMsg = e?.message || String(e ?? '');
-      if (errMsg.includes('SQLITE_FULL') || errMsg.includes('database or disk is full')) {
-        // Attempt to purge old device status cache keys to free space.
-        try {
-          const allKeys = await AsyncStorage.getAllKeys();
-          const deviceKeys = allKeys.filter(key => key.startsWith('deviceStatus-'));
-          if (deviceKeys.length) {
-            await AsyncStorage.multiRemove(deviceKeys);
-            console.info('fetchDeviceStatusForDateRange: Cleared old deviceStatus cache entries');
-          }
-        } catch (purgeErr) {
-          console.error('fetchDeviceStatusForDateRange: Failed to purge old cache', purgeErr);
-        }
+    if (cacheScope) {
+      assertActiveNightscoutCacheScope(cacheScope);
+    }
+    const status = (Array.isArray(response.data) ? response.data : [])
+      .map(decodeObjectRecord)
+      .filter((item): item is Record<string, unknown> => item !== null) as DeviceStatusEntry[];
+    const fetchedAtMs = Date.now();
+    if (cacheScope) {
+      try {
+        await writeNightscoutRangeCache({
+          scope: cacheScope,
+          resource: 'device-status.v2',
+          startMs: startDate.getTime(),
+          endMs: endDate.getTime(),
+          fetchedAtMs,
+          records: status,
+          getTimestampMs: nightscoutRecordTimestamp,
+        });
+      } catch (e) {
+        console.warn('fetchDeviceStatusForDateRange: Failed caching device status', e);
       }
     }
 
-    return status;
-  } catch (error: any) {
-    // Device status may not be enabled; treat as optional.
+    if (cacheScope) {
+      assertActiveNightscoutCacheScope(cacheScope);
+    }
+
+    return {records: status, freshness: {kind: 'fresh', fetchedAtMs}};
+  } catch (error: unknown) {
+    if (cacheScope) {
+      assertActiveNightscoutCacheScope(cacheScope);
+      try {
+        const cached = await readNightscoutRangeCache({
+          scope: cacheScope,
+          resource: 'device-status.v2',
+          startMs: startDate.getTime(),
+          endMs: endDate.getTime(),
+          decodeRecord: value => decodeObjectRecord(value) as DeviceStatusEntry | null,
+          getTimestampMs: nightscoutRecordTimestamp,
+        });
+        assertActiveNightscoutCacheScope(cacheScope);
+        if (cached) {
+          return {
+            records: cached.records,
+            freshness: {
+              kind: 'stale',
+              fetchedAtMs: cached.fetchedAtMs,
+              reason: 'network-unavailable',
+            },
+          };
+        }
+      } catch (cacheError) {
+        console.warn('fetchDeviceStatusForDateRange: Failed reading cache', cacheError);
+      }
+      assertActiveNightscoutCacheScope(cacheScope);
+    }
+    throw error;
+  }
+};
+
+/**
+ * Network-first treatments read with a bounded offline fallback.
+ *
+ * Unlike the legacy optional helper above, this method rejects when neither
+ * Nightscout nor a complete cached range is available. Callers can therefore
+ * mark a view incomplete instead of presenting an empty treatment list as fact.
+ */
+export const fetchTreatmentsForDateRangeWithMetadata = async (
+  startDate: Date,
+  endDate: Date,
+): Promise<NightscoutRangeResult<Record<string, unknown>>> => {
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+  const count = estimateTreatmentsCountForRange(startDate, endDate);
+  const apiUrl = `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${count}`;
+  const cacheScope = getActiveNightscoutCacheScope();
+  try {
+    const response = await nightscoutInstance.get<unknown[]>(apiUrl);
+    if (cacheScope) {
+      assertActiveNightscoutCacheScope(cacheScope);
+    }
+    const records = (Array.isArray(response.data) ? response.data : [])
+      .map(decodeObjectRecord)
+      .filter((item): item is Record<string, unknown> => item !== null);
+    const fetchedAtMs = Date.now();
+    if (cacheScope) {
+      try {
+        await writeNightscoutRangeCache({
+          scope: cacheScope,
+          resource: 'treatments.v1',
+          startMs: startDate.getTime(),
+          endMs: endDate.getTime(),
+          fetchedAtMs,
+          records,
+          getTimestampMs: nightscoutRecordTimestamp,
+        });
+      } catch (cacheError) {
+        console.warn(
+          'fetchTreatmentsForDateRangeWithMetadata: Failed caching treatments',
+          cacheError,
+        );
+      }
+    }
+    if (cacheScope) {
+      assertActiveNightscoutCacheScope(cacheScope);
+    }
+    return {records, freshness: {kind: 'fresh', fetchedAtMs}};
+  } catch (error: unknown) {
+    if (cacheScope) {
+      assertActiveNightscoutCacheScope(cacheScope);
+      try {
+        const cached = await readNightscoutRangeCache({
+          scope: cacheScope,
+          resource: 'treatments.v1',
+          startMs: startDate.getTime(),
+          endMs: endDate.getTime(),
+          decodeRecord: decodeObjectRecord,
+          getTimestampMs: nightscoutRecordTimestamp,
+        });
+        assertActiveNightscoutCacheScope(cacheScope);
+        if (cached) {
+          return {
+            records: cached.records,
+            freshness: {
+              kind: 'stale',
+              fetchedAtMs: cached.fetchedAtMs,
+              reason: 'network-unavailable',
+            },
+          };
+        }
+      } catch (cacheError) {
+        console.warn(
+          'fetchTreatmentsForDateRangeWithMetadata: Failed reading cache',
+          cacheError,
+        );
+      }
+      assertActiveNightscoutCacheScope(cacheScope);
+    }
+    throw error;
+  }
+};
+
+export const fetchDeviceStatusForDateRange = async (
+  startDate: Date,
+  endDate: Date,
+): Promise<DeviceStatusEntry[]> => {
+  try {
+    return [
+      ...(await fetchDeviceStatusForDateRangeWithMetadata(startDate, endDate))
+        .records,
+    ];
+  } catch (error) {
+    // Device status may not be enabled; preserve the optional legacy contract.
     console.warn('fetchDeviceStatusForDateRange: Failed to fetch device status', error);
     return [];
   }

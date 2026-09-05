@@ -31,6 +31,7 @@ import {
   searchMemory,
   updateMemoryEntry,
 } from 'app/services/aiMemory/aiMemoryStore';
+import type {AiWorkspaceScope} from 'app/services/aiMemory/aiWorkspaceScope';
 
 // Loop Analysis imports
 import {
@@ -260,7 +261,7 @@ function downsampleEvenly<T>(arr: T[], max: number): T[] {
   if (arr.length <= max) return arr;
   const step = Math.ceil(arr.length / max);
   const out: T[] = [];
-  for (let i = 0; i < arr.length; i += step) out.push(arr[i]);
+  for (let i = 0; i < arr.length; i += step) out.push(arr[i]!);
   return out;
 }
 
@@ -324,7 +325,11 @@ function extractHyperEvents(params: {
   return out;
 }
 
-export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Promise<ToolResult> {
+export async function runAiAnalystTool(
+  workspaceScope: AiWorkspaceScope,
+  name: AiAnalystToolName,
+  args: any,
+): Promise<ToolResult> {
   // Normalize tool name (convert snake_case to camelCase)
   const normalizedName = normalizeToolName(name) as AiAnalystToolName;
   console.log(`[AiAnalystTool] Calling tool: ${name}${name !== normalizedName ? ` (normalized to ${normalizedName})` : ''}`, args);
@@ -947,13 +952,17 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const hourlyStats: Record<number, {sum: number; count: number; min: number; max: number}> = {};
         filtered.forEach(s => {
           const hour = new Date(s.date).getHours();
-          if (!hourlyStats[hour]) {
-            hourlyStats[hour] = {sum: 0, count: 0, min: Infinity, max: -Infinity};
-          }
-          hourlyStats[hour].sum += s.sgv;
-          hourlyStats[hour].count++;
-          hourlyStats[hour].min = Math.min(hourlyStats[hour].min, s.sgv);
-          hourlyStats[hour].max = Math.max(hourlyStats[hour].max, s.sgv);
+          const stats = hourlyStats[hour] ?? {
+            sum: 0,
+            count: 0,
+            min: Infinity,
+            max: -Infinity,
+          };
+          stats.sum += s.sgv;
+          stats.count += 1;
+          stats.min = Math.min(stats.min, s.sgv);
+          stats.max = Math.max(stats.max, s.sgv);
+          hourlyStats[hour] = stats;
         });
 
         const hourlyAverages = Object.entries(hourlyStats).map(([hour, stats]) => ({
@@ -970,6 +979,27 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const problemHours = hourlyAverages.filter(h =>
           h.avgBg < tirThresholds.targetMin || h.avgBg > tirThresholds.targetMax
         );
+
+        const firstHourlyAverage = hourlyAverages[0];
+        const mostHighsAt = firstHourlyAverage
+          ? hourlyAverages.reduce(
+              (max, h) => (h.avgBg > max.avgBg ? h : max),
+              firstHourlyAverage,
+            ).hour
+          : null;
+        const mostLowsAt = firstHourlyAverage
+          ? hourlyAverages.reduce(
+              (min, h) => (h.avgBg < min.avgBg ? h : min),
+              firstHourlyAverage,
+            ).hour
+          : null;
+        const mostVariableAt = firstHourlyAverage
+          ? hourlyAverages.reduce(
+              (max, h) =>
+                h.maxBg - h.minBg > max.maxBg - max.minBg ? h : max,
+              firstHourlyAverage,
+            ).hour
+          : null;
 
         // Count hypos and hypers
         const hypoCount = values.filter(v => v < tirThresholds.targetMin).length;
@@ -998,9 +1028,9 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
             hourlyAverages,
             problemHours: problemHours.length > 0 ? problemHours : null,
             patterns: {
-              mostHighsAt: hourlyAverages.reduce((max, h) => h.avgBg > max.avgBg ? h : max, hourlyAverages[0])?.hour ?? null,
-              mostLowsAt: hourlyAverages.reduce((min, h) => h.avgBg < min.avgBg ? h : min, hourlyAverages[0])?.hour ?? null,
-              mostVariableAt: hourlyAverages.reduce((max, h) => (h.maxBg - h.minBg) > (max.maxBg - max.minBg) ? h : max, hourlyAverages[0])?.hour ?? null,
+              mostHighsAt,
+              mostLowsAt,
+              mostVariableAt,
             },
           },
         };
@@ -1618,7 +1648,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         if (!query) return {ok: false, error: 'query is required'};
         const limit = clampInt(args?.limit, 1, 20, 6);
         const types = Array.isArray(args?.types) ? args.types : undefined;
-        const result = await searchMemory(query, {limit, types});
+        const result = await searchMemory(workspaceScope, query, {limit, types});
         return {ok: true, result: {query, count: result.length, results: result}};
       }
 
@@ -1633,7 +1663,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
         const textSummary = String(args?.textSummary ?? '').trim();
         if (!textSummary) return {ok: false, error: 'textSummary is required'};
         const rawTags = Array.isArray(args?.tags) ? args.tags.map((x: any) => String(x)) : [];
-        const result = await addMemoryEntry({
+        const result = await addMemoryEntry(workspaceScope, {
           type: args?.type === 'profile' || args?.type === 'chat_summary' ? args.type : 'episode',
           tags: [
             ...rawTags.filter(
@@ -1655,7 +1685,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
       case 'proposeMemoryEntry': {
         const textSummary = String(args?.textSummary ?? '').trim();
         if (!textSummary) return {ok: false, error: 'textSummary is required'};
-        const result = await proposeMemoryEntry({
+        const result = await proposeMemoryEntry(workspaceScope, {
           type: args?.type === 'profile' || args?.type === 'chat_summary' ? args.type : 'episode',
           tags: Array.isArray(args?.tags) ? args.tags.map((x: any) => String(x)) : ['ai_suggestion'],
           textSummary,
@@ -1671,7 +1701,7 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
       case 'approveMemoryEntry': {
         const id = String(args?.id ?? '').trim();
         if (!id) return {ok: false, error: 'id is required'};
-        const result = await approveMemoryEntry(id);
+        const result = await approveMemoryEntry(workspaceScope, id);
         if (!result) return {ok: false, error: 'memory entry not found'};
         return {ok: true, result};
       }
@@ -1679,12 +1709,12 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
       case 'getMemoryByIds': {
         const ids = Array.isArray(args?.ids) ? args.ids.map((x: any) => String(x)) : [];
         if (!ids.length) return {ok: false, error: 'ids[] is required'};
-        const result = await getMemoryByIds(ids);
+        const result = await getMemoryByIds(workspaceScope, ids);
         return {ok: true, result: {count: result.length, results: result}};
       }
 
       case 'listMemoryEntries': {
-        const result = await listMemoryEntries({
+        const result = await listMemoryEntries(workspaceScope, {
           category: args?.category,
           folderKey: args?.folderKey,
           limit: args?.limit,
@@ -1693,20 +1723,20 @@ export async function runAiAnalystTool(name: AiAnalystToolName, args: any): Prom
       }
 
       case 'getMemoryTree': {
-        const result = await getMemoryTree();
+        const result = await getMemoryTree(workspaceScope);
         return {ok: true, result: {folders: result}};
       }
 
       case 'updateMemoryEntry': {
         const id = String(args?.id ?? '').trim();
         if (!id) return {ok: false, error: 'id is required'};
-        const result = await updateMemoryEntry(id, args?.patch ?? {});
+        const result = await updateMemoryEntry(workspaceScope, id, args?.patch ?? {});
         if (!result) return {ok: false, error: 'memory entry not found or empty'};
         return {ok: true, result};
       }
 
       case 'getPatientProfileSnapshot': {
-        const result = await buildCompactPatientMemory();
+        const result = await buildCompactPatientMemory(workspaceScope);
         return {ok: true, result};
       }
 

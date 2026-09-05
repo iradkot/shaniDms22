@@ -1,5 +1,6 @@
 import { getFirestore, collection, query, where, getDocs } from '@react-native-firebase/firestore';
 import { getApp } from '@react-native-firebase/app';
+import {getAuth} from '@react-native-firebase/auth';
 import {SportItemDTO} from 'app/types/sport.types';
 import {
   getLocalStartOfTheDay,
@@ -31,16 +32,23 @@ export class SportService {
 
     // Fetch sport items from Firestore
     // Initialize Firestore with the default Firebase app (modular API)
-    const db = getFirestore(getApp());
+    const app = getApp();
+    const user = getAuth(app).currentUser;
+    if (!user) {
+      return [];
+    }
+    const db = getFirestore(app);
     const q = query(
-      collection(db, 'sport_items'),
-      where('timestamp', '>=', startOfStartDate.getTime()),
-      where('timestamp', '<=', endOfEndDate.getTime())
+      collection(db, 'users', user.uid, 'legacySportItems'),
+      where('startTimestamp', '>=', startOfStartDate.getTime()),
+      where('startTimestamp', '<=', endOfEndDate.getTime())
     );
     const snapshot = await getDocs(q);
 
     // Map over the documents and cast them to SportItemDTO
-    const sportItems = snapshot.docs.map(doc => doc.data() as SportItemDTO);
+    const sportItems = snapshot.docs.map(
+      (doc: {data(): unknown}) => doc.data() as SportItemDTO,
+    );
 
     return sportItems;
   }

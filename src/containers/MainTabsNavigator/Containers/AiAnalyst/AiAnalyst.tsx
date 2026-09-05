@@ -26,6 +26,7 @@ const AiAnalyst: React.FC = () => {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
   const consumedContextRef = useRef<string | null>(null);
+  const consumedMissionRef = useRef<string | null>(null);
 
   useEffect(() => {
     const contextPrompt = route?.params?.homeRecommendationContext;
@@ -36,6 +37,36 @@ const AiAnalyst: React.FC = () => {
     engine.startOpenChatWithContext(String(contextPrompt));
     navigation.setParams?.({homeRecommendationContext: undefined});
   }, [engine, navigation, route?.params?.homeRecommendationContext]);
+
+  useEffect(() => {
+    const initialMission = route?.params?.initialMission;
+    if (typeof initialMission !== 'string' || !engine.hasKey || engine.isBusy) {
+      return;
+    }
+    if (consumedMissionRef.current === initialMission) {
+      return;
+    }
+    const starters: Record<string, () => Promise<void>> = {
+      openChat: engine.startOpenChat,
+      hypoDetective: engine.startHypoDetective,
+      userBehavior: engine.startUserBehavior,
+      loopSettings: engine.startLoopSettingsAdvisor,
+      mealAnalysis: () =>
+        engine.startMealAnalysis(
+          language === 'he'
+            ? 'אני רוצה לחקור תצפיות שחוזרות סביב הארוחות שלי.'
+            : 'I want to investigate repeated observations around my meals.',
+        ),
+    };
+    const start = starters[initialMission];
+    if (!start) {
+      navigation.setParams?.({initialMission: undefined});
+      return;
+    }
+    consumedMissionRef.current = initialMission;
+    void start();
+    navigation.setParams?.({initialMission: undefined});
+  }, [engine, language, navigation, route?.params?.initialMission]);
 
   useFocusEffect(
     useCallback(() => {

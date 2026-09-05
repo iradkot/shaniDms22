@@ -19,3 +19,8 @@ export interface SportItemDTO {
 export interface formattedSportItemDTO
   extends SportItemDTO,
     CommonFormattedEvent {}
+
+export type SportItemsByRelativeDate = Record<
+  string,
+  formattedSportItemDTO[]
+>;

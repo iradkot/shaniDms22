@@ -19,6 +19,13 @@ const STORAGE_KEYS = {
   userProfile: 'proactiveCare:dailyBrief:userProfile:v1',
 };
 
+const scopedStorageKey = (key: string, scopeId: string): string => {
+  if (!/^[A-Za-z0-9._-]{1,160}$/.test(scopeId)) {
+    throw new Error('Daily brief Workspace scope is invalid.');
+  }
+  return `${key}:${scopeId}`;
+};
+
 export type DailyBriefConfig = {
   enabled: boolean;
   hour: number;
@@ -32,7 +39,7 @@ export type DailyBriefAiOptions = {
   personality?: 'tachles' | 'nice' | 'buddha';
 };
 
-type StoredBrief = {
+export type StoredBrief = {
   title: string;
   body: string;
   source: 'ai' | 'fallback';
@@ -78,16 +85,31 @@ async function ensureChannel(lang: Lang) {
   });
 }
 
-async function persistLatestBrief(brief: Omit<StoredBrief, 'createdAt'>) {
+async function persistLatestBrief(
+  scopeId: string,
+  brief: Omit<StoredBrief, 'createdAt'>,
+) {
+  const stored: StoredBrief = {
+    ...brief,
+    createdAt: new Date().toISOString(),
+  };
   await AsyncStorage.setItem(
-    STORAGE_KEYS.latestBrief,
-    JSON.stringify({...brief, createdAt: new Date().toISOString()}),
+    scopedStorageKey(STORAGE_KEYS.latestBrief, scopeId),
+    JSON.stringify(stored),
   );
+  dailyBriefListeners.forEach(listener => listener(scopeId, stored));
 }
 
-export async function getLatestDailyBrief(): Promise<StoredBrief | null> {
+export async function getLatestDailyBrief(
+  scopeId: string | undefined,
+): Promise<StoredBrief | null> {
+  if (scopeId === undefined) {
+    return null;
+  }
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEYS.latestBrief);
+    const raw = await AsyncStorage.getItem(
+      scopedStorageKey(STORAGE_KEYS.latestBrief, scopeId),
+    );
     if (!raw) return null;
     return JSON.parse(raw) as StoredBrief;
   } catch {
@@ -253,8 +275,11 @@ function computeHolisticSignals(params: {
     const beforeBoluses = boluses
       .filter(b => b.ts <= meal.ts && b.ts >= meal.ts - 45 * 60 * 1000)
       .sort((a, b) => b.ts - a.ts);
-    if (beforeBoluses.length > 0) {
-      preBolusMinutes.push(Math.max(0, Math.round((meal.ts - beforeBoluses[0].ts) / 60000)));
+    const closestBeforeBolus = beforeBoluses[0];
+    if (closestBeforeBolus) {
+      preBolusMinutes.push(
+        Math.max(0, Math.round((meal.ts - closestBeforeBolus.ts) / 60000)),
+      );
     }
 
     const preCandidates = yList.filter((r: any) => {
@@ -279,7 +304,7 @@ function computeHolisticSignals(params: {
 
   const sortedPreBolus = [...preBolusMinutes].sort((a, b) => a - b);
   const medianPreBolusMin = sortedPreBolus.length
-    ? sortedPreBolus[Math.floor(sortedPreBolus.length / 2)]
+    ? (sortedPreBolus[Math.floor(sortedPreBolus.length / 2)] ?? null)
     : null;
   const suggestedPreBolusMin = 10;
 
@@ -324,17 +349,22 @@ function mealBucketLabelForBrief(lang: Lang, bucket: 'breakfast' | 'lunch' | 'di
   return 'snack';
 }
 
-async function readDailyProfile(): Promise<DailyProfile | null> {
+async function readDailyProfile(scopeId: string): Promise<DailyProfile | null> {
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEYS.userProfile);
+    const raw = await AsyncStorage.getItem(
+      scopedStorageKey(STORAGE_KEYS.userProfile, scopeId),
+    );
     return raw ? (JSON.parse(raw) as DailyProfile) : null;
   } catch {
     return null;
   }
 }
 
-async function writeDailyProfile(profile: DailyProfile) {
-  await AsyncStorage.setItem(STORAGE_KEYS.userProfile, JSON.stringify(profile));
+async function writeDailyProfile(scopeId: string, profile: DailyProfile) {
+  await AsyncStorage.setItem(
+    scopedStorageKey(STORAGE_KEYS.userProfile, scopeId),
+    JSON.stringify(profile),
+  );
 }
 
 async function buildFallbackBrief(glucose: GlucoseSettings, lang: Lang) {
@@ -810,7 +840,7 @@ async function maybeGenerateLlmSections(params: {
 
   const instruction = withSharedAiContext(buildDailyBriefSystemInstruction(lang), {
     language: lang,
-    personality: ai?.personality,
+    ...(ai.personality !== undefined ? {personality: ai.personality} : {}),
     patientProfileSummary: profile ? JSON.stringify(profile) : null,
   });
 
@@ -937,9 +967,14 @@ async function maybeGenerateLlmSections(params: {
   return fallback;
 }
 
-async function computeYesterdayBrief(glucose: GlucoseSettings, lang: Lang, ai?: DailyBriefAiOptions) {
+async function computeYesterdayBrief(
+  scopeId: string,
+  glucose: GlucoseSettings,
+  lang: Lang,
+  ai?: DailyBriefAiOptions,
+) {
   const base = await buildFallbackBrief(glucose, lang);
-  const prevProfile = await readDailyProfile();
+  const prevProfile = await readDailyProfile(scopeId);
 
   const dominantRisk: DailyProfile['dominantRisk'] =
     base.stats.yesterday.lows > base.stats.yesterday.highs
@@ -954,9 +989,14 @@ async function computeYesterdayBrief(glucose: GlucoseSettings, lang: Lang, ai?: 
     avgTir7d: base.stats.week.tir,
     avgGlucose7d: base.stats.week.avg,
   };
-  await writeDailyProfile(nextProfile);
+  await writeDailyProfile(scopeId, nextProfile);
 
-  const llm = await maybeGenerateLlmSections({base, ai, lang, profile: prevProfile ?? nextProfile});
+  const llm = await maybeGenerateLlmSections({
+    base,
+    lang,
+    profile: prevProfile ?? nextProfile,
+    ...(ai !== undefined ? {ai} : {}),
+  });
 
   return {
     title: base.title,
@@ -966,15 +1006,30 @@ async function computeYesterdayBrief(glucose: GlucoseSettings, lang: Lang, ai?: 
 }
 
 export async function regenerateDailyBrief(params: {
+  scopeId: string;
   glucose: GlucoseSettings;
   ai?: DailyBriefAiOptions;
   notify?: boolean;
+  /** Internal lifecycle guard used by scheduled generation after a scope switch. */
+  canCommit?: () => boolean;
 }) {
   const lang = (await getStoredAppLanguage()) as Lang;
   await ensureChannel(lang);
 
-  const brief = await computeYesterdayBrief(params.glucose, lang, params.ai);
-  await persistLatestBrief({title: brief.title, body: brief.body, source: brief.source});
+  const brief = await computeYesterdayBrief(
+    params.scopeId,
+    params.glucose,
+    lang,
+    params.ai,
+  );
+  if (params.canCommit !== undefined && !params.canCommit()) {
+    return brief;
+  }
+  await persistLatestBrief(params.scopeId, {
+    title: brief.title,
+    body: brief.body,
+    source: brief.source,
+  });
 
   if (params.notify) {
     await notifee.displayNotification({
@@ -986,41 +1041,99 @@ export async function regenerateDailyBrief(params: {
         smallIcon: 'ic_launcher',
         pressAction: {id: 'default'},
       },
-      data: {route: 'DailyReviewScreen', source: 'daily_brief_manual'},
+      data: {
+        route: 'DailyReviewScreen',
+        source: 'daily_brief_manual',
+        workspaceScopeId: params.scopeId,
+      },
     });
   }
 
   return brief;
 }
 
-export async function sendDailyBriefNow(glucose: GlucoseSettings, ai?: DailyBriefAiOptions) {
-  await regenerateDailyBrief({glucose, ai, notify: true});
+export async function sendDailyBriefNow(
+  scopeId: string,
+  glucose: GlucoseSettings,
+  ai?: DailyBriefAiOptions,
+) {
+  await regenerateDailyBrief({
+    scopeId,
+    glucose,
+    notify: true,
+    ...(ai !== undefined ? {ai} : {}),
+  });
 }
 
-export async function syncDailyBriefNotifications(params: {
+let scheduleGeneration = 0;
+let scheduleTail: Promise<void> = Promise.resolve();
+
+export function cancelDailyBriefNotifications(): Promise<void> {
+  scheduleGeneration += 1;
+  const run = scheduleTail.then(() =>
+    notifee.cancelNotification(NOTIFICATION_ID),
+  );
+  scheduleTail = run.catch(() => undefined);
+  return run;
+}
+
+type DailyBriefSyncInput = {
+  scopeId: string;
   config: DailyBriefConfig;
   glucose: GlucoseSettings;
   ai?: DailyBriefAiOptions;
-}) {
+};
+
+type DailyBriefListener = (scopeId: string, brief: StoredBrief) => void;
+const dailyBriefListeners = new Set<DailyBriefListener>();
+
+export const subscribeToDailyBriefs = (
+  listener: DailyBriefListener,
+): (() => void) => {
+  dailyBriefListeners.add(listener);
+  return () => dailyBriefListeners.delete(listener);
+};
+
+const syncDailyBriefNotificationsUnlocked = async (
+  params: DailyBriefSyncInput,
+  generation: number,
+): Promise<void> => {
+  const isCurrent = () => scheduleGeneration === generation;
   const lang = (await getStoredAppLanguage()) as Lang;
   const hour = clampInt(params.config.hour, 8, 0, 23);
   const minute = clampInt(params.config.minute, 0, 0, 59);
 
   await ensureChannel(lang);
   await notifee.cancelNotification(NOTIFICATION_ID);
-  if (!params.config.enabled) return;
+  if (!params.config.enabled || !isCurrent()) return;
 
   const now = new Date();
   const todayKey = ymd(now);
   const todaySchedule = new Date(now);
   todaySchedule.setHours(hour, minute, 0, 0);
 
-  const lastDelivered = await AsyncStorage.getItem(STORAGE_KEYS.lastDeliveredDate);
+  const lastDeliveredKey = scopedStorageKey(
+    STORAGE_KEYS.lastDeliveredDate,
+    params.scopeId,
+  );
+  const lastDelivered = await AsyncStorage.getItem(lastDeliveredKey);
   if (now.getTime() >= todaySchedule.getTime() && lastDelivered !== todayKey) {
-    await regenerateDailyBrief({glucose: params.glucose, ai: params.ai, notify: true});
-    await AsyncStorage.setItem(STORAGE_KEYS.lastDeliveredDate, todayKey);
+    await regenerateDailyBrief({
+      scopeId: params.scopeId,
+      glucose: params.glucose,
+      notify: true,
+      canCommit: isCurrent,
+      ...(params.ai !== undefined ? {ai: params.ai} : {}),
+    });
+    if (!isCurrent()) {
+      return;
+    }
+    await AsyncStorage.setItem(lastDeliveredKey, todayKey);
   }
 
+  if (!isCurrent()) {
+    return;
+  }
   const nextTs = nextScheduledTime(new Date(), hour, minute);
   await notifee.createTriggerNotification(
     {
@@ -1032,7 +1145,11 @@ export async function syncDailyBriefNotifications(params: {
         smallIcon: 'ic_launcher',
         pressAction: {id: 'default'},
       },
-      data: {route: 'DailyReviewScreen', source: 'daily_brief_trigger'},
+      data: {
+        route: 'DailyReviewScreen',
+        source: 'daily_brief_trigger',
+        workspaceScopeId: params.scopeId,
+      },
     },
     {
       type: TriggerType.TIMESTAMP,
@@ -1041,6 +1158,18 @@ export async function syncDailyBriefNotifications(params: {
       alarmManager: false,
     },
   );
+};
+
+export function syncDailyBriefNotifications(
+  params: DailyBriefSyncInput,
+): Promise<void> {
+  const generation = scheduleGeneration + 1;
+  scheduleGeneration = generation;
+  const run = scheduleTail.then(() =>
+    syncDailyBriefNotificationsUnlocked(params, generation),
+  );
+  scheduleTail = run.catch(() => undefined);
+  return run;
 }
 
 

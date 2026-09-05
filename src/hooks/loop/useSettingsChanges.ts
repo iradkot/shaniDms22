@@ -98,8 +98,9 @@ export function useSettingsChanges(
       setAllEvents(initialEvents);
 
       // Check if there are more
-      if (initialEvents.length > 0) {
-        const lastTimestamp = initialEvents[initialEvents.length - 1].timestamp;
+      const lastInitialEvent = initialEvents.slice(-1)[0];
+      if (lastInitialEvent) {
+        const lastTimestamp = lastInitialEvent.timestamp;
         const more = await hasMoreSettingsChanges(lastTimestamp);
         if (mountedRef.current) {
           setHasMore(more);
@@ -130,12 +131,13 @@ export function useSettingsChanges(
   }, [loadInitial]);
 
   const loadMore = useCallback(async () => {
-    if (loadingRef.current || !hasMore || allEvents.length === 0) return;
+    const lastExistingEvent = allEvents.slice(-1)[0];
+    if (loadingRef.current || !hasMore || !lastExistingEvent) return;
     loadingRef.current = true;
     setIsLoadingMore(true);
 
     try {
-      const lastTimestamp = allEvents[allEvents.length - 1].timestamp;
+      const lastTimestamp = lastExistingEvent.timestamp;
       const moreEvents = await detectSettingsChanges({
         minEvents: 20,
         beforeTimestamp: lastTimestamp,
@@ -151,7 +153,12 @@ export function useSettingsChanges(
         setAllEvents(prev => [...prev, ...newEvents]);
 
         // Check for more
-        const lastNewTimestamp = moreEvents[moreEvents.length - 1].timestamp;
+        const lastNewEvent = moreEvents.slice(-1)[0];
+        if (!lastNewEvent) {
+          setHasMore(false);
+          return;
+        }
+        const lastNewTimestamp = lastNewEvent.timestamp;
         const more = await hasMoreSettingsChanges(lastNewTimestamp);
         if (mountedRef.current) {
           setHasMore(more);

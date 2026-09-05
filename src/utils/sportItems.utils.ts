@@ -3,36 +3,47 @@ import {
   formatDateToDateAndTimeString,
   getRelativeDateText,
 } from 'app/utils/datetime.utils';
-import {formattedSportItemDTO, SportItemDTO} from 'app/types/sport.types';
+import {
+  formattedSportItemDTO,
+  SportItemDTO,
+  SportItemsByRelativeDate,
+} from 'app/types/sport.types';
 import {getBgDataByDate} from 'app/api/firebase/functions/getBgByDate';
 
 export const formatSportItem = async (
   item: SportItemDTO,
 ): Promise<formattedSportItemDTO> => {
-  if (!item?.startTimestamp) {
-    item.startTimestamp = item.timestamp;
-  }
-  const formattedItem = item as formattedSportItemDTO;
-  const startDate = new Date(item.startTimestamp);
+  const legacyTimestamp = (item as SportItemDTO & {timestamp?: number})
+    .timestamp;
+  const startTimestamp = Number.isFinite(item.startTimestamp)
+    ? item.startTimestamp
+    : Number.isFinite(legacyTimestamp)
+      ? (legacyTimestamp as number)
+      : item.endTimestamp - Math.max(0, item.durationMinutes) * 60_000;
+  const startDate = new Date(startTimestamp);
   startDate.setHours(startDate.getHours() - 1);
   const endDate = new Date(item.endTimestamp);
   endDate.setHours(endDate.getHours() + 3);
-  formattedItem.bgData = await getBgDataByDate({
+  const bgData = await getBgDataByDate({
     startDate,
     endDate,
   });
-  formattedItem.localDateString = formatDateToDateAndTimeString(
-    item.startTimestamp,
-  );
-  if (!item.durationMinutes) {
-    formattedItem.durationMinutes = Math.round(
-      (item.endTimestamp - item.startTimestamp) / 1000 / 60,
-    );
-  }
-  return formattedItem;
+  const durationMinutes = item.durationMinutes > 0
+    ? item.durationMinutes
+    : Math.max(0, Math.round((item.endTimestamp - startTimestamp) / 60_000));
+
+  return {
+    ...item,
+    startTimestamp,
+    durationMinutes,
+    bgData,
+    localDateString: formatDateToDateAndTimeString(startTimestamp),
+  };
 };
 
-export const fetchSportItems = async setSportItems => {
+export const fetchSportItems = async (
+  setSportItems: (items: SportItemsByRelativeDate) => void,
+): Promise<void> => {
   const FSsportItems = await FirebaseService.getSportItems();
   const updatedSportItems = await Promise.all(
     FSsportItems.map((item: SportItemDTO) => {
@@ -42,12 +53,11 @@ export const fetchSportItems = async setSportItems => {
   const sortedSportItems = updatedSportItems.sort((a, b) => {
     return b.startTimestamp - a.startTimestamp;
   });
-  const groupedSportItems = sortedSportItems.reduce((grouped, item) => {
+  const groupedSportItems = sortedSportItems.reduce<SportItemsByRelativeDate>((grouped, item) => {
     const relativeDateText = getRelativeDateText(new Date(item.startTimestamp));
-    if (!grouped[relativeDateText]) {
-      grouped[relativeDateText] = [];
-    }
-    grouped[relativeDateText].push(item);
+    const itemsForDate = grouped[relativeDateText] ?? [];
+    itemsForDate.push(item);
+    grouped[relativeDateText] = itemsForDate;
     return grouped;
   }, {});
   setSportItems(groupedSportItems);

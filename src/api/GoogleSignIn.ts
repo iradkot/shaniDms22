@@ -1,5 +1,11 @@
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import auth, {FirebaseAuthTypes, GoogleAuthProvider} from '@react-native-firebase/auth';
+import {GoogleSignin} from '@react-native-google-signin/google-signin';
+import {getApp} from '@react-native-firebase/app';
+import {
+  FirebaseAuthTypes,
+  getAuth,
+  GoogleAuthProvider,
+  signInWithCredential,
+} from '@react-native-firebase/auth';
 
 /** types */
 export type GoogleSignInResult = {
@@ -36,24 +42,27 @@ class GoogleSignIn {
   };
   signIn = async (): Promise<GoogleSignInResult> => {
     try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      await GoogleSignin.hasPlayServices({showPlayServicesUpdateDialog: true});
       // trigger Google sign-in UI
       await GoogleSignin.signIn();
       // retrieve tokens (idToken is required for Firebase auth)
-      const { idToken, accessToken } = await GoogleSignin.getTokens();
+      const {idToken, accessToken} = await GoogleSignin.getTokens();
       if (!idToken) {
-        return { user: null, error: new Error('Missing idToken from Google sign-in') };
+        return {
+          user: null,
+          error: new Error('Missing idToken from Google sign-in'),
+        };
       }
       // create Firebase credential
       const credential = GoogleAuthProvider.credential(idToken, accessToken);
-      const user = await auth().signInWithCredential(credential);
+      const user = await signInWithCredential(getAuth(getApp()), credential);
       this.isSignedIn = true;
-      return { user, error: null };
+      return {user, error: null};
     } catch (err: any) {
       console.error('GoogleSignIn.signIn exception:', err);
       // wrap and propagate error
       const errorMsg = err instanceof Error ? err.message : String(err);
-      return { user: null, error: new Error(errorMsg) };
+      return {user: null, error: new Error(errorMsg)};
     }
   };
   getTokens: () => any = async () => {

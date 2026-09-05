@@ -1,59 +1,41 @@
-# This file contains the fastlane.tools configuration
-# You can find the documentation at https://docs.fastlane.tools
-#
-# For a list of all available actions, check out
-#
-#     https://docs.fastlane.tools/actions
-#
-# For a list of all available plugins, check out
-#
-#     https://docs.fastlane.tools/plugins/available-plugins
-#
-
-# Uncomment the line if you want fastlane to automatically update itself
-# update_fastlane
-
 default_platform(:android)
 
+def require_android_release_signing!
+  required = %w[
+    ANDROID_KEYSTORE_PATH
+    ANDROID_KEYSTORE_PASSWORD
+    ANDROID_KEY_ALIAS
+    ANDROID_KEY_PASSWORD
+  ]
+  missing = required.select { |name| ENV[name].to_s.strip.empty? }
+  return if missing.empty?
+
+  UI.user_error!("Missing Android release signing variables: #{missing.join(', ')}")
+end
+
 platform :android do
-  desc "Runs all the tests"
+  desc "Run Android unit tests"
   lane :test do
     gradle(task: "test")
   end
 
-  desc "Submit a new Beta Build to Crashlytics Beta"
-  lane :beta do
+  desc "Build production-signed release APKs"
+  lane :apk do
+    require_android_release_signing!
     gradle(task: "clean assembleRelease")
-    crashlytics
-
-    # sh "your_script.sh"
-    # You can also use other beta testing services here
   end
 
-  desc "Submit a new Beta Build to Play Store"
-  lane :beta do
-    store_password = prompt(text: "Signing Store Password: ", secure_text: true)
-    key_password = prompt(text: "Alias Key Password: ", secure_text: true)
-    releaseFilePath = File.join(Dir.pwd, "..", "my-release-key.keystore")
-    gradle(task: 'clean')
-    gradle(
-      task: 'bundle',
-      build_type: 'Release',
-      print_command: false,
-      properties: {
-        "android.injected.signing.store.file" => releaseFilePath,
-        "android.injected.signing.store.password" => store_password,
-        "android.injected.signing.key.alias" => "my-key-alias",
-        "android.injected.signing.key.password" => key_password,
-      }
-    )
-    upload_to_play_store(
-      track: 'internal'
-    )
+  desc "Build an AAB and upload it to the Play internal track"
+  lane :internal do
+    require_android_release_signing!
+    json_key = ENV["GOOGLE_PLAY_JSON_KEY_PATH"].to_s.strip
+    UI.user_error!("GOOGLE_PLAY_JSON_KEY_PATH is required") if json_key.empty?
 
-#   desc "Deploy a new version to the Google Play"
-#   lane :deploy do
-#     gradle(task: "clean assembleRelease")
-#     upload_to_play_store
-#   end
+    gradle(task: "clean bundleRelease")
+    upload_to_play_store(
+      aab: File.expand_path("../app/build/outputs/bundle/release/app-release.aab", __dir__),
+      json_key: json_key,
+      track: "internal"
+    )
+  end
 end

@@ -1,29 +1,48 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {useState, useEffect} from 'react';
+import {useEffect, useRef, useState} from 'react';
 
-async function getStorageValue(key: string, defaultValue: any) {
-  // getting stored value
-  const saved = await AsyncStorage.getItem(key);
-  let initial;
-  if (typeof saved === 'string') {
-    initial = JSON.parse(saved);
-  } else {
-    initial = saved;
+async function getStorageValue<T>(key: string, defaultValue: T): Promise<T> {
+  try {
+    const saved = await AsyncStorage.getItem(key);
+    return saved === null ? defaultValue : (JSON.parse(saved) as T);
+  } catch {
+    return defaultValue;
   }
-  return initial;
 }
 
-export const useLocalStorage = (key: string, defaultValue: any) => {
-  const [value, setValue] = useState(() => {
-    return getStorageValue(key, JSON.stringify(defaultValue));
-  });
+export const useLocalStorage = <T>(key: string, defaultValue: T) => {
+  const [value, setValue] = useState<T>(defaultValue);
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
+  const defaultValueRef = useRef(defaultValue);
+  defaultValueRef.current = defaultValue;
 
   useEffect(() => {
-    // storing input name
-    AsyncStorage.setItem(key, JSON.stringify(value));
-  }, [key, value]);
+    let active = true;
 
-  return [value, setValue];
+    setHydratedKey(null);
+    getStorageValue(key, defaultValueRef.current)
+      .then(storedValue => {
+        if (!active) {
+          return;
+        }
+        setValue(storedValue);
+        setHydratedKey(key);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [key]);
+
+  useEffect(() => {
+    if (hydratedKey !== key) {
+      return;
+    }
+    AsyncStorage.setItem(key, JSON.stringify(value)).catch(() => undefined);
+  }, [hydratedKey, key, value]);
+
+  return [value, setValue] as const;
 };
 
 export default useLocalStorage;

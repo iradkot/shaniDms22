@@ -97,7 +97,11 @@ export function useProfileHistory(
     setState({status: 'loading'});
 
     try {
-      const events = await fetchProfileChangeHistory(filter);
+      const stableFilter =
+        filterKey === undefined
+          ? undefined
+          : (JSON.parse(filterKey) as ProfileHistoryFilter);
+      const events = await fetchProfileChangeHistory(stableFilter);
 
       if (!mountedRef.current) return;
       setState({status: 'success', events});

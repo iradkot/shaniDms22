@@ -497,7 +497,7 @@ const MissionChatScreen: React.FC<MissionChatScreenProps> = ({
         </View>
 
         {/* Quick actions (meal flow) */}
-        {mission === 'openChat' ? (
+        {mission === 'openChat' || mission === 'mealAnalysis' ? (
           <View style={{paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.sm}}>
             <Text style={{color: addOpacity(theme.textColor, 0.7), marginBottom: 6, textAlign, writingDirection}}>
               {language === 'he' ? 'קיצורי דרך לארוחה:' : 'Meal shortcuts:'}

@@ -34,6 +34,7 @@ import {
 } from 'app/utils/nightscoutTreatments.utils';
 import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsulin';
 import {addMemoryEntry} from 'app/services/aiMemory/aiMemoryStore';
+import {useActiveAiWorkspaceScope} from 'app/services/aiMemory/useActiveAiWorkspaceScope';
 import notifee, {TriggerType} from '@notifee/react-native';
 import ScoreBadge from 'app/components/common-ui/ScoreBadge/ScoreBadge';
 import {detectLoopAdjustmentTrend, LoopTrendSignal} from 'app/services/loopAssist/loopAdjustmentAssist';
@@ -360,6 +361,7 @@ const DailyReviewScreen: React.FC = () => {
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
   const {language} = useAppLanguage();
+  const aiWorkspaceScope = useActiveAiWorkspaceScope();
 
   const [loading, setLoading] = useState(true);
   const [estimatedTotalMs, setEstimatedTotalMs] = useState<number | null>(null);
@@ -525,13 +527,17 @@ const DailyReviewScreen: React.FC = () => {
       // ignore
     }
 
-    let latestBrief = await getLatestDailyBrief();
+    let latestBrief = await getLatestDailyBrief(aiWorkspaceScope?.workspaceId);
     const expectedDate = format(yStart, 'yyyy-MM-dd');
     const briefDate = latestBrief?.createdAt ? format(new Date(latestBrief.createdAt), 'yyyy-MM-dd') : null;
 
-    if (!latestBrief?.body || briefDate !== expectedDate) {
+    if (
+      aiWorkspaceScope !== null &&
+      (!latestBrief?.body || briefDate !== expectedDate)
+    ) {
       try {
         await regenerateDailyBrief({
+          scopeId: aiWorkspaceScope.workspaceId,
           glucose: glucoseSettings,
           ai: {
             enabled: aiSettings.enabled,
@@ -541,7 +547,9 @@ const DailyReviewScreen: React.FC = () => {
           },
           notify: false,
         });
-        latestBrief = await getLatestDailyBrief();
+        latestBrief = await getLatestDailyBrief(
+          aiWorkspaceScope?.workspaceId,
+        );
       } catch {
         // Keep local computed fallback UI if generation fails.
       }
@@ -561,7 +569,7 @@ const DailyReviewScreen: React.FC = () => {
       setWhyLine(null);
       setActionSource('fallback');
     }
-  }, [aiSettings.apiKey, aiSettings.enabled, aiSettings.openAiModel, aiSettings.personality, glucoseSettings, prevDayStart, todayStart, wStart, yStart]);
+  }, [aiSettings.apiKey, aiSettings.enabled, aiSettings.openAiModel, aiSettings.personality, aiWorkspaceScope, glucoseSettings, prevDayStart, todayStart, wStart, yStart]);
 
   useEffect(() => {
     let mounted = true;
@@ -570,12 +578,15 @@ const DailyReviewScreen: React.FC = () => {
     setLoading(true);
     loadEstimatedDuration();
 
-    loadData()
-      .finally(() => {
+    void (async () => {
+      try {
+        await loadData();
+      } finally {
         const duration = Date.now() - loadingStartRef.current;
         persistLoadDuration(duration);
         if (mounted) setLoading(false);
-      });
+      }
+    })();
 
     return () => {
       mounted = false;
@@ -594,7 +605,11 @@ const DailyReviewScreen: React.FC = () => {
   const handleRegenerate = async () => {
     try {
       setRefreshingAction(true);
+      if (!aiWorkspaceScope) {
+        return;
+      }
       await regenerateDailyBrief({
+        scopeId: aiWorkspaceScope.workspaceId,
         glucose: glucoseSettings,
         ai: {
           enabled: aiSettings.enabled,
@@ -848,21 +863,23 @@ const DailyReviewScreen: React.FC = () => {
 
     const memo = `ביום ${format(yStart, 'yyyy-MM-dd')}, ארוחת ${mealBucketLabel('he', focusModalBucket)} גרמה ל-Peak High של ${item?.avgRise ?? '-'} mg/dL. המשתמש הסיק: ${focusNote || 'ללא הערה'}. להשתמש בתובנה זו עבור ארוחות דומות.`;
 
-    await addMemoryEntry({
-      type: 'episode',
-      tags: ['daily_review', 'plan_tomorrow', String(focusModalBucket)],
-      textSummary: memo,
-      facts: {
-        bucket: focusModalBucket,
-        score: item?.score ?? null,
-        avgRise: item?.avgRise ?? null,
-        note: focusNote,
-        reminderTime: focusReminderTime,
-      },
-      source: 'user',
-      confidence: 0.9,
-      expiresAt: Date.now() + 180 * 24 * 60 * 60 * 1000,
-    });
+    if (aiWorkspaceScope) {
+      await addMemoryEntry(aiWorkspaceScope, {
+        type: 'episode',
+        tags: ['daily_review', 'plan_tomorrow', String(focusModalBucket)],
+        textSummary: memo,
+        facts: {
+          bucket: focusModalBucket,
+          score: item?.score ?? null,
+          avgRise: item?.avgRise ?? null,
+          note: focusNote,
+          reminderTime: focusReminderTime,
+        },
+        source: 'user',
+        confidence: 0.9,
+        expiresAt: Date.now() + 180 * 24 * 60 * 60 * 1000,
+      });
+    }
 
     if (reminderTs) {
       await notifee.createTriggerNotification(

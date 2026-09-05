@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {type GestureResponderEvent} from 'react-native';
+import {Platform, type GestureResponderEvent} from 'react-native';
 import * as d3 from 'd3';
 
 import type {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
@@ -12,11 +12,61 @@ type UseStackedChartsTouchTooltipParams = {
   bgSamples: BgSample[];
   width: number;
   margin: ChartMargin;
-  xDomain?: [Date, Date] | null;
+  xDomain?: [Date, Date] | null | undefined;
   autoHideMs?: number;
-  scrollSafeEdgeWidth?: number;
-  onTouchSessionChange?: (session: StackedChartsTouchSession | null) => void;
+  onTouchSessionChange?:
+    | ((session: StackedChartsTouchSession | null) => void)
+    | undefined;
 };
+
+// Structural contracts also work on native without importing DOM types.
+type ChartSurface = {
+  getBoundingClientRect?: () => {left: number; width?: number};
+};
+type ChartMouseEvent = {
+  readonly nativeEvent: {
+    readonly clientX: number;
+    readonly sourceCapabilities?: {readonly firesTouchEvents?: boolean};
+  };
+  readonly currentTarget: ChartSurface;
+  readonly preventDefault?: () => void;
+};
+type TouchPoint = {
+  pageX?: number | undefined;
+  pageY?: number | undefined;
+  clientX?: number | undefined;
+  locationX?: number | undefined;
+};
+type ChartTouchEvent = {
+  nativeEvent: TouchPoint & {
+    touches?: ArrayLike<TouchPoint>;
+    changedTouches?: ArrayLike<TouchPoint>;
+  };
+  currentTarget?: ChartSurface;
+};
+type ActiveTouch = {
+  pageOriginX: number | null;
+  startPageX: number | null;
+  startPageY: number | null;
+  scale: number;
+  horizontal: boolean;
+};
+
+const MOVE_THRESHOLD_PX = 8;
+const SYNTHETIC_MOUSE_DELAY_MS = 800;
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+function getTouchPoint(event: ChartTouchEvent): TouchPoint {
+  const native = event.nativeEvent;
+  const touch = native.touches?.[0] ?? native.changedTouches?.[0];
+  return {
+    pageX: touch?.pageX ?? native.pageX,
+    pageY: touch?.pageY ?? native.pageY,
+    clientX: touch?.clientX ?? native.clientX,
+    locationX: native.locationX ?? touch?.locationX,
+  };
+}
 
 export function useStackedChartsTouchTooltip({
   bgSamples,
@@ -24,29 +74,31 @@ export function useStackedChartsTouchTooltip({
   margin,
   xDomain,
   autoHideMs = 4000,
-  scrollSafeEdgeWidth = 0,
   onTouchSessionChange,
 }: UseStackedChartsTouchTooltipParams) {
   const [chartsTooltip, setChartsTooltip] =
     useState<CGMGraphExternalTooltipPayload | null>(null);
-
-  const lastPayloadRef =
-    useRef<CGMGraphExternalTooltipPayload | null>(null);
-  const touchSurfacePageXRef = useRef<number | null>(null);
-  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const lastPayloadRef = useRef<CGMGraphExternalTooltipPayload | null>(null);
+  const activeTouchRef = useRef<ActiveTouch | null>(null);
+  const ignoreMouseUntilRef = useRef(0);
+  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionCallbackRef = useRef(onTouchSessionChange);
+  sessionCallbackRef.current = onTouchSessionChange;
 
   const clearTooltipTimer = useCallback(() => {
-    if (tooltipTimerRef.current) {
+    if (tooltipTimerRef.current != null) {
       clearTimeout(tooltipTimerRef.current);
       tooltipTimerRef.current = null;
     }
   }, []);
 
+  const releaseTouchSession = useCallback(() => {
+    activeTouchRef.current = null;
+    sessionCallbackRef.current?.(null);
+  }, []);
+
   const clearTooltipState = useCallback(() => {
     lastPayloadRef.current = null;
-    touchSurfacePageXRef.current = null;
     setChartsTooltip(null);
   }, []);
 
@@ -58,194 +110,238 @@ export function useStackedChartsTouchTooltip({
     }, autoHideMs);
   }, [autoHideMs, clearTooltipState, clearTooltipTimer]);
 
-  const setActiveTooltip = useCallback(
-    (payload: CGMGraphExternalTooltipPayload) => {
-      lastPayloadRef.current = payload;
-      setChartsTooltip(payload);
-    },
-    [],
-  );
-
   const handleTooltipChange = useCallback(
     (payload: CGMGraphExternalTooltipPayload | null) => {
       clearTooltipTimer();
-
+      lastPayloadRef.current = payload;
+      setChartsTooltip(payload);
       if (!payload) {
-        clearTooltipState();
-        return;
-      }
-
-      setActiveTooltip(payload);
-      if (payload?.autoHide) {
+        releaseTouchSession();
+      } else if (payload.autoHide) {
         scheduleTooltipAutoHide();
       }
     },
-    [
-      clearTooltipState,
-      clearTooltipTimer,
-      scheduleTooltipAutoHide,
-      setActiveTooltip,
-    ],
+    [clearTooltipTimer, releaseTouchSession, scheduleTooltipAutoHide],
   );
 
-  useEffect(() => clearTooltipTimer, [clearTooltipTimer]);
-
-  const plotWidth = useMemo(
-    () => Math.max(1, width - margin.left - margin.right),
-    [margin.left, margin.right, width],
+  const extent = useMemo(() => d3.extent(bgSamples, s => s.date), [bgSamples]);
+  const domainStartMs = xDomain?.[0].getTime() ?? extent[0] ?? 0;
+  const domainEndMs = xDomain?.[1].getTime() ?? extent[1] ?? 0;
+  const plotWidth = Math.max(1, width - margin.left - margin.right);
+  const xScale = useMemo(
+    () =>
+      d3
+        .scaleTime()
+        .domain([new Date(domainStartMs), new Date(domainEndMs)])
+        .range([0, plotWidth]),
+    [domainStartMs, domainEndMs, plotWidth],
   );
-
-  const xScale = useMemo(() => {
-    const resolvedDomain =
-      xDomain ??
-      (() => {
-        const extent = d3.extent(bgSamples, s => new Date(s.date));
-        if (extent[0] && extent[1]) {
-          return extent as [Date, Date];
-        }
-        const now = new Date();
-        return [now, now] as [Date, Date];
-      })();
-    return d3.scaleTime().domain(resolvedDomain).range([0, plotWidth]);
-  }, [bgSamples, plotWidth, xDomain]);
 
   const buildTooltipPayloadFromRawX = useCallback(
-    (rawX: number): CGMGraphExternalTooltipPayload | null => {
-      if (typeof rawX !== 'number' || !Number.isFinite(rawX)) {
-        return null;
-      }
-      if (scrollSafeEdgeWidth > 0 && rawX >= width - scrollSafeEdgeWidth) {
-        return null;
-      }
-
-      return buildExternalTooltipPayloadFromLocationX({
+    (rawX: number): CGMGraphExternalTooltipPayload | null =>
+      buildExternalTooltipPayloadFromLocationX({
         rawX,
         plotMarginLeft: margin.left,
         plotWidth,
         xScale,
-      });
-    },
-    [margin.left, plotWidth, scrollSafeEdgeWidth, width, xScale],
-  );
-
-  const buildTooltipPayload = useCallback(
-    (evt: GestureResponderEvent): CGMGraphExternalTooltipPayload | null => {
-      return buildTooltipPayloadFromRawX(evt.nativeEvent.locationX);
-    },
-    [buildTooltipPayloadFromRawX],
-  );
-
-  const buildTooltipPayloadFromPageX = useCallback(
-    (pageX: number): CGMGraphExternalTooltipPayload | null => {
-      const surfacePageX = touchSurfacePageXRef.current;
-      if (surfacePageX == null) {
-        return null;
-      }
-
-      return buildTooltipPayloadFromRawX(pageX - surfacePageX);
-    },
-    [buildTooltipPayloadFromRawX],
-  );
-
-  const rememberTouchSurface = useCallback((evt: GestureResponderEvent) => {
-    const {locationX, pageX} = evt.nativeEvent;
-    if (
-      typeof locationX === 'number' &&
-      Number.isFinite(locationX) &&
-      typeof pageX === 'number' &&
-      Number.isFinite(pageX)
-    ) {
-      touchSurfacePageXRef.current = pageX - locationX;
-    }
-  }, []);
-
-  const handlePageTouchMove = useCallback(
-    (evt: GestureResponderEvent) => {
-      const pageX = evt.nativeEvent.pageX;
-      if (typeof pageX !== 'number' || !Number.isFinite(pageX)) {
-        return;
-      }
-
-      const payload = buildTooltipPayloadFromPageX(pageX);
-      if (payload) {
-        handleTooltipChange(payload);
-      }
-    },
-    [buildTooltipPayloadFromPageX, handleTooltipChange],
+      }),
+    [margin.left, plotWidth, xScale],
   );
 
   const handleTouchEnd = useCallback(() => {
-    onTouchSessionChange?.(null);
-    handleTooltipChange(null);
-  }, [handleTooltipChange, onTouchSessionChange]);
-
-  const handleTouchCancel = useCallback(() => {
-    // Keep the last selection visible when ScrollView or another responder
-    // takes over. If no release arrives afterwards, clear it as stale.
-    const lastPayload = lastPayloadRef.current;
-    if (lastPayload) {
-      setActiveTooltip(lastPayload);
+    // Visibility is independent of gesture ownership: a tap stays readable,
+    // but must never keep the page in an active chart-touch session.
+    ignoreMouseUntilRef.current = Date.now() + SYNTHETIC_MOUSE_DELAY_MS;
+    releaseTouchSession();
+    if (lastPayloadRef.current) {
       scheduleTooltipAutoHide();
     }
-  }, [scheduleTooltipAutoHide, setActiveTooltip]);
+  }, [releaseTouchSession, scheduleTooltipAutoHide]);
 
-  const handlePageTouchCancel = useCallback(() => {
-    onTouchSessionChange?.(null);
-    handleTouchCancel();
-  }, [handleTouchCancel, onTouchSessionChange]);
+  const handleTouchMove = useCallback(
+    (event: GestureResponderEvent) => {
+      const active = activeTouchRef.current;
+      if (!active) {
+        return;
+      }
+      const evt = event as unknown as ChartTouchEvent;
+      if ((evt.nativeEvent.touches?.length ?? 1) !== 1) {
+        handleTouchEnd();
+        return;
+      }
+      const point = getTouchPoint(evt);
+      if (!isFiniteNumber(point.pageX) || active.pageOriginX == null) {
+        return;
+      }
+      if (!active.horizontal && active.startPageX != null) {
+        const dx = Math.abs(point.pageX - active.startPageX);
+        const dy =
+          isFiniteNumber(point.pageY) && active.startPageY != null
+            ? Math.abs(point.pageY - active.startPageY)
+            : 0;
+        if (dy >= MOVE_THRESHOLD_PX && dy > dx) {
+          // Let vertical page scrolling finish without scrubbing the time.
+          handleTouchEnd();
+          return;
+        }
+        if (dx < MOVE_THRESHOLD_PX) {
+          return;
+        }
+        active.horizontal = true;
+      }
+      const payload = buildTooltipPayloadFromRawX(
+        (point.pageX - active.pageOriginX) * active.scale,
+      );
+      if (payload) {
+        handleTooltipChange(payload);
+      }
+    },
+    [buildTooltipPayloadFromRawX, handleTooltipChange, handleTouchEnd],
+  );
 
   const pageTouchSession = useMemo<StackedChartsTouchSession>(
     () => ({
-      handlePageTouchMove,
+      handlePageTouchMove: handleTouchMove,
       handlePageTouchEnd: handleTouchEnd,
-      handlePageTouchCancel,
+      handlePageTouchCancel: handleTouchEnd,
     }),
-    [handlePageTouchCancel, handlePageTouchMove, handleTouchEnd],
+    [handleTouchEnd, handleTouchMove],
   );
 
-  const registerTouchSession = useCallback(() => {
-    onTouchSessionChange?.(pageTouchSession);
-  }, [onTouchSessionChange, pageTouchSession]);
-
-  const handleTouchPoint = useCallback(
-    (evt: GestureResponderEvent) => {
-      rememberTouchSurface(evt);
-      const payload = buildTooltipPayload(evt);
-      if (payload) {
-        handleTooltipChange(payload);
-        registerTouchSession();
+  const handleTouchStart = useCallback(
+    (event: GestureResponderEvent) => {
+      ignoreMouseUntilRef.current = Date.now() + SYNTHETIC_MOUSE_DELAY_MS;
+      const evt = event as unknown as ChartTouchEvent;
+      if ((evt.nativeEvent.touches?.length ?? 1) !== 1) {
+        handleTouchEnd();
+        return;
       }
+      const point = getTouchPoint(evt);
+      const rect = evt.currentTarget?.getBoundingClientRect?.();
+      const scale =
+        rect && isFiniteNumber(rect.width) && rect.width > 0
+          ? width / rect.width
+          : 1;
+      // On web locationX is relative to the SVG child under the finger.
+      // Native visual children use pointerEvents="none" so the surface is
+      // the event target and its initial locationX provides a stable origin.
+      const surfaceX =
+        rect && isFiniteNumber(point.clientX)
+          ? point.clientX - rect.left
+          : point.locationX;
+      if (!isFiniteNumber(surfaceX)) {
+        releaseTouchSession();
+        return;
+      }
+      const payload = buildTooltipPayloadFromRawX(surfaceX * scale);
+      if (!payload) {
+        releaseTouchSession();
+        return;
+      }
+      activeTouchRef.current = {
+        pageOriginX: isFiniteNumber(point.pageX)
+          ? point.pageX - surfaceX
+          : null,
+        startPageX: isFiniteNumber(point.pageX) ? point.pageX : null,
+        startPageY: isFiniteNumber(point.pageY) ? point.pageY : null,
+        scale,
+        horizontal: false,
+      };
+      handleTooltipChange(payload);
+      sessionCallbackRef.current?.(pageTouchSession);
     },
     [
-      buildTooltipPayload,
+      buildTooltipPayloadFromRawX,
       handleTooltipChange,
-      registerTouchSession,
-      rememberTouchSurface,
+      handleTouchEnd,
+      pageTouchSession,
+      releaseTouchSession,
+      width,
     ],
   );
 
   const touchHandlers = useMemo(
     () => ({
-      onTouchStart: handleTouchPoint,
-      onTouchMove: handleTouchPoint,
+      onTouchStart: handleTouchStart,
+      onTouchMove: handleTouchMove,
       onTouchEnd: handleTouchEnd,
-      onTouchCancel: handleTouchCancel,
+      onTouchCancel: handleTouchEnd,
     }),
-    [handleTouchCancel, handleTouchEnd, handleTouchPoint],
+    [handleTouchEnd, handleTouchMove, handleTouchStart],
   );
 
+  const ignoreMouse = useCallback(
+    (event?: ChartMouseEvent) =>
+      activeTouchRef.current != null ||
+      Date.now() < ignoreMouseUntilRef.current ||
+      event?.nativeEvent.sourceCapabilities?.firesTouchEvents === true,
+    [],
+  );
+
+  const handleMousePoint = useCallback(
+    (event: ChartMouseEvent) => {
+      if (ignoreMouse(event)) {
+        return;
+      }
+      const rect = event.currentTarget.getBoundingClientRect?.();
+      if (!rect) {
+        return;
+      }
+      const scale =
+        isFiniteNumber(rect.width) && rect.width > 0 ? width / rect.width : 1;
+      const payload = buildTooltipPayloadFromRawX(
+        (event.nativeEvent.clientX - rect.left) * scale,
+      );
+      if (payload) {
+        handleTooltipChange(payload);
+      }
+    },
+    [buildTooltipPayloadFromRawX, handleTooltipChange, ignoreMouse, width],
+  );
+
+  const mouseHandlers =
+    Platform.OS === 'web'
+      ? {
+          onMouseMove: handleMousePoint,
+          onMouseDown: (event: ChartMouseEvent) => {
+            if (!ignoreMouse(event)) {
+              event.preventDefault?.();
+              handleMousePoint(event);
+            }
+          },
+          onMouseLeave: () => {
+            if (!ignoreMouse()) {
+              handleTooltipChange(null);
+            }
+          },
+        }
+      : {};
+
+  // Use values, not the domain array identity: callers may recreate that
+  // array every render. A new day/range/orientation invalidates selection.
+  const selectionSpace = `${domainStartMs}:${domainEndMs}:${width}:${margin.left}:${margin.right}`;
+  const selectionSpaceRef = useRef(selectionSpace);
   useEffect(() => {
-    if (!chartsTooltip) {
-      onTouchSessionChange?.(null);
-      return;
+    if (selectionSpaceRef.current !== selectionSpace) {
+      selectionSpaceRef.current = selectionSpace;
+      clearTooltipTimer();
+      clearTooltipState();
+      releaseTouchSession();
     }
+  }, [
+    clearTooltipState,
+    clearTooltipTimer,
+    releaseTouchSession,
+    selectionSpace,
+  ]);
 
-    onTouchSessionChange?.(pageTouchSession);
-  }, [chartsTooltip, onTouchSessionChange, pageTouchSession]);
+  useEffect(
+    () => () => {
+      clearTooltipTimer();
+      releaseTouchSession();
+    },
+    [clearTooltipTimer, releaseTouchSession],
+  );
 
-  return {
-    chartsTooltip,
-    handleTooltipChange,
-    touchHandlers,
-  };
+  return {chartsTooltip, handleTooltipChange, touchHandlers, mouseHandlers};
 }

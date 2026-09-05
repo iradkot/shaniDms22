@@ -48,10 +48,11 @@ export function computeRank(metrics: RankMetrics): RankState {
   }
 
   const idx = TIERS.findIndex(t => t.tier === tier);
+  const current = TIERS[idx] ?? TIERS[0];
   const next = TIERS[idx + 1] ?? null;
 
-  const progressToNextPct = next
-    ? Math.round(clamp(((score - TIERS[idx].minScore) / (next.minScore - TIERS[idx].minScore)) * 100, 0, 100))
+  const progressToNextPct = next && current
+    ? Math.round(clamp(((score - current.minScore) / (next.minScore - current.minScore)) * 100, 0, 100))
     : 100;
 
   let shortGoal = 'Maintain your pattern.';

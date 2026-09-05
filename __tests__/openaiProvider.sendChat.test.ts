@@ -1,529 +1,216 @@
 import {OpenAIProvider} from 'app/services/llm/providers/openaiProvider';
+import {
+  ShaniLlmProxyError,
+  configureShaniLlmProxyRuntime,
+} from 'app/services/llm/shaniLlmProxy';
 
-function makeResponse(params: {ok: boolean; status: number; body?: any}) {
-  const bodyText =
-    params.body == null ? '' : typeof params.body === 'string' ? params.body : JSON.stringify(params.body);
+const makeResponse = (status: number, body: unknown) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  text: async () => JSON.stringify(body),
+});
 
-  return {
-    ok: params.ok,
-    status: params.status,
-    text: async () => bodyText,
-  } as any;
-}
+describe('OpenAIProvider.sendChat through ShaniDms', () => {
+  const fetchMock = jest.fn();
 
-describe('OpenAIProvider.sendChat', () => {
-  const originalFetch = global.fetch;
+  beforeEach(() => {
+    fetchMock.mockReset();
+    configureShaniLlmProxyRuntime({
+      baseUrl: 'https://backend.example.test',
+      getFirebaseIdToken: async () => 'firebase-id-token',
+      fetch: fetchMock,
+    });
+  });
 
   afterEach(() => {
-    global.fetch = originalFetch as any;
-    jest.clearAllMocks();
+    jest.useRealTimers();
+    configureShaniLlmProxyRuntime(null);
   });
 
-  it('retries with max_completion_tokens when max_tokens is unsupported', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
-
-    const fetchMock = jest
-      .fn()
-      .mockImplementationOnce(async (_url: string, _opts: any) =>
-        makeResponse({
-          ok: false,
-          status: 400,
-          body: {
-            error: {
-              message: "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens' instead.",
-            },
-          },
-        }),
-      )
-      .mockImplementationOnce(async (_url: string, _opts: any) =>
-        makeResponse({
-          ok: true,
-          status: 200,
-          body: {
-            choices: [{message: {content: 'hello'}}],
-          },
-        }),
-      );
-
-    global.fetch = fetchMock as any;
-
-    const res = await provider.sendChat({
-      model: 'some-model',
-      messages: [{role: 'user', content: 'hi'}],
-      maxOutputTokens: 123,
-    });
-
-    expect(res.content).toBe('hello');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-
-    const firstBody = JSON.parse((fetchMock.mock.calls[0]?.[1] as any).body);
-    const secondBody = JSON.parse((fetchMock.mock.calls[1]?.[1] as any).body);
-
-    expect(firstBody.max_tokens).toBe(123);
-    expect(firstBody.max_completion_tokens).toBeUndefined();
-
-    expect(secondBody.max_completion_tokens).toBe(123);
-    expect(secondBody.max_tokens).toBeUndefined();
-  });
-
-  it('does not retry when maxOutputTokens is not provided', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
-
-    const fetchMock = jest.fn(async () =>
-      makeResponse({
-        ok: false,
-        status: 400,
-        body: {
-          error: {
-            message: "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens' instead.",
-          },
-        },
+  it('sends the typed chat contract without sending the provider key', async () => {
+    fetchMock.mockResolvedValue(
+      makeResponse(200, {
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-5-mini',
+        content: 'Evidence-backed answer',
       }),
     );
-
-    global.fetch = fetchMock as any;
+    const provider = new OpenAIProvider({apiKey: 'must-not-leave-client'});
 
     await expect(
       provider.sendChat({
-        model: 'some-model',
-        messages: [{role: 'user', content: 'hi'}],
+        model: 'gpt-5-mini',
+        messages: [{role: 'user', content: 'Summarize today'}],
+        temperature: 0.2,
+        maxOutputTokens: 300,
       }),
-    ).rejects.toThrow(/unsupported parameter/i);
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('retries without temperature when temperature is unsupported', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
-
-    // For o-models we no longer send temperature by default.
-    const fetchMock = jest.fn(async (_url: string, _opts: any) =>
-      makeResponse({
-        ok: true,
-        status: 200,
-        body: {
-          status: 'completed',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{type: 'output_text', text: 'ok'}],
-            },
-          ],
-        },
-      }),
-    );
-
-    global.fetch = fetchMock as any;
-
-    const res = await provider.sendChat({
-      model: 'o3-mini',
-      messages: [{role: 'user', content: 'hi'}],
-      maxOutputTokens: 50,
+    ).resolves.toEqual({
+      content: 'Evidence-backed answer',
+      raw: {proxy: true, provider: 'openai', model: 'gpt-5-mini'},
     });
 
-    expect(res.content).toBe('ok');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    // o-series uses the Responses API.
-    expect(fetchMock.mock.calls[0]?.[0]).toMatch(/\/v1\/responses$/);
-
-    const firstBody = JSON.parse((fetchMock.mock.calls[0]?.[1] as any).body);
-
-    expect(firstBody.temperature).toBeUndefined();
-    expect(firstBody.max_output_tokens).toBe(50);
-
-    expect(firstBody.input?.[0]?.type).toBe('message');
-    expect(['input_text', 'output_text']).toContain(firstBody.input?.[0]?.content?.[0]?.type);
-    expect(typeof firstBody.input?.[0]?.content?.[0]?.text).toBe('string');
-  });
-
-  it('retries without temperature for o-models when temperature is explicitly provided but unsupported', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
-
-    const fetchMock = jest
-      .fn()
-      .mockImplementationOnce(async (_url: string, _opts: any) =>
-        makeResponse({
-          ok: false,
-          status: 400,
-          body: {
-            error: {
-              message: "Unsupported parameter: 'temperature' is not supported with this model.",
-            },
-          },
-        }),
-      )
-      .mockImplementationOnce(async (_url: string, _opts: any) =>
-        makeResponse({
-          ok: true,
-          status: 200,
-          body: {
-            status: 'completed',
-            output: [
-              {
-                type: 'message',
-                role: 'assistant',
-                content: [{type: 'output_text', text: 'ok'}],
-              },
-            ],
-          },
-        }),
-      );
-
-    global.fetch = fetchMock as any;
-
-    const res = await provider.sendChat({
-      model: 'o3-mini',
-      messages: [{role: 'user', content: 'hi'}],
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://backend.example.test/v1/llm/chat');
+    expect(url).not.toContain('api.openai.com');
+    expect(init.headers).toMatchObject({
+      Authorization: 'Bearer firebase-id-token',
+      'Cache-Control': 'no-store',
+    });
+    const serialized = String(init.body);
+    expect(serialized).not.toContain('must-not-leave-client');
+    expect(JSON.parse(serialized)).toEqual({
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-5-mini',
+      messages: [{role: 'user', content: 'Summarize today'}],
       temperature: 0.2,
-      maxOutputTokens: 50,
+      maxOutputTokens: 300,
     });
-
-    expect(res.content).toBe('ok');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-
-    const firstBody = JSON.parse((fetchMock.mock.calls[0]?.[1] as any).body);
-    const secondBody = JSON.parse((fetchMock.mock.calls[1]?.[1] as any).body);
-
-    expect(firstBody.temperature).toBe(0.2);
-    expect(secondBody.temperature).toBeUndefined();
   });
 
-  it('retries without temperature when a chat model only supports the default temperature value', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
+  it('rejects malformed requests before any network call', async () => {
+    const provider = new OpenAIProvider();
 
-    const fetchMock = jest
-      .fn()
-      .mockImplementationOnce(async (_url: string, _opts: any) =>
-        makeResponse({
-          ok: false,
-          status: 400,
-          body: {
-            error: {
-              message: "Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.",
-            },
-          },
-        }),
-      )
-      .mockImplementationOnce(async (_url: string, _opts: any) =>
-        makeResponse({
-          ok: true,
-          status: 200,
-          body: {
-            choices: [{message: {content: 'ok'}}],
-          },
-        }),
-      );
-
-    global.fetch = fetchMock as any;
-
-    const res = await provider.sendChat({
-      model: 'gpt-5.5',
-      messages: [{role: 'user', content: 'hi'}],
-      temperature: 0.2,
-      maxOutputTokens: 50,
-    });
-
-    expect(res.content).toBe('ok');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0]?.[0]).toMatch(/\/v1\/chat\/completions$/);
-
-    const firstBody = JSON.parse((fetchMock.mock.calls[0]?.[1] as any).body);
-    const secondBody = JSON.parse((fetchMock.mock.calls[1]?.[1] as any).body);
-
-    expect(firstBody.temperature).toBe(0.2);
-    expect(secondBody.temperature).toBeUndefined();
+    await expect(
+      provider.sendChat({model: '', messages: []}),
+    ).rejects.toMatchObject({code: 'invalid_request'});
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('returns partial content when Responses status is incomplete but output_text exists', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
+  it('requires a signed-in Firebase identity', async () => {
+    configureShaniLlmProxyRuntime({
+      baseUrl: 'https://backend.example.test',
+      getFirebaseIdToken: async () => null,
+      fetch: fetchMock,
+    });
 
-    const fetchMock = jest.fn(async (_url: string, _opts: any) =>
-      makeResponse({
-        ok: true,
-        status: 200,
-        body: {
-          status: 'incomplete',
-          incomplete_details: {reason: 'max_output_tokens'},
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{type: 'output_text', text: 'partial but usable'}],
-            },
-          ],
-        },
+    await expect(
+      new OpenAIProvider().sendChat({
+        model: 'gpt-5-mini',
+        messages: [{role: 'user', content: 'hello'}],
+      }),
+    ).rejects.toMatchObject({code: 'unauthenticated'});
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('maps rate limits and rejects malformed backend responses', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeResponse(429, {
+        version: 1,
+        code: 'rate_limited',
+        message: 'Try again later',
+      }),
+    );
+    const provider = new OpenAIProvider();
+    const request = {
+      model: 'gpt-5-mini',
+      messages: [{role: 'user' as const, content: 'hello'}],
+    };
+
+    await expect(provider.sendChat(request)).rejects.toMatchObject({
+      code: 'rate_limited',
+      status: 429,
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      makeResponse(200, {version: 1, provider: 'openai', content: ''}),
+    );
+    await expect(provider.sendChat(request)).rejects.toBeInstanceOf(
+      ShaniLlmProxyError,
+    );
+  });
+
+  it('does not resolve auth or send a request for a pre-aborted signal', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const getFirebaseIdToken = jest.fn().mockResolvedValue('firebase-id-token');
+    fetchMock.mockResolvedValue(
+      makeResponse(200, {
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-5-mini',
+        content: 'should not be returned',
+      }),
+    );
+    configureShaniLlmProxyRuntime({
+      baseUrl: 'https://backend.example.test',
+      getFirebaseIdToken,
+      fetch: fetchMock,
+    });
+
+    await expect(
+      new OpenAIProvider().sendChat({
+        model: 'gpt-5-mini',
+        messages: [{role: 'user', content: 'hello'}],
+        abortSignal: controller.signal,
+      }),
+    ).rejects.toMatchObject({name: 'AbortError'});
+
+    expect(getFirebaseIdToken).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps external cancellation active while the response body is read', async () => {
+    let resolveBody!: (value: string) => void;
+    const body = new Promise<string>(resolve => {
+      resolveBody = resolve;
+    });
+    const text = jest.fn(() => body);
+    fetchMock.mockResolvedValue({ok: true, status: 200, text});
+    const controller = new AbortController();
+
+    const pending = new OpenAIProvider().sendChat({
+      model: 'gpt-5-mini',
+      messages: [{role: 'user', content: 'hello'}],
+      abortSignal: controller.signal,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(text).toHaveBeenCalledTimes(1);
+
+    controller.abort();
+    resolveBody(
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-5-mini',
+        content: 'late response',
       }),
     );
 
-    global.fetch = fetchMock as any;
-
-    const res = await provider.sendChat({
-      model: 'o3-mini',
-      messages: [{role: 'user', content: 'hi'}],
-      maxOutputTokens: 50,
-    });
-
-    expect(res.content).toBe('partial but usable');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await expect(pending).rejects.toMatchObject({name: 'AbortError'});
+    const sentSignal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal;
+    expect(sentSignal.aborted).toBe(true);
   });
 
-  it('retries without max_output_tokens for o-models when max_output_tokens is explicitly provided but unsupported', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
-
-    const fetchMock = jest
-      .fn()
-      .mockImplementationOnce(async (_url: string, _opts: any) =>
-        makeResponse({
-          ok: false,
-          status: 400,
-          body: {
-            error: {
-              message: "Unsupported parameter: 'max_output_tokens' is not supported with this model.",
-            },
-          },
-        }),
-      )
-      .mockImplementationOnce(async (_url: string, _opts: any) =>
-        makeResponse({
-          ok: true,
-          status: 200,
-          body: {
-            status: 'completed',
-            output: [
-              {
-                type: 'message',
-                role: 'assistant',
-                content: [{type: 'output_text', text: 'ok'}],
-              },
-            ],
-          },
-        }),
-      );
-
-    global.fetch = fetchMock as any;
-
-    const res = await provider.sendChat({
-      model: 'o3-mini',
-      messages: [{role: 'user', content: 'hi'}],
-      maxOutputTokens: 50,
+  it('keeps the deadline active while the response body is read', async () => {
+    jest.useFakeTimers();
+    let resolveBody!: (value: string) => void;
+    const body = new Promise<string>(resolve => {
+      resolveBody = resolve;
     });
+    const text = jest.fn(() => body);
+    fetchMock.mockResolvedValue({ok: true, status: 200, text});
 
-    expect(res.content).toBe('ok');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0]?.[0]).toMatch(/\/v1\/responses$/);
-    expect(fetchMock.mock.calls[1]?.[0]).toMatch(/\/v1\/responses$/);
-
-    const firstBody = JSON.parse((fetchMock.mock.calls[0]?.[1] as any).body);
-    const secondBody = JSON.parse((fetchMock.mock.calls[1]?.[1] as any).body);
-
-    expect(firstBody.max_output_tokens).toBe(50);
-    expect(secondBody.max_output_tokens).toBeUndefined();
-  });
-
-  it('retries on transient Responses API 5xx errors for o-models', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
-
-    const fetchMock = jest
-      .fn()
-      .mockImplementationOnce(async (_url: string, _opts: any) =>
-        makeResponse({
-          ok: false,
-          status: 500,
-          body: {
-            error: {
-              message: 'server error',
-            },
-          },
-        }),
-      )
-      .mockImplementationOnce(async (_url: string, _opts: any) =>
-        makeResponse({
-          ok: true,
-          status: 200,
-          body: {
-            status: 'completed',
-            output: [
-              {
-                type: 'message',
-                role: 'assistant',
-                content: [{type: 'output_text', text: 'ok'}],
-              },
-            ],
-          },
-        }),
-      );
-
-    global.fetch = fetchMock as any;
-
-    const res = await provider.sendChat({
-      model: 'o3-mini',
-      messages: [{role: 'user', content: 'hi'}],
-      maxOutputTokens: 50,
+    const pending = new OpenAIProvider().sendChat({
+      model: 'gpt-5-mini',
+      messages: [{role: 'user', content: 'hello'}],
     });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(text).toHaveBeenCalledTimes(1);
 
-    expect(res.content).toBe('ok');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('encodes assistant history as output_text for o-series Responses API', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
-
-    const fetchMock = jest.fn(async (_url: string, _opts: any) =>
-      makeResponse({
-        ok: true,
-        status: 200,
-        body: {
-          status: 'completed',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{type: 'output_text', text: 'ok'}],
-            },
-          ],
-        },
+    jest.advanceTimersByTime(65_000);
+    resolveBody(
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-5-mini',
+        content: 'late response',
       }),
     );
 
-    global.fetch = fetchMock as any;
-
-    await provider.sendChat({
-      model: 'o3-mini',
-      messages: [
-        {role: 'system', content: 'sys'},
-        {role: 'user', content: 'hi'},
-        {role: 'assistant', content: 'previous assistant message'},
-        {role: 'user', content: 'follow up'},
-      ],
-      maxOutputTokens: 50,
-    });
-
-    const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as any).body);
-    expect(fetchMock.mock.calls[0]?.[0]).toMatch(/\/v1\/responses$/);
-
-    const items = body.input;
-    expect(items[0].role).toBe('user');
-    expect(items[0].content[0].type).toBe('input_text');
-
-    expect(items[1].role).toBe('assistant');
-    expect(items[1].content[0].type).toBe('output_text');
-
-    expect(items[2].role).toBe('user');
-    expect(items[2].content[0].type).toBe('input_text');
-  });
-
-  it('retries once when the response content is empty', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
-
-    const fetchMock = jest
-      .fn()
-      .mockImplementationOnce(async () =>
-        makeResponse({
-          ok: true,
-          status: 200,
-          body: {
-            choices: [{message: {content: ''}}],
-          },
-        }),
-      )
-      .mockImplementationOnce(async () =>
-        makeResponse({
-          ok: true,
-          status: 200,
-          body: {
-            choices: [{message: {content: 'ok'}}],
-          },
-        }),
-      );
-
-    global.fetch = fetchMock as any;
-
-    const res = await provider.sendChat({
-      model: 'some-model',
-      messages: [{role: 'user', content: 'hi'}],
-    });
-
-    expect(res.content).toBe('ok');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('converts tool_calls into the local tool_call envelope when content is missing', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
-
-    const fetchMock = jest.fn(async () =>
-      makeResponse({
-        ok: true,
-        status: 200,
-        body: {
-          choices: [
-            {
-              message: {
-                content: null,
-                tool_calls: [
-                  {
-                    id: 'call_1',
-                    type: 'function',
-                    function: {
-                      name: 'getGlucoseStats',
-                      arguments: '{"days":7}',
-                    },
-                  },
-                ],
-              },
-            },
-          ],
-        },
-      }),
-    );
-
-    global.fetch = fetchMock as any;
-
-    const res = await provider.sendChat({
-      model: 'some-model',
-      messages: [{role: 'user', content: 'hi'}],
-    });
-
-    const parsed = JSON.parse(res.content);
-    expect(parsed.type).toBe('tool_call');
-    expect(parsed.name).toBe('getGlucoseStats');
-    expect(parsed.args).toEqual({days: 7});
-  });
-
-  it('retries when chat completion finish_reason indicates incomplete output', async () => {
-    const provider = new OpenAIProvider({apiKey: 'sk-test'});
-
-    const fetchMock = jest
-      .fn()
-      .mockImplementationOnce(async () =>
-        makeResponse({
-          ok: true,
-          status: 200,
-          body: {
-            choices: [{message: {content: 'partial'}, finish_reason: 'length'}],
-          },
-        }),
-      )
-      .mockImplementationOnce(async () =>
-        makeResponse({
-          ok: true,
-          status: 200,
-          body: {
-            choices: [{message: {content: 'ok'}, finish_reason: 'stop'}],
-          },
-        }),
-      );
-
-    global.fetch = fetchMock as any;
-
-    const res = await provider.sendChat({
-      model: 'some-model',
-      messages: [{role: 'user', content: 'hi'}],
-      maxOutputTokens: 50,
-    });
-
-    expect(res.content).toBe('ok');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(pending).rejects.toMatchObject({code: 'timeout'});
   });
 });

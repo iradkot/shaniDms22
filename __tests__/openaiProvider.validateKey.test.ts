@@ -1,85 +1,86 @@
 import {validateOpenAiApiKey} from 'app/services/llm/providers/openaiProvider';
+import {configureShaniLlmProxyRuntime} from 'app/services/llm/shaniLlmProxy';
 
-function makeResponse(params: {ok: boolean; status: number; body?: any}) {
-  const bodyText =
-    params.body == null ? '' : typeof params.body === 'string' ? params.body : JSON.stringify(params.body);
+const makeResponse = (status: number, body: unknown) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  text: async () => JSON.stringify(body),
+});
 
-  return {
-    ok: params.ok,
-    status: params.status,
-    text: async () => bodyText,
-  } as any;
-}
+describe('validateOpenAiApiKey through ShaniDms', () => {
+  const fetchMock = jest.fn();
 
-describe('validateOpenAiApiKey', () => {
-  const originalFetch = global.fetch;
+  beforeEach(() => {
+    fetchMock.mockReset();
+    configureShaniLlmProxyRuntime({
+      baseUrl: 'https://backend.example.test',
+      getFirebaseIdToken: async () => 'firebase-id-token',
+      fetch: fetchMock,
+    });
+  });
 
   afterEach(() => {
-    global.fetch = originalFetch as any;
-    jest.clearAllMocks();
+    configureShaniLlmProxyRuntime(null);
   });
 
-  it('returns missing when empty', async () => {
-    const res = await validateOpenAiApiKey('');
-    expect(res.ok).toBe(false);
-    if (!res.ok) {
-      expect(res.reason).toBe('missing');
-    }
+  it('returns missing without making a request', async () => {
+    await expect(validateOpenAiApiKey('')).resolves.toMatchObject({
+      ok: false,
+      reason: 'missing',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('returns ok when OpenAI accepts key', async () => {
-    global.fetch = jest.fn(async () => makeResponse({ok: true, status: 200})) as any;
+  it('validates transiently through the authenticated backend', async () => {
+    fetchMock.mockResolvedValue(
+      makeResponse(200, {version: 1, valid: true}),
+    );
 
-    const res = await validateOpenAiApiKey('sk-test');
-    expect(res.ok).toBe(true);
-    expect(global.fetch).toHaveBeenCalled();
+    await expect(validateOpenAiApiKey('sk-test')).resolves.toEqual({ok: true});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      'https://backend.example.test/v1/vault/llm/validate',
+    );
+    expect(url).not.toContain('api.openai.com');
+    expect(init.headers).toMatchObject({
+      Authorization: 'Bearer firebase-id-token',
+      'Cache-Control': 'no-store',
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      version: 1,
+      provider: 'openai',
+      credential: 'sk-test',
+    });
   });
 
-  it('maps 401/403 to unauthorized', async () => {
-    global.fetch = jest
-      .fn(async () =>
-        makeResponse({
-          ok: false,
-          status: 401,
-          body: {error: {message: 'Invalid authentication'}},
-        }),
-      ) as any;
+  it.each([
+    [401, 'unauthorized'],
+    [403, 'unauthorized'],
+    [429, 'rate_limited'],
+  ] as const)('maps backend status %s to %s', async (status, reason) => {
+    fetchMock.mockResolvedValue(
+      makeResponse(status, {
+        version: 1,
+        code: reason,
+        message: `backend ${reason}`,
+      }),
+    );
 
-    const res = await validateOpenAiApiKey('sk-bad');
-    expect(res.ok).toBe(false);
-    if (!res.ok) {
-      expect(res.reason).toBe('unauthorized');
-      expect(res.message).toMatch(/invalid/i);
-    }
+    await expect(validateOpenAiApiKey('sk-test')).resolves.toMatchObject({
+      ok: false,
+      reason,
+      message: `backend ${reason}`,
+    });
   });
 
-  it('maps 429 to rate_limited', async () => {
-    global.fetch = jest
-      .fn(async () =>
-        makeResponse({
-          ok: false,
-          status: 429,
-          body: {error: {message: 'Rate limit exceeded'}},
-        }),
-      ) as any;
+  it('maps transport failures to network', async () => {
+    fetchMock.mockRejectedValue(new Error('Network down'));
 
-    const res = await validateOpenAiApiKey('sk-rate');
-    expect(res.ok).toBe(false);
-    if (!res.ok) {
-      expect(res.reason).toBe('rate_limited');
-    }
-  });
-
-  it('maps thrown errors to network', async () => {
-    global.fetch = jest.fn(async () => {
-      throw new Error('Network down');
-    }) as any;
-
-    const res = await validateOpenAiApiKey('sk-any');
-    expect(res.ok).toBe(false);
-    if (!res.ok) {
-      expect(res.reason).toBe('network');
-      expect(res.message).toMatch(/network down/i);
-    }
+    await expect(validateOpenAiApiKey('sk-test')).resolves.toMatchObject({
+      ok: false,
+      reason: 'network',
+      message: 'Network down',
+    });
   });
 });

@@ -311,7 +311,7 @@ describe('StackedHomeCharts tooltip docking', () => {
     await act(async () => tree!.unmount());
   });
 
-  it('continues tracking tooltip x from page touch moves after ScrollView takeover', async () => {
+  it('preserves selection and releases page tracking after ScrollView takeover', async () => {
     const start = Date.UTC(2026, 0, 7, 0, 0, 0);
     const end = start + 1000;
     mockEmitTooltipOnMount = false;
@@ -375,7 +375,8 @@ describe('StackedHomeCharts tooltip docking', () => {
       });
     });
 
-    expect(tree!.root.findByProps({testID: 'stacked.tooltipDock'}).props.$align).toBe('left');
+    expect(tree!.root.findByProps({testID: 'stacked.tooltipDock'}).props.$align).toBe('right');
+    expect(onTouchSessionChange).toHaveBeenLastCalledWith(null);
 
     await act(async () => tree!.unmount());
   });

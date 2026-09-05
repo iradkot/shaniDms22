@@ -1,18 +1,73 @@
+/* global jest */
 // Jest setup for React Native native-module shims used by unit tests.
 
 require('react-native-gesture-handler/jestSetup');
 
-jest.mock(
-  '@react-native-async-storage/async-storage',
-  () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
 
-jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
+jest.mock('@dr.pogodin/react-native-fs', () => ({
+  DocumentDirectoryPath: '/test-documents',
+  copyFile: jest.fn(async () => undefined),
+  exists: jest.fn(async () => false),
+  mkdir: jest.fn(async () => undefined),
+  stat: jest.fn(async path => ({path, size: 1024})),
+  unlink: jest.fn(async () => undefined),
+}));
+
+jest.mock('react-native-image-picker', () => ({
+  launchCamera: jest.fn(async () => ({didCancel: true})),
+  launchImageLibrary: jest.fn(async () => ({didCancel: true})),
+}));
+
+jest.mock('@react-native-firebase/storage', () => ({
+  getStorage: jest.fn(() => ({})),
+  ref: jest.fn((_storage, path) => ({path})),
+  getMetadata: jest.fn(async () => {
+    const error = new Error('Object not found');
+    error.code = 'storage/object-not-found';
+    throw error;
+  }),
+  getDownloadURL: jest.fn(async reference =>
+    `https://storage.test/${encodeURIComponent(reference.path)}`,
+  ),
+  putFile: jest.fn(() => Promise.resolve({state: 'success'})),
+  deleteObject: jest.fn(async () => undefined),
+}));
+
+jest.mock('react-native-keychain', () => {
+  const credentials = new Map();
+  return {
+    ACCESSIBLE: {WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WhenUnlockedThisDeviceOnly'},
+    getGenericPassword: jest.fn(async ({service} = {}) => {
+      const password = credentials.get(service ?? 'default');
+      return password === undefined
+        ? false
+        : {service, username: 'credential', password};
+    }),
+    setGenericPassword: jest.fn(async (_username, password, {service} = {}) => {
+      credentials.set(service ?? 'default', password);
+      return {service};
+    }),
+    resetGenericPassword: jest.fn(async ({service} = {}) => {
+      credentials.delete(service ?? 'default');
+      return true;
+    }),
+  };
+});
+
+jest.mock('react-native-reanimated', () =>
+  require('react-native-reanimated/mock'),
+);
 global.__reanimatedWorkletInit = () => {};
 
 jest.mock('react-native-vector-icons/Ionicons', () => 'Ionicons');
 jest.mock('react-native-vector-icons/MaterialIcons', () => 'MaterialIcons');
-jest.mock('react-native-vector-icons/MaterialCommunityIcons', () => 'MaterialCommunityIcons');
+jest.mock(
+  'react-native-vector-icons/MaterialCommunityIcons',
+  () => 'MaterialCommunityIcons',
+);
 jest.mock('react-native-linear-gradient', () => {
   const React = require('react');
   const {View} = require('react-native');
@@ -35,7 +90,8 @@ jest.mock('d3', () => {
       const d1 = toNumber(domain[1]);
       const r0 = range[0];
       const r1 = range[1];
-      if (!Number.isFinite(xv) || !Number.isFinite(d0) || !Number.isFinite(d1)) return r0;
+      if (!Number.isFinite(xv) || !Number.isFinite(d0) || !Number.isFinite(d1))
+        return r0;
       if (d1 === d0) return r0;
       const t = (xv - d0) / (d1 - d0);
       return r0 + t * (r1 - r0);
@@ -47,7 +103,8 @@ jest.mock('d3', () => {
       const d1 = toNumber(domain[1]);
       const r0 = range[0];
       const r1 = range[1];
-      if (!Number.isFinite(xv) || !Number.isFinite(d0) || !Number.isFinite(d1)) return new Date(d0);
+      if (!Number.isFinite(xv) || !Number.isFinite(d0) || !Number.isFinite(d1))
+        return new Date(d0);
       if (r1 === r0) return new Date(d0);
       const t = (xv - r0) / (r1 - r0);
       const dv = d0 + t * (d1 - d0);
@@ -63,6 +120,15 @@ jest.mock('d3', () => {
       if (Array.isArray(next)) range = next;
       return scale;
     };
+    scale.ticks = (count = 5) => {
+      const steps = Math.max(1, Math.floor(count));
+      const start = toNumber(domain[0]);
+      const end = toNumber(domain[1]);
+      return Array.from({length: steps + 1}, (_, index) => {
+        const value = start + ((end - start) * index) / steps;
+        return domain[0] instanceof Date ? new Date(value) : value;
+      });
+    };
     return scale;
   };
 
@@ -77,7 +143,10 @@ jest.mock('d3', () => {
       if (min == null || n < min) min = n;
       if (max == null || n > max) max = n;
     }
-    return [min != null ? new Date(min) : undefined, max != null ? new Date(max) : undefined];
+    return [
+      min != null ? new Date(min) : undefined,
+      max != null ? new Date(max) : undefined,
+    ];
   };
 
   const line = () => {
@@ -137,7 +206,8 @@ jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
   const {View} = require('react-native');
   return {
-    SafeAreaProvider: ({children}) => React.createElement(React.Fragment, null, children),
+    SafeAreaProvider: ({children}) =>
+      React.createElement(React.Fragment, null, children),
     SafeAreaView: View,
     useSafeAreaInsets: () => ({top: 0, right: 0, bottom: 0, left: 0}),
   };
@@ -145,8 +215,22 @@ jest.mock('react-native-safe-area-context', () => {
 
 jest.mock('@react-navigation/native', () => {
   const React = require('react');
+  const createNavigationContainerRef = () => ({
+    current: null,
+    isReady: jest.fn(() => false),
+    navigate: jest.fn(),
+    dispatch: jest.fn(),
+    resetRoot: jest.fn(),
+    getRootState: jest.fn(),
+    getCurrentRoute: jest.fn(),
+    getCurrentOptions: jest.fn(),
+    addListener: jest.fn(() => jest.fn()),
+    removeListener: jest.fn(),
+  });
   return {
-    NavigationContainer: ({children}) => React.createElement(React.Fragment, null, children),
+    NavigationContainer: ({children}) =>
+      React.createElement(React.Fragment, null, children),
+    createNavigationContainerRef,
     useNavigation: () => ({
       navigate: jest.fn(),
       goBack: jest.fn(),
@@ -165,8 +249,10 @@ jest.mock('@react-navigation/native-stack', () => {
   const React = require('react');
   return {
     createNativeStackNavigator: () => ({
-      Navigator: ({children}) => React.createElement(React.Fragment, null, children),
-      Screen: ({children}) => React.createElement(React.Fragment, null, children),
+      Navigator: ({children}) =>
+        React.createElement(React.Fragment, null, children),
+      Screen: ({children}) =>
+        React.createElement(React.Fragment, null, children),
     }),
   };
 });
@@ -175,8 +261,10 @@ jest.mock('@react-navigation/bottom-tabs', () => {
   const React = require('react');
   return {
     createBottomTabNavigator: () => ({
-      Navigator: ({children}) => React.createElement(React.Fragment, null, children),
-      Screen: ({children}) => React.createElement(React.Fragment, null, children),
+      Navigator: ({children}) =>
+        React.createElement(React.Fragment, null, children),
+      Screen: ({children}) =>
+        React.createElement(React.Fragment, null, children),
     }),
   };
 });
@@ -194,7 +282,10 @@ jest.mock('@react-native-google-signin/google-signin', () => {
       hasPlayServices: jest.fn(async () => true),
       signInSilently: jest.fn(async () => ({user: {}})),
       signIn: jest.fn(async () => ({user: {}})),
-      getTokens: jest.fn(async () => ({idToken: 'test-id-token', accessToken: 'test-access-token'})),
+      getTokens: jest.fn(async () => ({
+        idToken: 'test-id-token',
+        accessToken: 'test-access-token',
+      })),
       signOut: jest.fn(async () => undefined),
       revokeAccess: jest.fn(async () => undefined),
       isSignedIn: jest.fn(async () => false),
@@ -205,10 +296,18 @@ jest.mock('@react-native-google-signin/google-signin', () => {
 
 jest.mock('@react-native-firebase/auth', () => {
   const signInWithCredential = jest.fn(async () => ({user: {}}));
-
-  const authDefaultExport = () => ({
+  const testUser = {uid: 'test-firebase-user'};
+  const authInstance = {
+    currentUser: testUser,
     signInWithCredential,
-  });
+    signInAnonymously: jest.fn(async () => ({user: testUser})),
+    onAuthStateChanged: jest.fn(listener => {
+      listener(testUser);
+      return jest.fn();
+    }),
+  };
+
+  const authDefaultExport = () => authInstance;
 
   authDefaultExport.GoogleAuthProvider = {
     credential: jest.fn(() => ({providerId: 'google.com'})),
@@ -217,6 +316,7 @@ jest.mock('@react-native-firebase/auth', () => {
   return {
     __esModule: true,
     default: authDefaultExport,
+    getAuth: jest.fn(() => authInstance),
     GoogleAuthProvider: authDefaultExport.GoogleAuthProvider,
   };
 });
@@ -242,11 +342,36 @@ jest.mock('@react-native-firebase/messaging', () => {
     __esModule: true,
     default: defaultExport,
     getMessaging,
+    onNotificationOpenedApp: jest.fn((instance, listener) =>
+      instance.onNotificationOpenedApp(listener),
+    ),
+    onMessage: jest.fn((instance, listener) => instance.onMessage(listener)),
+    onTokenRefresh: jest.fn((instance, listener) =>
+      instance.onTokenRefresh(listener),
+    ),
+    requestPermission: jest.fn(instance => instance.requestPermission()),
   };
 });
 
 jest.mock('@notifee/react-native', () => {
-  return {
+  const instance = {
     requestPermission: jest.fn(async () => ({})),
+    getNotificationSettings: jest.fn(async () => ({android: {alarm: 1}})),
+    openAlarmPermissionSettings: jest.fn(async () => undefined),
+    isBatteryOptimizationEnabled: jest.fn(async () => false),
+    onForegroundEvent: jest.fn(() => jest.fn()),
+    getInitialNotification: jest.fn(async () => null),
+    createChannel: jest.fn(async ({id}) => id || 'test-channel'),
+    displayNotification: jest.fn(async () => undefined),
+    createTriggerNotification: jest.fn(async () => undefined),
+    cancelNotification: jest.fn(async () => undefined),
+  };
+  return {
+    __esModule: true,
+    default: instance,
+    ...instance,
+    EventType: {PRESS: 1, ACTION_PRESS: 2},
+    AndroidImportance: {HIGH: 4},
+    TriggerType: {TIMESTAMP: 0},
   };
 });

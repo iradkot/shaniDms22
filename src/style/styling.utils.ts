@@ -1,12 +1,12 @@
 import {interpolateRgb} from 'd3';
-import {DetermineBgColorByGlucoseValue, Theme} from 'app/types/theme';
+import {DetermineBgColorByGlucoseValue, ThemeType} from 'app/types/theme';
 import {Platform} from 'react-native';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 
 // props are bgValue and theme, theme defaults to theme
 export const determineBgColorByGlucoseValue: DetermineBgColorByGlucoseValue = (
   bgValue: number,
-  currentTheme: Theme,
+  currentTheme: ThemeType,
 ) => {
   // Read thresholds dynamically (they can be user-configured in Settings).
   const SEVERE_HYPO_THRESHOLD = cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number;
@@ -75,10 +75,14 @@ export const addOpacity = (color: string, opacity: number): string => {
   const matches = color.match(rgbaRegex);
 
   if (matches) {
-    const r = parseInt(matches[1], 10);
-    const g = parseInt(matches[2], 10);
-    const b = parseInt(matches[3], 10);
-    const existingOpacity = matches[4] ? parseFloat(matches[4]) : 1;
+    const [, red, green, blue, alpha] = matches;
+    if (red === undefined || green === undefined || blue === undefined) {
+      return color;
+    }
+    const r = parseInt(red, 10);
+    const g = parseInt(green, 10);
+    const b = parseInt(blue, 10);
+    const existingOpacity = alpha ? parseFloat(alpha) : 1;
 
     return `rgba(${r}, ${g}, ${b}, ${opacity * existingOpacity})`;
   }
@@ -93,7 +97,7 @@ export const shadowStyles = ({
   color,
   elevation,
 }: {
-  theme: Theme;
+  theme: ThemeType;
   color?: string;
   elevation?: number;
 }) => {
@@ -115,9 +119,13 @@ export const addBrightness = (color: string, amount: number): string => {
   const matches = color.match(rgbaRegex);
 
   if (matches) {
-    const r = parseInt(matches[1], 10);
-    const g = parseInt(matches[2], 10);
-    const b = parseInt(matches[3], 10);
+    const [, red, green, blue] = matches;
+    if (red === undefined || green === undefined || blue === undefined) {
+      return color;
+    }
+    const r = parseInt(red, 10);
+    const g = parseInt(green, 10);
+    const b = parseInt(blue, 10);
 
     return `rgb(${r + amount}, ${g + amount}, ${b + amount})`;
   }
@@ -148,9 +156,13 @@ export const pickReadableTextColor = (
       /^rgba?\(\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*(?:,\s*([0-9.]+)\s*)?\)$/i;
     const m = color.match(rgbaRegex);
     if (!m) return dark;
-    r = parseInt(m[1], 10);
-    g = parseInt(m[2], 10);
-    b = parseInt(m[3], 10);
+    const [, red, green, blue] = m;
+    if (red === undefined || green === undefined || blue === undefined) {
+      return dark;
+    }
+    r = parseInt(red, 10);
+    g = parseInt(green, 10);
+    b = parseInt(blue, 10);
   }
 
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;

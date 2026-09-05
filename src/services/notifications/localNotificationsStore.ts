@@ -2,14 +2,28 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {NotificationRequest, NotificationResponse} from 'app/types/notifications';
 
-const STORAGE_KEY = 'notifications:rules:v1';
+const LEGACY_STORAGE_KEY = 'notifications:rules:v1';
 
-function nowMs() {
-  return Date.now();
+export interface NotificationStoreScope {
+  /** Opaque product Workspace ID. Never pass a URL, email, or API token. */
+  readonly scopeId: string;
 }
 
+const storageKey = (scope?: NotificationStoreScope): string => {
+  if (scope === undefined) {
+    return LEGACY_STORAGE_KEY;
+  }
+  const scopeId = scope.scopeId.trim();
+  if (!/^[a-z0-9][a-z0-9_-]{0,127}$/i.test(scopeId)) {
+    throw new Error('Notification storage scope is invalid.');
+  }
+  return `notifications:rules:v2:${scopeId}`;
+};
+
 function safeArray(input: unknown): NotificationResponse[] {
-  if (!Array.isArray(input)) return [];
+  if (!Array.isArray(input)) {
+    return [];
+  }
   return input.filter(Boolean) as NotificationResponse[];
 }
 
@@ -29,9 +43,13 @@ function createId(): string {
   return `rule_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 }
 
-async function readAll(): Promise<NotificationResponse[]> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
+async function readAll(
+  scope?: NotificationStoreScope,
+): Promise<NotificationResponse[]> {
+  const raw = await AsyncStorage.getItem(storageKey(scope));
+  if (!raw) {
+    return [];
+  }
   try {
     return safeArray(JSON.parse(raw));
   } catch {
@@ -39,16 +57,24 @@ async function readAll(): Promise<NotificationResponse[]> {
   }
 }
 
-async function writeAll(items: NotificationResponse[]): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+async function writeAll(
+  items: NotificationResponse[],
+  scope?: NotificationStoreScope,
+): Promise<void> {
+  await AsyncStorage.setItem(storageKey(scope), JSON.stringify(items));
 }
 
-export async function getNotificationRules(): Promise<NotificationResponse[]> {
-  return readAll();
+export async function getNotificationRules(
+  scope?: NotificationStoreScope,
+): Promise<NotificationResponse[]> {
+  return readAll(scope);
 }
 
-export async function addNotificationRule(notification: NotificationRequest): Promise<NotificationResponse> {
-  const all = await readAll();
+export async function addNotificationRule(
+  notification: NotificationRequest,
+  scope?: NotificationStoreScope,
+): Promise<NotificationResponse> {
+  const all = await readAll(scope);
   const created: NotificationResponse = {
     ...sanitizeRequest(notification),
     id: createId(),
@@ -57,12 +83,16 @@ export async function addNotificationRule(notification: NotificationRequest): Pr
     time_read: 0,
   };
   const next = [created, ...all];
-  await writeAll(next);
+  await writeAll(next, scope);
   return created;
 }
 
-export async function updateNotificationRule(id: string, notification: NotificationRequest): Promise<void> {
-  const all = await readAll();
+export async function updateNotificationRule(
+  id: string,
+  notification: NotificationRequest,
+  scope?: NotificationStoreScope,
+): Promise<void> {
+  const all = await readAll(scope);
   const next = all.map(item =>
     item.id === id
       ? {
@@ -71,19 +101,28 @@ export async function updateNotificationRule(id: string, notification: Notificat
         }
       : item,
   );
-  await writeAll(next);
+  await writeAll(next, scope);
 }
 
-export async function deleteNotificationRule(id: string): Promise<void> {
-  const all = await readAll();
+export async function deleteNotificationRule(
+  id: string,
+  scope?: NotificationStoreScope,
+): Promise<void> {
+  const all = await readAll(scope);
   const next = all.filter(item => item.id !== id);
-  await writeAll(next);
+  await writeAll(next, scope);
 }
 
-export async function markNotificationRuleCalled(id: string, calledAtMs: number): Promise<void> {
-  const all = await readAll();
+export async function markNotificationRuleCalled(
+  id: string,
+  calledAtMs: number,
+  scope?: NotificationStoreScope,
+): Promise<void> {
+  const all = await readAll(scope);
   const next = all.map(item => {
-    if (item.id !== id) return item;
+    if (item.id !== id) {
+      return item;
+    }
     const times = [...(item.times_called ?? []), calledAtMs].slice(-50);
     return {
       ...item,
@@ -91,5 +130,5 @@ export async function markNotificationRuleCalled(id: string, calledAtMs: number)
       time_read: calledAtMs,
     };
   });
-  await writeAll(next);
+  await writeAll(next, scope);
 }

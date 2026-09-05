@@ -10,8 +10,8 @@ export function useBasalRateAtTime(params: {
   /** Epoch milliseconds. */
   timeMs: number | null;
 
-  insulinData?: InsulinDataEntry[];
-  basalProfileData?: BasalProfile;
+  insulinData?: InsulinDataEntry[] | undefined;
+  basalProfileData?: BasalProfile | undefined;
 }): number | null {
   const {enabled, timeMs, insulinData, basalProfileData} = params;
 
@@ -25,7 +25,7 @@ export function useBasalRateAtTime(params: {
 
     return getEffectiveBasalRateAt({
       basalProfile: basalProfileData ?? [],
-      insulinData,
+      ...(insulinData ? {insulinData} : {}),
       timeMs,
     });
   }, [basalProfileData, enabled, insulinData, timeMs]);

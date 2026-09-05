@@ -8,6 +8,17 @@ import {
 
 import {runLlmToolLoop} from './runToolLoop';
 import {ToolLoopParams, ToolLoopResult} from './types';
+import {
+  maybeRewriteLoopSettingsResponse,
+  maybeReflectAsEndoExpert,
+} from './guardrails';
+import {
+  createLoopSettingsEvidenceState,
+  hasMinimumLoopSettingsEvidence,
+  isLoopSettingsReadOnlyTool,
+  LOOP_SETTINGS_EVIDENCE_SAFETY_RESPONSE,
+  recordLoopSettingsEvidence,
+} from './guardrails/loopSettingsEvidenceGate';
 
 type AgentFinding = {
   agentId: string;
@@ -43,6 +54,25 @@ const LOOP_AND_PREGNANCY_REFERENCE_GUIDANCE = [
 export async function runAiAnalystAgentOrchestra(
   params: AgentOrchestraParams,
 ): Promise<ToolLoopResult> {
+  if (params.callbacks.isCancelled() || params.abortSignal?.aborted) {
+    return {finalText: '', llmMessages: params.initialMessages};
+  }
+  const isLoopSettingsMode = params.mission === 'loopSettings';
+  let evidence = createLoopSettingsEvidenceState();
+  const scopedParams: AgentOrchestraParams = {
+    ...params,
+    callbacks: {
+      ...params.callbacks,
+      onToolResult: (name, result) => {
+        if (params.callbacks.isCancelled() || params.abortSignal?.aborted)
+          return;
+        if (isLoopSettingsMode) {
+          evidence = recordLoopSettingsEvidence(evidence, name, result);
+        }
+        params.callbacks.onToolResult?.(name, result);
+      },
+    },
+  };
   const agents = getAiOrchestraAgentsForMission(params.mission);
   const specialistAgents = agents.filter(agent =>
     [
@@ -56,11 +86,36 @@ export async function runAiAnalystAgentOrchestra(
   );
   const safetyAgent = agents.find(agent => agent.role === 'safety');
 
-  const findings = await runSpecialists(params, specialistAgents);
-  const draft = await runFinalWriter(params, findings);
-  const finalText = safetyAgent
-    ? await runSafetyReview(params, safetyAgent, findings, draft)
+  const findings = await runSpecialists(scopedParams, specialistAgents);
+  if (params.callbacks.isCancelled() || params.abortSignal?.aborted) {
+    return {finalText: '', llmMessages: params.initialMessages};
+  }
+  if (isLoopSettingsMode && !hasMinimumLoopSettingsEvidence(evidence)) {
+    return {
+      finalText: LOOP_SETTINGS_EVIDENCE_SAFETY_RESPONSE,
+      llmMessages: [
+        ...params.initialMessages,
+        {role: 'assistant', content: LOOP_SETTINGS_EVIDENCE_SAFETY_RESPONSE},
+      ],
+    };
+  }
+  const draft = await runFinalWriter(scopedParams, findings);
+  let finalText = safetyAgent
+    ? await runSafetyReview(scopedParams, safetyAgent, findings, draft)
     : draft;
+  if (isLoopSettingsMode) {
+    const guardParams = {
+      provider: params.provider,
+      model: params.model,
+      systemPrompt: params.baseSystemPrompt,
+      workingMessages: params.initialMessages,
+      temperature: params.temperature,
+      abortSignal: params.abortSignal,
+      isCancelled: params.callbacks.isCancelled,
+    };
+    finalText = await maybeRewriteLoopSettingsResponse(finalText, guardParams);
+    finalText = await maybeReflectAsEndoExpert(finalText, guardParams);
+  }
 
   return {
     finalText: unwrapFinalEnvelope(finalText),
@@ -78,7 +133,9 @@ async function runSpecialists(
   params: AgentOrchestraParams,
   agents: AiAgentDefinition[],
 ): Promise<AgentFinding[]> {
-  const selectedAgents = agents.filter(agent => shouldRunAgent(agent, params.mission));
+  const selectedAgents = agents.filter(agent =>
+    shouldRunAgent(agent, params.mission),
+  );
 
   const settled = await Promise.all(
     selectedAgents.map(async agent => {
@@ -110,8 +167,7 @@ function shouldRunAgent(agent: AiAgentDefinition, mission: AiOrchestraMission) {
   }
   if (mission === 'hypoNow' || mission === 'hypoDetective') {
     return (
-      agent.role === 'pattern_analysis' ||
-      agent.role === 'clinical_reference'
+      agent.role === 'pattern_analysis' || agent.role === 'clinical_reference'
     );
   }
   return true;
@@ -121,16 +177,28 @@ async function runSpecialist(
   params: AgentOrchestraParams,
   agent: AiAgentDefinition,
 ): Promise<string> {
+  if (params.callbacks.isCancelled() || params.abortSignal?.aborted) return '';
   const result = await runLlmToolLoop({
+    workspaceScope: params.workspaceScope,
     provider: params.provider,
     model: params.model,
     systemPrompt: buildSpecialistPrompt(params, agent),
     initialMessages: params.initialMessages,
     maxToolCalls: Math.min(params.maxToolCalls, SPECIALIST_MAX_TOOL_CALLS),
-    allowedTools: agent.allowedTools,
-    maxOutputTokens: Math.min(params.maxOutputTokens, SPECIALIST_MAX_OUTPUT_TOKENS),
-    temperature: params.temperature,
-    abortSignal: params.abortSignal,
+    allowedTools:
+      params.mission === 'loopSettings'
+        ? agent.allowedTools.filter(isLoopSettingsReadOnlyTool)
+        : agent.allowedTools,
+    maxOutputTokens: Math.min(
+      params.maxOutputTokens,
+      SPECIALIST_MAX_OUTPUT_TOKENS,
+    ),
+    ...(params.temperature !== undefined
+      ? {temperature: params.temperature}
+      : {}),
+    ...(params.abortSignal !== undefined
+      ? {abortSignal: params.abortSignal}
+      : {}),
     callbacks: params.callbacks,
   });
 
@@ -182,7 +250,11 @@ async function runSafetyReview(
     messages: [
       {
         role: 'user',
-        content: `Findings:\n${JSON.stringify(findings, null, 2)}\n\nDraft:\n${draft}`,
+        content: `Findings:\n${JSON.stringify(
+          findings,
+          null,
+          2,
+        )}\n\nDraft:\n${draft}`,
       },
     ],
     maxOutputTokens: Math.min(params.maxOutputTokens, FINAL_MAX_OUTPUT_TOKENS),
@@ -242,7 +314,10 @@ async function runDraftReviewLoops(
             `Previous draft:\n${draft}\n\nReviewer critique:\n${critique}`,
         },
       ],
-      maxOutputTokens: Math.min(params.maxOutputTokens, FINAL_MAX_OUTPUT_TOKENS),
+      maxOutputTokens: Math.min(
+        params.maxOutputTokens,
+        FINAL_MAX_OUTPUT_TOKENS,
+      ),
     });
   }
 
@@ -257,12 +332,22 @@ async function sendNoToolAgent(
     maxOutputTokens: number;
   },
 ) {
+  if (params.callbacks.isCancelled() || params.abortSignal?.aborted) {
+    throw new Error('AI analysis cancelled');
+  }
   const res = await params.provider.sendChat({
     model: params.model,
-    messages: [{role: 'system', content: input.systemPrompt}, ...input.messages],
-    temperature: params.temperature,
+    messages: [
+      {role: 'system', content: input.systemPrompt},
+      ...input.messages,
+    ],
+    ...(params.temperature !== undefined
+      ? {temperature: params.temperature}
+      : {}),
     maxOutputTokens: input.maxOutputTokens,
-    abortSignal: params.abortSignal,
+    ...(params.abortSignal !== undefined
+      ? {abortSignal: params.abortSignal}
+      : {}),
   });
 
   return String(res.content ?? '').trim();
@@ -286,7 +371,9 @@ function buildSpecialistPrompt(
 }
 
 function critiqueLooksApproved(text: string): boolean {
-  const normalized = String(text ?? '').trim().toLowerCase();
+  const normalized = String(text ?? '')
+    .trim()
+    .toLowerCase();
   return (
     normalized === 'approved' ||
     normalized.startsWith('approved\n') ||

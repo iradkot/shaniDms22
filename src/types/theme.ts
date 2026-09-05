@@ -1,4 +1,5 @@
 // Interface for the styled-components theme object
+import 'styled-components';
 
 export interface colors {
   primary: string;
@@ -86,6 +87,14 @@ export type ThemeType = {
     insulinSecondary: string;
     carbs: string;
     barTrack: string;
+  };
+
+  /** Distinct series colors shared by charts, legends and selected readings. */
+  chart: {
+    basal: string;
+    bolus: string;
+    iob: string;
+    cob: string;
   };
 
   /**

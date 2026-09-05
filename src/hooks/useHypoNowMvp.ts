@@ -1,7 +1,10 @@
 import {useEffect, useMemo, useRef} from 'react';
 
 import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
-import {evaluateHypoNowAndNotify} from 'app/services/proactiveCare/hypoNowMvp';
+import {
+  clearHypoNowNotifications,
+  evaluateHypoNowAndNotify,
+} from 'app/services/proactiveCare/hypoNowMvp';
 
 /**
  * POC hook: monitor latest CGM snapshot and trigger a single hypo-now proactive flow.
@@ -15,6 +18,7 @@ import {evaluateHypoNowAndNotify} from 'app/services/proactiveCare/hypoNowMvp';
  */
 export function useHypoNowMvp(params?: {
   enabled?: boolean;
+  scopeId?: string;
 }) {
   const enabled = params?.enabled ?? true;
 
@@ -24,13 +28,23 @@ export function useHypoNowMvp(params?: {
 
   const lastEvaluatedTsRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    lastEvaluatedTsRef.current = null;
+    const scopeId = params?.scopeId;
+    return () => {
+      if (scopeId !== undefined) {
+        clearHypoNowNotifications(scopeId).catch(() => undefined);
+      }
+    };
+  }, [params?.scopeId]);
+
   const latestBg = useMemo(() => {
     if (!snapshot?.enrichedBg) return null;
     return snapshot.enrichedBg;
   }, [snapshot]);
 
   useEffect(() => {
-    if (!enabled || !latestBg) return;
+    if (!enabled || !latestBg || params?.scopeId === undefined) return;
 
     const sampleTs = typeof latestBg.date === 'number' ? latestBg.date : null;
     if (sampleTs == null) return;
@@ -39,9 +53,10 @@ export function useHypoNowMvp(params?: {
     lastEvaluatedTsRef.current = sampleTs;
 
     evaluateHypoNowAndNotify({
+      scopeId: params.scopeId,
       latestBgSample: latestBg,
     }).catch(err => {
       console.warn('useHypoNowMvp: failed to evaluate hypo_now flow', err);
     });
-  }, [enabled, latestBg]);
+  }, [enabled, latestBg, params?.scopeId]);
 }

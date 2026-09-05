@@ -1,0 +1,1124 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function validScope(scope, uid, workspaceId) {
+      return scope is map
+        && scope.keys().hasOnly([
+          'ownerProductUserId',
+          'workspaceId',
+          'nightscoutSourceId'
+        ])
+        && scope.ownerProductUserId == uid
+        && scope.workspaceId == workspaceId
+        && scope.nightscoutSourceId is string
+        && scope.nightscoutSourceId.size() > 0
+        && scope.nightscoutSourceId.size() <= 128;
+    }
+
+    function validLifecycle(lifecycle) {
+      return lifecycle is map
+        && (lifecycle.kind == 'active'
+          ? lifecycle.keys().hasOnly(['kind'])
+          : (lifecycle.kind == 'trashed'
+            && lifecycle.keys().hasOnly(['kind', 'trashedAt', 'purgeAfter'])
+            && lifecycle.trashedAt is int
+            && lifecycle.purgeAfter is int
+            && lifecycle.purgeAfter > lifecycle.trashedAt));
+    }
+
+    function nonEmptyString(value, maxSize) {
+      return value is string
+        && value.size() > 0
+        && value.size() <= maxSize;
+    }
+
+    function validStringList(values, maxSize) {
+      return values is list
+        && values.size() <= maxSize
+        && (values.size() < 1 || values[0] is string)
+        && (values.size() < 2 || values[1] is string)
+        && (values.size() < 3 || values[2] is string)
+        && (values.size() < 4 || values[3] is string)
+        && (values.size() < 5 || values[4] is string)
+        && (values.size() < 6 || values[5] is string)
+        && (values.size() < 7 || values[6] is string)
+        && (values.size() < 8 || values[7] is string)
+        && (values.size() < 9 || values[8] is string)
+        && (values.size() < 10 || values[9] is string);
+    }
+
+    function validTagAt(tags, index) {
+      return tags.size() <= index || nonEmptyString(tags[index], 80);
+    }
+
+    // Eight keeps the strict per-item validation below Firestore's 1,000
+    // expression limit for the atomic Journal entry + operation write.
+    function validTags(tags) {
+      return tags is list
+        && tags.size() <= 8
+        && validTagAt(tags, 0)
+        && validTagAt(tags, 1)
+        && validTagAt(tags, 2)
+        && validTagAt(tags, 3)
+        && validTagAt(tags, 4)
+        && validTagAt(tags, 5)
+        && validTagAt(tags, 6)
+        && validTagAt(tags, 7);
+    }
+
+    function validExternalIdentity(identity, nightscoutSourceId) {
+      return identity is map
+        && identity.keys().hasOnly([
+          'nightscoutSourceId', 'recordKey', 'namespace', 'value'
+        ])
+        && identity.nightscoutSourceId == nightscoutSourceId
+        && identity.nightscoutSourceId.matches('^[A-Za-z0-9._~-]{1,128}$')
+        && identity.value.matches('^[A-Za-z0-9._~-]{1,512}$')
+        && identity.namespace in ['_id', 'identifier', 'syncIdentifier']
+        && identity.recordKey == identity.nightscoutSourceId
+          + ':' + identity.namespace + ':' + identity.value
+        && identity.recordKey.size() <= 768;
+    }
+
+    function validMealExternalRole(role) {
+      return role is map
+        && role.keys().hasOnly(['kind', 'purpose'])
+        && role.kind + ':' + role.purpose in [
+          'reported_carbohydrate:meal',
+          'reported_carbohydrate:low_treatment',
+          'reported_carbohydrate:unknown',
+          'supporting_treatment:bolus',
+          'supporting_treatment:correction',
+          'supporting_treatment:other'
+        ];
+    }
+
+    function validActivityExternalRole(role) {
+      return role is map
+        && (role.kind == 'activity'
+          ? role.keys().hasOnly(['kind'])
+          : (role.kind == 'supporting_treatment'
+            && role.keys().hasOnly(['kind', 'purpose'])
+            && role.purpose in ['bolus', 'correction', 'other']));
+    }
+
+    function validMealExternalLink(link, nightscoutSourceId) {
+      return link is map
+        && link.keys().hasOnly(['identity', 'role', 'linkedAt'])
+        && validExternalIdentity(link.identity, nightscoutSourceId)
+        && validMealExternalRole(link.role)
+        && link.linkedAt is int
+        && link.linkedAt > 0;
+    }
+
+    function validActivityExternalLink(link, nightscoutSourceId) {
+      return link is map
+        && link.keys().hasOnly(['identity', 'role', 'linkedAt'])
+        && validExternalIdentity(link.identity, nightscoutSourceId)
+        && validActivityExternalRole(link.role)
+        && link.linkedAt is int
+        && link.linkedAt > 0;
+    }
+
+    function validMealExternalLinkAt(links, index, nightscoutSourceId) {
+      return links.size() <= index
+        || validMealExternalLink(links[index], nightscoutSourceId);
+    }
+
+    function validActivityExternalLinkAt(links, index, nightscoutSourceId) {
+      return links.size() <= index
+        || validActivityExternalLink(links[index], nightscoutSourceId);
+    }
+
+    // V1 links one carbohydrate identity and one supporting treatment. A
+    // larger list exceeds Firestore's expression budget for the atomic pair.
+    function validExternalLinkList(links) {
+      return links is list
+        && links.size() <= 2;
+    }
+
+    function validMealExternalLinks(links, nightscoutSourceId) {
+      return validExternalLinkList(links)
+        && validMealExternalLinkAt(links, 0, nightscoutSourceId)
+        && validMealExternalLinkAt(links, 1, nightscoutSourceId);
+    }
+
+    function validActivityExternalLinks(links, nightscoutSourceId) {
+      return validExternalLinkList(links)
+        && validActivityExternalLinkAt(links, 0, nightscoutSourceId)
+        && validActivityExternalLinkAt(links, 1, nightscoutSourceId);
+    }
+
+    function validMealCarbohydrates(document) {
+      return !('mealCarbohydrates' in document)
+        ? true
+        : (document.mealCarbohydrates is map
+          && document.mealCarbohydrates.keys().hasOnly(['kind', 'grams'])
+          && document.mealCarbohydrates.kind == 'meal_carbohydrates'
+          && document.mealCarbohydrates.grams is number
+          && document.mealCarbohydrates.grams > 0);
+    }
+
+    function validMealImage(image) {
+      return image is map
+        && (image.kind == 'none'
+          ? image.keys().hasOnly(['kind'])
+          : (image.kind == 'omitted'
+            ? (image.keys().hasOnly(['kind', 'reason'])
+            && image.reason == 'remote_object_identity_unavailable')
+            : (image.kind == 'stored'
+              && image.keys().hasOnly([
+              'kind', 'objectName', 'mimeType', 'byteSize', 'widthPx',
+              'heightPx'
+            ])
+            && image.objectName.matches(
+              '^image_[0-9a-f]{32}\\.(jpg|png|webp|heic|heif)$'
+            )
+            && image.mimeType in [
+              'image/jpeg', 'image/png', 'image/webp', 'image/heic',
+              'image/heif'
+            ]
+            && (!('byteSize' in image)
+              || (image.byteSize is int
+                && image.byteSize > 0
+                && image.byteSize <= 10485760))
+            && (!('widthPx' in image)
+              || (image.widthPx is int
+                && image.widthPx > 0
+                && image.widthPx <= 20000))
+            && (!('heightPx' in image)
+              || (image.heightPx is int
+                && image.heightPx > 0
+                && image.heightPx <= 20000)))));
+    }
+
+    function validDocumentBase(document, uid, workspaceId) {
+      return document.schemaVersion == 1
+        && validScope(document.scope, uid, workspaceId)
+        && document.entityId is string
+        && document.entityId.size() > 0
+        && document.entityId.size() <= 128
+        && document.revision is int
+        && document.revision > 0
+        && document.createdAt is int
+        && document.updatedAt is int
+        && document.updatedAt >= document.createdAt
+        && validLifecycle(document.lifecycle)
+        && validTags(document.tags);
+    }
+
+    function validMeal(document, uid, workspaceId) {
+      return document.keys().hasOnly([
+          'schemaVersion', 'documentKind', 'scope', 'entityId', 'revision',
+          'createdAt', 'updatedAt', 'lifecycle', 'mealStart', 'name',
+          'mealCarbohydrates', 'image', 'notes', 'tags', 'externalLinks'
+        ])
+        && document.documentKind == 'meal'
+        && validDocumentBase(document, uid, workspaceId)
+        && document.mealStart is int
+        && document.mealStart > 0
+        && validMealImage(document.image)
+        && validMealExternalLinks(
+          document.externalLinks,
+          document.scope.nightscoutSourceId
+        )
+        && validMealCarbohydrates(document)
+        && (
+          'name' in document
+          || 'mealCarbohydrates' in document
+          || document.image.kind == 'omitted'
+        )
+        && (!('name' in document)
+          || nonEmptyString(document.name, 200))
+        && (!('notes' in document)
+          || (document.notes is string && document.notes.size() <= 10000));
+    }
+
+    function validActivity(document, uid, workspaceId) {
+      return document.keys().hasOnly([
+          'schemaVersion', 'documentKind', 'scope', 'entityId', 'revision',
+          'createdAt', 'updatedAt', 'lifecycle', 'category', 'customName',
+          'startedAt', 'endedAt', 'intensity', 'notes', 'tags', 'externalLinks'
+        ])
+        && document.documentKind == 'activity'
+        && validDocumentBase(document, uid, workspaceId)
+        && document.category in [
+          'walking', 'running', 'cycling', 'strength', 'swimming', 'sport',
+          'other'
+        ]
+        && document.startedAt is int
+        && validActivityExternalLinks(
+          document.externalLinks,
+          document.scope.nightscoutSourceId
+        )
+        && document.startedAt > 0
+        && (!('endedAt' in document)
+          || (document.endedAt is int && document.endedAt >= document.startedAt))
+        && (!('customName' in document)
+          || nonEmptyString(document.customName, 200))
+        && (document.category != 'other' || 'customName' in document)
+        && (!('intensity' in document)
+          || document.intensity in [
+            'very_low', 'low', 'medium', 'high', 'very_high'
+          ])
+        && (!('notes' in document)
+          || (document.notes is string && document.notes.size() <= 10000));
+    }
+
+    function validUpsert(change, uid, workspaceId, entryId) {
+      return change.keys().hasOnly([
+          'schemaVersion', 'changeKind', 'operationId', 'baseRevision',
+          'localRevision', 'changedFields', 'document'
+        ])
+        && change.schemaVersion == 1
+        && change.changeKind == 'upsert'
+        && change.operationId is string
+        && change.operationId.size() > 0
+        && change.operationId.size() <= 128
+        && change.operationId.matches('^[A-Za-z0-9_-]+$')
+        && change.localRevision is int
+        && change.localRevision > 0
+        && (change.baseRevision == null
+          || (change.baseRevision is int
+            && change.baseRevision > 0
+            && change.baseRevision < change.localRevision))
+        && validStringList(change.changedFields, 10)
+        && change.changedFields.size() > 0
+        && change.document.entityId == entryId
+        && change.document.revision == change.localRevision
+        && (change.document.documentKind == 'meal'
+          ? validMeal(change.document, uid, workspaceId)
+          : (change.document.documentKind == 'activity'
+            && validActivity(change.document, uid, workspaceId)));
+    }
+
+    function validPurge(change, uid, workspaceId, entryId) {
+      return change.keys().hasOnly([
+          'schemaVersion', 'changeKind', 'operationId', 'baseRevision',
+          'localRevision', 'changedFields', 'scope', 'tombstone'
+        ])
+        && change.schemaVersion == 1
+        && change.changeKind == 'purge'
+        && validScope(change.scope, uid, workspaceId)
+        && change.operationId is string
+        && change.operationId.size() > 0
+        && change.operationId.size() <= 128
+        && change.operationId.matches('^[A-Za-z0-9_-]+$')
+        && change.localRevision is int
+        && change.localRevision > 0
+        && (change.baseRevision == null
+          || (change.baseRevision is int
+            && change.baseRevision > 0
+            && change.baseRevision < change.localRevision))
+        && change.changedFields == ['purge']
+        && change.tombstone is map
+        && change.tombstone.keys().hasOnly([
+          'kind', 'entityKind', 'entityId', 'purgedAt', 'revision'
+        ])
+        && change.tombstone.kind == 'journal_tombstone'
+        && change.tombstone.entityKind in ['meal', 'activity']
+        && change.tombstone.entityId == entryId
+        && change.tombstone.purgedAt is int
+        && change.tombstone.revision == change.localRevision;
+    }
+
+    function validChange(change, uid, workspaceId, entryId) {
+      return change is map
+        && (change.changeKind == 'upsert'
+          ? validUpsert(change, uid, workspaceId, entryId)
+          : (change.changeKind == 'purge'
+            && validPurge(change, uid, workspaceId, entryId)));
+    }
+
+    function validCompactedChange(compacted, operationId) {
+      return compacted is map
+        && compacted.keys().hasOnly([
+          'schemaVersion', 'operationId', 'changeKind', 'baseRevision',
+          'localRevision', 'changedFields', 'contentDigest'
+        ])
+        && compacted.schemaVersion == 1
+        && compacted.operationId == operationId
+        && compacted.changeKind == 'upsert'
+        && compacted.localRevision is int
+        && compacted.localRevision > 0
+        && (compacted.baseRevision == null
+          || (compacted.baseRevision is int
+            && compacted.baseRevision > 0
+            && compacted.baseRevision < compacted.localRevision))
+        && validStringList(compacted.changedFields, 10)
+        && compacted.changedFields.size() > 0
+        && compacted.contentDigest is string
+        && compacted.contentDigest.matches('^[0-9a-f]{64}$');
+    }
+
+    function validOperationCompaction(
+      before,
+      after,
+      uid,
+      workspaceId,
+      entryId,
+      operationId
+    ) {
+      let head = getAfter(
+        /databases/$(database)/documents/users/$(uid)/workspaces/$(workspaceId)/journalEntries/$(entryId)
+      );
+      let purgeOperationId = head.data.operationId;
+      let purgeOperation = getAfter(
+        /databases/$(database)/documents/users/$(uid)/workspaces/$(workspaceId)/journalOperations/$(purgeOperationId)
+      );
+      return before.keys().hasOnly(['entryId', 'change', 'committedAt'])
+        && before.entryId == entryId
+        && before.change.changeKind == 'upsert'
+        && before.change.operationId == operationId
+        && after.keys().hasOnly([
+          'entryId', 'compactedChange', 'committedAt'
+        ])
+        && after.entryId == entryId
+        && after.committedAt == before.committedAt
+        && validCompactedChange(after.compactedChange, operationId)
+        && after.compactedChange.baseRevision == before.change.baseRevision
+        && after.compactedChange.localRevision == before.change.localRevision
+        && after.compactedChange.changedFields == before.change.changedFields
+        && head.data.entityId == entryId
+        && purgeOperationId != operationId
+        && head.data.localRevision > after.compactedChange.localRevision
+        && purgeOperation.data.entryId == entryId
+        && purgeOperation.data.change.changeKind == 'purge'
+        && purgeOperation.data.change.operationId == purgeOperationId;
+    }
+
+    function validEntryHead(head, entryId) {
+      return head is map
+        && head.keys().hasOnly([
+          'schemaVersion', 'entityId', 'operationId', 'localRevision'
+        ])
+        && head.schemaVersion == 1
+        && head.entityId == entryId
+        && nonEmptyString(head.operationId, 128)
+        && head.localRevision is int
+        && head.localRevision > 0;
+    }
+
+    function validPersonalizationMutation(document, uid) {
+      return document.schemaVersion == 1
+        && document.ownerProductUserId == uid
+        && nonEmptyString(document.mutationId, 128)
+        && document.mutationId.matches('^[A-Za-z0-9_-]+$')
+        && document.savedAt is int
+        && document.savedAt >= 0
+        && document.revision is int
+        && document.revision > 0;
+    }
+
+    function validDestinationTarget(target) {
+      return target is map
+        && target.keys().hasOnly(['schemaVersion', 'destinationId'])
+        && target.schemaVersion == 1
+        && nonEmptyString(target.destinationId, 128)
+        && target.destinationId.matches('^[A-Za-z0-9][A-Za-z0-9._-]*$');
+    }
+
+    function validDestinationTargetAt(targets, index) {
+      return targets.size() <= index
+        || validDestinationTarget(targets[index]);
+    }
+
+    // The v1 catalog contains fewer than 24 destinations. This bound is a
+    // document-abuse guard, not a product-facing favorites limit.
+    function validDestinationTargetList(targets) {
+      return targets is list
+        && targets.size() <= 24
+        && validDestinationTargetAt(targets, 0)
+        && validDestinationTargetAt(targets, 1)
+        && validDestinationTargetAt(targets, 2)
+        && validDestinationTargetAt(targets, 3)
+        && validDestinationTargetAt(targets, 4)
+        && validDestinationTargetAt(targets, 5)
+        && validDestinationTargetAt(targets, 6)
+        && validDestinationTargetAt(targets, 7)
+        && validDestinationTargetAt(targets, 8)
+        && validDestinationTargetAt(targets, 9)
+        && validDestinationTargetAt(targets, 10)
+        && validDestinationTargetAt(targets, 11)
+        && validDestinationTargetAt(targets, 12)
+        && validDestinationTargetAt(targets, 13)
+        && validDestinationTargetAt(targets, 14)
+        && validDestinationTargetAt(targets, 15)
+        && validDestinationTargetAt(targets, 16)
+        && validDestinationTargetAt(targets, 17)
+        && validDestinationTargetAt(targets, 18)
+        && validDestinationTargetAt(targets, 19)
+        && validDestinationTargetAt(targets, 20)
+        && validDestinationTargetAt(targets, 21)
+        && validDestinationTargetAt(targets, 22)
+        && validDestinationTargetAt(targets, 23);
+    }
+
+    function validShell(shell) {
+      return shell is map
+        && shell.keys().hasOnly([
+          'schemaVersion', 'startDestination', 'shortcuts'
+        ])
+        && shell.schemaVersion == 1
+        && shell.shortcuts is list
+        && shell.shortcuts.size() <= 2
+        && (shell.shortcuts.size() < 1
+          || validDestinationTarget(shell.shortcuts[0]))
+        && (shell.shortcuts.size() < 2
+          || validDestinationTarget(shell.shortcuts[1]))
+        && (!('startDestination' in shell)
+          || validDestinationTarget(shell.startDestination));
+    }
+
+    function validAccountPersonalization(value) {
+      return value is map
+        && value.keys().hasOnly([
+          'schemaVersion', 'favorites', 'hiddenModules'
+        ])
+        && value.schemaVersion == 1
+        && validDestinationTargetList(value.favorites)
+        && validDestinationTargetList(value.hiddenModules);
+    }
+
+    function validQuestionnaire(questionnaire) {
+      return questionnaire is map
+        && questionnaire.keys().hasOnly([
+          'schemaVersion', 'status', 'currentStage'
+        ])
+        && questionnaire.schemaVersion == 1
+        && questionnaire.status in [
+          'not-started', 'in-progress', 'completed', 'skipped'
+        ]
+        && (questionnaire.status == 'in-progress'
+          ? (questionnaire.keys().hasAll(['currentStage'])
+            && questionnaire.currentStage in [
+              'relationship', 'quick-access', 'presentation'
+            ])
+          : !('currentStage' in questionnaire));
+    }
+
+    function validWorkspacePersonalization(value) {
+      return value is map
+        && value.keys().hasOnly([
+          'schemaVersion', 'questionnaire', 'relationship'
+        ])
+        && value.schemaVersion == 1
+        && validQuestionnaire(value.questionnaire)
+        && (!('relationship' in value)
+          || value.relationship in [
+            'self', 'parent', 'family-member', 'caregiver', 'clinician',
+            'other', 'prefer-not-to-answer'
+          ])
+        && (value.questionnaire.status != 'completed'
+          || 'relationship' in value);
+    }
+
+    function validDayGraphPreferences(value) {
+      return value is map
+        && value.keys().hasOnly(['schemaVersion', 'mode', 'windowHours'])
+        && value.schemaVersion == 1
+        && value.mode in ['separate', 'mixed']
+        && value.windowHours in ['full-day', 3, 6, 12];
+    }
+
+    function validLayoutPersonalization(value, layout) {
+      return value is map
+        && value.keys().hasOnly([
+          'schemaVersion', 'layout', 'showCurrentSnapshot', 'showRecents',
+          'showGri', 'shell', 'dayGraph'
+        ])
+        && value.schemaVersion == 1
+        && value.layout == layout
+        && value.showCurrentSnapshot is bool
+        && value.showRecents is bool
+        && value.showGri is bool
+        && validShell(value.shell)
+        && (!('dayGraph' in value) || validDayGraphPreferences(value.dayGraph));
+    }
+
+    function validAccountPersonalizationDocument(document, uid) {
+      return document is map
+        && document.keys().hasOnly([
+          'schemaVersion', 'documentKind', 'ownerProductUserId', 'revision',
+          'mutationId', 'savedAt', 'value'
+        ])
+        && document.documentKind == 'account_personalization'
+        && validPersonalizationMutation(document, uid)
+        && validAccountPersonalization(document.value);
+    }
+
+    function validLayoutPersonalizationDocument(document, uid, documentId) {
+      let layout = documentId == 'layout_phone'
+        ? 'phone'
+        : (documentId == 'layout_tablet' ? 'tablet' : 'desktop');
+      return document is map
+        && documentId in ['layout_phone', 'layout_tablet', 'layout_desktop']
+        && document.keys().hasOnly([
+          'schemaVersion', 'documentKind', 'ownerProductUserId', 'layout',
+          'revision', 'mutationId', 'savedAt', 'value'
+        ])
+        && document.documentKind == 'layout_personalization'
+        && document.layout == layout
+        && validPersonalizationMutation(document, uid)
+        && validLayoutPersonalization(document.value, layout);
+    }
+
+    function validWorkspacePersonalizationDocument(
+      document,
+      uid,
+      workspaceId
+    ) {
+      return document is map
+        && document.keys().hasOnly([
+          'schemaVersion', 'documentKind', 'ownerProductUserId',
+          'workspaceId', 'nightscoutSourceId', 'revision', 'mutationId',
+          'savedAt', 'value'
+        ])
+        && document.documentKind == 'workspace_personalization'
+        && document.workspaceId == workspaceId
+        && nonEmptyString(document.nightscoutSourceId, 128)
+        && document.nightscoutSourceId.matches('^[A-Za-z0-9_-]+$')
+        && validPersonalizationMutation(document, uid)
+        && validWorkspacePersonalization(document.value);
+    }
+
+    function validInitialPersonalizationRevision(document) {
+      return document.revision == 1;
+    }
+
+    function validNextPersonalizationRevision(document) {
+      return document.revision == resource.data.revision + 1
+        && document.savedAt >= resource.data.savedAt
+        && document.mutationId != resource.data.mutationId;
+    }
+
+    function validAlertSyncId(value) {
+      return nonEmptyString(value, 128)
+        && value.matches('^[A-Za-z0-9_-]+$');
+    }
+
+    function validAlertRuleValue(value) {
+      return value is map
+        && value.keys().hasOnly([
+          'name', 'enabled', 'lowerBoundMgDl', 'upperBoundMgDl',
+          'activeFromMinute', 'activeToMinute', 'trend'
+        ])
+        && nonEmptyString(value.name, 80)
+        && value.enabled is bool
+        && value.lowerBoundMgDl is int
+        && value.lowerBoundMgDl >= 1
+        && value.lowerBoundMgDl <= 1000
+        && value.upperBoundMgDl is int
+        && value.upperBoundMgDl >= 1
+        && value.upperBoundMgDl <= 1000
+        && value.lowerBoundMgDl < value.upperBoundMgDl
+        && value.activeFromMinute is int
+        && value.activeFromMinute >= 0
+        && value.activeFromMinute <= 1439
+        && value.activeToMinute is int
+        && value.activeToMinute >= 0
+        && value.activeToMinute <= 1439
+        && value.activeFromMinute != value.activeToMinute
+        && value.trend in [
+          'any', 'double-down', 'single-down', 'forty-five-down',
+          'forty-five-up', 'single-up', 'double-up'
+        ];
+    }
+
+    function validAlertRuleDocument(document, uid, workspaceId, ruleId) {
+      return document is map
+        && document.keys().hasOnly([
+          'schemaVersion', 'documentKind', 'ownerProductUserId',
+          'workspaceId', 'ruleId', 'revision', 'mutationId', 'changedAtMs',
+          'deleted', 'value'
+        ])
+        && document.schemaVersion == 1
+        && document.documentKind == 'alert_rule'
+        && document.ownerProductUserId == uid
+        && document.workspaceId == workspaceId
+        && document.ruleId == ruleId
+        && validAlertSyncId(document.ruleId)
+        && document.revision is int
+        && document.revision > 0
+        && validAlertSyncId(document.mutationId)
+        && document.changedAtMs is int
+        && document.changedAtMs > 0
+        && document.deleted is bool
+        && (document.deleted
+          ? document.keys().hasOnly([
+              'schemaVersion', 'documentKind', 'ownerProductUserId',
+              'workspaceId', 'ruleId', 'revision', 'mutationId',
+              'changedAtMs', 'deleted'
+            ])
+          : (document.keys().hasAll(['value'])
+            && validAlertRuleValue(document.value)));
+    }
+
+    function validInitialAlertRuleRevision(document) {
+      return document.revision == 1;
+    }
+
+    function validNextAlertRuleRevision(document) {
+      return document.revision == resource.data.revision + 1
+        && document.changedAtMs >= resource.data.changedAtMs
+        && document.mutationId != resource.data.mutationId;
+    }
+
+    function validAlertRuleSnapshot(rule) {
+      return rule is map
+        && rule.keys().hasOnly([
+          'id', 'name', 'lowerBoundMgDl', 'upperBoundMgDl',
+          'activeFromMinute', 'activeToMinute', 'trend'
+        ])
+        && validAlertSyncId(rule.id)
+        && nonEmptyString(rule.name, 80)
+        && rule.lowerBoundMgDl is int
+        && rule.lowerBoundMgDl >= 1
+        && rule.lowerBoundMgDl <= 1000
+        && rule.upperBoundMgDl is int
+        && rule.upperBoundMgDl >= 1
+        && rule.upperBoundMgDl <= 1000
+        && rule.lowerBoundMgDl < rule.upperBoundMgDl
+        && rule.activeFromMinute is int
+        && rule.activeFromMinute >= 0
+        && rule.activeFromMinute <= 1439
+        && rule.activeToMinute is int
+        && rule.activeToMinute >= 0
+        && rule.activeToMinute <= 1439
+        && rule.activeFromMinute != rule.activeToMinute
+        && rule.trend in [
+          'any', 'double-down', 'single-down', 'forty-five-down',
+          'forty-five-up', 'single-up', 'double-up'
+        ];
+    }
+
+    function validAlertObservation(observation) {
+      return observation is map
+        && observation.keys().hasOnly(['valueMgDl', 'trend'])
+        && observation.valueMgDl is int
+        && observation.valueMgDl >= 1
+        && observation.valueMgDl <= 1000
+        && (!('trend' in observation)
+          || observation.trend in [
+            'any', 'double-down', 'single-down', 'forty-five-down',
+            'forty-five-up', 'single-up', 'double-up'
+          ]);
+    }
+
+    function validUpdateContent(content) {
+      return content is map
+        && (
+          (content.kind == 'message'
+            && content.keys().hasOnly(['kind', 'title', 'body'])
+            && nonEmptyString(content.title, 160)
+            && (!('body' in content)
+              || (content.body is string && content.body.size() <= 2000)))
+          || (content.kind == 'alert-rule-occurrence'
+            && content.keys().hasOnly(['kind', 'rule', 'observation'])
+            && validAlertRuleSnapshot(content.rule)
+            && validAlertObservation(content.observation))
+        );
+    }
+
+    function validUpdateDeepLink(link) {
+      return link is map
+        && (
+          (link.kind == 'alert-occurrence'
+            && link.keys().hasOnly(['kind', 'occurrenceId'])
+            && nonEmptyString(link.occurrenceId, 512))
+          || (link.kind == 'alert-rule'
+            && link.keys().hasOnly(['kind', 'ruleId'])
+            && nonEmptyString(link.ruleId, 512))
+          || (link.kind == 'day'
+            && link.keys().hasOnly(['kind', 'dayStartMs'])
+            && link.dayStartMs is int
+            && link.dayStartMs > 0)
+          || (link.kind == 'journal-entry'
+            && link.keys().hasOnly(['kind', 'entryKind', 'entryId'])
+            && link.entryKind in ['meal', 'activity']
+            && nonEmptyString(link.entryId, 512))
+          || (link.kind == 'ai-conversation'
+            && link.keys().hasOnly(['kind', 'conversationId'])
+            && nonEmptyString(link.conversationId, 512))
+        );
+    }
+
+    function validUpdateCenterRecord(
+      document,
+      uid,
+      workspaceId,
+      recordId
+    ) {
+      return document is map
+        && document.keys().hasOnly([
+          'schemaVersion', 'documentKind', 'ownerProductUserId',
+          'workspaceId', 'recordId', 'kind', 'occurredAtMs', 'content',
+          'deepLink'
+        ])
+        && document.schemaVersion == 1
+        && document.documentKind == 'update_center_record'
+        && document.ownerProductUserId == uid
+        && document.workspaceId == workspaceId
+        && document.recordId == recordId
+        && validAlertSyncId(document.recordId)
+        && document.kind in ['alert', 'reminder', 'generated-update']
+        && document.occurredAtMs is int
+        && document.occurredAtMs > 0
+        && validUpdateContent(document.content)
+        && (document.content.kind != 'alert-rule-occurrence'
+          || document.kind == 'alert')
+        && (!('deepLink' in document)
+          || validUpdateDeepLink(document.deepLink));
+    }
+
+    function validUpdateCenterRead(
+      document,
+      uid,
+      workspaceId,
+      itemId
+    ) {
+      return document is map
+        && document.keys().hasOnly([
+          'schemaVersion', 'documentKind', 'ownerProductUserId',
+          'workspaceId', 'itemId', 'readAtMs'
+        ])
+        && document.schemaVersion == 1
+        && document.documentKind == 'update_center_read'
+        && document.ownerProductUserId == uid
+        && document.workspaceId == workspaceId
+        && document.itemId == itemId
+        && validAlertSyncId(document.itemId)
+        && document.readAtMs is int
+        && document.readAtMs > 0;
+    }
+
+    function validNextUpdateCenterRead(document) {
+      return document.readAtMs >= resource.data.readAtMs;
+    }
+
+    function validPhoneTokenAt(tokens, index) {
+      return tokens.size() <= index
+        || nonEmptyString(tokens[index], 4096);
+    }
+
+    function validPhoneTokens(tokens) {
+      return tokens is list
+        && tokens.size() <= 10
+        && validPhoneTokenAt(tokens, 0)
+        && validPhoneTokenAt(tokens, 1)
+        && validPhoneTokenAt(tokens, 2)
+        && validPhoneTokenAt(tokens, 3)
+        && validPhoneTokenAt(tokens, 4)
+        && validPhoneTokenAt(tokens, 5)
+        && validPhoneTokenAt(tokens, 6)
+        && validPhoneTokenAt(tokens, 7)
+        && validPhoneTokenAt(tokens, 8)
+        && validPhoneTokenAt(tokens, 9);
+    }
+
+    function validUserDocument(document, uid) {
+      return document is map
+        && document.keys().hasOnly([
+          'schemaVersion', 'ownerProductUserId', 'userId', 'email',
+          'phoneTokens', 'createdAt', 'updatedAt'
+        ])
+        && document.schemaVersion == 1
+        && document.ownerProductUserId == uid
+        && document.userId == uid
+        && document.email is string
+        && document.email.size() <= 320
+        && validPhoneTokens(document.phoneTokens)
+        && document.createdAt is timestamp
+        && document.updatedAt is timestamp
+        && document.updatedAt >= document.createdAt;
+    }
+
+    function validUserDocumentUpdate(document, uid) {
+      return validUserDocument(document, uid)
+        && (
+          (resource.data.schemaVersion == 1
+            && document.createdAt == resource.data.createdAt)
+          || (!('schemaVersion' in resource.data)
+            && (
+              ('createdAt' in resource.data
+                && resource.data.createdAt is timestamp
+                && document.createdAt == resource.data.createdAt)
+              || (!('createdAt' in resource.data)
+                && document.createdAt == request.time)
+            ))
+        );
+    }
+
+    function validLegacyFoodDocument(document, uid, foodId) {
+      return document is map
+        && document.keys().hasOnly([
+          'schemaVersion', 'ownerProductUserId', 'id', 'carbs', 'name',
+          'image', 'notes', 'score', 'timestamp', 'tags'
+        ])
+        && document.schemaVersion == 1
+        && document.ownerProductUserId == uid
+        && document.id == foodId
+        && document.carbs is number
+        && document.carbs >= 0
+        && document.carbs <= 10000
+        && nonEmptyString(document.name, 200)
+        && document.image is string
+        && document.image.size() <= 4096
+        && document.notes is string
+        && document.notes.size() <= 10000
+        && document.score is number
+        && document.score >= 0
+        && document.score <= 100
+        && document.timestamp is int
+        && document.timestamp > 0
+        && (!('tags' in document) || validTags(document.tags));
+    }
+
+    function validLegacySportDocument(document, uid) {
+      return document is map
+        && document.keys().hasOnly([
+          'schemaVersion', 'ownerProductUserId', 'name', 'durationMinutes',
+          'intensity', 'startTimestamp', 'endTimestamp'
+        ])
+        && document.schemaVersion == 1
+        && document.ownerProductUserId == uid
+        && nonEmptyString(document.name, 200)
+        && document.durationMinutes is number
+        && document.durationMinutes >= 0
+        && document.durationMinutes <= 10080
+        && document.intensity is int
+        && document.intensity >= 1
+        && document.intensity <= 5
+        && document.startTimestamp is int
+        && document.startTimestamp > 0
+        && document.endTimestamp is int
+        && document.endTimestamp >= document.startTimestamp;
+    }
+
+    function validJournalEntryWrite(
+      head,
+      uid,
+      workspaceId,
+      entryId,
+      expectedBaseRevision
+    ) {
+      let operation = getAfter(
+        /databases/$(database)/documents/users/$(uid)/workspaces/$(workspaceId)/journalOperations/$(head.operationId)
+      );
+      return validEntryHead(head, entryId)
+        && operation.data.entryId == entryId
+        && operation.data.change.operationId == head.operationId
+        && operation.data.change.localRevision == head.localRevision
+        && operation.data.change.baseRevision == expectedBaseRevision;
+    }
+
+    function validJournalOperationCreate(
+      operation,
+      uid,
+      workspaceId,
+      operationId
+    ) {
+      let entryId = operation.entryId;
+      let head = getAfter(
+        /databases/$(database)/documents/users/$(uid)/workspaces/$(workspaceId)/journalEntries/$(entryId)
+      );
+      return operation.keys().hasOnly([
+          'entryId', 'change', 'committedAt'
+        ])
+        && entryId is string
+        && operation.committedAt is timestamp
+        && operation.committedAt == request.time
+        && operation.change.operationId == operationId
+        && validChange(operation.change, uid, workspaceId, entryId)
+        && head.data.operationId == operationId
+        && head.data.entityId == entryId
+        && head.data.localRevision == operation.change.localRevision;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && validUserDocument(request.resource.data, uid);
+      allow update: if isOwner(uid)
+        && validUserDocumentUpdate(request.resource.data, uid);
+      allow delete: if false;
+    }
+
+    match /users/{uid}/legacyFoodItems/{foodId} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && validLegacyFoodDocument(request.resource.data, uid, foodId);
+      allow delete: if isOwner(uid);
+    }
+
+    match /users/{uid}/legacySportItems/{sportId} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && validLegacySportDocument(request.resource.data, uid);
+      allow delete: if isOwner(uid);
+    }
+
+    match /privateCredentialVault/{uid}/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /users/{uid}/productPersonalization/{documentId} {
+      allow read: if isOwner(uid)
+        && documentId in [
+          'account', 'layout_phone', 'layout_tablet', 'layout_desktop'
+        ];
+      allow create: if isOwner(uid)
+        && validInitialPersonalizationRevision(request.resource.data)
+        && (
+          (documentId == 'account'
+            && validAccountPersonalizationDocument(
+              request.resource.data,
+              uid
+            ))
+          || validLayoutPersonalizationDocument(
+            request.resource.data,
+            uid,
+            documentId
+          )
+        );
+      allow update: if isOwner(uid)
+        && validNextPersonalizationRevision(request.resource.data)
+        && (
+          (documentId == 'account'
+            && validAccountPersonalizationDocument(
+              request.resource.data,
+              uid
+            ))
+          || validLayoutPersonalizationDocument(
+            request.resource.data,
+            uid,
+            documentId
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /users/{uid}/workspaces/{workspaceId}/productPersonalization/current {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && validInitialPersonalizationRevision(request.resource.data)
+        && validWorkspacePersonalizationDocument(
+          request.resource.data,
+          uid,
+          workspaceId
+        );
+      allow update: if isOwner(uid)
+        && validNextPersonalizationRevision(request.resource.data)
+        && validWorkspacePersonalizationDocument(
+          request.resource.data,
+          uid,
+          workspaceId
+        );
+      allow delete: if false;
+    }
+
+    match /users/{uid}/workspaces/{workspaceId}/alertRules/{ruleId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && validInitialAlertRuleRevision(request.resource.data)
+        && validAlertRuleDocument(
+          request.resource.data,
+          uid,
+          workspaceId,
+          ruleId
+        );
+      allow update: if isOwner(uid)
+        && validNextAlertRuleRevision(request.resource.data)
+        && validAlertRuleDocument(
+          request.resource.data,
+          uid,
+          workspaceId,
+          ruleId
+        );
+      allow delete: if false;
+    }
+
+    match /users/{uid}/workspaces/{workspaceId}/updateCenterRecords/{recordId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && validUpdateCenterRecord(
+          request.resource.data,
+          uid,
+          workspaceId,
+          recordId
+        );
+      allow update, delete: if false;
+    }
+
+    match /users/{uid}/workspaces/{workspaceId}/updateCenterReadState/{itemId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && validUpdateCenterRead(
+          request.resource.data,
+          uid,
+          workspaceId,
+          itemId
+        );
+      allow update: if isOwner(uid)
+        && validNextUpdateCenterRead(request.resource.data)
+        && validUpdateCenterRead(
+          request.resource.data,
+          uid,
+          workspaceId,
+          itemId
+        );
+      allow delete: if false;
+    }
+
+    match /users/{uid}/workspaces/{workspaceId}/journalEntries/{entryId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && validJournalEntryWrite(
+          request.resource.data,
+          uid,
+          workspaceId,
+          entryId,
+          null
+        );
+      allow update: if isOwner(uid)
+        && validJournalEntryWrite(
+          request.resource.data,
+          uid,
+          workspaceId,
+          entryId,
+          resource.data.localRevision
+        );
+      allow delete: if false;
+    }
+
+    match /users/{uid}/workspaces/{workspaceId}/journalOperations/{operationId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && validJournalOperationCreate(
+          request.resource.data,
+          uid,
+          workspaceId,
+          operationId
+        );
+      allow update: if isOwner(uid)
+        && validOperationCompaction(
+          resource.data,
+          request.resource.data,
+          uid,
+          workspaceId,
+          request.resource.data.entryId,
+          operationId
+        );
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

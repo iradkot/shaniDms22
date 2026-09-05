@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {aiWorkspaceStorageKey, type AiWorkspaceScope} from './aiWorkspaceScope';
 
 import {
   AiMemoryFolder,
@@ -8,11 +9,27 @@ import {
   normalizeMemoryFolder,
 } from './memoryTaxonomy';
 
-const MEMORY_KEY = 'aiMemory:v1:entries';
-const PROFILE_KEY = 'aiMemory:v1:profile';
-const MEMORY_EPISODE_KEYS = 'aiMemory:v1:episodeKeys';
 export const PENDING_MEMORY_TAG = 'pending_suggestion';
 export const DISABLED_FOR_AI_TAG = 'disabled_for_ai';
+const memoryKey = (scope: AiWorkspaceScope) =>
+  aiWorkspaceStorageKey('memory.entries', scope);
+const profileKey = (scope: AiWorkspaceScope) =>
+  aiWorkspaceStorageKey('memory.profile', scope);
+const memoryEpisodeKeysKey = (scope: AiWorkspaceScope) =>
+  aiWorkspaceStorageKey('memory.episode-keys', scope);
+const LEGACY_UNSCOPED_MEMORY_KEYS = [
+  'aiMemory:v1:entries',
+  'aiMemory:v1:profile',
+  'aiMemory:v1:episodeKeys',
+] as const;
+
+const purgeLegacyUnscopedMemory = async (): Promise<void> => {
+  try {
+    await AsyncStorage.multiRemove([...LEGACY_UNSCOPED_MEMORY_KEYS]);
+  } catch {
+    // Never attach unattributed legacy memory to the active Workspace.
+  }
+};
 
 export type MemoryType = 'profile' | 'episode' | 'chat_summary';
 
@@ -122,23 +139,24 @@ function overlapScore(query: string, candidate: string): number {
   return hit / q.length;
 }
 
-async function readEntries(): Promise<MemoryEntry[]> {
+async function readEntries(scope: AiWorkspaceScope): Promise<MemoryEntry[]> {
+  await purgeLegacyUnscopedMemory();
   try {
-    const raw = await AsyncStorage.getItem(MEMORY_KEY);
+    const raw = await AsyncStorage.getItem(memoryKey(scope));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed)
       ? parsed
-        .map(item => normalizeStoredEntry(item as MemoryEntry))
-        .filter(item => item.textSummary)
+          .map(item => normalizeStoredEntry(item as MemoryEntry))
+          .filter(item => item.textSummary)
       : [];
   } catch {
     return [];
   }
 }
 
-async function writeEntries(entries: MemoryEntry[]) {
-  await AsyncStorage.setItem(MEMORY_KEY, JSON.stringify(entries));
+async function writeEntries(scope: AiWorkspaceScope, entries: MemoryEntry[]) {
+  await AsyncStorage.setItem(memoryKey(scope), JSON.stringify(entries));
 }
 
 function pruneEntries(entries: MemoryEntry[]): MemoryEntry[] {
@@ -153,7 +171,10 @@ function pruneEntries(entries: MemoryEntry[]): MemoryEntry[] {
   return alive.slice(0, 500);
 }
 
-export async function addMemoryEntry(input: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt'>) {
+export async function addMemoryEntry(
+  scope: AiWorkspaceScope,
+  input: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt'>,
+) {
   const ts = nowMs();
   const entry: MemoryEntry = {
     id: genId(input.type || 'mem'),
@@ -164,37 +185,44 @@ export async function addMemoryEntry(input: Omit<MemoryEntry, 'id' | 'createdAt'
     textSummary: String(input.textSummary ?? '').trim(),
     facts: input.facts ?? {},
     folder: normalizeMemoryFolder(input.folder),
-    retention: input.retention,
+    ...(input.retention !== undefined ? {retention: input.retention} : {}),
     source: input.source ?? 'system',
-    confidence: typeof input.confidence === 'number' ? Math.max(0, Math.min(1, input.confidence)) : undefined,
+    ...(typeof input.confidence === 'number'
+      ? {confidence: Math.max(0, Math.min(1, input.confidence))}
+      : {}),
     expiresAt: input.expiresAt ?? null,
   };
 
   if (!entry.textSummary) return null;
 
-  const entries = await readEntries();
+  const entries = await readEntries(scope);
   const next = pruneEntries([entry, ...entries]);
-  await writeEntries(next);
+  await writeEntries(scope, next);
   return entry;
 }
 
 export async function proposeMemoryEntry(
+  scope: AiWorkspaceScope,
   input: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'source'>,
 ) {
-  return addMemoryEntry({
+  return addMemoryEntry(scope, {
     ...input,
-    tags: uniq([...(input.tags ?? []), PENDING_MEMORY_TAG, DISABLED_FOR_AI_TAG]),
+    tags: uniq([
+      ...(input.tags ?? []),
+      PENDING_MEMORY_TAG,
+      DISABLED_FOR_AI_TAG,
+    ]),
     source: 'ai',
     confidence: typeof input.confidence === 'number' ? input.confidence : 0.65,
   });
 }
 
-export async function approveMemoryEntry(id: string) {
-  const entries = await readEntries();
+export async function approveMemoryEntry(scope: AiWorkspaceScope, id: string) {
+  const entries = await readEntries(scope);
   const idx = entries.findIndex(entry => entry.id === id);
   if (idx < 0) return null;
 
-  const existing = entries[idx];
+  const existing = entries[idx]!;
   const updated: MemoryEntry = {
     ...existing,
     tags: uniq([
@@ -209,29 +237,33 @@ export async function approveMemoryEntry(id: string) {
   };
 
   const next = entries.map(entry => (entry.id === id ? updated : entry));
-  await writeEntries(pruneEntries(next));
+  await writeEntries(scope, pruneEntries(next));
   return updated;
 }
 
-export async function getMemoryByIds(ids: string[]) {
+export async function getMemoryByIds(scope: AiWorkspaceScope, ids: string[]) {
   const idSet = new Set(ids ?? []);
-  const entries = await readEntries();
+  const entries = await readEntries(scope);
   return entries.filter(e => idSet.has(e.id));
 }
 
-export async function listMemoryEntries(opts?: {
-  category?: AiMemoryFolder['category'];
-  folderKey?: string;
-  limit?: number;
-}) {
-  const entries = pruneEntries(await readEntries());
+export async function listMemoryEntries(
+  scope: AiWorkspaceScope,
+  opts?: {
+    category?: AiMemoryFolder['category'];
+    folderKey?: string;
+    limit?: number;
+  },
+) {
+  const entries = pruneEntries(await readEntries(scope));
   const limit = Math.max(1, Math.min(500, opts?.limit ?? 200));
 
   return entries
     .filter(e => {
       const folder = normalizeMemoryFolder(e.folder);
       if (opts?.category && folder.category !== opts.category) return false;
-      if (opts?.folderKey && memoryFolderKey(folder) !== opts.folderKey) return false;
+      if (opts?.folderKey && memoryFolderKey(folder) !== opts.folderKey)
+        return false;
       return true;
     })
     .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -239,6 +271,7 @@ export async function listMemoryEntries(opts?: {
 }
 
 export async function updateMemoryEntry(
+  scope: AiWorkspaceScope,
   id: string,
   patch: Partial<
     Pick<
@@ -247,16 +280,16 @@ export async function updateMemoryEntry(
     >
   >,
 ) {
-  const entries = await readEntries();
+  const entries = await readEntries(scope);
   const idx = entries.findIndex(entry => entry.id === id);
   if (idx < 0) return null;
 
-  const existing = entries[idx];
+  const existing = entries[idx]!;
   const updated: MemoryEntry = {
     ...existing,
     ...patch,
     tags: patch.tags ? uniq(patch.tags) : existing.tags,
-    folder: patch.folder ? normalizeMemoryFolder(patch.folder) : existing.folder,
+    folder: normalizeMemoryFolder(patch.folder ?? existing.folder),
     textSummary:
       patch.textSummary != null
         ? String(patch.textSummary).trim()
@@ -266,25 +299,21 @@ export async function updateMemoryEntry(
 
   if (!updated.textSummary) return null;
 
-  const next = entries.map(entry =>
-    entry.id === id
-      ? updated
-      : entry,
-  );
+  const next = entries.map(entry => (entry.id === id ? updated : entry));
 
-  await writeEntries(pruneEntries(next));
+  await writeEntries(scope, pruneEntries(next));
   return updated;
 }
 
-export async function deleteMemoryEntry(id: string) {
-  const entries = await readEntries();
+export async function deleteMemoryEntry(scope: AiWorkspaceScope, id: string) {
+  const entries = await readEntries(scope);
   const next = entries.filter(entry => entry.id !== id);
-  await writeEntries(next);
+  await writeEntries(scope, next);
   return next.length !== entries.length;
 }
 
-export async function getMemoryTree() {
-  const entries = await listMemoryEntries({limit: 500});
+export async function getMemoryTree(scope: AiWorkspaceScope) {
+  const entries = await listMemoryEntries(scope, {limit: 500});
   const counts = new Map<string, number>();
 
   for (const folder of DEFAULT_MEMORY_FOLDERS) {
@@ -302,8 +331,12 @@ export async function getMemoryTree() {
     .sort((a, b) => a.key.localeCompare(b.key));
 }
 
-export async function searchMemory(query: string, opts?: {types?: MemoryType[]; limit?: number}) {
-  const entries = await readEntries();
+export async function searchMemory(
+  scope: AiWorkspaceScope,
+  query: string,
+  opts?: {types?: MemoryType[]; limit?: number},
+) {
+  const entries = await readEntries(scope);
   const limit = Math.max(1, Math.min(20, opts?.limit ?? 6));
   const typeSet = opts?.types?.length ? new Set(opts.types) : null;
 
@@ -311,7 +344,9 @@ export async function searchMemory(query: string, opts?: {types?: MemoryType[]; 
     .filter(e => (typeSet ? typeSet.has(e.type) : true))
     .filter(e => !(e.tags ?? []).includes(DISABLED_FOR_AI_TAG))
     .map(e => {
-      const haystack = `${e.textSummary} ${(e.tags ?? []).join(' ')} ${JSON.stringify(e.facts ?? {})}`;
+      const haystack = `${e.textSummary} ${(e.tags ?? []).join(
+        ' ',
+      )} ${JSON.stringify(e.facts ?? {})}`;
       const semantic = overlapScore(query, haystack);
       const recencyDays = (nowMs() - e.updatedAt) / (24 * 60 * 60 * 1000);
       const recencyBoost = Math.max(0, 1 - recencyDays / 30) * 0.25;
@@ -333,9 +368,12 @@ export async function searchMemory(query: string, opts?: {types?: MemoryType[]; 
   }));
 }
 
-export async function loadProfileSnapshot(): Promise<ProfileSnapshot | null> {
+export async function loadProfileSnapshot(
+  scope: AiWorkspaceScope,
+): Promise<ProfileSnapshot | null> {
+  await purgeLegacyUnscopedMemory();
   try {
-    const raw = await AsyncStorage.getItem(PROFILE_KEY);
+    const raw = await AsyncStorage.getItem(profileKey(scope));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return null;
@@ -345,22 +383,32 @@ export async function loadProfileSnapshot(): Promise<ProfileSnapshot | null> {
   }
 }
 
-export async function upsertProfileSnapshot(patch: Partial<ProfileSnapshot>) {
-  const prev = (await loadProfileSnapshot()) ?? {updatedAt: nowMs()};
+export async function upsertProfileSnapshot(
+  scope: AiWorkspaceScope,
+  patch: Partial<ProfileSnapshot>,
+) {
+  const prev = (await loadProfileSnapshot(scope)) ?? {updatedAt: nowMs()};
   const next: ProfileSnapshot = {
     ...prev,
     ...patch,
     notes: uniq([...(prev.notes ?? []), ...(patch.notes ?? [])]),
     updatedAt: nowMs(),
   };
-  await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(next));
+  await AsyncStorage.setItem(profileKey(scope), JSON.stringify(next));
   return next;
 }
 
-export async function buildCompactPatientMemory() {
+export async function buildCompactPatientMemory(scope: AiWorkspaceScope) {
   const [profile, recentEpisodes] = await Promise.all([
-    loadProfileSnapshot(),
-    searchMemory('meal low high loop correction pattern similar response', {types: ['episode', 'chat_summary'], limit: 5}),
+    loadProfileSnapshot(scope),
+    searchMemory(
+      scope,
+      'meal low high loop correction pattern similar response',
+      {
+        types: ['episode', 'chat_summary'],
+        limit: 5,
+      },
+    ),
   ]);
 
   return {
@@ -369,8 +417,8 @@ export async function buildCompactPatientMemory() {
   };
 }
 
-export async function getMemoryStats() {
-  const entries = await readEntries();
+export async function getMemoryStats(scope: AiWorkspaceScope) {
+  const entries = await readEntries(scope);
   const byType = entries.reduce(
     (acc, e) => {
       acc[e.type] = (acc[e.type] ?? 0) + 1;
@@ -382,26 +430,34 @@ export async function getMemoryStats() {
   return {
     total: entries.length,
     byType,
-    latestUpdatedAt: entries.length ? Math.max(...entries.map(e => e.updatedAt)) : null,
+    latestUpdatedAt: entries.length
+      ? Math.max(...entries.map(e => e.updatedAt))
+      : null,
   };
 }
 
-export async function clearAllMemory() {
+export async function clearAllMemory(scope: AiWorkspaceScope) {
   await Promise.all([
-    AsyncStorage.removeItem(MEMORY_KEY),
-    AsyncStorage.removeItem(PROFILE_KEY),
-    AsyncStorage.removeItem(MEMORY_EPISODE_KEYS),
+    AsyncStorage.removeItem(memoryKey(scope)),
+    AsyncStorage.removeItem(profileKey(scope)),
+    AsyncStorage.removeItem(memoryEpisodeKeysKey(scope)),
+    ...LEGACY_UNSCOPED_MEMORY_KEYS.map(key => AsyncStorage.removeItem(key)),
   ]);
 }
 
-export async function markEpisodeKeyIfNew(key: string): Promise<boolean> {
+export async function markEpisodeKeyIfNew(
+  scope: AiWorkspaceScope,
+  key: string,
+): Promise<boolean> {
   if (!key) return false;
+  await purgeLegacyUnscopedMemory();
   try {
-    const raw = await AsyncStorage.getItem(MEMORY_EPISODE_KEYS);
+    const storageKey = memoryEpisodeKeysKey(scope);
+    const raw = await AsyncStorage.getItem(storageKey);
     const prev = raw ? (JSON.parse(raw) as string[]) : [];
     if (prev.includes(key)) return false;
     const next = [key, ...prev].slice(0, 600);
-    await AsyncStorage.setItem(MEMORY_EPISODE_KEYS, JSON.stringify(next));
+    await AsyncStorage.setItem(storageKey, JSON.stringify(next));
     return true;
   } catch {
     return false;

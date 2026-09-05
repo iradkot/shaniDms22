@@ -1,0 +1,24 @@
+diff --git a/android/src/main/java/com/drpogodin/reactnativefs/ReactNativeFsModule.kt b/android/src/main/java/com/drpogodin/reactnativefs/ReactNativeFsModule.kt
+index 1d1551b2cc2880144e58aa07639abcab56a7a009..02999eb945a6cd06dd4a0da5dc937efe028e720a 100644
+--- a/android/src/main/java/com/drpogodin/reactnativefs/ReactNativeFsModule.kt
++++ b/android/src/main/java/com/drpogodin/reactnativefs/ReactNativeFsModule.kt
+@@ -480,7 +480,8 @@ class ReactNativeFsModule internal constructor(context: ReactApplicationContext)
+         var mimeTypes = emptyArray<String>()
+         if (mimeTypesArray != null) {
+           for (i in 0 until mimeTypesArray.size()) {
+-            mimeTypes += mimeTypesArray.getString(i)
++            val type = mimeTypesArray.getString(i)
++            if (type != null) mimeTypes += type
+           }
+         }
+ 
+@@ -741,7 +742,8 @@ class ReactNativeFsModule internal constructor(context: ReactApplicationContext)
+             val fileList = ArrayList<ReadableMap>()
+             val params = UploadParams()
+             for (i in 0 until files!!.size()) {
+-                fileList.add(files.getMap(i))
++                val map = files.getMap(i)
++                if (map != null) fileList.add(map)
+             }
+             params.src = url
+             params.files = fileList

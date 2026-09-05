@@ -19,7 +19,7 @@ export type StackedChartsTooltipModel = {
   bolusEvents: any[];
   carbEvents: any[];
   fullWidth: boolean;
-  maxWidthPx?: number;
+  maxWidthPx?: number | undefined;
 };
 
 export type StackedChartsTouchSession = {
@@ -29,10 +29,12 @@ export type StackedChartsTouchSession = {
 };
 
 export type StackedHomeChartsProps = {
+  /** Language used by the reusable chart labels and tooltip. */
+  locale?: 'en' | 'he' | undefined;
   bgSamples: BgSample[];
   foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
-  insulinData?: InsulinDataEntry[];
-  basalProfileData?: BasalProfile;
+  insulinData?: InsulinDataEntry[] | undefined;
+  basalProfileData?: BasalProfile | undefined;
 
   width: number;
 
@@ -51,14 +53,14 @@ export type StackedHomeChartsProps = {
    *
    * When not provided, the domain is derived from the BG sample extent.
    */
-  xDomain?: [Date, Date] | null;
+  xDomain?: [Date, Date] | null | undefined;
 
   /**
    * Optional time used when there is no active touch.
    *
    * Home uses this to anchor the tooltip to the latest BG.
    */
-  fallbackAnchorTimeMs?: number;
+  fallbackAnchorTimeMs?: number | undefined;
 
   /**
    * Shared margin for stacked charts.
@@ -80,7 +82,7 @@ export type StackedHomeChartsProps = {
   /**
    * Optional E2E selector.
    */
-  testID?: string;
+  testID?: string | undefined;
 
   /**
    * Controls where the unified tooltip is positioned.
@@ -90,10 +92,11 @@ export type StackedHomeChartsProps = {
    *   clip overflow).
    * - `top`: renders above the chart in **normal document flow** (no absolute positioning,
    *   takes up layout space — ideal for inline expanded cards like the FoodTracker).
+   * - `panel`: a persistent compact inspector; selection never shifts the plots.
    * - `none`: suppresses tooltip rendering inside this component. Use `onTooltipModelChange`
    *   to render the tooltip externally (e.g., as a Home-level overlay).
    */
-  tooltipPlacement?: 'above' | 'inside' | 'top' | 'none';
+  tooltipPlacement?: 'above' | 'inside' | 'top' | 'panel' | 'none';
 
   /**
    * Controls horizontal alignment when `tooltipPlacement="inside"`.
@@ -109,13 +112,13 @@ export type StackedHomeChartsProps = {
    * Optional max width for the tooltip container (px).
    * Useful in fullscreen landscape to avoid covering charts.
    */
-  tooltipMaxWidthPx?: number;
+  tooltipMaxWidthPx?: number | undefined;
 
   /**
    * Controls how mini charts are displayed.
    *
    * - `separate` (default): Three distinct mini charts stacked vertically.
-   * - `mixed`: Single overlaid area chart combining basal, IOB, and COB.
+   * - `mixed`: Compact aligned lanes, each with its own labelled units.
    */
   chartMode?: 'separate' | 'mixed';
 
@@ -123,13 +126,16 @@ export type StackedHomeChartsProps = {
    * Called whenever the tooltip model changes.
    * Use with `tooltipPlacement="none"` to render the tooltip externally.
    */
-  onTooltipModelChange?: (model: StackedChartsTooltipModel) => void;
+  onTooltipModelChange?:
+    | ((model: StackedChartsTooltipModel) => void)
+    | undefined;
 
   /**
    * Registers a page-level touch session while a chart touch is active.
    *
-   * Home uses this to keep updating the tooltip after ScrollView takes over
-   * vertical scrolling and the chart receives touch cancel.
+   * Released when the finger lifts, vertical scrolling begins, or touch cancels.
    */
-  onTouchSessionChange?: (session: StackedChartsTouchSession | null) => void;
+  onTouchSessionChange?:
+    | ((session: StackedChartsTouchSession | null) => void)
+    | undefined;
 };

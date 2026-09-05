@@ -1,7 +1,7 @@
 // /Trends/TrendsContainer.tsx
 
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {View, ScrollView, Text} from 'react-native';
+import {View, ScrollView, Text, type LayoutChangeEvent} from 'react-native';
 import {differenceInCalendarDays} from 'date-fns';
 import {useTheme} from 'styled-components/native';
 import {StackActions, useNavigation} from '@react-navigation/native';
@@ -43,11 +43,67 @@ import {HYPO_INVESTIGATION_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 import {LoopStatsTimeWindow} from './utils/loopModeStats';
+import {
+  readLegacyTrendsSection,
+  selectLegacyTrendsScrollTarget,
+  type LegacyTrendsRouteParams,
+  type LegacyTrendsSection,
+} from 'app/platform/native/product/legacyDestinationRoute';
 
-const Trends: React.FC = () => {
+interface TrendsProps {
+  readonly route?: {readonly params?: LegacyTrendsRouteParams};
+}
+
+const Trends: React.FC<TrendsProps> = ({route}) => {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation();
   const {language} = useAppLanguage();
+  const requestedSection = readLegacyTrendsSection(route?.params);
+  const contentScrollRef = useRef<ScrollView | null>(null);
+  const sectionOffsetsRef = useRef<
+    Partial<Record<LegacyTrendsSection, number>>
+  >({});
+  const consumedSectionRef = useRef<LegacyTrendsSection | undefined>(undefined);
+
+  const scrollToRequestedSection = useCallback(
+    (section: LegacyTrendsSection): boolean => {
+      const scrollView = contentScrollRef.current;
+      const target = selectLegacyTrendsScrollTarget(
+        requestedSection === section ? requestedSection : undefined,
+        sectionOffsetsRef.current,
+        consumedSectionRef.current,
+      );
+      if (scrollView === null || target === undefined) {
+        return false;
+      }
+
+      scrollView.scrollTo({y: target.y, animated: true});
+      consumedSectionRef.current = target.section;
+      (
+        navigation as unknown as {
+          setParams?: (params: LegacyTrendsRouteParams) => void;
+        }
+      ).setParams?.({initialSection: undefined});
+      return true;
+    },
+    [navigation, requestedSection],
+  );
+
+  const captureSectionLayout = useCallback(
+    (section: LegacyTrendsSection, event: LayoutChangeEvent) => {
+      sectionOffsetsRef.current[section] = event.nativeEvent.layout.y;
+      scrollToRequestedSection(section);
+    },
+    [scrollToRequestedSection],
+  );
+
+  useEffect(() => {
+    if (requestedSection === undefined) {
+      consumedSectionRef.current = undefined;
+      return;
+    }
+    scrollToRequestedSection(requestedSection);
+  }, [requestedSection, scrollToRequestedSection]);
 
   const [presetDays, setPresetDays] = useState<number>(7);
   const [presetEndDate, setPresetEndDate] = useState<Date | null>(null);
@@ -471,9 +527,12 @@ const Trends: React.FC = () => {
 
       {/* 6. Main content if data is present */}
       {!isLoading && !fetchError && finalMetrics.dailyDetails.length > 0 && (
-        <ScrollView removeClippedSubviews={false}>
+        <ScrollView ref={contentScrollRef} removeClippedSubviews={false}>
           {/* (a) Time In Range */}
-          <View style={{marginBottom: theme.spacing.lg - 1}}>
+          <View
+            testID="legacy-trends-section-overview"
+            onLayout={event => captureSectionLayout('overview', event)}
+            style={{marginBottom: theme.spacing.lg - 1}}>
             <SectionTitle>
               {tr(language, 'trends.keyGlucoseTrends')}
             </SectionTitle>
@@ -509,7 +568,12 @@ const Trends: React.FC = () => {
             onTimeFilterChange={setLoopTimeFilterKey}
           />
           {/* (d) AGP Summary */}
-          <View style={{marginBottom: theme.spacing.lg - 1}}>
+          <View
+            testID="legacy-trends-section-agp-daily-patterns"
+            onLayout={event =>
+              captureSectionLayout('agp-daily-patterns', event)
+            }
+            style={{marginBottom: theme.spacing.lg - 1}}>
             <SectionTitle>{tr(language, 'trends.agp')}</SectionTitle>
             <AGPSummary
               bgData={bgData}
@@ -534,20 +598,24 @@ const Trends: React.FC = () => {
           */}
 
           {/* (g) Compare with previous period */}
-          <CompareSection
-            showComparison={showComparison}
-            comparing={comparing}
-            handleCompare={() => handleCompare(rangeDays)}
-            rangeDays={rangeDays}
-            currentDateRange={{start, end}}
-            currentBgData={bgData}
-            previousBgData={previousBgData}
-            currentMetrics={finalMetrics}
-            previousMetrics={previousMetrics}
-            comparisonDateRange={comparisonDateRange}
-            changeComparisonPeriod={changeComparisonPeriod}
-            hideComparison={() => setShowComparison(false)}
-          />
+          <View
+            testID="legacy-trends-section-compare-periods"
+            onLayout={event => captureSectionLayout('compare-periods', event)}>
+            <CompareSection
+              showComparison={showComparison}
+              comparing={comparing}
+              handleCompare={() => handleCompare(rangeDays)}
+              rangeDays={rangeDays}
+              currentDateRange={{start, end}}
+              currentBgData={bgData}
+              previousBgData={previousBgData}
+              currentMetrics={finalMetrics}
+              previousMetrics={previousMetrics}
+              comparisonDateRange={comparisonDateRange}
+              changeComparisonPeriod={changeComparisonPeriod}
+              hideComparison={() => setShowComparison(false)}
+            />
+          </View>
         </ScrollView>
       )}
     </TrendsContainer>

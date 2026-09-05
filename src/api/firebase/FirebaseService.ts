@@ -1,4 +1,3 @@
-import {AuthService} from './services/AuthService';
 import {FoodService} from './services/FoodService';
 import {SportService} from './services/SportService';
 import {UserService} from './services/UserService';
@@ -8,14 +7,12 @@ import {FoodItemDTO} from 'app/types/food.types';
 import {SportItemDTO} from 'app/types/sport.types';
 
 export class FirebaseService {
-  private authService: AuthService;
   private foodService: FoodService;
   private sportService: SportService;
   private userService: UserService;
   private storageService: StorageService;
 
   constructor() {
-    this.authService = new AuthService();
     this.foodService = new FoodService();
     this.sportService = new SportService();
     this.userService = new UserService();
@@ -32,9 +29,13 @@ export class FirebaseService {
     }
   }
 
-  createUserFSData(userId: string, phoneToken: string, email?: string) {
+  async createUserFSData(
+    userId: string,
+    phoneToken: string,
+    email = '',
+  ): Promise<void> {
     try {
-      this.userService.createUserFSData(userId, phoneToken, email);
+      await this.userService.createUserFSData(userId, phoneToken, email);
     } catch (error) {
       console.error('Error creating user FS data', error);
       throw new Error('Failed to create user data');
@@ -67,7 +68,7 @@ export class FirebaseService {
 
   async getFoodItemBgData(foodItem: FoodItemDTO): Promise<BgSample[]> {
     try {
-      return await this.foodService.getFoodItemBgData(foodItem);
+      return await FoodService.getFoodItemBgData(foodItem);
     } catch (error) {
       console.error('Error fetching BG data for food item', error);
       throw new Error('Failed to fetch BG data for the specified food item');

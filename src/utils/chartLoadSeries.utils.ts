@@ -20,6 +20,17 @@ function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+/** A total needs an explicit reading or both components; missing is not zero. */
+export function getSampleIobTotal(sample: BgSample): number | null {
+  const explicitTotal = finiteNumber(sample.iob);
+  if (explicitTotal != null) {
+    return explicitTotal;
+  }
+  const bolus = finiteNumber(sample.iobBolus);
+  const basal = finiteNumber(sample.iobBasal);
+  return bolus != null && basal != null ? bolus + basal : null;
+}
+
 export function buildChartLoadSeries(
   bgSamples: BgSample[],
   xDomain: [Date, Date],
@@ -36,13 +47,13 @@ export function buildChartLoadSeries(
 
   for (const sample of bgSamples ?? []) {
     const x = sample.date;
-    if (!Number.isFinite(x) || x < startMs || x > endMs) continue;
+    if (!Number.isFinite(x) || x < startMs || x > endMs) {
+      continue;
+    }
 
-    const explicitTotal = finiteNumber(sample.iob);
     const bolus = finiteNumber(sample.iobBolus);
     const basal = finiteNumber(sample.iobBasal);
-    const splitTotal = bolus != null && basal != null ? bolus + basal : null;
-    const total = explicitTotal ?? splitTotal;
+    const total = getSampleIobTotal(sample);
 
     if (total != null) {
       iobPoints.push({x, y: total});
@@ -82,10 +93,14 @@ export function findNearestLoadPoint(
   targetMs: number | null | undefined,
   maxDistanceMs = MAX_LOAD_CURSOR_DISTANCE_MS,
 ): LoadPoint | null {
-  if (!points.length) return null;
-  if (targetMs == null) return points[points.length - 1];
+  if (!points.length) {
+    return null;
+  }
+  if (targetMs == null) {
+    return points[points.length - 1]!;
+  }
 
-  let best = points[0];
+  let best = points[0]!;
   let bestDistance = Math.abs(best.x - targetMs);
   for (const point of points) {
     const distance = Math.abs(point.x - targetMs);

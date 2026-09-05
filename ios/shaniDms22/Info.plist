@@ -37,6 +37,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>ShaniBackendBaseURL</key>
+	<string>$(SHANI_BACKEND_BASE_URL)</string>
+	<key>ShaniFirestoreRulesSchemaVersion</key>
+	<string>$(FIRESTORE_RULES_SCHEMA_VERSION)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 	 <!-- Do not change NSAllowsArbitraryLoads to true, or you will risk app rejection! -->

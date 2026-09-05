@@ -15,6 +15,7 @@ import {withSharedAiContext} from 'app/services/llm/sharedAiContext';
 import {AI_ANALYST_SYSTEM_PROMPT} from 'app/services/llm/systemPrompts';
 import {createLlmProvider} from 'app/services/llm/llmClient';
 import {LlmChatMessage} from 'app/services/llm/llmTypes';
+import {analyzeMealImageViaProxy} from 'app/services/llm/shaniLlmProxy';
 import {buildHypoDetectiveContext} from 'app/services/aiAnalyst/hypoDetectiveContextBuilder';
 import {runAiAnalystTool} from 'app/services/aiAnalyst/aiAnalystLocalTools';
 import {
@@ -30,6 +31,10 @@ import {
   upsertAiAnalystConversationSnapshot,
 } from 'app/services/aiAnalyst/aiAnalystHistory';
 import {addMemoryEntry} from 'app/services/aiMemory/aiMemoryStore';
+import {useActiveAiWorkspaceScope} from 'app/services/aiMemory/useActiveAiWorkspaceScope';
+import {useAiWorkspaceIsolationBoundary} from 'app/services/aiAnalyst/useAiWorkspaceIsolationBoundary';
+import {buildLoopAdvisorOpening} from 'app/services/aiAnalyst/loopAdvisorOpening';
+import {guardAssistantOutput} from 'app/services/aiAnalyst/assistantOutputGuard';
 import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
 
 import {ScreenState, AnalystMode, AiAnalystEngine, EvidenceRequest, MissionKey, CompactKpi} from '../types';
@@ -48,7 +53,6 @@ import {
   LOOP_SETTINGS_MAX_OUTPUT_TOKENS,
   DEFAULT_TEMPERATURE,
   USER_BEHAVIOR_TEMPERATURE,
-  LOOP_SETTINGS_TEMPERATURE,
   SCROLL_DELAY_MS,
   MAX_EVENTS_WITH_DATES,
   MAX_EVENTS_DEFAULT,
@@ -77,12 +81,23 @@ import {
 // Hook
 // ---------------------------------------------------------------------------
 
+const modelTemperatureOptions = (model: string, defaultTemperature = DEFAULT_TEMPERATURE) => {
+  const temperature = temperatureForModel(model, defaultTemperature);
+  return temperature === undefined ? {} : {temperature};
+};
+
 export function useAiAnalystEngine(): AiAnalystEngine {
   const theme = useTheme() as ThemeType;
   const navigation = useNavigation<any>();
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
   const {language} = useAppLanguage();
+  const aiWorkspaceScope = useActiveAiWorkspaceScope();
+  const aiWorkspaceIdentity = aiWorkspaceScope
+    ? `${aiWorkspaceScope.productUserId}\n${aiWorkspaceScope.workspaceId}`
+    : null;
+  const currentWorkspaceIdentityRef = useRef(aiWorkspaceIdentity);
+  currentWorkspaceIdentityRef.current = aiWorkspaceIdentity;
 
   const hasKey = (aiSettings.apiKey ?? '').trim().length > 0;
 
@@ -151,6 +166,37 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   const activeMissionRef = useRef<MissionKey>('openChat');
 
   const scrollRef = useRef<ScrollView>(null);
+
+  const abortForWorkspaceChange = useCallback(() => {
+    runSeqRef.current += 1;
+    try { abortRef.current?.abort?.(); } catch {}
+    abortRef.current = null;
+  }, []);
+
+  const resetForWorkspaceChange = useCallback(() => {
+    Keyboard.dismiss();
+    setUiMessages([]);
+    setLlmMessages([]);
+    setSessionDataUsed([]);
+    setPendingMealImage(null);
+    setInput('');
+    setIsBusy(false);
+    setProgressText('');
+    setErrorText(null);
+    setCompactKpi(null);
+    setConversationId(null);
+    setHistoryItems([]);
+    setHistoryBusy(false);
+    setAnalystMode(null);
+    activeMissionRef.current = 'openChat';
+    setState(hasKey ? {mode: 'dashboard'} : {mode: 'locked'});
+  }, [hasKey]);
+
+  useAiWorkspaceIsolationBoundary({
+    scope: aiWorkspaceScope,
+    abortActive: abortForWorkspaceChange,
+    resetSession: resetForWorkspaceChange,
+  });
 
   // ── Markdown config (memoised) ──────────────────────────────────────────
   const markdownItInstance = useMemo(() => createMarkdownItInstance(), []);
@@ -225,6 +271,11 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     };
   }, [trendArrowFromDirection]);
 
+  const sanitizeAssistantToneAndAvailability = useCallback(
+    (text: string): string => guardAssistantOutput({text, language}),
+    [language],
+  );
+
   // ====================================================================
   // Navigation & persistence helpers
   // ====================================================================
@@ -234,28 +285,38 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   }, [navigation]);
 
   const refreshHistory = useCallback(async () => {
+    if (!aiWorkspaceScope) {
+      setHistoryItems([]);
+      setHistoryBusy(false);
+      return;
+    }
+    const requestedWorkspaceIdentity = aiWorkspaceIdentity;
     setHistoryBusy(true);
     try {
-      const items = await loadAiAnalystHistory();
-      setHistoryItems(items);
+      const items = await loadAiAnalystHistory(aiWorkspaceScope);
+      if (currentWorkspaceIdentityRef.current === requestedWorkspaceIdentity) {
+        setHistoryItems(items);
+      }
     } finally {
-      setHistoryBusy(false);
+      if (currentWorkspaceIdentityRef.current === requestedWorkspaceIdentity) {
+        setHistoryBusy(false);
+      }
     }
-  }, []);
+  }, [aiWorkspaceIdentity, aiWorkspaceScope]);
 
   const persistHistorySnapshot = useCallback(
     async (nextMessages: LlmChatMessage[]) => {
-      if (!conversationId) return;
+      if (!aiWorkspaceScope || !conversationId) return;
       const mission = state.mode === 'mission' ? state.mission : undefined;
-      await upsertAiAnalystConversationSnapshot({
+      await upsertAiAnalystConversationSnapshot(aiWorkspaceScope, {
         id: conversationId,
-        mission,
+        ...(mission !== undefined ? {mission} : {}),
         messages: (nextMessages ?? [])
           .filter(m => m.role === 'user' || m.role === 'assistant')
           .map(m => ({role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content})),
       });
     },
-    [conversationId, state],
+    [aiWorkspaceScope, conversationId, state],
   );
 
   const recordDataUsed = useCallback((name: string, toolResult: any) => {
@@ -352,15 +413,18 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   // Mission starters
   // ====================================================================
 
-  const startOpenChatInternal = useCallback(async (contextPrompt?: string) => {
-    if (!provider) return;
+  const startOpenChatInternal = useCallback(async (
+    contextPrompt?: string,
+    mission: 'openChat' | 'mealAnalysis' = 'openChat',
+  ) => {
+    if (!provider || !aiWorkspaceScope) return;
     const {runId, signal, conversationId: nextId} = initMission(language === 'he' ? 'מכין הקשר…' : 'Preparing context…', null);
 
     try {
       const [cgmResult, insulinResult, profileResult] = await Promise.all([
-        runAiAnalystTool('getCgmSamples', {rangeDays: 14, maxSamples: 400}),
-        runAiAnalystTool('getInsulinSummary', {rangeDays: 14}),
-        runAiAnalystTool('getCurrentProfileSettings', {}),
+        runAiAnalystTool(aiWorkspaceScope, 'getCgmSamples', {rangeDays: 14, maxSamples: 400}),
+        runAiAnalystTool(aiWorkspaceScope, 'getInsulinSummary', {rangeDays: 14}),
+        runAiAnalystTool(aiWorkspaceScope, 'getCurrentProfileSettings', {}),
       ]);
 
       recordDataUsed('getCgmSamples', cgmResult);
@@ -373,8 +437,8 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
       const contextualSection = contextPrompt?.trim()
         ? language === 'he'
-          ? `\n\nהקשר מהמלצה במסך הבית:\n${contextPrompt.trim()}\n\nתתחיל מלהתייחס להקשר הזה לפני שאלות המשך.`
-          : `\n\nContext from Home recommendation:\n${contextPrompt.trim()}\n\nStart by addressing this specific context before asking follow-up questions.`
+          ? `\n\nהקשר גלוי שנבחר ב־ShaniDms:\n${contextPrompt.trim()}\n\nהתייחס להקשר הזה לפני שאלות המשך.`
+          : `\n\nVisible context selected in ShaniDms:\n${contextPrompt.trim()}\n\nAddress this context before asking follow-up questions.`
         : '';
 
       const languageHint =
@@ -382,11 +446,17 @@ export function useAiAnalystEngine(): AiAnalystEngine {
           ? 'חשוב: כתוב למשתמש בעברית בלבד.'
           : 'Important: respond to the user in English only.';
 
+      const missionOpening =
+        mission === 'mealAnalysis'
+          ? language === 'he'
+            ? `משימה: ניתוח ארוחות\n\nהתחל בתצפיות עובדתיות על ארוחות והקשר הסוכר שלהן. אם חסר הקשר, שאל שאלה קצרה אחת.\n`
+            : `Mission: Meal Analysis\n\nStart with factual observations about meals and their glucose context. Ask one concise question when context is missing.\n`
+          : language === 'he'
+            ? `משימה: צ׳אט פתוח\n\nהתחל בברכה קצרה וידידותית ושאלה קצרה אחת על מה המשתמש רוצה להתמקד עכשיו.\n`
+            : `Mission: Open Chat\n\nStart with a short, friendly greeting and one concise question asking what the user wants to focus on now.\n`;
+
       const userPrompt =
-        (language === 'he' ? `משימה: צ׳אט פתוח\n\n` : `Mission: Open Chat\n\n`) +
-        (language === 'he'
-          ? `התחל בברכה קצרה וידידותית ושאלה קצרה אחת על מה המשתמש רוצה להתמקד עכשיו.\n`
-          : `Start with a short, friendly greeting and one concise question asking what the user wants to focus on now.\n`) +
+        missionOpening +
         (language === 'he'
           ? `אפשר לענות על שאלות מגוונות על סוכרת, אבל לבסס המלצות על הנתונים הזמינים.\n\n`
           : `You can answer broad and random diabetes questions, but ground recommendations in available data.\n\n`) +
@@ -400,13 +470,14 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       setLlmMessages(baseLlmMessages);
 
       const {finalText, llmMessages: updatedMessages} = await runLlmToolLoop({
+        workspaceScope: aiWorkspaceScope,
         provider,
         model: aiSettings.openAiModel,
         systemPrompt: buildSystemPrompt(null, glucoseSettings, language, aiSettings.personality),
         initialMessages: baseLlmMessages,
         maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
         maxOutputTokens: maxOutputTokensForModel(aiSettings.openAiModel, DEFAULT_MAX_OUTPUT_TOKENS),
-        temperature: temperatureForModel(aiSettings.openAiModel, DEFAULT_TEMPERATURE),
+        ...modelTemperatureOptions(aiSettings.openAiModel),
         abortSignal: signal,
         callbacks: {
           onToolStart: name => setProgressText(`Running ${name}…`),
@@ -423,14 +494,15 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       setUiMessages([assistantMessage]);
       setLlmMessages(updatedMessages);
 
-      await upsertAiAnalystConversationSnapshot({
+      await upsertAiAnalystConversationSnapshot(aiWorkspaceScope, {
         id: nextId,
-        mission: 'openChat',
+        mission,
         messages: [{role: 'assistant', content: assistantMessage.content}],
       });
+      if (runSeqRef.current !== runId) return;
 
-      activeMissionRef.current = 'openChat';
-      setState({mode: 'mission', mission: 'openChat'});
+      activeMissionRef.current = mission;
+      setState({mode: 'mission', mission});
       setProgressText('');
       scrollToEnd();
     } catch (e: any) {
@@ -440,6 +512,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     }
   }, [
     provider,
+    aiWorkspaceScope,
     aiSettings.openAiModel,
     aiSettings.personality,
     glucoseSettings,
@@ -461,8 +534,17 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     await startOpenChatInternal(contextPrompt);
   }, [startOpenChatInternal]);
 
+  const startMealAnalysis = useCallback(async (contextPrompt?: string) => {
+    const visibleContext =
+      contextPrompt?.trim() ||
+      (language === 'he'
+        ? 'ניתוח ארוחות · שיחה על תצפיות סוכר שחוזרות סביב ארוחות.'
+        : 'Meal analysis · Discuss repeated glucose observations around meals.');
+    await startOpenChatInternal(visibleContext, 'mealAnalysis');
+  }, [language, startOpenChatInternal]);
+
   const startHypoDetective = useCallback(async () => {
-    if (!provider) return;
+    if (!provider || !aiWorkspaceScope) return;
     const {runId, signal, conversationId: nextId} = initMission('Starting…', null);
 
     try {
@@ -486,13 +568,14 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       setLlmMessages(baseLlmMessages);
 
       const {finalText, llmMessages: updatedMessages} = await runLlmToolLoop({
+        workspaceScope: aiWorkspaceScope,
         provider,
         model: aiSettings.openAiModel,
         systemPrompt: AI_ANALYST_SYSTEM_PROMPT + '\n' + DEFAULT_TOOL_SYSTEM_PROMPT,
         initialMessages: baseLlmMessages,
         maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
         maxOutputTokens: maxOutputTokensForModel(aiSettings.openAiModel, DEFAULT_MAX_OUTPUT_TOKENS),
-        temperature: temperatureForModel(aiSettings.openAiModel, DEFAULT_TEMPERATURE),
+        ...modelTemperatureOptions(aiSettings.openAiModel),
         abortSignal: signal,
         callbacks: {
           onToolStart: name => setProgressText(`Running ${name}…`),
@@ -508,11 +591,12 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       setUiMessages([assistantMessage]);
       setLlmMessages(updatedMessages);
 
-      await upsertAiAnalystConversationSnapshot({
+      await upsertAiAnalystConversationSnapshot(aiWorkspaceScope, {
         id: nextId,
         mission: 'hypoDetective',
         messages: [{role: 'assistant', content: assistantMessage.content}],
       });
+      if (runSeqRef.current !== runId) return;
 
       activeMissionRef.current = 'hypoDetective';
       setState({mode: 'mission', mission: 'hypoDetective'});
@@ -523,15 +607,15 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } finally {
       finaliseMission(runId);
     }
-}, [provider, glucoseSettings.severeHypo, aiSettings.openAiModel, aiSettings.personality, initMission, handleMissionError, finaliseMission, scrollToEnd, sanitizeAssistantToneAndAvailability]);
+}, [provider, aiWorkspaceScope, glucoseSettings.severeHypo, aiSettings.openAiModel, initMission, handleMissionError, finaliseMission, scrollToEnd, sanitizeAssistantToneAndAvailability]);
 
   const startUserBehavior = useCallback(async () => {
-    if (!provider) return;
+    if (!provider || !aiWorkspaceScope) return;
     const {runId, signal, conversationId: nextId} = initMission('Starting User Behavior Analysis…', 'userBehavior');
 
     try {
       setProgressText('Loading CGM data…');
-      const cgmResult = await runAiAnalystTool('getCgmSamples', {
+      const cgmResult = await runAiAnalystTool(aiWorkspaceScope, 'getCgmSamples', {
         rangeDays: USER_BEHAVIOR_RANGE_DAYS,
         maxSamples: USER_BEHAVIOR_MAX_SAMPLES,
       });
@@ -540,11 +624,11 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       if (runSeqRef.current !== runId) return;
 
       setProgressText('Loading treatments…');
-      const treatmentsResult = await runAiAnalystTool('getTreatments', {rangeDays: USER_BEHAVIOR_RANGE_DAYS});
+      const treatmentsResult = await runAiAnalystTool(aiWorkspaceScope, 'getTreatments', {rangeDays: USER_BEHAVIOR_RANGE_DAYS});
       recordDataUsed('getTreatments', treatmentsResult);
       if (runSeqRef.current !== runId) return;
 
-      const insulinResult = await runAiAnalystTool('getInsulinSummary', {rangeDays: USER_BEHAVIOR_RANGE_DAYS});
+      const insulinResult = await runAiAnalystTool(aiWorkspaceScope, 'getInsulinSummary', {rangeDays: USER_BEHAVIOR_RANGE_DAYS});
       recordDataUsed('getInsulinSummary', insulinResult);
       if (runSeqRef.current !== runId) return;
 
@@ -567,7 +651,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const res = await provider.sendChat({
         model: aiSettings.openAiModel,
         messages: [{role: 'system', content: systemPrompt}, ...baseLlmMessages],
-        temperature: temperatureForModel(aiSettings.openAiModel, USER_BEHAVIOR_TEMPERATURE),
+        ...modelTemperatureOptions(aiSettings.openAiModel, USER_BEHAVIOR_TEMPERATURE),
         maxOutputTokens: maxOutputTokensForModel(aiSettings.openAiModel, USER_BEHAVIOR_MAX_OUTPUT_TOKENS),
         abortSignal: signal,
       });
@@ -581,11 +665,12 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       setUiMessages([assistantMessage]);
       setLlmMessages([...baseLlmMessages, assistantMessage]);
 
-      await upsertAiAnalystConversationSnapshot({
+      await upsertAiAnalystConversationSnapshot(aiWorkspaceScope, {
         id: nextId,
         mission: 'userBehavior',
         messages: [{role: 'assistant', content: assistantMessage.content}],
       });
+      if (runSeqRef.current !== runId) return;
 
       activeMissionRef.current = 'userBehavior';
       setState({mode: 'mission', mission: 'userBehavior'});
@@ -596,65 +681,29 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } finally {
       finaliseMission(runId);
     }
-}, [provider, aiSettings.openAiModel, aiSettings.personality, glucoseSettings, language, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd, deriveCompactKpiFromCgmResult, sanitizeAssistantToneAndAvailability]);
+}, [provider, aiWorkspaceScope, aiSettings.openAiModel, aiSettings.personality, glucoseSettings, language, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd, deriveCompactKpiFromCgmResult, sanitizeAssistantToneAndAvailability]);
 
   const startLoopSettingsAdvisor = useCallback(async () => {
-    if (!provider) return;
-    const {runId, signal, conversationId: nextId} = initMission('Starting Loop Settings Advisor…', 'loopSettings');
+    if (!aiWorkspaceScope) return;
+    const {runId, conversationId: nextId} = initMission(
+      language === 'he' ? 'פותח יועץ Loop…' : 'Starting Loop Advisor…',
+      'loopSettings',
+    );
 
     try {
-      setProgressText('Loading profile data…');
-      const profileResult = await runAiAnalystTool('getPumpProfile', {});
-      recordDataUsed('getPumpProfile', profileResult);
-      console.log('[LoopSettingsAdvisor] Profile loaded:', profileResult.ok ? 'success' : 'failed');
-      if (runSeqRef.current !== runId) return;
-
-      const currentSettingsResult = await runAiAnalystTool('getCurrentProfileSettings', {});
-      recordDataUsed('getCurrentProfileSettings', currentSettingsResult);
-      if (runSeqRef.current !== runId) return;
-
-      setProgressText('Asking AI Analyst…');
-
-      const userPrompt =
-        `Mission: Loop Settings Advisor\n\n` +
-        `I'd like help optimizing my Loop settings.\n\n` +
-        `Disclosure: ${DISCLOSURE_TEXT}\n\n` +
-        `Current Pump Profile (for your reference, don't mention specifics yet):\n${JSON.stringify(profileResult.ok ? profileResult.result : 'Profile unavailable')}\n\n` +
-        `Current Profile Settings (USE THESE to fill Current Value fields later):\n${JSON.stringify(
-          currentSettingsResult.ok ? currentSettingsResult.result : 'Settings unavailable',
-        )}\n\n` +
-        `IMPORTANT: Start with a simple, friendly greeting and ask ONE open-ended question like "What's been bothering you lately?" or "What would you like to improve?"\n` +
-        `DO NOT overwhelm with multiple questions in the first message.\n` +
-        `After I respond, you can ask 2-3 focused follow-up questions, then use tools to analyze.\n` +
-        `Do NOT ask me whether I changed settings; you can verify that yourself via getSettingsChangeHistory/getProfileChangeHistory.`;
-
-      const baseLlmMessages: LlmChatMessage[] = [{role: 'user', content: userPrompt}];
-      setLlmMessages(baseLlmMessages);
-
-      const systemPrompt = buildSystemPrompt('loopSettings', glucoseSettings, language, aiSettings.personality);
-
-      const res = await provider.sendChat({
-        model: aiSettings.openAiModel,
-        messages: [{role: 'system', content: systemPrompt}, ...baseLlmMessages],
-        temperature: temperatureForModel(aiSettings.openAiModel, LOOP_SETTINGS_TEMPERATURE),
-        maxOutputTokens: maxOutputTokensForModel(aiSettings.openAiModel, DEFAULT_MAX_OUTPUT_TOKENS),
-        abortSignal: signal,
-      });
-      if (runSeqRef.current !== runId) return;
-
-      const finalText = res.content?.trim?.() ? res.content.trim() : String(res.content ?? '');
       const assistantMessage: LlmChatMessage = {
         role: 'assistant',
-        content: sanitizeAssistantToneAndAvailability(finalText),
+        content: buildLoopAdvisorOpening(language),
       };
       setUiMessages([assistantMessage]);
-      setLlmMessages([...baseLlmMessages, assistantMessage]);
+      setLlmMessages([assistantMessage]);
 
-      await upsertAiAnalystConversationSnapshot({
+      await upsertAiAnalystConversationSnapshot(aiWorkspaceScope, {
         id: nextId,
         mission: 'loopSettings',
         messages: [{role: 'assistant', content: assistantMessage.content}],
       });
+      if (runSeqRef.current !== runId) return;
 
       activeMissionRef.current = 'loopSettings';
       setState({mode: 'mission', mission: 'loopSettings'});
@@ -665,7 +714,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } finally {
       finaliseMission(runId);
     }
-}, [provider, aiSettings.openAiModel, aiSettings.personality, glucoseSettings, language, recordDataUsed, initMission, handleMissionError, finaliseMission, scrollToEnd, sanitizeAssistantToneAndAvailability]);
+}, [aiWorkspaceScope, language, initMission, handleMissionError, finaliseMission, scrollToEnd]);
 
   // ====================================================================
   // Follow-up (shared across all missions)
@@ -690,9 +739,11 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const thresholdMgdl = isHyper ? glucoseSettings.hyper : glucoseSettings.hypo;
       const maxEvents = wantsCountWithDates(text) ? MAX_EVENTS_WITH_DATES : MAX_EVENTS_DEFAULT;
 
+      if (!aiWorkspaceScope) return messages;
+
       setProgressText('Running getGlycemicEvents…');
       const toolResult = await withTimeout(
-        runAiAnalystTool('getGlycemicEvents', {kind, rangeDays, thresholdMgdl, maxEvents}),
+        runAiAnalystTool(aiWorkspaceScope, 'getGlycemicEvents', {kind, rangeDays, thresholdMgdl, maxEvents}),
         TOOL_TIMEOUT_MS,
         'getGlycemicEvents',
       );
@@ -705,7 +756,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         {role: 'user', content: `Tool result (getGlycemicEvents):\n${JSON.stringify(toolResult)}`},
       ];
     },
-    [glucoseSettings.hyper, glucoseSettings.hypo],
+    [aiWorkspaceScope, glucoseSettings.hyper, glucoseSettings.hypo],
   );
 
   /** Keep only recent context to reduce latency/cost while preserving tool results. */
@@ -784,58 +835,6 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     return assistantText;
   }, []);
 
-  const sanitizeAssistantToneAndAvailability = useCallback((text: string): string => {
-    if (!text) return text;
-
-    let out = text;
-
-    const mentionsCarbRatio = /carb ratio|carbohydrate ratio|cr\b/i.test(out);
-    const hasPercent = /\b\d{1,2}\s*%/.test(out);
-    const hasRatioExample = /\b\d+\s*:\s*\d+(\.\d+)?\b/.test(out);
-    if (mentionsCarbRatio && !hasPercent && !hasRatioExample) {
-      out += '\n\nPractical starting point: consider a conservative carb-ratio adjustment of about 5-10%, then monitor meal responses for 3-7 days.';
-    }
-
-    out = out.replace(
-      /\b(discuss|review|check)\b[^.\n]*(clinician|doctor|care team|healthcare provider)[^.\n]*\.?/gi,
-      'review this in-app and adjust your self-management plan based on the data shown.',
-    );
-
-    const hasEvidenceTag = /\[\[\s*evidence\s*:/i.test(out);
-    const saysNoData =
-      /don['’]t have[^.\n]*(data|agp|time in range|tir|absorption)/i.test(out) ||
-      /data (is|are) unavailable/i.test(out) ||
-      /unable to (find|access).*(data|agp|tir|absorption)/i.test(out);
-
-    if (hasEvidenceTag && saysNoData) {
-      out = out.replace(
-        /(i currently don['’]t have[^.\n]*\.?|you may want to check[^.\n]*\.?|data (is|are) unavailable[^.\n]*\.?)/gi,
-        '',
-      );
-      out = `I pulled your data and prepared the requested view.\n\n${out}`.replace(/\n{3,}/g, '\n\n').trim();
-    }
-
-    // Guardrail: prevent dumping raw tool JSON/sample arrays in chat output.
-    const lines = out.split('\n');
-    const rawLinePattern = /^\s*"?(tMs|mgdl|iobU|cobG|samples|dataUsed)"?\s*:/;
-    const jsonScaffoldPattern = /^\s*[\[\]{}],?\s*$/;
-    let removed = 0;
-    const kept = lines.filter(line => {
-      const isRaw = rawLinePattern.test(line) || jsonScaffoldPattern.test(line);
-      if (isRaw) removed += 1;
-      return !isRaw;
-    });
-
-    if (removed >= 12) {
-      out = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-      out += language === 'he'
-        ? '\n\nהערה: הסרתי פלט RAW ארוך של דגימות כדי לשמור על תשובה קריאה.'
-        : '\n\nNote: long raw sample output was hidden to keep this answer readable.';
-    }
-
-    return out;
-  }, [language]);
-
   /** Follow-up error handler (rolls back user message for retry). */
   const handleFollowUpError = useCallback(
     (error: any, originalText: string, _runId: number) => {
@@ -872,7 +871,10 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   );
 
   const analyzePendingMealImage = useCallback(
-    async (promptText: string): Promise<string | null> => {
+    async (
+      promptText: string,
+      abortSignal?: AbortSignal,
+    ): Promise<string | null> => {
       const image = pendingMealImage;
       const apiKey = (aiSettings.apiKey ?? '').trim();
       if (!image || !apiKey) return null;
@@ -887,56 +889,22 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         {language, personality: aiSettings.personality},
       );
 
-      const payload: any = {
+      const out = await analyzeMealImageViaProxy({
+        provider: 'openai',
+        e2eApiKey: apiKey,
         model: visionModel,
-        input: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'input_text',
-                text: imageInstruction,
-              },
-              {
-                type: 'input_image',
-                image_url: `data:${image.mimeType};base64,${image.base64}`,
-              },
-            ],
-          },
-        ],
-        max_output_tokens: 350,
-      };
-
-      const res = await fetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        instruction: imageInstruction,
+        mimeType: image.mimeType,
+        base64: image.base64,
+        ...(abortSignal !== undefined ? {abortSignal} : {}),
       });
-
-      const rawText = await res.text();
-      let rawJson: any = null;
-      try {
-        rawJson = rawText ? JSON.parse(rawText) : null;
-      } catch {
-        rawJson = null;
-      }
-
-      if (!res.ok) {
-        const msg = rawJson?.error?.message || `Vision request failed (${res.status})`;
-        throw new Error(msg);
-      }
-
-      const out = typeof rawJson?.output_text === 'string' ? rawJson.output_text.trim() : '';
       return out || null;
     },
-    [pendingMealImage, aiSettings.apiKey, aiSettings.openAiModel, aiSettings.personality, language],
+    [pendingMealImage, aiSettings.apiKey, aiSettings.personality, language],
   );
 
   const sendFollowUp = useCallback(async () => {
-    if (!provider) return;
+    if (!provider || !aiWorkspaceScope) return;
     const trimmed = input.trim();
     if (!trimmed) return;
 
@@ -957,7 +925,8 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
     try {
       try {
-        const kpiRes = await runAiAnalystTool('getCgmSamples', {rangeDays: 1, maxSamples: 80, includeDeviceStatus: true});
+        const kpiRes = await runAiAnalystTool(aiWorkspaceScope, 'getCgmSamples', {rangeDays: 1, maxSamples: 80, includeDeviceStatus: true});
+        if (runSeqRef.current !== runId) return;
         if (kpiRes?.ok) setCompactKpi(deriveCompactKpiFromCgmResult(kpiRes.result));
       } catch {}
 
@@ -965,7 +934,8 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         let clearPendingImage = false;
         try {
           setProgressText(language === 'he' ? 'מנתח תמונת ארוחה…' : 'Analyzing meal photo…');
-          const imageAnalysis = await analyzePendingMealImage(trimmed);
+          const imageAnalysis = await analyzePendingMealImage(trimmed, signal);
+          if (runSeqRef.current !== runId) return;
           if (imageAnalysis) {
             workingLlmMessages = [
               ...workingLlmMessages,
@@ -980,6 +950,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
             clearPendingImage = true;
           }
         } catch (e: any) {
+          if (runSeqRef.current !== runId) return;
           const errText = String(e?.message ?? 'unknown error');
           setErrorText(
             language === 'he'
@@ -1028,12 +999,13 @@ export function useAiAnalystEngine(): AiAnalystEngine {
             ? 'userBehavior'
             : 'openChat';
       const commonLoopParams = {
+        workspaceScope: aiWorkspaceScope,
         provider,
         model: aiSettings.openAiModel,
         initialMessages: contextWindowMessages,
         maxToolCalls,
         maxOutputTokens,
-        temperature: temperatureForModel(aiSettings.openAiModel, DEFAULT_TEMPERATURE),
+        ...modelTemperatureOptions(aiSettings.openAiModel),
         abortSignal: signal,
         callbacks,
       };
@@ -1049,6 +1021,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         finalText = orchestrated.finalText;
         updatedMessages = orchestrated.llmMessages;
       } catch {
+        if (runSeqRef.current !== runId || signal?.aborted) {return;}
         const legacy = await runLlmToolLoop({
           ...commonLoopParams,
           systemPrompt,
@@ -1081,7 +1054,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       finaliseMission(runId);
     }
   }, [
-    provider, input, llmMessages, aiSettings.openAiModel, aiSettings.personality, analystMode,
+    provider, aiWorkspaceScope, input, llmMessages, aiSettings.openAiModel, aiSettings.personality, analystMode,
     glucoseSettings, persistHistorySnapshot, recordDataUsed, beginRun,
     finaliseMission, scrollToEnd, maybePreFetchGlycemicEvents, handleFollowUpError,
     buildContextWindow, maybeInjectEvidenceTag, deriveCompactKpiFromCgmResult,
@@ -1093,37 +1066,55 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   // ====================================================================
 
   const openHistory = useCallback(async () => {
+    const requestedWorkspaceIdentity = aiWorkspaceIdentity;
     await refreshHistory();
-    setState({mode: 'history'});
-  }, [refreshHistory]);
+    if (currentWorkspaceIdentityRef.current === requestedWorkspaceIdentity) {
+      setState({mode: 'history'});
+    }
+  }, [aiWorkspaceIdentity, refreshHistory]);
 
   const clearAllHistory = useCallback(async () => {
+    if (!aiWorkspaceScope) return;
+    const requestedWorkspaceIdentity = aiWorkspaceIdentity;
     setHistoryBusy(true);
     try {
-      await clearAiAnalystHistory();
+      await clearAiAnalystHistory(aiWorkspaceScope);
       await refreshHistory();
     } finally {
-      setHistoryBusy(false);
+      if (currentWorkspaceIdentityRef.current === requestedWorkspaceIdentity) {
+        setHistoryBusy(false);
+      }
     }
-  }, [refreshHistory]);
+  }, [aiWorkspaceIdentity, aiWorkspaceScope, refreshHistory]);
 
   const deleteConversation = useCallback(
     async (id: string) => {
+      if (!aiWorkspaceScope) return;
+      const requestedWorkspaceIdentity = aiWorkspaceIdentity;
       setHistoryBusy(true);
       try {
-        await deleteAiAnalystConversation(id);
+        await deleteAiAnalystConversation(aiWorkspaceScope, id);
         await refreshHistory();
-        setState({mode: 'history'});
+        if (currentWorkspaceIdentityRef.current === requestedWorkspaceIdentity) {
+          setState({mode: 'history'});
+        }
       } finally {
-        setHistoryBusy(false);
+        if (currentWorkspaceIdentityRef.current === requestedWorkspaceIdentity) {
+          setHistoryBusy(false);
+        }
       }
     },
-    [refreshHistory],
+    [aiWorkspaceIdentity, aiWorkspaceScope, refreshHistory],
   );
 
   const resumeConversation = useCallback(
     async (id: string) => {
-      const items = historyItems.length ? historyItems : await loadAiAnalystHistory();
+      if (!aiWorkspaceScope) return;
+      const requestedWorkspaceIdentity = aiWorkspaceIdentity;
+      const items = historyItems.length
+        ? historyItems
+        : await loadAiAnalystHistory(aiWorkspaceScope);
+      if (currentWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) return;
       const selected = (items ?? []).find((x: any) => x.id === id);
       if (!selected) return;
 
@@ -1131,7 +1122,8 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         selected?.mission === 'hypoDetective' ||
         selected?.mission === 'userBehavior' ||
         selected?.mission === 'loopSettings' ||
-        selected?.mission === 'openChat'
+        selected?.mission === 'openChat' ||
+        selected?.mission === 'mealAnalysis'
           ? (selected.mission as MissionKey)
           : 'openChat';
 
@@ -1150,7 +1142,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       activeMissionRef.current = mission;
       scrollToEnd();
     },
-    [historyItems, scrollToEnd],
+    [aiWorkspaceIdentity, aiWorkspaceScope, historyItems, scrollToEnd],
   );
 
   const imageAssetToBase64 = useCallback(async (asset: any): Promise<{base64: string; mimeType: string} | null> => {
@@ -1185,6 +1177,8 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   }, []);
 
   const onAttachMealImage = useCallback(async () => {
+    if (!aiWorkspaceScope) return;
+    const requestedWorkspaceIdentity = aiWorkspaceIdentity;
     try {
       const res = await launchImageLibrary({
         mediaType: 'photo',
@@ -1199,6 +1193,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       const fileName = asset?.fileName ?? null;
       const fileSize = asset?.fileSize ?? null;
       const prepared = await imageAssetToBase64(asset);
+      if (currentWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) return;
       const base64 = (prepared?.base64 ?? '').trim();
       const mimeType = (prepared?.mimeType ?? asset?.type ?? 'image/jpeg').trim() || 'image/jpeg';
 
@@ -1214,7 +1209,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
       setPendingMealImage({base64, mimeType, fileName, fileSize, uri});
 
-      await addMemoryEntry({
+      await addMemoryEntry(aiWorkspaceScope, {
         type: 'episode',
         tags: ['meal', 'photo_input', 'user_provided'],
         textSummary: language === 'he' ? 'המשתמש צירף תמונת ארוחה לניתוח.' : 'User attached a meal photo for analysis.',
@@ -1223,6 +1218,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         confidence: 0.9,
         expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
       });
+      if (currentWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) return;
 
       setInput(
         language === 'he'
@@ -1232,12 +1228,13 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     } catch {
       // no-op
     }
-  }, [language, imageAssetToBase64]);
+  }, [aiWorkspaceIdentity, aiWorkspaceScope, language, imageAssetToBase64]);
 
   const onAssistantFeedback = useCallback(
     async ({content, helpful}: {content: string; helpful: boolean}) => {
       try {
-        await addMemoryEntry({
+        if (!aiWorkspaceScope) return;
+        await addMemoryEntry(aiWorkspaceScope, {
           type: 'chat_summary',
           tags: ['assistant_feedback', helpful ? 'helpful' : 'not_helpful'],
           textSummary: content,
@@ -1254,7 +1251,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
         // no-op
       }
     },
-    [state],
+    [aiWorkspaceScope, state],
   );
 
   useEffect(() => {
@@ -1332,6 +1329,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     resumeConversation,
     startOpenChat,
     startOpenChatWithContext,
+    startMealAnalysis,
     startHypoDetective,
     startUserBehavior,
     startLoopSettingsAdvisor,

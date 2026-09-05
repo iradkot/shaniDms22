@@ -27,58 +27,50 @@ object GlucoseSyncScheduler {
     .build()
 
   fun configure(context: Context, baseUrl: String?, apiSecretSha1: String?, enabled: Boolean) {
-    val prefs = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
-    val hasLiveModePreference = prefs.contains(GlucoseSyncWorker.KEY_LIVE_MODE)
-
-    val editor = prefs.edit()
-      .putString(GlucoseSyncWorker.KEY_BASE_URL, baseUrl?.trim())
-      .putString(GlucoseSyncWorker.KEY_API_SECRET_SHA1, apiSecretSha1?.trim())
-      .putBoolean(GlucoseSyncWorker.KEY_ENABLED, enabled)
-
-    if (!hasLiveModePreference) {
-      // Default to Live Mode ON for users who explicitly asked for live refresh.
-      editor.putBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, true)
-    }
-
-    editor.apply()
-
-    applyModeFromPrefs(context)
-    if (enabled && !baseUrl.isNullOrBlank()) {
-      requestImmediateRefresh(context)
-    } else {
-      cancelRefreshAlarm(context)
+    GlucoseWidgetCredentialStore.withConfigurationLock {
+      val result = GlucoseWidgetCredentialStore.writeSyncConfiguration(
+        context = context,
+        baseUrl = baseUrl,
+        apiSecretSha1 = apiSecretSha1,
+        enabled = enabled,
+      )
+      applyModeFromPrefs(context)
+      if (result.effectiveEnabled && !result.baseUrl.isNullOrBlank()) {
+        requestImmediateRefresh(context)
+      } else {
+        cancelRefreshAlarm(context)
+      }
     }
   }
 
   fun setLiveModeEnabled(context: Context, enabled: Boolean) {
-    context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
-      .edit()
-      .putBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, enabled)
-      .apply()
+    GlucoseWidgetCredentialStore.withConfigurationLock {
+      context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, enabled)
+        .commit()
 
-    applyModeFromPrefs(context)
-    if (enabled) requestImmediateRefresh(context)
+      applyModeFromPrefs(context)
+      if (enabled) requestImmediateRefresh(context)
+    }
   }
 
   fun scheduleFromPrefs(context: Context) {
-    applyModeFromPrefs(context)
+    GlucoseWidgetCredentialStore.withConfigurationLock {
+      applyModeFromPrefs(context)
+    }
   }
 
   private fun applyModeFromPrefs(context: Context) {
-    val prefs = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
-    val enabled = prefs.getBoolean(GlucoseSyncWorker.KEY_ENABLED, false)
-    val baseUrl = prefs.getString(GlucoseSyncWorker.KEY_BASE_URL, null)?.trim().orEmpty()
-    val liveMode = prefs.getBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, true)
-
-    if (!enabled || baseUrl.isBlank()) {
+    val configuration = GlucoseWidgetCredentialStore.readSyncConfiguration(context)
+    if (configuration !is WidgetSyncConfiguration.Ready) {
       cancel(context)
-      GlucoseLiveForegroundService.stop(context)
       return
     }
 
     scheduleRefreshAlarm(context)
 
-    if (liveMode) {
+    if (configuration.liveMode) {
       cancelWork(context)
       val started = GlucoseLiveForegroundService.start(context)
       if (!started) {
@@ -120,6 +112,14 @@ object GlucoseSyncScheduler {
   fun requestImmediateRefresh(context: Context) {
     enqueueImmediate(context)
     GlucoseWidgetSync.syncAsync(context)
+  }
+
+  fun cancelIfConfigurationUnavailable(context: Context) {
+    GlucoseWidgetCredentialStore.withConfigurationLock {
+      if (GlucoseWidgetCredentialStore.readSyncConfiguration(context) !is WidgetSyncConfiguration.Ready) {
+        cancel(context)
+      }
+    }
   }
 
   fun cancel(context: Context) {

@@ -7,19 +7,19 @@ import extractDailyBasalInsulinPlan from 'app/utils/insulin.utils/extractDailyBa
 // Helper function to calculate the base basal rate for a given period
 
 // Finds the highest and lowest IOB (Insulin On Board) values
-export const findHighestAndLowestIOB = insulinData => {};
+export const findHighestAndLowestIOB = (_insulinData: unknown) => {};
 
 // Calculates the ratio of basal to bolus insulin
-export const calculateBasalBolusRatio = insulinData => {};
+export const calculateBasalBolusRatio = (_insulinData: unknown) => {};
 
 // Calculates average insulin usage over a period
 export const calculateAverageInsulinUsage = (
-  insulinData,
-  basalProfileData,
+  _insulinData: unknown,
+  _basalProfileData: unknown,
 ) => {};
 
 // Calculates the percentage of time glucose levels were within target ranges
-export const calculateTimeInRange = insulinData => {};
+export const calculateTimeInRange = (_insulinData: unknown) => {};
 
 export default {
   findHighestAndLowestIOB,

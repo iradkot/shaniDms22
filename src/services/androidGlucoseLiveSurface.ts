@@ -188,6 +188,18 @@ export function updateAndroidGlucoseLiveSurface(
   }
 }
 
+/** Removes the previous account's widget payload and live notification. */
+export function clearAndroidGlucoseLiveSurface(): void {
+  if (!nativeModule?.clearLiveSurface) {
+    return;
+  }
+  try {
+    nativeModule.clearLiveSurface();
+  } catch (err) {
+    console.warn('androidGlucoseLiveSurface: clearLiveSurface failed', err);
+  }
+}
+
 export function setAndroidWidgetThresholds(low?: number, high?: number): void {
   if (!nativeModule?.setWidgetThresholds) {
     return;

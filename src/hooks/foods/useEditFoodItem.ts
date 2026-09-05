@@ -1,62 +1,77 @@
 import {useCallback} from 'react';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
+import {getApp} from '@react-native-firebase/app';
+import {getAuth} from '@react-native-firebase/auth';
+import {
+  doc,
+  getDoc,
+  getFirestore,
+  updateDoc,
+} from '@react-native-firebase/firestore';
+import {
+  getDownloadURL,
+  getStorage,
+  putFile,
+  ref,
+} from '@react-native-firebase/storage';
 import {FoodItemDTO} from 'app/types/food.types';
-import {useGetUser} from 'app/hooks/useGetUser';
 import {PhotoFile} from 'react-native-vision-camera';
 import {imagePathToUri} from 'app/utils/image.utils';
 
 export interface EditFoodItem extends Omit<FoodItemDTO, 'image'> {
-  image: PhotoFile;
+  image: PhotoFile | {uri: string};
 }
 
 export const useEditFoodItem: () => {
   editFoodItem: (foodItem: EditFoodItem) => Promise<FoodItemDTO>;
 } = () => {
-  const {userData} = useGetUser();
-
   const editFoodItem = useCallback(
     async (foodItem: EditFoodItem) => {
       try {
-        const foodItemsCollectionRef = firestore()
-          .collection('food_items')
-          .doc(foodItem.id);
-        const directGet = firestore().collection('food_items').doc(foodItem.id);
-        const directGetResponse = await directGet.get();
+        const app = getApp();
+        const user = getAuth(app).currentUser;
+        if (!user) {
+          throw new Error('Sign in before editing a meal.');
+        }
+        const database = getFirestore(app);
+        const foodItemRef = doc(
+          database,
+          'users',
+          user.uid,
+          'legacyFoodItems',
+          foodItem.id,
+        );
 
-        let downloadURL = foodItem.image.uri; // Set the download URL to the current image URI by default
+        let downloadURL = 'uri' in foodItem.image ? foodItem.image.uri : '';
 
         // If the image has changed, upload the new image to Firebase Storage and get its download URL
-        if (foodItem.image.path !== undefined) {
-          const imageRef = storage().ref(
-            `food_item_images/${foodItemsCollectionRef.id}`,
+        if ('path' in foodItem.image) {
+          const imageRef = ref(
+            getStorage(app),
+            `users/${user.uid}/food_item_images/${foodItemRef.id}`,
           );
-          await imageRef.putFile(imagePathToUri(foodItem.image.path), {
+          await putFile(imageRef, imagePathToUri(foodItem.image.path), {
             contentType: 'image/jpeg',
           });
-          downloadURL = await imageRef.getDownloadURL();
+          downloadURL = await getDownloadURL(imageRef);
         }
 
         const foodItemRequest = {
           ...foodItem,
           image: downloadURL,
           timestamp: Number(foodItem.timestamp),
-          related_user: firestore().collection('users').doc(userData?.id),
+          schemaVersion: 1,
+          ownerProductUserId: user.uid,
         };
-        const foorItemResponse = await foodItemsCollectionRef.get();
-        await foodItemsCollectionRef.update(foodItemRequest);
+        await updateDoc(foodItemRef, foodItemRequest);
 
-        const lastSavedFoodItem = await firestore()
-          .collection('food_items')
-          .doc(foodItemsCollectionRef.id)
-          .get();
+        const lastSavedFoodItem = await getDoc(foodItemRef);
         return lastSavedFoodItem.data() as FoodItemDTO;
       } catch (error) {
         console.log('Error editing food item', error);
         throw error;
       }
     },
-    [userData?.id],
+    [],
   );
 
   return {

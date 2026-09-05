@@ -41,7 +41,10 @@ function isValidBolus(bolus: InsulinDataEntry): bolus is InsulinDataEntry & {
  *
  * This is time-based (not spatial), so users can touch "near" a bolus by time.
  */
-export function findClosestBolus(touchTimeMs: number, insulinData: InsulinDataEntry[]):
+export function findClosestBolus(
+  touchTimeMs: number,
+  insulinData: InsulinDataEntry[],
+):
   | (InsulinDataEntry & {type: 'bolus'; amount: number; timestamp: string})
   | null {
   if (!insulinData?.length) {
@@ -53,7 +56,7 @@ export function findClosestBolus(touchTimeMs: number, insulinData: InsulinDataEn
     return null;
   }
 
-  let closest = boluses[0];
+  let closest = boluses[0]!;
   let minDiff = Math.abs(new Date(closest.timestamp).getTime() - touchTimeMs);
 
   for (const bolus of boluses) {
@@ -75,7 +78,9 @@ export function findClosestBolus(touchTimeMs: number, insulinData: InsulinDataEn
 export function findBolusEventsInTooltipWindow(params: {
   anchorTimeMs: number;
   insulinData: InsulinDataEntry[];
-}): Array<InsulinDataEntry & {type: 'bolus'; amount: number; timestamp: string}> {
+}): Array<
+  InsulinDataEntry & {type: 'bolus'; amount: number; timestamp: string}
+> {
   const {anchorTimeMs, insulinData} = params;
 
   if (!insulinData?.length) {
@@ -129,7 +134,9 @@ export function findBolusEventsInWindow(params: {
 
   for (const bolus of candidates) {
     const bolusTimeMs = parseBolusTimestampMs(bolus);
-    if (bolusTimeMs == null) continue;
+    if (bolusTimeMs == null) {
+      continue;
+    }
 
     const timeDistance = Math.abs(bolusTimeMs - touchTimeMs);
 
@@ -143,7 +150,10 @@ export function findBolusEventsInWindow(params: {
     const withinTimeWindow = timeDistance <= BOLUS_DETECTION_WINDOW_MS;
     const withinSpatialRadius = pixelDistance <= spatialRadius;
 
-    if (withinTimeWindow || (withinSpatialRadius && timeDistance <= extendedWindowMs)) {
+    if (
+      withinTimeWindow ||
+      (withinSpatialRadius && timeDistance <= extendedWindowMs)
+    ) {
       matches.push({bolus, t: bolusTimeMs});
     }
   }

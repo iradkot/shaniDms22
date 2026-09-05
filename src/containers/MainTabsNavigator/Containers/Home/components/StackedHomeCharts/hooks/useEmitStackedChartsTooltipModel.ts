@@ -22,7 +22,9 @@ function buildTooltipModelKey(model: StackedChartsTooltipModel) {
 
 export function useEmitStackedChartsTooltipModel(params: {
   model: StackedChartsTooltipModel;
-  onTooltipModelChange?: (model: StackedChartsTooltipModel) => void;
+  onTooltipModelChange?:
+    | ((model: StackedChartsTooltipModel) => void)
+    | undefined;
 }) {
   const {model, onTooltipModelChange} = params;
   const prevModelKeyRef = React.useRef<string>('');

@@ -527,10 +527,10 @@ function valueAtMinute(schedule: unknown, minutes: number): number | null {
     )
     .sort((a, b) => a.minute - b.minute);
 
-  if (!parsed.length) {
+  let active = parsed[parsed.length - 1];
+  if (!active) {
     return null;
   }
-  let active = parsed[parsed.length - 1];
   for (const entry of parsed) {
     if (entry.minute <= minutes) {
       active = entry;
@@ -650,18 +650,23 @@ function countDaysWithData(samples: BgSample[]) {
   ).size;
 }
 
-function percentile(sortedValues: number[], p: number) {
+function percentile(sortedValues: number[], p: number): number | null {
   if (!sortedValues.length) {
     return null;
   }
   if (sortedValues.length === 1) {
-    return sortedValues[0];
+    return sortedValues[0] ?? null;
   }
   const index = (p / 100) * (sortedValues.length - 1);
   const lower = Math.floor(index);
   const upper = Math.ceil(index);
   const weight = index - lower;
-  return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
+  const lowerValue = sortedValues[lower];
+  const upperValue = sortedValues[upper];
+  if (lowerValue == null || upperValue == null) {
+    return null;
+  }
+  return lowerValue * (1 - weight) + upperValue * weight;
 }
 
 function avg(values: number[]) {

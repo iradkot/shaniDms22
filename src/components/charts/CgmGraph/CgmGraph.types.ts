@@ -39,7 +39,7 @@ export type CgmGraphVariant =
 export interface CgmGraphProps {
   bgSamples: BgSample[];
   foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
-  insulinData?: InsulinDataEntry[];
+  insulinData?: InsulinDataEntry[] | undefined;
   width: number;
   height: number;
 
@@ -54,20 +54,25 @@ export interface CgmGraphProps {
    *
    * When not provided, the domain is derived from the BG sample extent.
    */
-  xDomain?: [Date, Date] | null;
+  xDomain?: [Date, Date] | null | undefined;
 
   /**
    * Optional formatter for x-axis tick labels.
    *
    * When not provided, ticks default to locale time strings.
    */
-  xTickLabelFormatter?: ((date: Date) => string) | null;
+  xTickLabelFormatter?: ((date: Date) => string) | null | undefined;
 
   /** Whether to show the date labels row at the top of the plot. Defaults to true. */
   showDateLabels?: boolean;
 
   /** Whether to show Y-axis numeric labels. Defaults to true. */
   showYLabels?: boolean;
+
+  /** Hide dose markers when a separate bolus lane is rendered. */
+  showBolusMarkers?: boolean;
+  /** A parent inspector can supply its exact selected carbohydrate events. */
+  highlightedCarbIds?: string[] | undefined;
 
   /** Number of horizontal grid bands/ticks on Y-axis. Defaults to 6. */
   yTicksAmount?: number;
@@ -88,7 +93,7 @@ export interface CgmGraphProps {
    *
    * We keep this optional so the chart can be reused in lists/cards without forcing unique IDs.
    */
-  testID?: string;
+  testID?: string | undefined;
 
   /** Whether to show the fullscreen button. Defaults to true. */
   showFullScreenButton?: boolean;
@@ -112,5 +117,5 @@ export interface CgmGraphProps {
    * When provided together with `tooltipMode="external"`, this becomes the single
    * source of truth for the vertical focus line.
    */
-  cursorTimeMs?: number | null;
+  cursorTimeMs?: number | null | undefined;
 }

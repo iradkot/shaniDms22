@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -27,7 +27,8 @@ import {
   memoryFolderKey,
   normalizeMemoryFolder,
 } from 'app/services/aiMemory/memoryTaxonomy';
-import {theme} from 'app/style/theme';
+import {useTheme} from 'styled-components/native';
+import {useActiveAiWorkspaceScope} from 'app/services/aiMemory/useActiveAiWorkspaceScope';
 import {addOpacity} from 'app/style/styling.utils';
 
 const ALL_CATEGORY = 'all';
@@ -147,6 +148,11 @@ function entryPreview(entry: MemoryEntry) {
 
 const AiMemoryScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const theme = useTheme();
+  const workspaceScope = useActiveAiWorkspaceScope();
+  const currentScopeRef = useRef(workspaceScope);
+  currentScopeRef.current = workspaceScope;
+  const loadSequenceRef = useRef(0);
   const {language} = useAppLanguage();
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [tree, setTree] = useState<FolderTreeItem[]>([]);
@@ -174,16 +180,29 @@ const AiMemoryScreen: React.FC = () => {
     [he],
   );
 
+  useLayoutEffect(() => {
+    loadSequenceRef.current += 1;
+    setEntries([]);
+    setTree([]);
+    setDrafts({});
+    setEditingIds({});
+    setSavingId(null);
+    setBusy(false);
+  }, [workspaceScope]);
+
   const load = useCallback(async () => {
+    if (!workspaceScope) return;
+    const loadSequence = ++loadSequenceRef.current;
     setBusy(true);
     try {
       const [nextEntries, nextTree] = await Promise.all([
-        listMemoryEntries({
-          category: selectedCategory === ALL_CATEGORY ? undefined : selectedCategory,
+        listMemoryEntries(workspaceScope, {
+          ...(selectedCategory === ALL_CATEGORY ? {} : {category: selectedCategory}),
           limit: 300,
         }),
-        getMemoryTree(),
+        getMemoryTree(workspaceScope),
       ]);
+      if (currentScopeRef.current !== workspaceScope || loadSequence !== loadSequenceRef.current) return;
       setEntries(nextEntries);
       setTree(nextTree);
       setDrafts(prev => {
@@ -194,60 +213,64 @@ const AiMemoryScreen: React.FC = () => {
         return next;
       });
     } finally {
-      setBusy(false);
+      if (currentScopeRef.current === workspaceScope && loadSequence === loadSequenceRef.current) setBusy(false);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, workspaceScope]);
 
   useEffect(() => {
-    load();
+    void load();
+    return () => {loadSequenceRef.current += 1;};
   }, [load]);
 
   const saveEntry = async (entry: MemoryEntry) => {
+    if (!workspaceScope) return;
     const textSummary = (drafts[entry.id] ?? '').trim();
     if (!textSummary) return;
-
     setSavingId(entry.id);
     try {
-      const updated = await updateMemoryEntry(entry.id, {textSummary});
-      if (updated) {
+      const updated = await updateMemoryEntry(workspaceScope, entry.id, {textSummary});
+      if (updated && currentScopeRef.current === workspaceScope) {
         setEntries(prev => prev.map(item => (item.id === entry.id ? updated : item)));
         setEditingIds(prev => ({...prev, [entry.id]: false}));
       }
     } finally {
-      setSavingId(null);
+      if (currentScopeRef.current === workspaceScope) setSavingId(null);
     }
   };
 
   const toggleUseInAi = async (entry: MemoryEntry) => {
+    if (!workspaceScope) return;
     const disabled = isDisabledForAi(entry);
     const tags = disabled
       ? (entry.tags ?? []).filter(tag => tag !== 'disabled_for_ai')
       : [...new Set([...(entry.tags ?? []), 'disabled_for_ai'])];
-
-    const updated = await updateMemoryEntry(entry.id, {tags});
-    if (updated) {
+    const updated = await updateMemoryEntry(workspaceScope, entry.id, {tags});
+    if (updated && currentScopeRef.current === workspaceScope) {
       setEntries(prev => prev.map(item => (item.id === entry.id ? updated : item)));
     }
   };
 
   const approveEntry = async (entry: MemoryEntry) => {
+    if (!workspaceScope) return;
     setSavingId(entry.id);
     try {
       const textSummary = (drafts[entry.id] ?? entry.textSummary).trim();
       if (textSummary && textSummary !== entry.textSummary) {
-        await updateMemoryEntry(entry.id, {textSummary});
+        await updateMemoryEntry(workspaceScope, entry.id, {textSummary});
       }
-      const updated = await approveMemoryEntry(entry.id);
-      if (updated) {
+      if (currentScopeRef.current !== workspaceScope) return;
+      const updated = await approveMemoryEntry(workspaceScope, entry.id);
+      if (updated && currentScopeRef.current === workspaceScope) {
         setEntries(prev => prev.map(item => (item.id === entry.id ? updated : item)));
         setDrafts(prev => ({...prev, [entry.id]: updated.textSummary}));
       }
     } finally {
-      setSavingId(null);
+      if (currentScopeRef.current === workspaceScope) setSavingId(null);
     }
   };
 
   const confirmDelete = (entry: MemoryEntry) => {
+    if (!workspaceScope) return;
     Alert.alert(
       he ? 'למחוק זיכרון?' : 'Delete memory?',
       he
@@ -259,8 +282,9 @@ const AiMemoryScreen: React.FC = () => {
           text: he ? 'מחק' : 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const ok = await deleteMemoryEntry(entry.id);
-            if (ok) setEntries(prev => prev.filter(item => item.id !== entry.id));
+            if (currentScopeRef.current !== workspaceScope) return;
+            const ok = await deleteMemoryEntry(workspaceScope, entry.id);
+            if (ok && currentScopeRef.current === workspaceScope) setEntries(prev => prev.filter(item => item.id !== entry.id));
           },
         },
       ],

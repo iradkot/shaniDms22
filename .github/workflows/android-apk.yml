@@ -1,20 +1,33 @@
 name: Android APK (Lite)
+run-name: Android APK Lite · ${{ github.event_name == 'workflow_dispatch' && inputs.signing == 'production' && 'production' || 'internal preview' }} · ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
     inputs:
+      signing:
+        description: 'Signing mode (preview is for internal installation only)'
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
       run_e2e:
-        description: "Run Android Maestro E2E"
+        description: 'Run Android Maestro E2E'
         required: false
         default: false
         type: boolean
   push:
-    branches: ["main"]
+    branches: ['main']
   pull_request:
 
 jobs:
   build-apk-lite:
     runs-on: ubuntu-latest
+    env:
+      SIGNING_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.signing == 'production' && 'production' || 'preview' }}
+      SHANI_BACKEND_BASE_URL: ${{ vars.SHANI_BACKEND_BASE_URL }}
+      FIRESTORE_RULES_SCHEMA_VERSION: ${{ vars.FIRESTORE_RULES_SCHEMA_VERSION }}
 
     steps:
       - name: Checkout
@@ -23,14 +36,14 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
           cache: yarn
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -55,37 +68,88 @@ jobs:
       - name: Install JS dependencies
         run: yarn install --immutable
 
-      - name: Decode release keystore (optional)
+      - name: Install backend dependencies
+        run: npm ci --prefix functions
+
+      - name: Verify app, web, backend, rules, and credential policy
+        run: yarn verify:all
+
+      - name: Generate shared Android build version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Shared clock-based sequence across Lite and Full; generate once per build.
+          version_code=$((30000000 + $(date -u +%s) - 1767225600))
+          if (( version_code < 30000000 || version_code > 2100000000 )); then
+            echo "::error::Android version code is outside the supported range."
+            exit 1
+          fi
+          version_name="1.0.${GITHUB_RUN_NUMBER}"
+          if [ "$SIGNING_MODE" = preview ]; then
+            version_name="${version_name}-preview"
+          fi
+          echo "code=${version_code}" >> "$GITHUB_OUTPUT"
+          echo "name=${version_name}" >> "$GITHUB_OUTPUT"
+          echo "### Android Lite: ${SIGNING_MODE}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version ${version_name}; version code ${version_code}." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$SIGNING_MODE" = preview ]; then
+            echo "Internal preview, signed with the debug certificate. Not for Google Play." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Decode release keystore
+        if: env.SIGNING_MODE == 'production'
         id: keystore
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
-            echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > android/release.keystore
-            echo "path=${GITHUB_WORKSPACE}/android/release.keystore" >> "$GITHUB_OUTPUT"
-          else
-            echo "path=" >> "$GITHUB_OUTPUT"
-          fi
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required Android release secret: ${name}"
+              exit 1
+            fi
+          done
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > android/release.keystore
+          echo "path=${GITHUB_WORKSPACE}/android/release.keystore" >> "$GITHUB_OUTPUT"
 
-      - name: "Build APK (Lite profile: arm64-v8a release only)"
+      - name: 'Build production APK (Lite profile: arm64-v8a only)'
+        if: env.SIGNING_MODE == 'production'
         working-directory: android
         env:
+          ALLOW_DEBUG_RELEASE_SIGNING: 'false'
           ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
           ORG_GRADLE_PROJECT_TARGET_ABI: arm64-v8a
+          ORG_GRADLE_PROJECT_VERSION_CODE: ${{ steps.version.outputs.code }}
+          ORG_GRADLE_PROJECT_VERSION_NAME: ${{ steps.version.outputs.name }}
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace clean :app:assembleRelease
 
+      - name: 'Build internal preview APK (arm64-v8a, debug certificate)'
+        if: env.SIGNING_MODE == 'preview'
+        working-directory: android
+        env:
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
+          ORG_GRADLE_PROJECT_TARGET_ABI: arm64-v8a
+          ORG_GRADLE_PROJECT_VERSION_CODE: ${{ steps.version.outputs.code }}
+          ORG_GRADLE_PROJECT_VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace clean -PALLOW_DEBUG_RELEASE_SIGNING=true :app:assembleRelease
+
       - name: Upload APK artifact (Lite)
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk-lite-${{ github.sha }}
+          name: android-apk-lite-${{ env.SIGNING_MODE == 'preview' && 'preview-debug-signed' || 'production-signed' }}-${{ github.sha }}
           if-no-files-found: error
           path: |
             android/app/build/outputs/apk/release/*arm64-v8a-release.apk

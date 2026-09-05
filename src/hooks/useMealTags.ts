@@ -11,7 +11,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import type {MealTag, MealTagMap, TagRegistryEntry} from 'app/types/mealTag.types';
 import {
   getTagsForMeals,
-  tagMealAndSync,
+  saveMealTags,
   getTagSuggestions,
   getAllKnownTags,
 } from 'app/services/mealTagService';
@@ -23,7 +23,7 @@ export interface UseMealTagsResult {
   knownTags: TagRegistryEntry[];
   /** Autocomplete suggestions (most popular). */
   suggestions: string[];
-  /** Tag a meal (saves locally + syncs to NS). Refreshes tagMap. */
+  /** Tag a meal locally as App-Owned Data. Refreshes tagMap. */
   tagMeal: (mealId: string, tags: MealTag[]) => Promise<void>;
   /** Refresh tags for the current meal IDs. */
   refreshTags: () => void;
@@ -75,7 +75,7 @@ export function useMealTags(mealIds: string[]): UseMealTagsResult {
 
   const tagMeal = useCallback(
     async (mealId: string, tags: MealTag[]) => {
-      await tagMealAndSync(mealId, tags);
+      await saveMealTags(mealId, tags);
       // Refresh
       await load();
     },

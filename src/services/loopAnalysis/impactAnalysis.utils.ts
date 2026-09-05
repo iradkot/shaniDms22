@@ -21,7 +21,6 @@ import {
 // CONSTANTS
 // =============================================================================
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_HOUR = 60 * 60 * 1000;
 const EXPECTED_READINGS_PER_DAY = 288; // 5-minute CGM
 const LARGE_GAP_THRESHOLD_MS = 2 * MS_PER_HOUR; // 2 hours
@@ -60,15 +59,17 @@ function clamp(v: number, min: number, max: number): number {
  */
 function percentile(sortedArr: number[], p: number): number {
   if (sortedArr.length === 0) return 0;
-  if (sortedArr.length === 1) return sortedArr[0];
+  if (sortedArr.length === 1) return sortedArr[0] ?? 0;
 
   const index = (p / 100) * (sortedArr.length - 1);
   const lower = Math.floor(index);
   const upper = Math.ceil(index);
   const weight = index - lower;
 
-  if (lower === upper) return sortedArr[lower];
-  return sortedArr[lower] * (1 - weight) + sortedArr[upper] * weight;
+  const lowerValue = sortedArr[lower] ?? 0;
+  const upperValue = sortedArr[upper] ?? lowerValue;
+  if (lower === upper) return lowerValue;
+  return lowerValue * (1 - weight) + upperValue * weight;
 }
 
 /**
@@ -312,7 +313,8 @@ export function computeHourlyAggregates(bgSamples: BgSample[]): HourlyAggregate[
     if (typeof ts !== 'number' || sgv == null) continue;
 
     const hour = new Date(ts).getHours();
-    hourBuckets[hour].push(sgv);
+    const bucket = hourBuckets[hour];
+    if (bucket) bucket.push(sgv);
   }
 
   // Calculate aggregates for each hour

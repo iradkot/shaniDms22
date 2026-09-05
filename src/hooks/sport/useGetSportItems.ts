@@ -5,6 +5,10 @@ import { getAuth } from '@react-native-firebase/auth';
 import FirebaseService from 'app/api/firebase/FirebaseService';
 import {formatSportItem} from 'app/utils/sportItems.utils';
 import {getRelativeDateText} from 'app/utils/datetime.utils';
+import type {
+  formattedSportItemDTO,
+  SportItemsByRelativeDate,
+} from 'app/types/sport.types';
 
 const useGetSportItems = () => {
   // Only log the authenticated UID to avoid verbose object dumps
@@ -20,14 +24,14 @@ const useGetSportItems = () => {
     const sortedSportItems = updatedSportItems.sort((a, b) => {
       return b.startTimestamp - a.startTimestamp;
     });
-    const groupedSportItems = sortedSportItems.reduce((grouped, item) => {
+    const groupedSportItems = sortedSportItems.reduce<SportItemsByRelativeDate>((grouped, item) => {
       const relativeDateText = getRelativeDateText(
         new Date(item.startTimestamp),
       );
-      if (!grouped[relativeDateText]) {
-        grouped[relativeDateText] = [];
-      }
-      grouped[relativeDateText].push(item);
+      const itemsForDate: formattedSportItemDTO[] =
+        grouped[relativeDateText] ?? [];
+      itemsForDate.push(item);
+      grouped[relativeDateText] = itemsForDate;
       return grouped;
     }, {});
     return groupedSportItems;

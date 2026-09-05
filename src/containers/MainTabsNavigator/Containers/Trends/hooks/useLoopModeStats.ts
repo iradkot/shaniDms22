@@ -78,9 +78,13 @@ export function useLoopModeStats({
 
         for (const range of deviceStatusRanges) {
           rows = rows.concat(
-            await fetchDeviceStatusForDateRangeUncached(range.start, range.end, {
-              throwOnError: true,
-            }),
+            await fetchDeviceStatusForDateRangeUncached(
+              range.start,
+              range.end,
+              {
+                throwOnError: true,
+              },
+            ),
           );
           completedChunks += 1;
           if (!cancelled) {
@@ -169,7 +173,7 @@ export function useLoopModeStats({
       end,
       bgData,
       events: hasCurrentRangeData ? events : [],
-      timeWindow,
+      ...(timeWindow !== undefined ? {timeWindow} : {}),
       maxCarryForwardMinutes: LOOP_STATUS_CARRY_FORWARD_MINUTES,
       initialContextLookbackMinutes: LOOP_CONTEXT_LOOKBACK_MINUTES,
     });

@@ -25,7 +25,11 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
 
   const tooltipWidth = 160;
   const fontSize = theme.typography.size.xs;
-  const {textX, rowYs, height: tooltipHeight} = getSvgTooltipTextLayout({
+  const {
+    textX,
+    rowYs,
+    height: tooltipHeight,
+  } = getSvgTooltipTextLayout({
     rows: 2,
     fontSize,
     lineHeightMultiplier: theme.typography.lineHeight.normal,
@@ -51,12 +55,16 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
   const shadowOffset = 0.5; // Reduced offset for a minimalistic look
 
   return (
-    <Tooltip x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}>
+    <Tooltip
+      x={tooltipX}
+      y={tooltipY}
+      width={tooltipWidth}
+      height={tooltipHeight}>
       <SvgTooltipBox width={tooltipWidth} height={tooltipHeight} />
       {/* Subtle shadow for the glucose value text */}
       <Text
         x={textX + shadowOffset}
-        y={rowYs[0] + shadowOffset}
+        y={rowYs[0]! + shadowOffset}
         fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={shadowColor} // Shadow with slight offset for minimalistic effect
@@ -66,7 +74,7 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
       {/* Glucose value text */}
       <Text
         x={textX}
-        y={rowYs[0]}
+        y={rowYs[0]!}
         fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={bgColor}
@@ -76,7 +84,7 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
       {/* Time text without shadow */}
       <Text
         x={textX}
-        y={rowYs[1]}
+        y={rowYs[1]!}
         fontSize={String(theme.typography.size.xs)}
         fontFamily={theme.typography.fontFamily}
         fill={theme.textColor}

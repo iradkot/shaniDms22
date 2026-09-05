@@ -68,10 +68,10 @@ export function oracleLoadPointsToBgSamples(params: {
     const base = toBgSample({ts, sgv: 0});
     samples.push({
       ...base,
-      iob: typeof p.iob === 'number' ? p.iob : undefined,
-      iobBolus: typeof p.iobBolus === 'number' ? p.iobBolus : undefined,
-      iobBasal: typeof p.iobBasal === 'number' ? p.iobBasal : undefined,
-      cob: typeof p.cob === 'number' ? p.cob : undefined,
+      ...(typeof p.iob === 'number' ? {iob: p.iob} : {}),
+      ...(typeof p.iobBolus === 'number' ? {iobBolus: p.iobBolus} : {}),
+      ...(typeof p.iobBasal === 'number' ? {iobBasal: p.iobBasal} : {}),
+      ...(typeof p.cob === 'number' ? {cob: p.cob} : {}),
     });
   }
 

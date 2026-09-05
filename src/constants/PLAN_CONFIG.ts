@@ -1,14 +1,3 @@
-interface CGMStatusCodes {
-  TARGET: string;
-  HIGH: string;
-  LOW: string;
-  VERY_LOW: string;
-  VERY_HIGH: string;
-  SERIOUS_LOW: string;
-  SERIOUS_HIGH: string;
-  EXTREME_LOW: string;
-  EXTREME_HIGH: string;
-}
 export const CGM_STATUS_CODES = {
   TARGET: 'TARGET',
   HIGH: 'HIGH',

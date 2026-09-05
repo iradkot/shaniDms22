@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.rewrite.json",
+  "compilerOptions": {
+    "lib": ["es2021", "es2021.intl", "dom"],
+    "types": ["vite/client", "jest"]
+  },
+  "include": [
+    "src/types/styled-components.d.ts",
+    "src/platform/web/**/*.ts",
+    "src/platform/web/**/*.tsx",
+    "web/**/*.ts",
+    "web/**/*.tsx",
+    "__tests__/platform/web/**/*.ts",
+    "__tests__/platform/web/**/*.tsx"
+  ],
+  "exclude": ["node_modules"]
+}

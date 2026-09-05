@@ -1,3 +1,4 @@
+/// <reference types="styled-components-react-native" />
 // Allows styled-components/native to understand DefaultTheme from ThemeType
 import 'styled-components/native';
 import {ThemeType} from 'app/types/theme';

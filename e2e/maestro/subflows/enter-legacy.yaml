@@ -1,0 +1,39 @@
+appId: com.shanidms22
+---
+# Compatibility bootstrap for the preserved, detailed legacy scenarios.
+# The app always enters the rebuilt Product Experience first. Day Graph then
+# uses the same legacy bridge available to a real user, landing on legacy Home.
+- launchApp:
+    clearState: true
+
+- extendedWaitUntil:
+    visible:
+      id: product-hub
+    timeout: 30000
+
+- scrollUntilVisible:
+    element:
+      id: hub-grid-today-tile-core.day-graph
+    direction: DOWN
+    timeout: 20000
+
+- tapOn:
+    id: hub-grid-today-tile-core.day-graph
+
+- extendedWaitUntil:
+    visible:
+      id: product-module-bridge
+    timeout: 15000
+
+- tapOn:
+    text: "Open current version|פתיחת הגרסה הנוכחית"
+
+- extendedWaitUntil:
+    visible:
+      id: tabs.navigator
+    timeout: 30000
+
+- extendedWaitUntil:
+    visible:
+      id: screen.home
+    timeout: 30000

@@ -20,7 +20,6 @@ class GlucoseSyncWorker(
   companion object {
     const val PREFS = "glucose_sync_prefs"
     const val KEY_BASE_URL = "base_url"
-    const val KEY_API_SECRET_SHA1 = "api_secret_sha1"
     const val KEY_ENABLED = "enabled"
     const val KEY_LIVE_MODE = "live_mode"
     const val KEY_SPARKLINE_HOURS = "sparkline_hours"

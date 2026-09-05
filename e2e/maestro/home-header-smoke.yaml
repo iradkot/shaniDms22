@@ -3,24 +3,7 @@ appId: com.shanidms22
 # Home header smoke: verify SmartExpandableHeader can expand/collapse
 # and shows predictions + load bars.
 
-- launchApp:
-    clearState: true
-
-# Deterministic E2E login
-- extendedWaitUntil:
-    visible:
-      id: login.e2eButton
-    timeout: 15000
-    optional: true
-
-- tapOn:
-    id: login.e2eButton
-    optional: true
-
-- extendedWaitUntil:
-    visible:
-      id: tabs.navigator
-    timeout: 30000
+- runFlow: subflows/enter-legacy.yaml
 
 - tapOn:
     id: tab.home

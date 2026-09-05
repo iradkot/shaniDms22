@@ -16,20 +16,35 @@ import {
   persistNightscoutProfiles,
   NightscoutProfile,
 } from 'app/services/nightscoutProfiles';
-import {clearNightscoutInstance, configureNightscoutInstance} from 'app/api/shaniNightscoutInstances';
+import {
+  clearNightscoutInstance,
+  configureNightscoutInstance,
+} from 'app/api/shaniNightscoutInstances';
 import {configureAndroidWidgetBackgroundSync} from 'app/services/androidGlucoseLiveSurface';
 import {
   testNightscoutConnection,
-  NightscoutConnectionTestResult,
+  type NightscoutConnectionTestResult,
 } from 'app/services/nightscoutConnectionTest';
+import {
+  nativeNightscoutVaultSynchronizer,
+  nativeNightscoutVaultAuthSession,
+} from 'app/services/backend/nativeNightscoutVaultSync';
+import type {
+  NightscoutVaultAuthSession,
+  NightscoutVaultSyncSnapshot,
+  NightscoutVaultSynchronizer,
+} from 'app/services/backend/nightscoutVaultSynchronizer';
 
 export type NightscoutConfigContextValue = {
   profiles: NightscoutProfile[];
   activeProfile: NightscoutProfile | null;
   isLoaded: boolean;
   /** Adds a profile and selects it as active. Accepts loosely formatted URL/secret inputs. */
-  addProfile: (params: {urlInput: string; secretInput: string}) => Promise<void>;
-  /** Verifies a Nightscout URL/secret without saving it. */
+  addProfile: (params: {
+    urlInput: string;
+    secretInput: string;
+  }) => Promise<void>;
+  /** Verifies a connection without persisting credentials or selecting a profile. */
   testProfileConnection: (params: {
     urlInput: string;
     secretInput?: string;
@@ -38,9 +53,17 @@ export type NightscoutConfigContextValue = {
   /** Switches the currently active profile by ID. */
   setActiveProfileId: (id: string) => Promise<void>;
   /** Updates an existing profile. If secretInput is empty, keeps the existing secret. */
-  updateProfile: (params: {profileId: string; urlInput: string; secretInput?: string}) => Promise<void>;
+  updateProfile: (params: {
+    profileId: string;
+    urlInput: string;
+    secretInput?: string;
+  }) => Promise<void>;
   /** Deletes a profile by ID and re-selects an active profile if needed. */
   deleteProfile: (profileId: string) => Promise<void>;
+  /** Server-vault synchronization never blocks local Nightscout usage. */
+  vaultSyncStatus: NightscoutVaultSyncSnapshot;
+  /** Manually retries a durable pending server-vault reconciliation. */
+  retryVaultSync: () => Promise<void>;
 };
 
 const NightscoutConfigContext = createContext<NightscoutConfigContextValue>({
@@ -48,10 +71,16 @@ const NightscoutConfigContext = createContext<NightscoutConfigContextValue>({
   activeProfile: null,
   isLoaded: false,
   addProfile: async () => {},
-  testProfileConnection: async () => ({ok: true, entriesCount: 0, authMethod: 'query'}),
+  testProfileConnection: async () => ({
+    ok: true,
+    entriesCount: 0,
+    authMethod: 'query',
+  }),
   setActiveProfileId: async () => {},
   updateProfile: async () => {},
   deleteProfile: async () => {},
+  vaultSyncStatus: {state: 'idle', pending: false},
+  retryVaultSync: async () => {},
 });
 
 export const useNightscoutConfig = () => useContext(NightscoutConfigContext);
@@ -60,15 +89,64 @@ export const useNightscoutConfig = () => useContext(NightscoutConfigContext);
  * Loads Nightscout profiles from local storage and keeps the axios client
  * configured to the currently active profile.
  */
-export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}) => {
+export const NightscoutConfigProvider = ({
+  children,
+  authSession = nativeNightscoutVaultAuthSession,
+  vaultSynchronizer = nativeNightscoutVaultSynchronizer,
+}: {
+  children: React.ReactNode;
+  /** Auth seam keeps every local profile and credential in one account namespace. */
+  authSession?: NightscoutVaultAuthSession;
+  /** Injection seam for deterministic tests and alternate Native runtimes. */
+  vaultSynchronizer?: NightscoutVaultSynchronizer;
+}) => {
   const [profiles, setProfiles] = useState<NightscoutProfile[]>([]);
-  const [activeProfileId, setActiveProfileIdState] = useState<string | null>(null);
+  const [activeProfileId, setActiveProfileIdState] = useState<string | null>(
+    null,
+  );
   const [isLoaded, setIsLoaded] = useState(false);
-
+  const [vaultSyncStatus, setVaultSyncStatus] =
+    useState<NightscoutVaultSyncSnapshot>(() =>
+      vaultSynchronizer.getSnapshot(),
+    );
+  const [ownerUserId, setOwnerUserId] = useState<string | null>(
+    () => authSession.getCurrentUserId()?.trim() || null,
+  );
   const profilesRef = useRef<NightscoutProfile[]>([]);
+  const activeProfileIdRef = useRef<string | null>(null);
+  const ownerUserIdRef = useRef(ownerUserId);
+  const mutationTail = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     profilesRef.current = profiles;
   }, [profiles]);
+
+  useEffect(() => {
+    activeProfileIdRef.current = activeProfileId;
+  }, [activeProfileId]);
+
+  useEffect(() => {
+    ownerUserIdRef.current = ownerUserId;
+  }, [ownerUserId]);
+
+  useEffect(
+    () =>
+      authSession.subscribe(userId => {
+        const nextOwnerUserId = userId?.trim() || null;
+        if (nextOwnerUserId === ownerUserIdRef.current) {
+          return;
+        }
+        ownerUserIdRef.current = nextOwnerUserId;
+        profilesRef.current = [];
+        activeProfileIdRef.current = null;
+        setProfiles([]);
+        setActiveProfileIdState(null);
+        setIsLoaded(false);
+        clearNightscoutInstance();
+        configureAndroidWidgetBackgroundSync({enabled: false});
+        setOwnerUserId(nextOwnerUserId);
+      }),
+    [authSession],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -76,9 +154,11 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
     const load = async () => {
       try {
         const {profiles: storedProfiles, activeProfileId: storedActiveId} =
-          await loadNightscoutProfiles();
+          await loadNightscoutProfiles(ownerUserId);
 
-        if (!isMounted) return;
+        if (!isMounted || ownerUserIdRef.current !== ownerUserId) {
+          return;
+        }
 
         const resolvedActiveId =
           storedActiveId && storedProfiles.some(p => p.id === storedActiveId)
@@ -86,12 +166,19 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
             : storedProfiles[0]?.id ?? null;
 
         setProfiles(storedProfiles);
+        profilesRef.current = storedProfiles;
         setActiveProfileIdState(resolvedActiveId);
+        activeProfileIdRef.current = resolvedActiveId;
 
         if (resolvedActiveId) {
-          const active = storedProfiles.find(p => p.id === resolvedActiveId) ?? null;
+          const active =
+            storedProfiles.find(p => p.id === resolvedActiveId) ?? null;
           if (active) {
-            configureNightscoutInstance({baseUrl: active.baseUrl, apiSecretSha1: active.apiSecretSha1});
+            configureNightscoutInstance({
+              baseUrl: active.baseUrl,
+              apiSecretSha1: active.apiSecretSha1,
+              ownerUserId,
+            });
             configureAndroidWidgetBackgroundSync({
               baseUrl: active.baseUrl,
               apiSecretSha1: active.apiSecretSha1,
@@ -104,12 +191,21 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
 
         // Persist repaired active ID if needed.
         if (storedProfiles.length > 0 && resolvedActiveId !== storedActiveId) {
-          await persistNightscoutProfiles(storedProfiles, resolvedActiveId);
+          await persistNightscoutProfiles(
+            storedProfiles,
+            resolvedActiveId,
+            ownerUserId,
+          );
         }
+        // Startup must not invent a desired server state. A fresh device with
+        // no local profile may still have a valid vault connection created by
+        // another device. `activate()` retries only a durable explicit intent.
       } catch {
         // Best-effort: keep empty.
       } finally {
-        if (isMounted) setIsLoaded(true);
+        if (isMounted) {
+          setIsLoaded(true);
+        }
       }
     };
 
@@ -117,7 +213,30 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [ownerUserId, vaultSynchronizer]);
+
+  const serializeMutation = useCallback(
+    (operation: () => Promise<void>): Promise<void> => {
+      const run = mutationTail.current.then(operation, operation);
+      mutationTail.current = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const refresh = () => setVaultSyncStatus(vaultSynchronizer.getSnapshot());
+    refresh();
+    const unsubscribeSnapshot = vaultSynchronizer.subscribe(refresh);
+    const deactivate = vaultSynchronizer.activate();
+    return () => {
+      unsubscribeSnapshot();
+      deactivate();
+    };
+  }, [vaultSynchronizer]);
 
   const activeProfile = useMemo(
     () => profiles.find(p => p.id === activeProfileId) ?? null,
@@ -130,151 +249,256 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
       if (!normalizedUrl) {
         throw new Error('Please enter a valid Nightscout URL (http/https).');
       }
-
       const existingProfile = params.profileId
-        ? profilesRef.current.find(p => p.id === params.profileId)
+        ? profilesRef.current.find(profile => profile.id === params.profileId)
         : null;
       const secretTrimmed = (params.secretInput ?? '').trim();
       const apiSecretSha1 = secretTrimmed
         ? normalizeNightscoutApiSecretToSha1(secretTrimmed)
         : existingProfile?.apiSecretSha1 ?? null;
-
       if (!apiSecretSha1) {
         throw new Error('Please enter your Nightscout API secret/token.');
       }
-
       return {normalizedUrl, apiSecretSha1};
     },
     [],
   );
 
   const testProfileConnection = useCallback(
-    async (params: {urlInput: string; secretInput?: string; profileId?: string}) => {
+    async (params: {
+      urlInput: string;
+      secretInput?: string;
+      profileId?: string;
+    }) => {
+      if (ownerUserIdRef.current !== ownerUserId) {
+        throw new Error('The signed-in account changed before testing.');
+      }
       const {normalizedUrl, apiSecretSha1} = resolveConnectionInputs(params);
-      return testNightscoutConnection({
-        baseUrl: normalizedUrl,
-        apiSecretSha1,
-      });
+      return testNightscoutConnection({baseUrl: normalizedUrl, apiSecretSha1});
     },
-    [resolveConnectionInputs],
+    [ownerUserId, resolveConnectionInputs],
   );
 
   const addProfile = useCallback(
-    async (params: {urlInput: string; secretInput: string}) => {
-      const {normalizedUrl, apiSecretSha1} = resolveConnectionInputs(params);
-      await testNightscoutConnection({baseUrl: normalizedUrl, apiSecretSha1});
+    (params: {urlInput: string; secretInput: string}) => {
+      const mutationOwnerUserId = ownerUserId;
+      return serializeMutation(async () => {
+        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+          throw new Error('The signed-in account changed before saving.');
+        }
+        const {normalizedUrl, apiSecretSha1} = resolveConnectionInputs(params);
+        await testNightscoutConnection({baseUrl: normalizedUrl, apiSecretSha1});
+        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+          throw new Error('The signed-in account changed before saving.');
+        }
 
-      const profile = createNightscoutProfile({
-        baseUrl: normalizedUrl,
-        apiSecretSha1,
+        const profile = createNightscoutProfile({
+          baseUrl: normalizedUrl,
+          apiSecretSha1,
+        });
+
+        const nextProfiles = [profile, ...profilesRef.current];
+        profilesRef.current = nextProfiles;
+        activeProfileIdRef.current = profile.id;
+        setProfiles(nextProfiles);
+        setActiveProfileIdState(profile.id);
+
+        configureNightscoutInstance({
+          baseUrl: profile.baseUrl,
+          apiSecretSha1: profile.apiSecretSha1,
+          ownerUserId: mutationOwnerUserId,
+        });
+        configureAndroidWidgetBackgroundSync({
+          baseUrl: profile.baseUrl,
+          apiSecretSha1: profile.apiSecretSha1,
+          enabled: true,
+        });
+        await persistNightscoutProfiles(
+          nextProfiles,
+          profile.id,
+          mutationOwnerUserId,
+        );
+        if (ownerUserIdRef.current === mutationOwnerUserId) {
+          await vaultSynchronizer.requestReconciliation('provision');
+        }
       });
-
-      const nextProfiles = [profile, ...profilesRef.current];
-      setProfiles(nextProfiles);
-      setActiveProfileIdState(profile.id);
-
-      configureNightscoutInstance({baseUrl: profile.baseUrl, apiSecretSha1: profile.apiSecretSha1});
-      configureAndroidWidgetBackgroundSync({
-        baseUrl: profile.baseUrl,
-        apiSecretSha1: profile.apiSecretSha1,
-        enabled: true,
-      });
-      await persistNightscoutProfiles(nextProfiles, profile.id);
     },
-    [resolveConnectionInputs],
+    [
+      ownerUserId,
+      resolveConnectionInputs,
+      serializeMutation,
+      vaultSynchronizer,
+    ],
   );
 
   const setActiveProfileId = useCallback(
-    async (id: string) => {
-      const nextActive = profiles.find(p => p.id === id);
-      if (!nextActive) return;
+    (id: string) => {
+      const mutationOwnerUserId = ownerUserId;
+      return serializeMutation(async () => {
+        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+          throw new Error('The signed-in account changed before saving.');
+        }
+        const currentProfiles = profilesRef.current;
+        const nextActive = currentProfiles.find(p => p.id === id);
+        if (!nextActive) {
+          return;
+        }
 
-      setActiveProfileIdState(id);
-      configureNightscoutInstance({baseUrl: nextActive.baseUrl, apiSecretSha1: nextActive.apiSecretSha1});
-      configureAndroidWidgetBackgroundSync({
-        baseUrl: nextActive.baseUrl,
-        apiSecretSha1: nextActive.apiSecretSha1,
-        enabled: true,
+        activeProfileIdRef.current = id;
+        setActiveProfileIdState(id);
+        configureNightscoutInstance({
+          baseUrl: nextActive.baseUrl,
+          apiSecretSha1: nextActive.apiSecretSha1,
+          ownerUserId: mutationOwnerUserId,
+        });
+        configureAndroidWidgetBackgroundSync({
+          baseUrl: nextActive.baseUrl,
+          apiSecretSha1: nextActive.apiSecretSha1,
+          enabled: true,
+        });
+        await persistNightscoutProfiles(
+          currentProfiles,
+          id,
+          mutationOwnerUserId,
+        );
+        if (ownerUserIdRef.current === mutationOwnerUserId) {
+          await vaultSynchronizer.requestReconciliation('provision');
+        }
       });
-      await persistNightscoutProfiles(profiles, id);
     },
-    [profiles],
+    [ownerUserId, serializeMutation, vaultSynchronizer],
   );
 
   const updateProfile = useCallback(
-    async (params: {profileId: string; urlInput: string; secretInput?: string}) => {
-      const {normalizedUrl, apiSecretSha1} = resolveConnectionInputs(params);
-      const secretTrimmed = (params.secretInput ?? '').trim();
-      const nextSecretSha1 = secretTrimmed ? apiSecretSha1 : null;
+    (params: {profileId: string; urlInput: string; secretInput?: string}) => {
+      const mutationOwnerUserId = ownerUserId;
+      return serializeMutation(async () => {
+        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+          throw new Error('The signed-in account changed before saving.');
+        }
+        const {normalizedUrl, apiSecretSha1} = resolveConnectionInputs(params);
+        const secretTrimmed = (params.secretInput ?? '').trim();
+        const nextSecretSha1 = secretTrimmed ? apiSecretSha1 : null;
+        await testNightscoutConnection({baseUrl: normalizedUrl, apiSecretSha1});
+        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+          throw new Error('The signed-in account changed before saving.');
+        }
 
-      await testNightscoutConnection({baseUrl: normalizedUrl, apiSecretSha1});
+        const currentProfiles = profilesRef.current;
+        const nextProfiles = currentProfiles.map(p => {
+          if (p.id !== params.profileId) {
+            return p;
+          }
 
-      const currentProfiles = profilesRef.current;
-      const nextProfiles = currentProfiles.map(p => {
-        if (p.id !== params.profileId) return p;
+          const nextLabelDerived = labelFromNightscoutBaseUrl(normalizedUrl);
+          const prevLabelDerived = labelFromNightscoutBaseUrl(p.baseUrl);
+          const label =
+            p.label === prevLabelDerived ? nextLabelDerived : p.label;
 
-        const nextLabelDerived = labelFromNightscoutBaseUrl(normalizedUrl);
-        const prevLabelDerived = labelFromNightscoutBaseUrl(p.baseUrl);
-        const label = p.label === prevLabelDerived ? nextLabelDerived : p.label;
-
-        return {
-          ...p,
-          baseUrl: normalizedUrl,
-          label,
-          apiSecretSha1: nextSecretSha1 ?? p.apiSecretSha1,
-        };
-      });
-
-      setProfiles(nextProfiles);
-
-      // If the updated profile is the active one, reconfigure axios.
-      const updatedActive = nextProfiles.find(p => p.id === activeProfileId) ?? null;
-      if (updatedActive) {
-        configureNightscoutInstance({
-          baseUrl: updatedActive.baseUrl,
-          apiSecretSha1: updatedActive.apiSecretSha1,
+          return {
+            ...p,
+            baseUrl: normalizedUrl,
+            label,
+            apiSecretSha1: nextSecretSha1 ?? p.apiSecretSha1,
+          };
         });
-        configureAndroidWidgetBackgroundSync({
-          baseUrl: updatedActive.baseUrl,
-          apiSecretSha1: updatedActive.apiSecretSha1,
-          enabled: true,
-        });
-      }
 
-      await persistNightscoutProfiles(nextProfiles, activeProfileId);
-    },
-    [activeProfileId, resolveConnectionInputs],
-  );
+        profilesRef.current = nextProfiles;
+        setProfiles(nextProfiles);
 
-  const deleteProfile = useCallback(
-    async (profileId: string) => {
-      const nextProfiles = profilesRef.current.filter(p => p.id !== profileId);
-      const nextActiveId =
-        activeProfileId && activeProfileId !== profileId
-          ? activeProfileId
-          : nextProfiles[0]?.id ?? null;
-
-      setProfiles(nextProfiles);
-      setActiveProfileIdState(nextActiveId);
-
-      if (nextActiveId) {
-        const active = nextProfiles.find(p => p.id === nextActiveId) ?? null;
-        if (active) {
-          configureNightscoutInstance({baseUrl: active.baseUrl, apiSecretSha1: active.apiSecretSha1});
+        // If the updated profile is the active one, reconfigure axios.
+        const currentActiveProfileId = activeProfileIdRef.current;
+        const updatedActive =
+          nextProfiles.find(p => p.id === currentActiveProfileId) ?? null;
+        if (updatedActive) {
+          configureNightscoutInstance({
+            baseUrl: updatedActive.baseUrl,
+            apiSecretSha1: updatedActive.apiSecretSha1,
+            ownerUserId: mutationOwnerUserId,
+          });
           configureAndroidWidgetBackgroundSync({
-            baseUrl: active.baseUrl,
-            apiSecretSha1: active.apiSecretSha1,
+            baseUrl: updatedActive.baseUrl,
+            apiSecretSha1: updatedActive.apiSecretSha1,
             enabled: true,
           });
         }
-      } else {
-        clearNightscoutInstance();
-        configureAndroidWidgetBackgroundSync({enabled: false});
-      }
 
-      await persistNightscoutProfiles(nextProfiles, nextActiveId);
+        await persistNightscoutProfiles(
+          nextProfiles,
+          currentActiveProfileId,
+          mutationOwnerUserId,
+        );
+        if (ownerUserIdRef.current === mutationOwnerUserId) {
+          await vaultSynchronizer.requestReconciliation('provision');
+        }
+      });
     },
-    [activeProfileId],
+    [
+      ownerUserId,
+      resolveConnectionInputs,
+      serializeMutation,
+      vaultSynchronizer,
+    ],
+  );
+
+  const deleteProfile = useCallback(
+    (profileId: string) => {
+      const mutationOwnerUserId = ownerUserId;
+      return serializeMutation(async () => {
+        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+          throw new Error('The signed-in account changed before saving.');
+        }
+        const nextProfiles = profilesRef.current.filter(
+          p => p.id !== profileId,
+        );
+        const currentActiveProfileId = activeProfileIdRef.current;
+        const nextActiveId =
+          currentActiveProfileId && currentActiveProfileId !== profileId
+            ? currentActiveProfileId
+            : nextProfiles[0]?.id ?? null;
+
+        profilesRef.current = nextProfiles;
+        activeProfileIdRef.current = nextActiveId;
+        setProfiles(nextProfiles);
+        setActiveProfileIdState(nextActiveId);
+
+        if (nextActiveId) {
+          const active = nextProfiles.find(p => p.id === nextActiveId) ?? null;
+          if (active) {
+            configureNightscoutInstance({
+              baseUrl: active.baseUrl,
+              apiSecretSha1: active.apiSecretSha1,
+              ownerUserId: mutationOwnerUserId,
+            });
+            configureAndroidWidgetBackgroundSync({
+              baseUrl: active.baseUrl,
+              apiSecretSha1: active.apiSecretSha1,
+              enabled: true,
+            });
+          }
+        } else {
+          clearNightscoutInstance();
+          configureAndroidWidgetBackgroundSync({enabled: false});
+        }
+
+        await persistNightscoutProfiles(
+          nextProfiles,
+          nextActiveId,
+          mutationOwnerUserId,
+        );
+        if (ownerUserIdRef.current === mutationOwnerUserId) {
+          await vaultSynchronizer.requestReconciliation(
+            nextActiveId ? 'provision' : 'remove',
+          );
+        }
+      });
+    },
+    [ownerUserId, serializeMutation, vaultSynchronizer],
+  );
+
+  const retryVaultSync = useCallback(
+    () => vaultSynchronizer.retryPending(),
+    [vaultSynchronizer],
   );
 
   const value = useMemo<NightscoutConfigContextValue>(
@@ -287,6 +511,8 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
       setActiveProfileId,
       updateProfile,
       deleteProfile,
+      vaultSyncStatus,
+      retryVaultSync,
     }),
     [
       profiles,
@@ -297,6 +523,8 @@ export const NightscoutConfigProvider = ({children}: {children: React.ReactNode}
       setActiveProfileId,
       updateProfile,
       deleteProfile,
+      vaultSyncStatus,
+      retryVaultSync,
     ],
   );
 

@@ -75,7 +75,7 @@ const MainTabsNavigator: React.FC = () => {
           }}
         />
         <Tab.Screen
-          name="TRENDS"
+          name={SCREEN_NAMES.TRENDS_TAB_SCREEN}
           component={Trends}
           options={{
             tabBarIcon: ({color, size}: {color: string; size: number}) => (

@@ -5,21 +5,9 @@ appId: com.shanidms22
 # This relies on E2E mode providing deterministic BG fixtures when live data is missing.
 # Selectors are stable `testID`s (see src/constants/E2E_TEST_IDS.ts).
 
-- launchApp:
-    clearState: true
+- runFlow: subflows/enter-legacy.yaml
 
-# Deterministic E2E login.
-- extendedWaitUntil:
-    visible:
-      id: login.e2eButton
-    timeout: 15000
-    optional: true
-
-- tapOn:
-    id: login.e2eButton
-    optional: true
-
-# Wait for Home.
+# The compatibility bridge lands on Home.
 - extendedWaitUntil:
     visible:
       id: screen.home

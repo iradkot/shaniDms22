@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {RefreshControl, ScrollView, View, Text, Pressable} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -53,8 +53,12 @@ import {
   markEpisodeKeyIfNew,
   upsertProfileSnapshot,
 } from 'app/services/aiMemory/aiMemoryStore';
+import {
+  loadAiHomeRecommendation,
+  saveAiHomeRecommendation,
+} from 'app/services/aiMemory/aiHomeRecommendationStore';
+import {useActiveAiWorkspaceScope} from 'app/services/aiMemory/useActiveAiWorkspaceScope';
 
-const HOME_RECOMMENDATION_STORAGE_KEY = 'home:todayRecommendation:v1';
 const LOOP_ASSIST_STATUS_KEY = 'loopAssist:status:v1';
 
 function normalizeRecommendationText(input: string): string {
@@ -224,6 +228,18 @@ const Home: React.FC = () => {
   const {language} = useAppLanguage();
   const {settings: glucoseSettings} = useGlucoseSettings();
   const {settings: aiSettings} = useAiSettings();
+  const aiWorkspaceScope = useActiveAiWorkspaceScope();
+  const activeAiWorkspaceIdentity = aiWorkspaceScope
+    ? `${aiWorkspaceScope.productUserId}\n${aiWorkspaceScope.workspaceId}`
+    : null;
+  const dailySummarySeenKey = aiWorkspaceScope
+    ? `${DAILY_SUMMARY_SEEN_KEY}:${aiWorkspaceScope.workspaceId}`
+    : null;
+  const currentAiWorkspaceIdentityRef = useRef(
+    activeAiWorkspaceIdentity,
+  );
+  currentAiWorkspaceIdentityRef.current = activeAiWorkspaceIdentity;
+  const recommendationAbortRef = useRef<AbortController | null>(null);
   const recommendationStyles = useMemo(() => ({
     alertTitleStrong: {
       fontWeight: '800' as const,
@@ -292,7 +308,6 @@ const Home: React.FC = () => {
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [tooltipModel, setTooltipModel] = useState<StackedChartsTooltipModel | null>(null);
   const {
-    isChartTouchSessionActive,
     handleChartTouchSessionChange,
     scrollTouchHandlers,
   } = useHomeChartTouchSession();
@@ -538,6 +553,7 @@ const Home: React.FC = () => {
   }, [taggedSegments]);
 
   useEffect(() => {
+    if (!aiWorkspaceScope) {return;}
     let mounted = true;
 
     const persistMealEpisodes = async () => {
@@ -545,11 +561,11 @@ const Home: React.FC = () => {
       for (const meal of recentMeals) {
         if (!mounted) {return;}
         const key = `meal:${format(new Date(meal.startMs), 'yyyy-MM-dd')}:${meal.id}`;
-        const isNew = await markEpisodeKeyIfNew(key);
+        const isNew = await markEpisodeKeyIfNew(aiWorkspaceScope, key);
         if (!isNew) {continue;}
 
         const response = summarizeMealResponse(meal, listBgData);
-        await addMemoryEntry({
+        await addMemoryEntry(aiWorkspaceScope, {
           type: 'episode',
           tags: ['meal', 'postprandial', ...(meal.tags ?? []).slice(0, 3)],
           textSummary:
@@ -574,7 +590,7 @@ const Home: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [language, listBgData, taggedSegments]);
+  }, [aiWorkspaceScope, language, listBgData, taggedSegments]);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const handlePullToRefresh = useCallback(async () => {
@@ -718,22 +734,31 @@ const Home: React.FC = () => {
     liveSnapshot?.predictions,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let mounted = true;
+    recommendationAbortRef.current?.abort();
+    recommendationAbortRef.current = null;
+    setAiRecommendationBody(null);
+    setRecommendationGeneratedAt(Date.now());
+    setHasLoadedSavedRecommendation(false);
+    if (!aiWorkspaceScope) {
+      setHasLoadedSavedRecommendation(true);
+      return () => {
+        mounted = false;
+        recommendationAbortRef.current?.abort();
+      };
+    }
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(HOME_RECOMMENDATION_STORAGE_KEY);
+        const saved = await loadAiHomeRecommendation(aiWorkspaceScope);
         if (!mounted) {return;}
-        if (!raw) {
+        if (!saved) {
           setHasLoadedSavedRecommendation(true);
           return;
         }
-        const parsed = JSON.parse(raw) as {date?: string; text?: string; generatedAt?: number};
-        if (parsed?.date === todayYmd && parsed?.text) {
-          setAiRecommendationBody(normalizeRecommendationText(parsed.text));
-          setRecommendationGeneratedAt(
-            typeof parsed.generatedAt === 'number' ? parsed.generatedAt : Date.now(),
-          );
+        if (saved.date === todayYmd) {
+          setAiRecommendationBody(normalizeRecommendationText(saved.text));
+          setRecommendationGeneratedAt(saved.generatedAt);
         }
       } catch {
         // ignore
@@ -744,8 +769,9 @@ const Home: React.FC = () => {
 
     return () => {
       mounted = false;
+      recommendationAbortRef.current?.abort();
     };
-  }, [todayYmd]);
+  }, [activeAiWorkspaceIdentity, aiWorkspaceScope, todayYmd]);
 
   const recommendationContextPrompt = useMemo(() => {
     if (!todayRecommendation) {return '';}
@@ -839,10 +865,15 @@ const Home: React.FC = () => {
   const handleRefreshRecommendation = useCallback(async () => {
     if (!todayRecommendation || isRefreshingRecommendation) {return;}
     setIsRefreshingRecommendation(true);
+    const requestedWorkspaceIdentity = activeAiWorkspaceIdentity;
+    recommendationAbortRef.current?.abort();
+    const abortController =
+      typeof AbortController === 'undefined' ? null : new AbortController();
+    recommendationAbortRef.current = abortController;
 
     try {
       const apiKey = (aiSettings.apiKey ?? '').trim();
-      if (!aiSettings.enabled || !apiKey) {
+      if (!aiSettings.enabled || !apiKey || !aiWorkspaceScope) {
         return;
       }
 
@@ -860,12 +891,14 @@ const Home: React.FC = () => {
         .filter(e => Date.now() - new Date(e.timestamp!).getTime() <= 2 * 60 * 60 * 1000)
         .reduce((sum, e) => sum + (e.amount ?? 0), 0);
 
-      const patientMemory = await buildCompactPatientMemory();
+      const patientMemory = await buildCompactPatientMemory(aiWorkspaceScope);
+      if (currentAiWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) {return;}
 
-      await upsertProfileSnapshot({
+      await upsertProfileSnapshot(aiWorkspaceScope, {
         communicationStyle: language === 'he' ? 'hebrew-concise-practical' : 'english-concise-practical',
         notes: ['prefers concise practical recommendations', 'prefers context-aware guidance over generic bolus focus'],
       });
+      if (currentAiWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) {return;}
 
       const model = (aiSettings.openAiModel ?? 'gpt-5.5').trim() || 'gpt-5.5';
       const provider = createLlmProvider({
@@ -877,6 +910,7 @@ const Home: React.FC = () => {
         model,
         temperature: 0.5,
         maxOutputTokens: 220,
+        abortSignal: abortController?.signal,
         messages: [
           {
             role: 'system',
@@ -918,6 +952,7 @@ const Home: React.FC = () => {
           },
         ],
       });
+      if (currentAiWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) {return;}
 
       const rawText = (response.content ?? '').trim();
       const text = normalizeRecommendationText(rawText);
@@ -925,12 +960,13 @@ const Home: React.FC = () => {
       setAiRecommendationBody(text || null);
       setRecommendationGeneratedAt(nowMs);
       if (text) {
-        await AsyncStorage.setItem(
-          HOME_RECOMMENDATION_STORAGE_KEY,
-          JSON.stringify({date: todayYmd, text, generatedAt: nowMs}),
-        );
+        await saveAiHomeRecommendation(aiWorkspaceScope, {
+          date: todayYmd,
+          text,
+          generatedAt: nowMs,
+        });
 
-        await addMemoryEntry({
+        await addMemoryEntry(aiWorkspaceScope, {
           type: 'chat_summary',
           tags: ['home_recommendation', 'general_guidance', isShowingToday ? 'today' : 'history'],
           textSummary: text,
@@ -949,14 +985,21 @@ const Home: React.FC = () => {
     } catch {
       // keep last successful recommendation
     } finally {
-      setIsRefreshingRecommendation(false);
+      if (currentAiWorkspaceIdentityRef.current === requestedWorkspaceIdentity) {
+        setIsRefreshingRecommendation(false);
+      }
+      if (recommendationAbortRef.current === abortController) {
+        recommendationAbortRef.current = null;
+      }
     }
   }, [
+    aiWorkspaceScope,
     aiSettings.apiKey,
     aiSettings.enabled,
     aiSettings.openAiModel,
     aiSettings.personality,
     aiSettings.provider,
+    activeAiWorkspaceIdentity,
     insulinData,
     isRefreshingRecommendation,
     isShowingToday,
@@ -1028,8 +1071,12 @@ const Home: React.FC = () => {
     const run = async () => {
       try {
         const summaryDate = format(subDays(new Date(), 1), 'yyyy-MM-dd');
-        const latestBrief = await getLatestDailyBrief();
-        const seenDate = await AsyncStorage.getItem(DAILY_SUMMARY_SEEN_KEY);
+        const latestBrief = await getLatestDailyBrief(
+          aiWorkspaceScope?.workspaceId,
+        );
+        const seenDate = dailySummarySeenKey
+          ? await AsyncStorage.getItem(dailySummarySeenKey)
+          : null;
 
         if (!mounted) {return;}
 
@@ -1048,7 +1095,7 @@ const Home: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [isShowingToday]);
+  }, [aiWorkspaceScope, dailySummarySeenKey, isShowingToday]);
 
   useEffect(() => {
     let mounted = true;
@@ -1114,7 +1161,6 @@ const Home: React.FC = () => {
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        scrollEnabled={!isChartTouchSessionActive}
         {...scrollTouchHandlers}
         refreshControl={
           <RefreshControl
@@ -1156,8 +1202,11 @@ const Home: React.FC = () => {
             {showDailySummaryAlert ? (
               <DailySummaryAlert
                 onPress={async () => {
-                  if (pendingSummaryDate) {
-                    await AsyncStorage.setItem(DAILY_SUMMARY_SEEN_KEY, pendingSummaryDate);
+                  if (pendingSummaryDate && dailySummarySeenKey) {
+                    await AsyncStorage.setItem(
+                      dailySummarySeenKey,
+                      pendingSummaryDate,
+                    );
                   }
                   setShowDailySummaryAlert(false);
                   (navigation as any).navigate(DAILY_REVIEW_SCREEN);

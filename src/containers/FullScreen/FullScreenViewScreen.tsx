@@ -28,7 +28,7 @@ import {useAGPData} from 'app/components/charts/AGPGraph/hooks/useAGPData';
 import AGPChart from 'app/components/charts/AGPGraph/components/AGPChart';
 import {cgmRange} from 'app/constants/PLAN_CONFIG';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
-import {MAIN_TAB_NAVIGATOR} from 'app/constants/SCREEN_NAMES';
+import {PRODUCT_EXPERIENCE_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {addOpacity} from 'app/style/styling.utils';
 
 const FULL_SCREEN_CONSTANTS = {
@@ -37,7 +37,6 @@ const FULL_SCREEN_CONSTANTS = {
   hitSlop: {top: 10, bottom: 10, left: 10, right: 10},
   defaultCgmGraphHeightFallback: 240,
   agpMinWidth: 280,
-  stackedMixedMiniMultiplier: 2.5,
   stackedLandscapeGap: 10,
 } as const;
 
@@ -137,28 +136,16 @@ function getStackedChartHeights(params: {
   isLandscape: boolean;
 }) {
   const availableHeight = Math.max(1, Math.floor(params.availableHeight));
-  const minCgm = params.isLandscape ? 150 : 220;
-  const minMixed = params.isLandscape ? 116 : 180;
-  const maxMixed = params.isLandscape ? 220 : 300;
-  const targetMixed = availableHeight * (params.isLandscape ? 0.38 : 0.42);
-  const minTotal = minCgm + minMixed;
-
-  let mixedHeight =
-    availableHeight >= minTotal
-      ? clamp(Math.floor(targetMixed), minMixed, maxMixed)
-      : Math.floor(availableHeight * 0.42);
-
-  if (availableHeight - mixedHeight < minCgm) {
-    mixedHeight = Math.max(1, availableHeight - minCgm);
-  }
-
-  const cgmHeight = Math.max(1, availableHeight - mixedHeight);
-  const miniHeight = Math.max(
-    1,
-    Math.floor(mixedHeight / FULL_SCREEN_CONSTANTS.stackedMixedMiniMultiplier),
-  );
-
-  return {cgmHeight, miniHeight};
+  // Lanes now have separate units, headers and minimum readable plot heights.
+  // The panel scrolls; never shrink their combined content to one viewport.
+  return {
+    cgmHeight: clamp(
+      Math.floor(availableHeight * 0.6),
+      params.isLandscape ? 150 : 220,
+      420,
+    ),
+    miniHeight: clamp(Math.floor(availableHeight / 4), 110, 140),
+  };
 }
 
 function getStackedLandscapeRailWidth(availableWidth: number) {
@@ -413,7 +400,7 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
 
   const handleBack = () => {
     // In some navigation states (or E2E automation timing), goBack() can be a no-op
-    // if the current navigator has no back stack. Fall back to parent, then tabs.
+    // if the current navigator has no back stack. Fall back to parent, then Hub.
     if (typeof navigation?.canGoBack === 'function' && navigation.canGoBack()) {
       navigation.goBack();
       return;
@@ -433,7 +420,7 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
     }
 
     if (typeof navigation?.navigate === 'function') {
-      navigation.navigate(MAIN_TAB_NAVIGATOR);
+      navigation.navigate(PRODUCT_EXPERIENCE_SCREEN);
     }
   };
 
@@ -598,7 +585,12 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
         {mode === 'stackedCharts' ? (
           <StackedChartsFrame testID={E2E_TEST_IDS.charts.cgmGraphFullScreen}>
             <StackedChartsLandscapeRow>
-              <StackedChartsPanel>
+              <StackedChartsPanel
+                testID="fullscreen.stackedChartScroll"
+                scrollEnabled
+                nestedScrollEnabled
+                removeClippedSubviews={false}
+                style={{width: stackedFrame.chartWidth}}>
                 <StackedHomeCharts
                   bgSamples={(params as any)?.bgSamples ?? []}
                   foodItems={(params as any)?.foodItems ?? null}
@@ -627,6 +619,9 @@ const FullScreenViewScreen: React.FC<{navigation: any; route: any}> = ({
 
               {isDeviceLandscape ? (
                 <StackedTooltipRail
+                  testID="fullscreen.stackedRailScroll"
+                  scrollEnabled
+                  nestedScrollEnabled
                   style={{width: stackedFrame.tooltipRailWidth}}>
                   {stackedTooltipModel?.visible ? (
                     <StackedRailTooltip model={stackedTooltipModel} />
@@ -860,13 +855,7 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
         onChange(nextSelection);
       }
     },
-    [
-      disabled,
-      minRangeRatio,
-      normalizedSelection,
-      onChange,
-      onPreviewChange,
-    ],
+    [disabled, minRangeRatio, normalizedSelection, onChange, onPreviewChange],
   );
 
   return (
@@ -921,9 +910,7 @@ const RangeTimelineSlider: React.FC<RangeTimelineSliderProps> = ({
           step={0.001}
           value={normalizedSelection.end}
           onValueChange={(value: number) => updateThumb('end', value)}
-          onSlidingComplete={(value: number) =>
-            updateThumb('end', value, true)
-          }
+          onSlidingComplete={(value: number) => updateThumb('end', value, true)}
           minimumTrackTintColor={tintColor}
           maximumTrackTintColor={inactiveTrackColor}
           thumbTintColor={tintColor}
@@ -1027,18 +1014,21 @@ const StackedChartsFrame = styled.View`
 `;
 
 const StackedChartsLandscapeRow = styled.View`
+  flex: 1;
+  width: 100%;
   flex-direction: row;
   align-items: stretch;
   justify-content: center;
 `;
 
-const StackedChartsPanel = styled.View`
-  justify-content: center;
+const StackedChartsPanel = styled.ScrollView`
+  flex: 1;
 `;
 
-const StackedTooltipRail = styled.View`
+const StackedTooltipRail = styled.ScrollView`
+  flex-grow: 0;
+  flex-shrink: 0;
   margin-left: ${FULL_SCREEN_CONSTANTS.stackedLandscapeGap}px;
-  justify-content: flex-start;
 `;
 
 const RailTooltipCard = styled.View`

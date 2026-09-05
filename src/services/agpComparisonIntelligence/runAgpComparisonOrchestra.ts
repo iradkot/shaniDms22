@@ -61,7 +61,9 @@ export async function runAgpComparisonOrchestra(
       localInsights,
       provider: params.provider,
       model: params.model,
-      abortSignal: params.abortSignal,
+      ...(params.abortSignal !== undefined
+        ? {abortSignal: params.abortSignal}
+        : {}),
     });
     if (!refined) {
       return localResult;

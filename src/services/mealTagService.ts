@@ -1,16 +1,14 @@
 /**
- * Meal Tag Service — AsyncStorage-backed CRUD with Nightscout sync.
+ * Meal Tag Service — AsyncStorage-backed local CRUD.
  *
  * Storage layout:
  *   `meal-tags-v1`     → MealTagMap  (treatmentId → string[])
  *   `tag-registry-v1`  → TagRegistry (global list for autocomplete)
  *
- * Nightscout sync:
- *   Tags are written to the treatment `notes` field as comma-separated values.
- *   When reading treatments, tags are extracted from notes via `parseTagsFromNotes`.
+ * Nightscout is a read-only source in V1. Tags created in ShaniDms are App-Owned
+ * Data and are never written back to a Nightscout treatment.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
 import type {MealTag, MealTagMap, TagRegistry, TagRegistryEntry} from 'app/types/mealTag.types';
 
 // ── Storage keys ────────────────────────────────────────────────────────
@@ -44,7 +42,9 @@ export function parseTagsFromNotes(notes: string | null | undefined): MealTag[] 
   const hashMatches: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = hashtagRe.exec(notes)) !== null) {
-    const tag = normalizeTag(m[1]);
+    const match = m[1];
+    if (match === undefined) continue;
+    const tag = normalizeTag(match);
     if (tag) hashMatches.push(tag);
   }
   if (hashMatches.length) return hashMatches;
@@ -103,8 +103,9 @@ export async function getTagsForMeals(mealIds: string[]): Promise<MealTagMap> {
   const map = await loadTagMap();
   const result: MealTagMap = {};
   for (const id of mealIds) {
-    if (map[id]?.length) {
-      result[id] = map[id];
+    const tags = map[id];
+    if (tags?.length) {
+      result[id] = tags;
     }
   }
   return result;
@@ -165,57 +166,18 @@ export async function getAllKnownTags(): Promise<TagRegistryEntry[]> {
   return loadRegistry();
 }
 
-// ── Nightscout Sync ─────────────────────────────────────────────────────
-
 /**
- * Sync tags to a Nightscout treatment's `notes` field.
- * Preserves any existing non-tag notes content.
+ * Save App-Owned meal tags locally. Nightscout remains read-only.
  */
-export async function syncTagsToNightscout(
-  treatmentId: string,
-  tags: MealTag[],
-): Promise<boolean> {
-  try {
-    // First fetch the current treatment to preserve existing notes
-    const response = await nightscoutInstance.get(`/api/v1/treatments/${treatmentId}`);
-    const treatment = response.data;
-
-    // Strip old tags from notes, preserve other content
-    const existingNotes = typeof treatment?.notes === 'string' ? treatment.notes : '';
-    const nonTagNotes = existingNotes
-      .replace(/#[\w][\w\s-]*/g, '')
-      .trim();
-
-    // Build new notes: existing content + tags
-    const tagString = formatTagsForNotes(tags);
-    const newNotes = [nonTagNotes, tagString].filter(Boolean).join(' ').trim();
-
-    // PUT update
-    await nightscoutInstance.put(`/api/v1/treatments`, {
-      ...treatment,
-      notes: newNotes,
-    });
-
-    return true;
-  } catch (err) {
-    console.warn('syncTagsToNightscout: Failed to sync', treatmentId, err);
-    return false;
-  }
-}
-
-/**
- * Save tags locally and sync to Nightscout in background.
- * Returns immediately after local save — NS sync is fire-and-forget.
- */
-export async function tagMealAndSync(
+export async function saveMealTags(
   mealId: string,
   tags: MealTag[],
 ): Promise<void> {
-  // 1. Save locally (fast)
   await setTagsForMeal(mealId, tags);
-
-  // 2. Sync to Nightscout (background, don't block)
-  syncTagsToNightscout(mealId, tags).catch(() => {
-    // Silently fail — local is the source of truth
-  });
 }
+
+/**
+ * @deprecated Use `saveMealTags`. Kept temporarily so older callers also stay
+ * read-only while migrating to the clearer App-Owned Data name.
+ */
+export const tagMealAndSync = saveMealTags;
