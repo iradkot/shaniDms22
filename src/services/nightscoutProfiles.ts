@@ -23,7 +23,8 @@ const LEGACY_OWNER_USER_ID_KEY = 'nightscout.legacyOwnerUid.v1';
 const LEGACY_QUARANTINE_KEY = 'nightscout.legacyQuarantine.v1';
 const MAX_PROFILES = 32;
 
-const isSha1Hex = (value: string): boolean => /^[a-f0-9]{40}$/i.test(value.trim());
+const isSha1Hex = (value: string): boolean =>
+  /^[a-f0-9]{40}$/i.test(value.trim());
 
 const isLocalNightscoutHost = (input: string): boolean => {
   const hostname = input.toLowerCase().replace(/^\[|\]$/g, '');
@@ -83,7 +84,9 @@ export const normalizeNightscoutUrl = (raw: string): string | null => {
   }
 
   // Allow users to omit scheme; default to https.
-  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const withScheme = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
 
   try {
     const url = new URL(withScheme);
@@ -112,7 +115,10 @@ export const normalizeNightscoutUrl = (raw: string): string | null => {
     }
 
     // Remove default ports for nicer display.
-    if ((url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80')) {
+    if (
+      (url.protocol === 'https:' && url.port === '443') ||
+      (url.protocol === 'http:' && url.port === '80')
+    ) {
       url.port = '';
     }
 
@@ -130,7 +136,9 @@ export const normalizeNightscoutUrl = (raw: string): string | null => {
  * - the full secret/token (example: `jvA4cWn9c7zxgTyZ`), or
  * - the already-hashed value (40 hex chars).
  */
-export const normalizeNightscoutApiSecretToSha1 = (raw: string): string | null => {
+export const normalizeNightscoutApiSecretToSha1 = (
+  raw: string,
+): string | null => {
   const trimmed = raw.trim();
   if (!trimmed) {
     return null;
@@ -144,7 +152,8 @@ export const normalizeNightscoutApiSecretToSha1 = (raw: string): string | null =
   return sha1(trimmed);
 };
 
-const makeId = () => `ns_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+const makeId = () =>
+  `ns_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
 /** Derives a user-friendly label from the Nightscout base URL (best-effort). */
 export const labelFromNightscoutBaseUrl = (baseUrl: string): string => {
@@ -157,13 +166,16 @@ export const labelFromNightscoutBaseUrl = (baseUrl: string): string => {
 };
 
 type StoredNightscoutProfile = Omit<NightscoutProfile, 'apiSecretSha1'>;
+type DecodedNightscoutProfile = StoredNightscoutProfile & {
+  readonly legacySecret?: string;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const decodeStoredProfile = (
   value: unknown,
-): (StoredNightscoutProfile & {readonly legacySecret?: string}) | undefined => {
+): DecodedNightscoutProfile | undefined => {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -177,7 +189,12 @@ const decodeStoredProfile = (
     typeof value.createdAt === 'number' && Number.isFinite(value.createdAt)
       ? value.createdAt
       : undefined;
-  if (!/^[A-Za-z0-9_-]{1,96}$/.test(id) || !label || !baseUrl || createdAt === undefined) {
+  if (
+    !/^[A-Za-z0-9_-]{1,96}$/.test(id) ||
+    !label ||
+    !baseUrl ||
+    createdAt === undefined
+  ) {
     return undefined;
   }
   const legacySecret =
@@ -214,7 +231,8 @@ const storageKeysFor = (ownerUserId: string | null) => {
 const credentialService = (
   ownerUserId: string | null,
   profileId: string,
-): string => `shani.nightscout.v2.${accountScopeToken(ownerUserId)}.${profileId}`;
+): string =>
+  `shani.nightscout.v2.${accountScopeToken(ownerUserId)}.${profileId}`;
 
 const legacyCredentialService = (profileId: string): string =>
   `shani.nightscout.${profileId}`;
@@ -222,14 +240,63 @@ const legacyCredentialService = (profileId: string): string =>
 const quarantinedCredentialService = (profileId: string): string =>
   `shani.nightscout.quarantine.${sha1(profileId)}`;
 
-const metadataFor = (profile: NightscoutProfile): StoredNightscoutProfile => ({
+const metadataFor = (
+  profile: StoredNightscoutProfile,
+): StoredNightscoutProfile => ({
   id: profile.id,
   label: profile.label.trim().slice(0, 120) || 'Nightscout',
   baseUrl: profile.baseUrl,
   createdAt: profile.createdAt,
 });
 
-const readStoredProfilesAt = async (storageKey: string): Promise<
+// Destructive migrations require a complete decode. A missing URL polyfill or
+// damaged item must not turn a saved connection into an empty, deleted payload.
+const decodeCompleteProfileList = (
+  value: unknown,
+): DecodedNightscoutProfile[] | undefined => {
+  if (!Array.isArray(value) || value.length > MAX_PROFILES) {
+    return undefined;
+  }
+  const profiles = value.map(decodeStoredProfile);
+  if (profiles.some(profile => profile === undefined)) {
+    return undefined;
+  }
+  return profiles as DecodedNightscoutProfile[];
+};
+
+const readLegacyQuarantine = async (): Promise<{
+  profiles: StoredNightscoutProfile[];
+  preferredActiveProfileId: string | null;
+}> => {
+  const raw = await AsyncStorage.getItem(LEGACY_QUARANTINE_KEY);
+  if (raw === null) {
+    return {profiles: [], preferredActiveProfileId: null};
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    const profiles =
+      isRecord(parsed) &&
+      parsed.schemaVersion === 1 &&
+      parsed.reason === 'unattributed'
+        ? decodeCompleteProfileList(parsed.profiles)
+        : undefined;
+    if (profiles && isRecord(parsed)) {
+      const preferredActiveProfileId =
+        typeof parsed.preferredActiveProfileId === 'string' &&
+        profiles.some(profile => profile.id === parsed.preferredActiveProfileId)
+          ? parsed.preferredActiveProfileId
+          : null;
+      return {profiles: profiles.map(metadataFor), preferredActiveProfileId};
+    }
+  } catch {
+    // Keep the original payload for a later retry or repair.
+  }
+  throw new Error('Saved connections could not be read.');
+};
+
+const readStoredProfilesAt = async (
+  storageKey: string,
+): Promise<
   readonly (StoredNightscoutProfile & {readonly legacySecret?: string})[]
 > => {
   const raw = await AsyncStorage.getItem(storageKey);
@@ -247,8 +314,9 @@ const readStoredProfilesAt = async (storageKey: string): Promise<
       .filter(
         (
           profile,
-        ): profile is StoredNightscoutProfile & {readonly legacySecret?: string} =>
-          profile !== undefined,
+        ): profile is StoredNightscoutProfile & {
+          readonly legacySecret?: string;
+        } => profile !== undefined,
       );
   } catch {
     return [];
@@ -276,9 +344,15 @@ const migrateOrQuarantineLegacyProfiles = async (
     return;
   }
 
-  const legacyProfiles = await readStoredProfilesAt(
-    LEGACY_PROFILES_STORAGE_KEY,
-  );
+  let legacyProfiles: DecodedNightscoutProfile[] | undefined;
+  try {
+    legacyProfiles = decodeCompleteProfileList(JSON.parse(raw));
+  } catch {
+    return;
+  }
+  if (!legacyProfiles) {
+    return;
+  }
   const legacyActiveId = await AsyncStorage.getItem(
     LEGACY_ACTIVE_PROFILE_ID_KEY,
   );
@@ -303,6 +377,15 @@ const migrateOrQuarantineLegacyProfiles = async (
     const migrated = profilesWithSecrets.filter(
       profile => !existingIds.has(profile.id),
     );
+    const mergedMetadata = [
+      ...existing.map(metadataFor),
+      ...migrated.map(metadataFor),
+    ];
+    if (mergedMetadata.length > MAX_PROFILES) {
+      // Leave the complete legacy payload and its credentials for a later retry
+      // after the owner frees capacity. No part of this migration is written.
+      return;
+    }
     await Promise.all(
       migrated
         .filter(profile => isSha1Hex(profile.credential))
@@ -313,20 +396,6 @@ const migrateOrQuarantineLegacyProfiles = async (
           ),
         ),
     );
-    const mergedMetadata = [
-      ...existing.map(profile => ({
-        id: profile.id,
-        label: profile.label,
-        baseUrl: profile.baseUrl,
-        createdAt: profile.createdAt,
-      })),
-      ...migrated.map(profile => ({
-        id: profile.id,
-        label: profile.label,
-        baseUrl: profile.baseUrl,
-        createdAt: profile.createdAt,
-      })),
-    ].slice(0, MAX_PROFILES);
     await AsyncStorage.setItem(keys.profiles, JSON.stringify(mergedMetadata));
     const existingActiveId = await AsyncStorage.getItem(keys.activeProfileId);
     const resolvedActiveId = mergedMetadata.some(
@@ -334,16 +403,41 @@ const migrateOrQuarantineLegacyProfiles = async (
     )
       ? existingActiveId
       : mergedMetadata.some(profile => profile.id === legacyActiveId)
-        ? legacyActiveId
-        : null;
+      ? legacyActiveId
+      : null;
     if (resolvedActiveId) {
       await AsyncStorage.setItem(keys.activeProfileId, resolvedActiveId);
     } else {
       await AsyncStorage.removeItem(keys.activeProfileId);
     }
-  } else {
+  } else if (profilesWithSecrets.length > 0) {
+    const existing = await readLegacyQuarantine();
+    const merged = [...existing.profiles];
+    let preferredActiveProfileId = existing.preferredActiveProfileId;
+    const incoming = profilesWithSecrets.map(profile => {
+      const collision = merged.find(item => item.id === profile.id);
+      const id =
+        collision && collision.baseUrl !== profile.baseUrl
+          ? `ns_recovered_${sha1(`${profile.id}:${profile.baseUrl}`).slice(
+              0,
+              24,
+            )}`
+          : profile.id;
+      const entry = {...profile, id};
+      if (profile.id === legacyActiveId) {
+        preferredActiveProfileId = id;
+      }
+      if (!merged.some(item => item.id === id)) {
+        merged.push(metadataFor(entry));
+      }
+      return entry;
+    });
+    if (merged.length > MAX_PROFILES) {
+      // Preserve both payloads rather than silently truncate saved connections.
+      return;
+    }
     await Promise.all(
-      profilesWithSecrets
+      incoming
         .filter(profile => isSha1Hex(profile.credential))
         .map(profile =>
           nativeSecureCredentialStore.write(
@@ -358,12 +452,8 @@ const migrateOrQuarantineLegacyProfiles = async (
         schemaVersion: 1,
         reason: 'unattributed',
         quarantinedAt: Date.now(),
-        profiles: profilesWithSecrets.map(profile => ({
-          id: profile.id,
-          label: profile.label,
-          baseUrl: profile.baseUrl,
-          createdAt: profile.createdAt,
-        })),
+        profiles: merged,
+        ...(preferredActiveProfileId ? {preferredActiveProfileId} : {}),
       }),
     );
   }
@@ -380,11 +470,10 @@ const migrateOrQuarantineLegacyProfiles = async (
   ]);
 };
 
-const prepareLegacyProfiles = (ownerUserId: string | null): Promise<void> => {
-  const result = legacyMigrationTail.then(
-    () => migrateOrQuarantineLegacyProfiles(ownerUserId),
-    () => migrateOrQuarantineLegacyProfiles(ownerUserId),
-  );
+const serializeLegacyOperation = <T>(
+  operation: () => Promise<T>,
+): Promise<T> => {
+  const result = legacyMigrationTail.then(operation, operation);
   legacyMigrationTail = result.then(
     () => undefined,
     () => undefined,
@@ -392,9 +481,175 @@ const prepareLegacyProfiles = (ownerUserId: string | null): Promise<void> => {
   return result;
 };
 
+const prepareLegacyProfiles = (ownerUserId: string | null): Promise<void> =>
+  serializeLegacyOperation(() =>
+    migrateOrQuarantineLegacyProfiles(ownerUserId),
+  );
+
+/** Only a count is exposed until the signed-in user explicitly requests recovery. */
+export const countRecoverableLegacyNightscoutProfiles = async (
+  ownerUserId: string | null,
+): Promise<number> => {
+  if (!normalizedOwnerUserId(ownerUserId)) {
+    return 0;
+  }
+  return serializeLegacyOperation(async () => {
+    await migrateOrQuarantineLegacyProfiles(ownerUserId);
+    return (await readLegacyQuarantine()).profiles.length;
+  });
+};
+
+/**
+ * Call only after the user confirms that this device's old connections belong
+ * to their signed-in account. Every saved credential is revalidated before any
+ * profile is attributed. Failed verification leaves the quarantine intact.
+ */
+export const recoverLegacyNightscoutProfiles = async (params: {
+  ownerUserId: string;
+  verifyConnection: (profile: NightscoutProfile) => Promise<void>;
+  isOwnerCurrent: () => boolean;
+}): Promise<{
+  profiles: NightscoutProfile[];
+  activeProfileId: string | null;
+}> => {
+  const ownerUserId = normalizedOwnerUserId(params.ownerUserId);
+  if (!ownerUserId) {
+    throw new Error('Sign in before recovering saved connections.');
+  }
+  const assertOwnerCurrent = () => {
+    if (!params.isOwnerCurrent()) {
+      throw new Error(
+        'The signed-in account changed before recovery completed.',
+      );
+    }
+  };
+  return serializeLegacyOperation(async () => {
+    assertOwnerCurrent();
+    await migrateOrQuarantineLegacyProfiles(ownerUserId);
+    const quarantine = await readLegacyQuarantine();
+    const quarantined = quarantine.profiles;
+    const verified: NightscoutProfile[] = [];
+    for (const profile of quarantined) {
+      const credential = await nativeSecureCredentialStore.read(
+        quarantinedCredentialService(profile.id),
+      );
+      assertOwnerCurrent();
+      if (!credential || !isSha1Hex(credential)) {
+        throw new Error(
+          'The saved connection secret is unavailable. Add the connection again.',
+        );
+      }
+      const recovered = {...profile, apiSecretSha1: credential};
+      await params.verifyConnection(recovered);
+      assertOwnerCurrent();
+      verified.push(recovered);
+    }
+
+    const keys = storageKeysFor(ownerUserId);
+    const existingRaw = await AsyncStorage.getItem(keys.profiles);
+    let existing: DecodedNightscoutProfile[] | undefined;
+    try {
+      existing =
+        existingRaw === null
+          ? []
+          : decodeCompleteProfileList(JSON.parse(existingRaw));
+    } catch {
+      // Do not overwrite unreadable account data during recovery.
+    }
+    if (!existing) {
+      throw new Error('Current connections could not be read.');
+    }
+    const profiles: NightscoutProfile[] = await Promise.all(
+      existing.map(async profile => ({
+        ...metadataFor(profile),
+        apiSecretSha1:
+          profile.legacySecret ??
+          (await nativeSecureCredentialStore.read(
+            credentialService(ownerUserId, profile.id),
+          )) ??
+          '',
+      })),
+    );
+    for (const profile of verified) {
+      const sameSourceIndex = profiles.findIndex(
+        item => item.baseUrl === profile.baseUrl,
+      );
+      if (sameSourceIndex >= 0) {
+        const sameSource = profiles[sameSourceIndex]!;
+        // A retry after a failed cleanup must reuse the account's existing ID.
+        profiles[sameSourceIndex] = {
+          ...sameSource,
+          apiSecretSha1: profile.apiSecretSha1,
+        };
+      } else {
+        const id = profiles.some(item => item.id === profile.id)
+          ? makeId()
+          : profile.id;
+        profiles.push({...profile, id});
+      }
+    }
+    if (profiles.length > MAX_PROFILES) {
+      throw new Error(
+        'There are too many saved connections to recover at once.',
+      );
+    }
+    const existingActiveId = await AsyncStorage.getItem(keys.activeProfileId);
+    // Resolve by source URL because recovery can reuse an existing ID or rename
+    // a colliding one while retaining the user's original active connection.
+    const preferredSource = quarantined.find(
+      profile => profile.id === quarantine.preferredActiveProfileId,
+    );
+    const preferredActiveId = profiles.find(
+      profile => profile.baseUrl === preferredSource?.baseUrl,
+    )?.id;
+    const activeProfileId = existing.some(
+      profile => profile.id === existingActiveId,
+    )
+      ? existingActiveId
+      : preferredActiveId ?? profiles[0]?.id ?? null;
+    assertOwnerCurrent();
+    if (verified.length === 0) {
+      return {profiles, activeProfileId};
+    }
+    for (const profile of profiles) {
+      assertOwnerCurrent();
+      await nativeSecureCredentialStore.write(
+        credentialService(ownerUserId, profile.id),
+        profile.apiSecretSha1,
+      );
+    }
+    assertOwnerCurrent();
+    await AsyncStorage.setItem(
+      keys.profiles,
+      JSON.stringify(profiles.map(metadataFor)),
+    );
+    assertOwnerCurrent();
+    if (activeProfileId) {
+      await AsyncStorage.setItem(keys.activeProfileId, activeProfileId);
+    }
+    assertOwnerCurrent();
+    // Remove the index first: an interrupted cleanup can never leave an entry
+    // whose only credential has already been deleted. Repeating recovery is safe.
+    await AsyncStorage.removeItem(LEGACY_QUARANTINE_KEY);
+    await Promise.all(
+      quarantined.map(profile =>
+        nativeSecureCredentialStore.remove(
+          quarantinedCredentialService(profile.id),
+        ),
+      ),
+    ).catch(() => {
+      // Account data is durable and the quarantine index is gone. An unused
+      // Keychain item must not report a failed restore or hide the new profile.
+    });
+    return {profiles, activeProfileId};
+  });
+};
+
 const readStoredProfiles = async (
   ownerUserId: string | null,
-): Promise<readonly (StoredNightscoutProfile & {readonly legacySecret?: string})[]> => {
+): Promise<
+  readonly (StoredNightscoutProfile & {readonly legacySecret?: string})[]
+> => {
   await prepareLegacyProfiles(ownerUserId);
   return readStoredProfilesAt(storageKeysFor(ownerUserId).profiles);
 };
@@ -506,7 +761,9 @@ export const createNightscoutProfile = (params: {
   const createdAt = Date.now();
   return {
     id: makeId(),
-    label: params.label?.trim() ? params.label.trim() : labelFromNightscoutBaseUrl(baseUrl),
+    label: params.label?.trim()
+      ? params.label.trim()
+      : labelFromNightscoutBaseUrl(baseUrl),
     baseUrl,
     apiSecretSha1,
     createdAt,

@@ -9,11 +9,13 @@ import React, {
 } from 'react';
 import {
   createNightscoutProfile,
+  countRecoverableLegacyNightscoutProfiles,
   labelFromNightscoutBaseUrl,
   loadNightscoutProfiles,
   normalizeNightscoutApiSecretToSha1,
   normalizeNightscoutUrl,
   persistNightscoutProfiles,
+  recoverLegacyNightscoutProfiles,
   NightscoutProfile,
 } from 'app/services/nightscoutProfiles';
 import {
@@ -39,6 +41,10 @@ export type NightscoutConfigContextValue = {
   profiles: NightscoutProfile[];
   activeProfile: NightscoutProfile | null;
   isLoaded: boolean;
+  /** Only a count is visible before the user confirms ownership of old device connections. */
+  pendingLegacyProfileCount: number;
+  /** Revalidates and restores old device connections after explicit user confirmation. */
+  recoverLegacyProfiles: () => Promise<void>;
   /** Adds a profile and selects it as active. Accepts loosely formatted URL/secret inputs. */
   addProfile: (params: {
     urlInput: string;
@@ -70,6 +76,10 @@ const NightscoutConfigContext = createContext<NightscoutConfigContextValue>({
   profiles: [],
   activeProfile: null,
   isLoaded: false,
+  pendingLegacyProfileCount: 0,
+  recoverLegacyProfiles: async () => {
+    throw new Error('Sign in before recovering saved connections.');
+  },
   addProfile: async () => {},
   testProfileConnection: async () => ({
     ok: true,
@@ -105,6 +115,7 @@ export const NightscoutConfigProvider = ({
     null,
   );
   const [isLoaded, setIsLoaded] = useState(false);
+  const [pendingLegacyProfileCount, setPendingLegacyProfileCount] = useState(0);
   const [vaultSyncStatus, setVaultSyncStatus] =
     useState<NightscoutVaultSyncSnapshot>(() =>
       vaultSynchronizer.getSnapshot(),
@@ -112,10 +123,19 @@ export const NightscoutConfigProvider = ({
   const [ownerUserId, setOwnerUserId] = useState<string | null>(
     () => authSession.getCurrentUserId()?.trim() || null,
   );
+  const [ownerSessionRevision, setOwnerSessionRevision] = useState(0);
   const profilesRef = useRef<NightscoutProfile[]>([]);
   const activeProfileIdRef = useRef<string | null>(null);
   const ownerUserIdRef = useRef(ownerUserId);
+  const ownerSessionRevisionRef = useRef(0);
+  const mountedRef = useRef(true);
   const mutationTail = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   useEffect(() => {
     profilesRef.current = profiles;
   }, [profiles]);
@@ -128,35 +148,41 @@ export const NightscoutConfigProvider = ({
     ownerUserIdRef.current = ownerUserId;
   }, [ownerUserId]);
 
-  useEffect(
-    () =>
-      authSession.subscribe(userId => {
-        const nextOwnerUserId = userId?.trim() || null;
-        if (nextOwnerUserId === ownerUserIdRef.current) {
-          return;
-        }
-        ownerUserIdRef.current = nextOwnerUserId;
-        profilesRef.current = [];
-        activeProfileIdRef.current = null;
-        setProfiles([]);
-        setActiveProfileIdState(null);
-        setIsLoaded(false);
-        clearNightscoutInstance();
-        configureAndroidWidgetBackgroundSync({enabled: false});
-        setOwnerUserId(nextOwnerUserId);
-      }),
-    [authSession],
-  );
+  useEffect(() => {
+    const unsubscribe = authSession.subscribe(userId => {
+      const nextOwnerUserId = userId?.trim() || null;
+      if (nextOwnerUserId === ownerUserIdRef.current) {
+        return;
+      }
+      ownerUserIdRef.current = nextOwnerUserId;
+      ownerSessionRevisionRef.current += 1;
+      setOwnerSessionRevision(ownerSessionRevisionRef.current);
+      profilesRef.current = [];
+      activeProfileIdRef.current = null;
+      setProfiles([]);
+      setActiveProfileIdState(null);
+      setIsLoaded(false);
+      setPendingLegacyProfileCount(0);
+      clearNightscoutInstance();
+      configureAndroidWidgetBackgroundSync({enabled: false});
+      setOwnerUserId(nextOwnerUserId);
+    });
+    return unsubscribe;
+  }, [authSession]);
 
   useEffect(() => {
     let isMounted = true;
+    const isCurrentSession = () =>
+      isMounted &&
+      ownerUserIdRef.current === ownerUserId &&
+      ownerSessionRevisionRef.current === ownerSessionRevision;
 
     const load = async () => {
       try {
         const {profiles: storedProfiles, activeProfileId: storedActiveId} =
           await loadNightscoutProfiles(ownerUserId);
 
-        if (!isMounted || ownerUserIdRef.current !== ownerUserId) {
+        if (!isCurrentSession()) {
           return;
         }
 
@@ -197,13 +223,19 @@ export const NightscoutConfigProvider = ({
             ownerUserId,
           );
         }
+        const recoveryCount = await countRecoverableLegacyNightscoutProfiles(
+          ownerUserId,
+        );
+        if (isCurrentSession()) {
+          setPendingLegacyProfileCount(recoveryCount);
+        }
         // Startup must not invent a desired server state. A fresh device with
         // no local profile may still have a valid vault connection created by
         // another device. `activate()` retries only a durable explicit intent.
       } catch {
         // Best-effort: keep empty.
       } finally {
-        if (isMounted) {
+        if (isCurrentSession()) {
           setIsLoaded(true);
         }
       }
@@ -213,7 +245,7 @@ export const NightscoutConfigProvider = ({
     return () => {
       isMounted = false;
     };
-  }, [ownerUserId, vaultSynchronizer]);
+  }, [ownerUserId, ownerSessionRevision, vaultSynchronizer]);
 
   const serializeMutation = useCallback(
     (operation: () => Promise<void>): Promise<void> => {
@@ -501,11 +533,63 @@ export const NightscoutConfigProvider = ({
     [vaultSynchronizer],
   );
 
+  const recoverLegacyProfiles = useCallback(() => {
+    const recoveryOwner = ownerUserId;
+    const recoverySessionRevision = ownerSessionRevisionRef.current;
+    return serializeMutation(async () => {
+      if (!recoveryOwner) {
+        throw new Error('Sign in before recovering saved connections.');
+      }
+      const isOwnerCurrent = () =>
+        mountedRef.current &&
+        ownerUserIdRef.current === recoveryOwner &&
+        ownerSessionRevisionRef.current === recoverySessionRevision;
+      const recovered = await recoverLegacyNightscoutProfiles({
+        ownerUserId: recoveryOwner,
+        isOwnerCurrent,
+        verifyConnection: async profile => {
+          await testNightscoutConnection({
+            baseUrl: profile.baseUrl,
+            apiSecretSha1: profile.apiSecretSha1,
+          });
+        },
+      });
+      if (!isOwnerCurrent()) {
+        throw new Error(
+          'The signed-in account changed before recovery completed.',
+        );
+      }
+      profilesRef.current = recovered.profiles;
+      activeProfileIdRef.current = recovered.activeProfileId;
+      setProfiles(recovered.profiles);
+      setActiveProfileIdState(recovered.activeProfileId);
+      setPendingLegacyProfileCount(0);
+      const active = recovered.profiles.find(
+        profile => profile.id === recovered.activeProfileId,
+      );
+      if (active) {
+        configureNightscoutInstance({
+          baseUrl: active.baseUrl,
+          apiSecretSha1: active.apiSecretSha1,
+          ownerUserId: recoveryOwner,
+        });
+        configureAndroidWidgetBackgroundSync({
+          baseUrl: active.baseUrl,
+          apiSecretSha1: active.apiSecretSha1,
+          enabled: true,
+        });
+        await vaultSynchronizer.requestReconciliation('provision');
+      }
+    });
+  }, [ownerUserId, serializeMutation, vaultSynchronizer]);
+
   const value = useMemo<NightscoutConfigContextValue>(
     () => ({
       profiles,
       activeProfile,
       isLoaded,
+      pendingLegacyProfileCount,
+      recoverLegacyProfiles,
       addProfile,
       testProfileConnection,
       setActiveProfileId,
@@ -518,6 +602,8 @@ export const NightscoutConfigProvider = ({
       profiles,
       activeProfile,
       isLoaded,
+      pendingLegacyProfileCount,
+      recoverLegacyProfiles,
       addProfile,
       testProfileConnection,
       setActiveProfileId,

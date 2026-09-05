@@ -1,4 +1,5 @@
 import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
+import {decodeNightscoutGlucose as decodeBgSample} from './nightscoutGlucose';
 import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
 import {
   InsulinDataEntry,
@@ -41,29 +42,6 @@ const objectRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-
-const decodeBgSample = (value: unknown): BgSample | null => {
-  const record = objectRecord(value);
-  if (!record) {
-    return null;
-  }
-  const date =
-    typeof record.date === 'number'
-      ? record.date
-      : typeof record.date === 'string' && record.date.trim().length > 0
-      ? Number(record.date)
-      : Number.NaN;
-  const sgv =
-    typeof record.sgv === 'number'
-      ? record.sgv
-      : typeof record.sgv === 'string' && record.sgv.trim().length > 0
-      ? Number(record.sgv)
-      : Number.NaN;
-  if (!Number.isFinite(date) || !Number.isFinite(sgv) || sgv <= 0) {
-    return null;
-  }
-  return {...record, date, sgv} as unknown as BgSample;
-};
 
 const decodeObjectRecord = (value: unknown): Record<string, unknown> | null =>
   objectRecord(value);

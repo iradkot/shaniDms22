@@ -689,6 +689,11 @@ const coreProductImplementationRegistrations = [
         <SettingsModuleView
           dataSource={host.settingsRuntime.dataSource}
           locale={host.locale}
+          {...(host.settingsRuntime.nightscoutConnection === undefined
+            ? {}
+            : {
+                nightscoutConnection: host.settingsRuntime.nightscoutConnection,
+              })}
           {...(host.onCustomizePersonalization === undefined
             ? {}
             : {onCustomize: host.onCustomizePersonalization})}

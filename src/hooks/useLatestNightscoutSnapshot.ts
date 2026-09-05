@@ -14,6 +14,7 @@ import {
 } from 'app/api/apiRequests';
 import {
   getNightscoutBaseUrl,
+  getNightscoutConfigurationRevision,
   subscribeNightscoutConfiguration,
 } from 'app/api/shaniNightscoutInstances';
 import {BgSample} from 'app/types/day_bgs.types';
@@ -127,16 +128,11 @@ export function useLatestNightscoutSnapshot(params: {
   refresh: () => Promise<void>;
 } {
   const {pollingEnabled} = params;
-  const configuredBaseUrl = useSyncExternalStore(
+  const configurationRevision = useSyncExternalStore(
     subscribeNightscoutConfiguration,
-    getNightscoutBaseUrl,
-    getNightscoutBaseUrl,
+    getNightscoutConfigurationRevision,
+    getNightscoutConfigurationRevision,
   );
-  const cacheScope = useMemo(
-    () => createNightscoutCacheScope(configuredBaseUrl),
-    [configuredBaseUrl],
-  );
-  const sourceIdentity = cacheScope?.sourceIdentity ?? null;
 
   const [snapshot, setSnapshot] = useState<LatestNightscoutSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -149,17 +145,21 @@ export function useLatestNightscoutSnapshot(params: {
     requestId: number;
   } | null>(null);
 
-  // Reset before paint so a newly selected Workspace can never render the
-  // previous Data Subject's snapshot while its own request is starting.
+  // Reset before paint on source/account changes and credential corrections.
+  // Invalidating pending work lets a corrected credential retry immediately.
   useLayoutEffect(() => {
     generationRef.current += 1;
     inFlightRef.current = null;
     setSnapshot(null);
     setIsLoading(false);
     setError(null);
-  }, [sourceIdentity]);
+  }, [configurationRevision]);
 
   const refresh = useCallback(async () => {
+    if (configurationRevision !== getNightscoutConfigurationRevision()) {
+      return;
+    }
+    const cacheScope = createNightscoutCacheScope(getNightscoutBaseUrl());
     if (!cacheScope) return;
     if (inFlightRef.current?.sourceIdentity === cacheScope.sourceIdentity) {
       return;
@@ -236,7 +236,7 @@ export function useLatestNightscoutSnapshot(params: {
         inFlightRef.current = null;
       }
     }
-  }, [cacheScope]);
+  }, [configurationRevision]);
 
   useEffect(() => {
     refresh();

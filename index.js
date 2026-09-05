@@ -2,6 +2,8 @@
  * @format
  */
 
+import './src/platform/native/bootstrap';
+
 // Enforce RN‑Firebase modular API mode (throws on legacy namespaced calls)
 // Enforce RN-Firebase modular API mode (throws on legacy namespaced calls)
 // Must set this flag before importing any RN-Firebase modules

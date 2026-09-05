@@ -94,6 +94,7 @@
     "react-native-screens": "4.10.0",
     "react-native-size-matters": "^0.4.0",
     "react-native-svg": "^15.11.2",
+    "react-native-url-polyfill": "2.0.0",
     "react-native-vector-icons": "^10.2.0",
     "react-native-vision-camera": "^4.6",
     "react-native-web": "0.21.2",

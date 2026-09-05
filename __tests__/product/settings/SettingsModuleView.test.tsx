@@ -1,4 +1,5 @@
 import React from 'react';
+import {withTheme} from '../../mocks/withTheme';
 import {Pressable, Text} from 'react-native';
 import renderer, {act} from 'react-test-renderer';
 import type {
@@ -33,11 +34,13 @@ const overview: SettingsOverview = {
 };
 
 const textValues = (tree: renderer.ReactTestRenderer): string[] =>
-  tree.root.findAllByType(Text).map(node =>
-    Array.isArray(node.props.children)
-      ? node.props.children.join('')
-      : String(node.props.children ?? ''),
-  );
+  tree.root
+    .findAllByType(Text)
+    .map(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children.join('')
+        : String(node.props.children ?? ''),
+    );
 
 describe('SettingsModuleView', () => {
   it('loads a safe overview and offers focused navigation instead of one dense form', async () => {
@@ -53,12 +56,14 @@ describe('SettingsModuleView', () => {
 
     await act(async () => {
       tree = renderer.create(
-        <SettingsModuleView
-          dataSource={dataSource}
-          locale="en"
-          onCustomize={() => onOpenSection('personalization')}
-          onOpenSection={onOpenSection}
-        />,
+        withTheme(
+          <SettingsModuleView
+            dataSource={dataSource}
+            locale="en"
+            onCustomize={() => onOpenSection('personalization')}
+            onOpenSection={onOpenSection}
+          />,
+        ),
       );
     });
 
@@ -120,7 +125,7 @@ describe('SettingsModuleView', () => {
 
     await act(async () => {
       tree = renderer.create(
-        <SettingsModuleView dataSource={dataSource} locale="he" />,
+        withTheme(<SettingsModuleView dataSource={dataSource} locale="he" />),
       );
     });
 
@@ -194,7 +199,7 @@ describe('SettingsModuleView', () => {
 
     act(() => {
       tree = renderer.create(
-        <SettingsModuleView dataSource={dataSource} locale="en" />,
+        withTheme(<SettingsModuleView dataSource={dataSource} locale="en" />),
       );
     });
     expect(tree!.root.findByProps({testID: 'settings-loading'})).toBeTruthy();
@@ -237,12 +242,12 @@ describe('SettingsModuleView', () => {
 
     act(() => {
       tree = renderer.create(
-        <SettingsModuleView dataSource={oldSource} locale="en" />,
+        withTheme(<SettingsModuleView dataSource={oldSource} locale="en" />),
       );
     });
     await act(async () => {
       tree!.update(
-        <SettingsModuleView dataSource={newSource} locale="en" />,
+        withTheme(<SettingsModuleView dataSource={newSource} locale="en" />),
       );
       await Promise.resolve();
     });

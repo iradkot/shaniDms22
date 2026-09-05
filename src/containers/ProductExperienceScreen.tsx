@@ -57,7 +57,10 @@ import {
 } from 'app/product/personalization';
 import {useRefreshingNow} from 'app/product/time';
 import {useNativeProductPersonalization} from 'app/platform/native/personalization';
-import {createNativeSettingsDataSource} from 'app/platform/native/settings';
+import {
+  createNativeSettingsDataSource,
+  createNativeNightscoutSettingsConnection,
+} from 'app/platform/native/settings';
 import {
   SettingsDetailView,
   type SettingsDetailSection,
@@ -88,13 +91,17 @@ const ProductExperienceScreen = ({
   readonly route: {readonly params?: {readonly productIntent?: unknown}};
 }) => {
   const {language, setLanguage} = useAppLanguage();
-  const {activeProfile} = useNightscoutConfig();
+  const {
+    activeProfile,
+    isLoaded: nightscoutLoaded,
+    testProfileConnection,
+    pendingLegacyProfileCount,
+    recoverLegacyProfiles,
+  } = useNightscoutConfig();
   const {settings: glucoseSettings} = useGlucoseSettings();
   const {settings: aiSettings, setSetting: setAiSetting} = useAiSettings();
-  const {
-    settings: proactiveCareSettings,
-    setSetting: setProactiveCareSetting,
-  } = useProactiveCareSettings();
+  const {settings: proactiveCareSettings, setSetting: setProactiveCareSetting} =
+    useProactiveCareSettings();
   const [preMealIntent, setPreMealIntent] = useState<
     NativePreMealIntent | undefined
   >();
@@ -115,6 +122,40 @@ const ProductExperienceScreen = ({
       : {nightscoutBaseUrl: activeProfile.baseUrl}),
   });
   const latestNightscoutSnapshotState = useLatestNightscoutSnapshotState();
+  const nightscoutConnection = useMemo(
+    () =>
+      createNativeNightscoutSettingsConnection({
+        sourceKey: sha1WorkspaceIdentityDigest.digest(
+          [
+            firebaseUserId ?? '',
+            activeProfile?.id ?? '',
+            activeProfile?.baseUrl ?? '',
+            activeProfile?.apiSecretSha1 ?? '',
+          ].join('|'),
+        ),
+        profile: activeProfile,
+        isLoaded: nightscoutLoaded,
+        snapshot: latestNightscoutSnapshotState,
+        testProfileConnection,
+        ...(firebaseUserId && pendingLegacyProfileCount > 0
+          ? {
+              recovery: {
+                count: pendingLegacyProfileCount,
+                recover: recoverLegacyProfiles,
+              },
+            }
+          : {}),
+      }),
+    [
+      activeProfile,
+      firebaseUserId,
+      latestNightscoutSnapshotState,
+      nightscoutLoaded,
+      testProfileConnection,
+      pendingLegacyProfileCount,
+      recoverLegacyProfiles,
+    ],
+  );
   const currentTime = useRefreshingNow();
   const runtime = useMemo<DestinationRuntimeContext>(
     () => ({
@@ -348,7 +389,8 @@ const ProductExperienceScreen = ({
         settings: proactiveCareSettings.preMealAssistance,
         dataSource: preMealAssistanceDataSource,
         intentActive:
-          preMealIntent !== undefined && preMealIntent.expiresAtMs > currentTime,
+          preMealIntent !== undefined &&
+          preMealIntent.expiresAtMs > currentTime,
         onStartIntent: startPreMealIntent,
         onClearIntent: clearPreMealIntent,
       },
@@ -544,12 +586,15 @@ const ProductExperienceScreen = ({
         return;
       }
       if (section === 'nightscout') {
-        navigation.navigate(NIGHTSCOUT_SETUP_SCREEN);
+        navigation.navigate(
+          NIGHTSCOUT_SETUP_SCREEN,
+          activeProfile ? {profileId: activeProfile.id} : undefined,
+        );
         return;
       }
       setSettingsDetail(section);
     },
-    [navigation],
+    [activeProfile, navigation],
   );
   const aiRuntime = useLegacyAiAnalystModuleRuntime(language, {
     onOpenSettings: () => openSettingsSection('ai-credentials'),
@@ -577,9 +622,7 @@ const ProductExperienceScreen = ({
         },
         account: {
           status: firebaseUser ? 'signed-in' : 'signed-out',
-          ...(accountDisplayLabel
-            ? {displayLabel: accountDisplayLabel}
-            : {}),
+          ...(accountDisplayLabel ? {displayLabel: accountDisplayLabel} : {}),
         },
         nightscout: {
           status: activeProfile ? 'connected' : 'not-connected',
@@ -707,7 +750,9 @@ const ProductExperienceScreen = ({
         dayGraphRuntime={dayGraphRuntime}
         previousDaySummaryRuntime={previousDaySummaryRuntime}
         similarEventsRuntime={similarEventsRuntime}
-        {...(settingsRuntime === undefined ? {} : {settingsRuntime})}
+        {...(settingsRuntime === undefined
+          ? {}
+          : {settingsRuntime: {...settingsRuntime, nightscoutConnection}})}
         locale={language}
         loopChangesRuntime={loopChangesRuntime}
         {...(navigationIntent === undefined ? {} : {navigationIntent})}

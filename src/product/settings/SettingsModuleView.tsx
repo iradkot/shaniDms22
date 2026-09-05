@@ -14,7 +14,11 @@ import type {
 import {SettingsDataSourceError} from '../../modules/settings';
 import type {DestinationLocale} from '../destinations';
 import {ProductPage, ProductSection, productUiTokens} from '../ui';
-import type {SettingsLinkedSection} from './runtime';
+import type {
+  SettingsLinkedSection,
+  SettingsNightscoutConnectionRuntime,
+} from './runtime';
+import {NightscoutConnectionCard} from './NightscoutConnectionCard';
 
 const COPY = {
   en: {
@@ -72,7 +76,8 @@ const COPY = {
     offlineReady: 'Meals and activities work from local data first.',
     offlineSyncing: 'Local data is ready and changes are syncing.',
     offlineMode: 'Offline. Local changes will sync when a connection returns.',
-    offlineUnavailable: 'Choose an account and Workspace to use local Journal data.',
+    offlineUnavailable:
+      'Choose an account and Workspace to use local Journal data.',
     noPending: 'Everything is synced',
     onePending: '1 change waiting to sync',
     pending: 'changes waiting to sync',
@@ -133,8 +138,7 @@ const COPY = {
       'הצגת כרטיס עובדתי ואופציונלי בגרף היומי לאחר סימון שמתכננים ארוחה.',
     preMealEnabled: 'הפעלת סיוע לפני ארוחה',
     preMealNotifications: 'אישור התראות לפני ארוחה',
-    preMealNotificationsHint:
-      'התראות דורשות אישור נפרד וכבויות כברירת מחדל.',
+    preMealNotificationsHint: 'התראות דורשות אישור נפרד וכבויות כברירת מחדל.',
     offline: 'מידע ללא חיבור',
     offlineReady: 'ארוחות ופעילויות עובדות קודם מהמידע המקומי.',
     offlineSyncing: 'המידע המקומי זמין והשינויים מסתנכרנים.',
@@ -163,6 +167,7 @@ export interface SettingsModuleViewProps {
   readonly locale: DestinationLocale;
   readonly onCustomize?: () => void;
   readonly onOpenSection?: (section: SettingsLinkedSection) => void;
+  readonly nightscoutConnection?: SettingsNightscoutConnectionRuntime;
 }
 
 const ActionButton = ({
@@ -255,6 +260,7 @@ export const SettingsModuleView = ({
   locale,
   onCustomize,
   onOpenSection,
+  nightscoutConnection,
 }: SettingsModuleViewProps) => {
   const copy = COPY[locale];
   const rtl = locale === 'he';
@@ -379,6 +385,16 @@ export const SettingsModuleView = ({
         subtitle={copy.subtitle}
         testID="settings-page"
         title={copy.title}>
+        <NightscoutConnectionCard
+          source={overview.nightscout}
+          locale={locale}
+          {...(nightscoutConnection === undefined
+            ? {}
+            : {connection: nightscoutConnection})}
+          {...(onOpenSection === undefined
+            ? {}
+            : {onEdit: () => onOpenSection('nightscout')})}
+        />
         <View style={styles.featuredCard}>
           <Text style={[styles.featuredTitle, rtl && styles.rtlText]}>
             {copy.customizeTitle}
@@ -527,31 +543,6 @@ export const SettingsModuleView = ({
               ]}
               rtl={rtl}
               title={copy.account}
-            />
-            <StatusCard
-              action={
-                onOpenSection ? (
-                  <ActionButton
-                    label={copy.manageConnection}
-                    onPress={() => onOpenSection('nightscout')}
-                    testID="settings-manage-nightscout"
-                  />
-                ) : undefined
-              }
-              icon="☁"
-              lines={[
-                overview.nightscout.status === 'connected'
-                  ? copy.connected
-                  : copy.notConnected,
-                ...(overview.nightscout.displayLabel
-                  ? [overview.nightscout.displayLabel]
-                  : []),
-                overview.nightscout.credentialConfigured
-                  ? copy.configuredHere
-                  : copy.credentialMissing,
-              ]}
-              rtl={rtl}
-              title={copy.nightscout}
             />
           </View>
         </ProductSection>
