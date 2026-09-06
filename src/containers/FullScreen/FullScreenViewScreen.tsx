@@ -15,6 +15,7 @@ import {ThemeType} from 'app/types/theme';
 import {BgSample} from 'app/types/day_bgs.types';
 import CgmRows from 'app/components/CgmCardListDisplay/CgmRows';
 import CgmGraph from 'app/components/charts/CgmGraph/CgmGraph';
+import {ChartScrollView} from 'app/components/charts/interaction/ChartScrollView';
 import StackedHomeCharts, {
   StackedChartsTooltipModel,
 } from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
@@ -1021,7 +1022,7 @@ const StackedChartsLandscapeRow = styled.View`
   justify-content: center;
 `;
 
-const StackedChartsPanel = styled.ScrollView`
+const StackedChartsPanel = styled(ChartScrollView)`
   flex: 1;
 `;
 

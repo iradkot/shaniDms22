@@ -2,7 +2,6 @@ import React, {useMemo, useState} from 'react';
 import {
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -23,6 +22,8 @@ import {buildDayGraphChartPresentation} from './DayGraphChartAdapter';
 import type {DayGraphChartPreferencesRuntime} from './runtime';
 import {useDayGraphView} from './useDayGraphView';
 import {DayGraphSourceStatus} from './DayGraphSourceStatus';
+import {ChartScrollView} from '../../components/charts/interaction/ChartScrollView';
+import {ChartGestureRoot} from '../../components/charts/interaction/ChartGestureRoot';
 
 const COPY = {
   en: {
@@ -397,42 +398,44 @@ export const RichDayGraphChart = ({
       supportedOrientations={['portrait', 'landscape']}
       onRequestClose={() => setFullscreen(false)}
       testID="day-graph-fullscreen">
-      <SafeAreaProvider>
-        <SafeAreaView style={styles.fullscreen}>
-          <View style={[styles.fullscreenHeader, rtl && styles.rowReverse]}>
-            <View style={styles.fullscreenHeading}>
-              <Text
-                accessibilityRole="header"
-                style={[styles.fullscreenTitle, rtl && styles.rtlText]}>
-                {copy.fullScreenTitle}
-              </Text>
-              <Text style={[styles.factual, rtl && styles.rtlText]}>
-                {new Date(dayStartMs).toLocaleDateString(
-                  locale === 'he' ? 'he-IL' : 'en-US',
-                  {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  },
-                )}
-              </Text>
+      <ChartGestureRoot style={styles.fullscreen}>
+        <SafeAreaProvider>
+          <SafeAreaView style={styles.fullscreen}>
+            <View style={[styles.fullscreenHeader, rtl && styles.rowReverse]}>
+              <View style={styles.fullscreenHeading}>
+                <Text
+                  accessibilityRole="header"
+                  style={[styles.fullscreenTitle, rtl && styles.rtlText]}>
+                  {copy.fullScreenTitle}
+                </Text>
+                <Text style={[styles.factual, rtl && styles.rtlText]}>
+                  {new Date(dayStartMs).toLocaleDateString(
+                    locale === 'he' ? 'he-IL' : 'en-US',
+                    {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    },
+                  )}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setFullscreen(false)}
+                style={styles.closeButton}
+                testID="day-graph-fullscreen-close">
+                <Text style={styles.closeLabel}>{copy.close} ×</Text>
+              </Pressable>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setFullscreen(false)}
-              style={styles.closeButton}
-              testID="day-graph-fullscreen-close">
-              <Text style={styles.closeLabel}>{copy.close} ×</Text>
-            </Pressable>
-          </View>
-          <ScrollView
-            style={styles.fullscreen}
-            contentContainerStyle={styles.fullscreenContent}>
-            {content}
-          </ScrollView>
-        </SafeAreaView>
-      </SafeAreaProvider>
+            <ChartScrollView
+              style={styles.fullscreen}
+              contentContainerStyle={styles.fullscreenContent}>
+              {content}
+            </ChartScrollView>
+          </SafeAreaView>
+        </SafeAreaProvider>
+      </ChartGestureRoot>
     </Modal>
   );
 };

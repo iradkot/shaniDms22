@@ -1,5 +1,5 @@
 import {useCallback, useMemo, useRef, useState} from 'react';
-import type {GestureResponderEvent} from 'react-native';
+import {Platform, type GestureResponderEvent} from 'react-native';
 
 import type {StackedChartsTouchSession} from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
 
@@ -37,12 +37,17 @@ export function useHomeChartTouchSession() {
     clearChartTouchSession();
   }, [clearChartTouchSession]);
 
+  // Native charts observe touches alongside the scroll recognizer. React
+  // Native's scroll takeover cancellation must not end that observation.
   const scrollTouchHandlers = useMemo(
-    () => ({
-      onTouchMove: handleScrollTouchMove,
-      onTouchEnd: handleScrollTouchEnd,
-      onTouchCancel: handleScrollTouchCancel,
-    }),
+    () =>
+      Platform.OS === 'web'
+        ? {
+            onTouchMove: handleScrollTouchMove,
+            onTouchEnd: handleScrollTouchEnd,
+            onTouchCancel: handleScrollTouchCancel,
+          }
+        : {},
     [handleScrollTouchCancel, handleScrollTouchEnd, handleScrollTouchMove],
   );
 

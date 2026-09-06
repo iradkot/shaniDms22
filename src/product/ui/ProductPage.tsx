@@ -1,5 +1,6 @@
 import React from 'react';
-import {ScrollView, StyleSheet, Text} from 'react-native';
+import {StyleSheet, Text, type ScrollView} from 'react-native';
+import {ChartScrollView} from '../../components/charts/interaction/ChartScrollView';
 import type {ReactNode, Ref} from 'react';
 import type {DestinationLocale} from '../destinations';
 import {productUiTokens} from './tokens';
@@ -25,7 +26,7 @@ export const ProductPage = ({
   const rtl = locale === 'he';
 
   return (
-    <ScrollView
+    <ChartScrollView
       ref={scrollRef}
       contentContainerStyle={styles.content}
       style={styles.screen}
@@ -37,7 +38,7 @@ export const ProductPage = ({
       </Text>
       <Text style={[styles.subtitle, rtl && styles.rtlText]}>{subtitle}</Text>
       {children}
-    </ScrollView>
+    </ChartScrollView>
   );
 };
 

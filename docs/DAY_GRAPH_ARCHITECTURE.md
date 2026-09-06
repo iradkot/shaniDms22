@@ -20,8 +20,19 @@ chart-specific theme or read the mutable theme singleton from chart renderers.
   state. `miniChartData` supplies domain calculations and data segmentation.
   Individual series components only draw their own data.
 - `useStackedChartsTouchTooltip` owns pointer intent and selection lifetime.
-  Keep the gesture origin stable. Vertical movement yields to page scrolling;
-  horizontal movement inspects time. Child visuals must not intercept touches.
+  Keep the gesture origin stable. Vertical scrolling and horizontal inspection
+  continue together for the same finger contact, including direction changes.
+  Small horizontal movements are ignored to avoid jitter. Release starts the
+  inspector's hide timer; scrolling alone must never start it. Child visuals
+  must not intercept touches.
+- `components/charts/interaction` is the shared platform boundary for gestures.
+  Native chart hosts use `ChartScrollView`, and each `ChartTouchSurface` observes
+  touches simultaneously with that scroll view through the existing gesture
+  library. Normal React Native touch events are cancelled when Android starts
+  scrolling, so paired surfaces must not also forward those events. The same
+  tooltip hook receives coordinates from the observer. Fullscreen native modals
+  provide their own `ChartGestureRoot` and scroll boundary. Web adapters use
+  ordinary views and browser touch events, preserving page scrolling and zoom.
 
 ## Data rules
 
@@ -90,4 +101,7 @@ set `PLAYWRIGHT_MODULE` to its installed module path and `PLAYWRIGHT_CHANNEL` to
 an installed Chromium browser channel. The script uses synthetic data and
 checks four widths and all four app themes. Screenshots go to ignored
 `artifacts/chart-mobile/`. Browser emulation does not replace an Android device
-smoke test.
+smoke test. Native interaction tests also exercise the production hook through
+the gesture adapter and verify the actual product page and fullscreen scroll
+pairings. The browser checks change scroll direction without releasing the
+finger on glucose, separate insulin lanes and the fullscreen overlay.

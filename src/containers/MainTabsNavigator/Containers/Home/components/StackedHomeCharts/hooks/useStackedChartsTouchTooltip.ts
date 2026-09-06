@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Platform, type GestureResponderEvent} from 'react-native';
+import {Platform} from 'react-native';
 import * as d3 from 'd3';
 
 import type {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
@@ -7,6 +7,7 @@ import type {CGMGraphExternalTooltipPayload} from 'app/components/charts/CgmGrap
 import {buildExternalTooltipPayloadFromLocationX} from 'app/components/charts/CgmGraph/utils/externalTooltipTouch.utils';
 import type {BgSample} from 'app/types/day_bgs.types';
 import type {StackedChartsTouchSession} from '../StackedHomeCharts.types';
+import type {ChartTouchEvent} from 'app/components/charts/interaction/chartTouch.types';
 
 type UseStackedChartsTouchTooltipParams = {
   bgSamples: BgSample[];
@@ -37,17 +38,9 @@ type TouchPoint = {
   clientX?: number | undefined;
   locationX?: number | undefined;
 };
-type ChartTouchEvent = {
-  nativeEvent: TouchPoint & {
-    touches?: ArrayLike<TouchPoint>;
-    changedTouches?: ArrayLike<TouchPoint>;
-  };
-  currentTarget?: ChartSurface;
-};
 type ActiveTouch = {
   pageOriginX: number | null;
   startPageX: number | null;
-  startPageY: number | null;
   scale: number;
   horizontal: boolean;
 };
@@ -113,6 +106,19 @@ export function useStackedChartsTouchTooltip({
   const handleTooltipChange = useCallback(
     (payload: CGMGraphExternalTooltipPayload | null) => {
       clearTooltipTimer();
+      const previous = lastPayloadRef.current;
+      if (
+        payload &&
+        previous &&
+        payload.touchTimeMs === previous.touchTimeMs &&
+        payload.anchorTimeMs === previous.anchorTimeMs &&
+        payload.autoHide === previous.autoHide
+      ) {
+        if (payload.autoHide) {
+          scheduleTooltipAutoHide();
+        }
+        return;
+      }
       lastPayloadRef.current = payload;
       setChartsTooltip(payload);
       if (!payload) {
@@ -159,12 +165,12 @@ export function useStackedChartsTouchTooltip({
   }, [releaseTouchSession, scheduleTooltipAutoHide]);
 
   const handleTouchMove = useCallback(
-    (event: GestureResponderEvent) => {
+    (event: ChartTouchEvent) => {
       const active = activeTouchRef.current;
       if (!active) {
         return;
       }
-      const evt = event as unknown as ChartTouchEvent;
+      const evt = event;
       if ((evt.nativeEvent.touches?.length ?? 1) !== 1) {
         handleTouchEnd();
         return;
@@ -175,15 +181,8 @@ export function useStackedChartsTouchTooltip({
       }
       if (!active.horizontal && active.startPageX != null) {
         const dx = Math.abs(point.pageX - active.startPageX);
-        const dy =
-          isFiniteNumber(point.pageY) && active.startPageY != null
-            ? Math.abs(point.pageY - active.startPageY)
-            : 0;
-        if (dy >= MOVE_THRESHOLD_PX && dy > dx) {
-          // Let vertical page scrolling finish without scrubbing the time.
-          handleTouchEnd();
-          return;
-        }
+        // Vertical scrolling and inspection share the same contact. Only x
+        // needs a small movement threshold; scrolling must not end this session.
         if (dx < MOVE_THRESHOLD_PX) {
           return;
         }
@@ -209,15 +208,16 @@ export function useStackedChartsTouchTooltip({
   );
 
   const handleTouchStart = useCallback(
-    (event: GestureResponderEvent) => {
+    (event: ChartTouchEvent) => {
       ignoreMouseUntilRef.current = Date.now() + SYNTHETIC_MOUSE_DELAY_MS;
-      const evt = event as unknown as ChartTouchEvent;
+      const evt = event;
       if ((evt.nativeEvent.touches?.length ?? 1) !== 1) {
         handleTouchEnd();
         return;
       }
       const point = getTouchPoint(evt);
-      const rect = evt.currentTarget?.getBoundingClientRect?.();
+      const surface = evt.currentTarget as ChartSurface | undefined;
+      const rect = surface?.getBoundingClientRect?.();
       const scale =
         rect && isFiniteNumber(rect.width) && rect.width > 0
           ? width / rect.width
@@ -243,7 +243,6 @@ export function useStackedChartsTouchTooltip({
           ? point.pageX - surfaceX
           : null,
         startPageX: isFiniteNumber(point.pageX) ? point.pageX : null,
-        startPageY: isFiniteNumber(point.pageY) ? point.pageY : null,
         scale,
         horizontal: false,
       };

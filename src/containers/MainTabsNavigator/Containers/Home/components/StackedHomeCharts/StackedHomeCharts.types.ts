@@ -138,7 +138,8 @@ export type StackedHomeChartsProps = {
   /**
    * Registers a page-level touch session while a chart touch is active.
    *
-   * Released when the finger lifts, vertical scrolling begins, or touch cancels.
+   * Scrolling preserves this session. Released when the finger lifts or touch
+   * cancels. Native paired chart surfaces observe the scroll gesture directly.
    */
   onTouchSessionChange?:
     | ((session: StackedChartsTouchSession | null) => void)

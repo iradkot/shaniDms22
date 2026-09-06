@@ -1,7 +1,7 @@
 module.exports = {
   preset: 'react-native',
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-native-url-polyfill)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-native-url-polyfill|react-native-reanimated)/)',
   ],
   testPathIgnorePatterns: [
     '<rootDir>/__tests__/mocks/',

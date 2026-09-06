@@ -19,6 +19,7 @@ import BolusMiniGraph from 'app/components/charts/BolusMiniGraph/BolusMiniGraph'
 import ActiveInsulinMiniGraph from 'app/components/charts/ActiveInsulinMiniGraph/ActiveInsulinMiniGraph';
 import CobMiniGraph from 'app/components/charts/CobMiniGraph/CobMiniGraph';
 import MixedMiniChart from 'app/components/charts/MixedMiniChart/MixedMiniChart';
+import {ChartTouchSurface} from 'app/components/charts/interaction/ChartTouchSurface';
 import HomeChartsTooltip from 'app/containers/MainTabsNavigator/Containers/Home/components/HomeChartsTooltip';
 import type {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 import {useBasalRateAtTime} from './hooks/useBasalRateAtTime';
@@ -317,7 +318,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
       </ChartStack>
 
       {/* Mini charts area — observe touch without taking over ScrollView's responder. */}
-      <View
+      <ChartTouchSurface
         {...stackedTouchHandlers}
         {...mouseHandlers}
         style={touchSurfaceStyle}
@@ -414,7 +415,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
             </>
           )}
         </View>
-      </View>
+      </ChartTouchSurface>
     </View>
   );
 };
@@ -424,7 +425,7 @@ const touchSurfaceStyle =
     ? ({touchAction: 'pan-y pinch-zoom', userSelect: 'none'} as ViewStyle)
     : undefined;
 
-const ChartStack = styled.View`
+const ChartStack = styled(ChartTouchSurface)`
   position: relative;
 `;
 

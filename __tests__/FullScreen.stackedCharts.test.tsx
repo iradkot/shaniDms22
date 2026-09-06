@@ -13,6 +13,7 @@ import FullScreenViewScreen, {
   updateStackedRangeSelectionForThumb,
 } from '../src/containers/FullScreen/FullScreenViewScreen';
 import StackedHomeCharts from '../src/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
+import {ChartScrollView} from '../src/components/charts/interaction/ChartScrollView';
 import MiniChartLane from '../src/components/charts/MiniChartLane';
 import {theme} from '../src/style/theme';
 
@@ -211,6 +212,9 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
       .findAllByType(RN.ScrollView)
       .find(node => node.props.testID === 'fullscreen.stackedChartScroll');
     expect(chartScroll!.props.scrollEnabled).toBe(true);
+    const chartScrollHost = tree!.root.findByType(ChartScrollView);
+    expect(chartScrollHost.props.testID).toBe('fullscreen.stackedChartScroll');
+    expect(chartScrollHost.findByType(StackedHomeCharts)).toBe(stackedAfter);
 
     await act(async () => {
       tree!.unmount();

@@ -83,14 +83,47 @@ describe('Mobile chart inspection', () => {
     expect(onTouchSessionChange).toHaveBeenLastCalledWith(null);
   });
 
-  it('stops inspection on vertical scroll intent and ignores later moves', () => {
+  it('keeps following the same finger after vertical scrolling hands movement to the page', () => {
     act(() => current.touchHandlers.onTouchStart(touch(217.5, 317.5)));
     const session = lastSession();
-    act(() => current.touchHandlers.onTouchMove(touch(0, 330, 240)));
+
+    act(() => current.touchHandlers.onTouchMove(touch(0, 317.5, 240)));
     expect(current.chartsTooltip?.touchTimeMs).toBe(500);
+    expect(onTouchSessionChange).toHaveBeenLastCalledWith(session);
+    act(() => jest.advanceTimersByTime(5000));
+    expect(current.chartsTooltip?.touchTimeMs).toBe(500);
+
+    act(() => session.handlePageTouchMove(touch(0, 351, 260)));
+    expect(current.chartsTooltip?.touchTimeMs).toBe(600);
+    act(() => session.handlePageTouchMove(touch(0, 384.5, 220)));
+    expect(current.chartsTooltip?.touchTimeMs).toBe(700);
+
+    act(() => session.handlePageTouchEnd());
     expect(onTouchSessionChange).toHaveBeenLastCalledWith(null);
-    act(() => session.handlePageTouchMove(touch(0, 400, 260)));
-    expect(current.chartsTooltip?.touchTimeMs).toBe(500);
+    act(() => jest.advanceTimersByTime(3999));
+    expect(current.chartsTooltip?.touchTimeMs).toBe(700);
+    act(() => jest.advanceTimersByTime(1));
+    expect(current.chartsTooltip).toBeNull();
+  });
+
+  it('updates the selected time during predominantly vertical movement without consuming scrolling events', () => {
+    const preventDefault = jest.fn();
+    const stopPropagation = jest.fn();
+    const scrollTouch = (pageX: number, pageY: number) => ({
+      ...touch(217.5, pageX, pageY),
+      preventDefault,
+      stopPropagation,
+    });
+    act(() => current.touchHandlers.onTouchStart(scrollTouch(317.5, 200)));
+    const session = lastSession();
+
+    act(() => current.touchHandlers.onTouchMove(scrollTouch(351, 280)));
+    expect(current.chartsTooltip?.touchTimeMs).toBe(600);
+    act(() => session.handlePageTouchMove(scrollTouch(384.5, 360)));
+    expect(current.chartsTooltip?.touchTimeMs).toBe(700);
+    expect(onTouchSessionChange).toHaveBeenLastCalledWith(session);
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(stopPropagation).not.toHaveBeenCalled();
   });
 
   it('releases cancelled touches and does not revive them from page events', () => {

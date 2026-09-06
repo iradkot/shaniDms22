@@ -9,7 +9,7 @@ function assertTime(text, expectedMinutes, message) {
   assert(match, 'Inspector must expose a selected time');
   assert(
     Math.abs(Number(match[1]) * 60 + Number(match[2]) - expectedMinutes) <= 1,
-    message,
+    `${message}: expected ${expectedMinutes}, saw ${match[0]}`,
   );
 }
 
@@ -114,6 +114,100 @@ async function tapPlot(page, cdp, plot, fraction, expectedMinutes) {
   return values;
 }
 
+async function scrollAndInspectPlot(page, cdp, plot) {
+  await plot.evaluate(element => element.scrollIntoView({block: 'center'}));
+  const bounds = await plot.boundingBox();
+  assert(bounds, 'Scrolling plot must be visible');
+  const scrollPosition = () =>
+    plot.evaluate(element => {
+      let position = window.scrollY;
+      for (
+        let parent = element.parentElement;
+        parent;
+        parent = parent.parentElement
+      ) {
+        if (parent !== document.body && parent !== document.documentElement) {
+          position += parent.scrollTop;
+        }
+      }
+      return position;
+    });
+  const point = {
+    x: bounds.x + 50 + (bounds.width - 65) / 3,
+    y: bounds.y + bounds.height / 2,
+  };
+  const before = await scrollPosition();
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [point],
+  });
+  for (let step = 1; step <= 3; step++) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{...point, y: point.y + step * 25}],
+    });
+    await page.waitForTimeout(30);
+  }
+  // Keep supplying samples while changing direction, as a real finger does.
+  // Chromium may coalesce the first sample after a native scroll update.
+  for (let step = 1; step <= 5; step++) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [
+        {
+          x: point.x + ((bounds.width - 65) / 6) * Math.min(1, step / 3),
+          y: point.y + 75 + step * 5,
+        },
+      ],
+    });
+    await page.waitForTimeout(30);
+  }
+  await page.waitForTimeout(100);
+  const scrolledUp = await scrollPosition();
+  assert(
+    scrolledUp < before - 20,
+    'The insulin plot must let its page scroll upward',
+  );
+  const panel = page.getByTestId('day-graph-rich-chart.tooltipDock');
+  assertTime(
+    await panel.innerText(),
+    22 * 60 + 30,
+    'Inspection must follow x during upward scrolling',
+  );
+  for (let step = 1; step <= 5; step++) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [
+        {
+          x: point.x + ((bounds.width - 65) / 6) * (1 + Math.min(1, step / 3)),
+          y: point.y + 100 - step * 17,
+        },
+      ],
+    });
+    await page.waitForTimeout(30);
+  }
+  await page.waitForTimeout(100);
+  assert(
+    (await scrollPosition()) > scrolledUp + 20,
+    'The same contact must reverse scrolling direction',
+  );
+  assertTime(
+    await panel.innerText(),
+    23 * 60,
+    'Inspection must continue when scrolling reverses',
+  );
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+  });
+  await page.waitForTimeout(100);
+  assertTime(
+    await panel.innerText(),
+    23 * 60,
+    'Scrolling release must preserve the last inspected time',
+  );
+}
+
 async function run() {
   mkdirSync('artifacts/chart-mobile', {recursive: true});
   const browser = await chromium.launch({
@@ -200,6 +294,18 @@ async function run() {
           await page.waitForTimeout(20);
         }
         await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: [
+            {x: point.x + (before.width - 65) / 6, y: point.y - 130},
+          ],
+        });
+        await page.waitForTimeout(100);
+        assertTime(
+          await panel.innerText(),
+          12 * 60,
+          'After scrolling starts, the same finger must still inspect its current x',
+        );
+        await cdp.send('Input.dispatchTouchEvent', {
           type: 'touchEnd',
           touchPoints: [],
         });
@@ -210,8 +316,8 @@ async function run() {
         );
         assertTime(
           await panel.innerText(),
-          8 * 60,
-          'Vertical scrolling must not scrub the selected time',
+          12 * 60,
+          'The final inspected time must remain after releasing a scrolling touch',
         );
       }
       assert(await page.getByTestId('day-graph-rich-chart.bolus').isVisible());
@@ -258,6 +364,13 @@ async function run() {
         selectedLoads,
         'Separate and overlay modes must inspect identical source values',
       );
+      if (width < 768) {
+        await scrollAndInspectPlot(
+          page,
+          cdp,
+          page.getByTestId('day-graph-rich-chart.iob').locator('svg'),
+        );
+      }
       await page.getByTestId('day-graph-chart-mode-combined').click();
       await page.getByTestId('chart.cgmGraph.fullscreenButton').click();
       await page.waitForTimeout(350);
@@ -285,6 +398,9 @@ async function run() {
         selectedLoads,
         'Fullscreen must inspect the same source values',
       );
+      if (width < 768) {
+        await scrollAndInspectPlot(page, cdp, overlay.locator('svg'));
+      }
       assert.equal(
         await page
           .getByTestId('day-graph-chart-mode-combined')

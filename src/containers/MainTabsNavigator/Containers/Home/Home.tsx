@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
-import {RefreshControl, ScrollView, View, Text, Pressable} from 'react-native';
+import {RefreshControl, View, Text, Pressable} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import styled, {useTheme} from 'styled-components/native';
@@ -24,6 +24,7 @@ import {pushFullScreenStackedCharts} from 'app/utils/fullscreenNavigation.utils'
 import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
 import {updateAndroidGlucoseLiveSurface} from 'app/services/androidGlucoseLiveSurface';
 import {addOpacity} from 'app/style/styling.utils';
+import {ChartScrollView} from 'app/components/charts/interaction/ChartScrollView';
 
 import HomeHeaderSection from 'app/containers/MainTabsNavigator/Containers/Home/sections/HomeHeaderSection';
 import CompactDayChart from 'app/containers/MainTabsNavigator/Containers/Home/sections/CompactDayChart';
@@ -1159,7 +1160,7 @@ const Home: React.FC = () => {
 
   return (
     <HomeContainer testID={E2E_TEST_IDS.screens.home}>
-      <ScrollView
+      <ChartScrollView
         showsVerticalScrollIndicator={false}
         {...scrollTouchHandlers}
         refreshControl={
@@ -1417,7 +1418,7 @@ const Home: React.FC = () => {
           isToday={isShowingToday}
           onTagPress={handleMealTagPress}
         />
-      </ScrollView>
+      </ChartScrollView>
 
       {/* Chart tooltip overlay — renders at the top of the screen, over header/TIR */}
       {tooltipModel ? (

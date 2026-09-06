@@ -1,5 +1,5 @@
 import React, {useCallback, useMemo, useState} from 'react';
-import {FlatList, View} from 'react-native';
+import {FlatList, View, type ScrollViewProps} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useTheme} from 'styled-components/native';
 
@@ -22,6 +22,7 @@ import {
   EmptyText,
 } from 'app/containers/MainTabsNavigator/Containers/FoodTracker/styles';
 import {ThemeType} from 'app/types/theme';
+import {ChartScrollView} from 'app/components/charts/interaction/ChartScrollView';
 
 // ── constants ────────────────────────────────────────
 
@@ -29,6 +30,10 @@ interface ColumnConfig {
   label: string;
   field: SortField | null;
   flex: number;
+}
+
+function renderChartScrollView(props: ScrollViewProps) {
+  return <ChartScrollView {...props} />;
 }
 
 const COLUMNS: ColumnConfig[] = [
@@ -143,7 +148,7 @@ const MealTable: React.FC<MealTableProps> = ({
         </View>
       );
     },
-    [expandedId, expandedChart, handleRowPress],
+    [expandedId, expandedChart, handleRowPress, onTagPress],
   );
 
   const keyExtractor = useCallback((item: MealEntry) => item.id, []);
@@ -187,6 +192,7 @@ const MealTable: React.FC<MealTableProps> = ({
 
   return (
     <FlatList
+      renderScrollComponent={renderChartScrollView}
       data={processed}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
