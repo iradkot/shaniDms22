@@ -315,7 +315,6 @@ const ProductExperienceScreen = ({
     () =>
       createNativeDayGraphDataSource({
         locale: language,
-        loadTimelineItems: dayGraphTimelineLoader,
         nightscoutSourceId: opaqueNightscoutSourceId,
         ...(activeJournalWorkspace === undefined
           ? {}
@@ -323,7 +322,6 @@ const ProductExperienceScreen = ({
       }),
     [
       activeJournalWorkspace,
-      dayGraphTimelineLoader,
       language,
       opaqueNightscoutSourceId,
     ],

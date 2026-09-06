@@ -1,7 +1,12 @@
+import {getUserProfileFromNightscout} from '../../../api/apiRequests';
 import {
-  fetchInsulinDataForDateRange,
-  getUserProfileFromNightscout,
-} from '../../../api/apiRequests';
+  loadInsulinContext as loadSharedInsulinContext,
+  type InsulinContextLoader,
+} from '../../../services/insulin/insulinDataSource';
+import {
+  hasAuthoritativeBasalProfile,
+  hasAuthoritativeInsulinTotalsContext,
+} from '../../../services/insulin/insulinRangeMetrics';
 import type {
   DailyInsulinSourceSummary,
   DailyOverviewDataSource,
@@ -22,6 +27,7 @@ interface InsulinTotals {
 }
 
 export interface NativeDailyInsulinSummaryDependencies {
+  readonly loadInsulinContext?: InsulinContextLoader;
   /** Opaque identity used by hosts to replace loaders after a source switch. */
   readonly sourceRevision?: string;
   readonly fetchInsulinEntries?: (
@@ -50,22 +56,14 @@ export interface NativeDailyOverviewDataSourceDependencies
   readonly loadInsulinSummary?: NativeDailyInsulinSummaryLoader;
 }
 
-const hasAuthoritativeBasalProfile = (
-  basalProfile: BasalProfile,
-): boolean =>
-  basalProfile.length > 0 &&
-  basalProfile.every(
-    entry => Number.isFinite(entry.value) && entry.value >= 0,
-  );
-
 const isAuthoritativeTotal = (value: number): boolean =>
   Number.isFinite(value) && value >= 0;
 
 export const createNativeDailyInsulinSummaryLoader = (
   dependencies: NativeDailyInsulinSummaryDependencies = {},
 ): NativeDailyInsulinSummaryLoader => {
-  const fetchInsulinEntries =
-    dependencies.fetchInsulinEntries ?? fetchInsulinDataForDateRange;
+  const loadInsulinContext =
+    dependencies.loadInsulinContext ?? loadSharedInsulinContext;
   const fetchProfile =
     dependencies.fetchProfile ??
     ((asOfIso: string) => getUserProfileFromNightscout(asOfIso));
@@ -76,36 +74,43 @@ export const createNativeDailyInsulinSummaryLoader = (
   const calculateTotals =
     dependencies.calculateTotals ??
     ((insulinEntries, basalProfile, start, end) =>
-      calculateTotalInsulin(
-        [...insulinEntries],
-        basalProfile,
-        start,
-        end,
-      ));
+      calculateTotalInsulin([...insulinEntries], basalProfile, start, end));
   const useE2EFixtures = dependencies.useE2EFixtures ?? isE2E;
 
-  return async (
-    start: Date,
-    end: Date,
-  ): Promise<DailyInsulinSourceSummary> => {
+  return async (start: Date, end: Date): Promise<DailyInsulinSourceSummary> => {
     if (useE2EFixtures) {
       return {quality: 'unavailable'};
     }
     try {
-      const [insulinEntries, profilePayload] = await Promise.all([
-        fetchInsulinEntries(start, end),
-        fetchProfile(start.toISOString()),
-      ]);
-      const basalProfile = extractBasalProfile(profilePayload);
+      let insulinEntries: readonly InsulinDataEntry[];
+      let basalProfile: BasalProfile;
+      if (
+        dependencies.fetchInsulinEntries &&
+        !dependencies.loadInsulinContext
+      ) {
+        // Preserve the existing normalized-entry injection seam. Production
+        // never calls a second insulin transport or parses a second payload.
+        const [entries, profilePayload] = await Promise.all([
+          dependencies.fetchInsulinEntries(start, end),
+          fetchProfile(start.toISOString()),
+        ]);
+        insulinEntries = entries;
+        basalProfile = extractBasalProfile(profilePayload);
+      } else {
+        const context = await loadInsulinContext({
+          startMs: start.getTime(),
+          endMs: end.getTime(),
+        });
+        if (!hasAuthoritativeInsulinTotalsContext(context)) {
+          return {quality: 'unavailable'};
+        }
+        insulinEntries = context.insulinData;
+        basalProfile = context.basalProfileData;
+      }
       if (!hasAuthoritativeBasalProfile(basalProfile)) {
         return {quality: 'unavailable'};
       }
-      const totals = calculateTotals(
-        insulinEntries,
-        basalProfile,
-        start,
-        end,
-      );
+      const totals = calculateTotals(insulinEntries, basalProfile, start, end);
       if (
         !isAuthoritativeTotal(totals.totalBasal) ||
         !isAuthoritativeTotal(totals.totalBolus)

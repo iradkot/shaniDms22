@@ -35,6 +35,15 @@ export interface DayGraphActiveLoadSample {
   readonly cobGrams?: number;
 }
 
+export type DayGraphSourceAvailability = 'available' | 'stale' | 'unavailable';
+
+/** Source read outcomes are distinct from successfully loaded empty history. */
+export interface DayGraphDataAvailability {
+  readonly treatments: DayGraphSourceAvailability;
+  readonly deviceStatus: DayGraphSourceAvailability;
+  readonly profile: DayGraphSourceAvailability;
+}
+
 export type DayGraphInsulinEvent =
   | {
       readonly kind: 'bolus';
@@ -107,10 +116,14 @@ export interface DayGraphSnapshot {
   readonly activeLoadSamples?: readonly DayGraphActiveLoadSample[];
   readonly insulinEvents?: readonly DayGraphInsulinEvent[];
   readonly basalSchedule?: readonly DayGraphBasalScheduleEntry[];
+  readonly dataAvailability?: DayGraphDataAvailability;
   readonly freshness: DayGraphFreshness;
 }
 
 /** Read-only host boundary. Implementations may combine Nightscout and Journal data. */
 export interface DayGraphDataSource {
-  readonly loadDayGraph: (period: DayGraphPeriod) => Promise<DayGraphSnapshot>;
+  readonly loadDayGraph: (
+    period: DayGraphPeriod,
+    options?: {readonly forceRefresh?: boolean},
+  ) => Promise<DayGraphSnapshot>;
 }

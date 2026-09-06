@@ -1,5 +1,12 @@
 import type {BgSample} from 'app/types/day_bgs.types';
 
+export type ChartLoadValues = Pick<
+  BgSample,
+  'iob' | 'iobBolus' | 'iobBasal' | 'cob'
+>;
+export type DatedChartLoadSample = ChartLoadValues & {date: number};
+export type ChartLoadSample = ChartLoadValues & {readonly timestampMs: number};
+
 export type LoadPoint = {x: number; y: number};
 export type SplitIobPoint = {
   x: number;
@@ -21,7 +28,7 @@ function finiteNumber(value: unknown): number | null {
 }
 
 /** A total needs an explicit reading or both components; missing is not zero. */
-export function getSampleIobTotal(sample: BgSample): number | null {
+export function getSampleIobTotal(sample: ChartLoadValues): number | null {
   const explicitTotal = finiteNumber(sample.iob);
   if (explicitTotal != null) {
     return explicitTotal;
@@ -32,7 +39,7 @@ export function getSampleIobTotal(sample: BgSample): number | null {
 }
 
 export function buildChartLoadSeries(
-  bgSamples: BgSample[],
+  samples: readonly DatedChartLoadSample[],
   xDomain: [Date, Date],
 ): {
   iobPoints: LoadPoint[];
@@ -45,7 +52,7 @@ export function buildChartLoadSeries(
   const splitIobPoints: SplitIobPoint[] = [];
   const cobPoints: LoadPoint[] = [];
 
-  for (const sample of bgSamples ?? []) {
+  for (const sample of samples ?? []) {
     const x = sample.date;
     if (!Number.isFinite(x) || x < startMs || x > endMs) {
       continue;

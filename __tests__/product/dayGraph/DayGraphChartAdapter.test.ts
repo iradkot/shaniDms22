@@ -6,6 +6,88 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 describe('buildDayGraphChartPresentation', () => {
+  it('anchors to the latest real load when glucose has stopped, without counting missing markers as data', () => {
+    const chart = buildDayGraphChartPresentation(
+      buildDayGraph({
+        period: {dayStartMs: 0, dayEndMs: DAY},
+        expectedSampleIntervalMs: 5 * MINUTE,
+        glucoseSamples: [
+          {
+            identity: {sourceId: 'ns', recordId: 'glucose'},
+            timestampMs: HOUR,
+            valueMgDl: 123,
+          },
+        ],
+        timelineItems: [],
+        activeLoadSamples: [
+          {timestampMs: 2 * HOUR, iobUnits: 0},
+          {timestampMs: 3 * HOUR},
+        ],
+      }),
+    );
+    expect(chart.fallbackAnchorTimeMs).toBe(2 * HOUR);
+    expect(chart.loadSamples).toEqual([
+      {timestampMs: 2 * HOUR, iob: 0},
+      {timestampMs: 3 * HOUR},
+    ]);
+  });
+
+  it('exposes load-only history without generating glucose readings and keeps failure states distinct from no data', () => {
+    const dataAvailability = {
+      treatments: 'unavailable',
+      deviceStatus: 'stale',
+      profile: 'available',
+    } as const;
+    const chart = buildDayGraphChartPresentation(
+      buildDayGraph({
+        period: {dayStartMs: 0, dayEndMs: DAY},
+        expectedSampleIntervalMs: 5 * MINUTE,
+        glucoseSamples: [],
+        timelineItems: [],
+        dataAvailability,
+        activeLoadSamples: [
+          {
+            timestampMs: HOUR + MINUTE,
+            iobUnits: -0.2,
+            basalIobUnits: -0.2,
+            cobGrams: 0,
+          },
+        ],
+      }),
+    );
+    expect(chart.bgSamples).toEqual([]);
+    expect(chart.loadSamples).toEqual([
+      {timestampMs: HOUR + MINUTE, iob: -0.2, iobBasal: -0.2, cob: 0},
+    ]);
+    expect(chart.loadSamples[0]).not.toHaveProperty('sgv');
+    expect(chart.availability).toMatchObject({
+      activeInsulin: true,
+      activeCarbohydrates: true,
+    });
+    expect(chart.dataAvailability).toEqual(dataAvailability);
+    expect(chart.fallbackAnchorTimeMs).toBe(HOUR + MINUTE);
+  });
+
+  it('keeps independent load timestamps even when glucose is sampled a minute later', () => {
+    const chart = buildDayGraphChartPresentation(
+      buildDayGraph({
+        period: {dayStartMs: 0, dayEndMs: DAY},
+        expectedSampleIntervalMs: 5 * MINUTE,
+        glucoseSamples: [
+          {
+            identity: {sourceId: 'ns', recordId: 'glucose'},
+            timestampMs: HOUR + MINUTE,
+            valueMgDl: 123,
+          },
+        ],
+        timelineItems: [],
+        activeLoadSamples: [{timestampMs: HOUR, iobUnits: 1.2}],
+      }),
+    );
+    expect(chart.loadSamples).toEqual([{timestampMs: HOUR, iob: 1.2}]);
+    expect(chart.bgSamples[0]?.date).toBe(HOUR + MINUTE);
+  });
+
   it('projects the normalized Day Graph model into the existing rich chart inputs', () => {
     const model = buildDayGraph({
       period: {dayStartMs: 0, dayEndMs: DAY},

@@ -30,6 +30,11 @@ import {useTooltipEventsSummary} from './hooks/useTooltipEventsSummary';
 
 import type {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
+import {
+  findMiniLoadSample,
+  resolveMiniLoadSamples,
+  basalChartStatus,
+} from 'app/components/charts/miniChartData';
 import type {
   StackedChartsTooltipModel,
   StackedHomeChartsProps,
@@ -39,6 +44,8 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   const {
     locale,
     bgSamples,
+    loadSamples,
+    dataAvailability,
     foodItems,
     insulinData,
     basalProfileData,
@@ -111,8 +118,19 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     showFallback: tooltipPlacement === 'panel',
   });
 
+  const independentLoadSample = useMemo(
+    () =>
+      loadSamples === undefined
+        ? tooltipBgSample
+        : findMiniLoadSample(
+            resolveMiniLoadSamples(bgSamples, loadSamples),
+            cgmAnchorTimeMs,
+            xDomain,
+          ),
+    [loadSamples, tooltipBgSample, bgSamples, cgmAnchorTimeMs, xDomain],
+  );
   const {activeInsulinU, activeInsulinBolusU, activeInsulinBasalU, cobG} =
-    useBgTooltipDerivedMetrics(tooltipBgSample);
+    useBgTooltipDerivedMetrics(independentLoadSample);
 
   const {bolusSummary, carbsSummary} = useTooltipEventsSummary({
     bolusEvents: tooltipBolusEvents as any,
@@ -309,6 +327,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
             locale={resolvedLocale}
             bgSamples={bgSamples}
             insulinData={insulinData}
+            dataStatus={dataAvailability?.treatments}
             width={width}
             height={Math.max(100, miniChartHeight)}
             xDomain={xDomain}
@@ -320,10 +339,12 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
             <MixedMiniChart
               locale={resolvedLocale}
               bgSamples={bgSamples}
+              loadSamples={loadSamples}
+              dataAvailability={dataAvailability}
               insulinData={insulinData}
               basalProfileData={basalProfileData}
               width={width}
-              height={Math.max(300, miniChartHeight * 3)}
+              height={Math.max(170, miniChartHeight * 2)}
               xDomain={xDomain}
               margin={{
                 top: 16,
@@ -341,6 +362,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
                 bgSamples={bgSamples}
                 insulinData={insulinData}
                 basalProfileData={basalProfileData}
+                dataStatus={basalChartStatus(dataAvailability)}
                 width={width}
                 height={miniChartHeight}
                 xDomain={xDomain}
@@ -357,6 +379,8 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
               <ActiveInsulinMiniGraph
                 locale={resolvedLocale}
                 bgSamples={bgSamples}
+                loadSamples={loadSamples}
+                dataStatus={dataAvailability?.deviceStatus}
                 width={width}
                 height={miniChartHeight}
                 xDomain={xDomain}
@@ -373,6 +397,8 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
               <CobMiniGraph
                 locale={resolvedLocale}
                 bgSamples={bgSamples}
+                loadSamples={loadSamples}
+                dataStatus={dataAvailability?.deviceStatus}
                 width={width}
                 height={miniChartHeight}
                 xDomain={xDomain}

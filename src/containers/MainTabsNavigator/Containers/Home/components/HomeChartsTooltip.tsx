@@ -247,6 +247,7 @@ const HomeChartsTooltip: React.FC<Props> = ({
                     ? compactStyles.ltrFlow
                     : compactStyles.rtlFlow,
                 ]}
+                testID={`chart-inspector-value-${cell.key}`}
                 numberOfLines={1}>
                 {cell.value}
               </Text>

@@ -1,9 +1,15 @@
-import type {DayGraphModel} from '../../modules/dayGraph';
+import type {
+  DayGraphDataAvailability,
+  DayGraphModel,
+} from '../../modules/dayGraph';
 import type {BgSample} from '../../types/day_bgs.types';
 import type {FoodItemDTO} from '../../types/food.types';
 import type {BasalProfile, InsulinDataEntry} from '../../types/insulin.types';
 import type {TrendDirectionString} from '../../types/notifications';
-import {getSampleIobTotal} from '../../utils/chartLoadSeries.utils';
+import {
+  getSampleIobTotal,
+  type ChartLoadSample,
+} from '../../utils/chartLoadSeries.utils';
 
 const MINUTE_MS = 60 * 1000;
 
@@ -26,14 +32,19 @@ export interface DayGraphChartAvailability {
   readonly basal: boolean;
 }
 
+/** Real load readings; this type deliberately has no glucose value. */
+export type DayGraphChartLoadSample = Readonly<ChartLoadSample>;
+
 export interface DayGraphChartPresentation {
   readonly bgSamples: BgSample[];
+  readonly loadSamples: readonly DayGraphChartLoadSample[];
   readonly foodItems: FoodItemDTO[];
   readonly insulinData: InsulinDataEntry[];
   readonly basalProfileData: BasalProfile;
   readonly xDomain: [Date, Date];
   readonly fallbackAnchorTimeMs: number | undefined;
   readonly availability: DayGraphChartAvailability;
+  readonly dataAvailability: DayGraphDataAvailability;
 }
 
 const identityKey = (sourceId: string, recordId: string): string =>
@@ -88,6 +99,19 @@ const toFoodItems = (model: DayGraphModel): FoodItemDTO[] =>
       },
     ];
   });
+
+const toLoadSamples = (model: DayGraphModel): DayGraphChartLoadSample[] =>
+  model.activeLoadSamples.map(sample => ({
+    timestampMs: sample.timestampMs,
+    ...(sample.iobUnits === undefined ? {} : {iob: sample.iobUnits}),
+    ...(sample.bolusIobUnits === undefined
+      ? {}
+      : {iobBolus: sample.bolusIobUnits}),
+    ...(sample.basalIobUnits === undefined
+      ? {}
+      : {iobBasal: sample.basalIobUnits}),
+    ...(sample.cobGrams === undefined ? {} : {cob: sample.cobGrams}),
+  }));
 
 const toInsulinData = (model: DayGraphModel): InsulinDataEntry[] =>
   model.insulinEvents.map(event => {
@@ -148,11 +172,27 @@ export const buildDayGraphChartPresentation = (
   model: DayGraphModel,
 ): DayGraphChartPresentation => {
   const bgSamples = toBgSamples(model);
+  const loadSamples = toLoadSamples(model);
   const foodItems = toFoodItems(model);
   const insulinData = toInsulinData(model);
   const basalProfileData = toBasalProfile(model);
+  const latestGlucoseTime = bgSamples[bgSamples.length - 1]?.date;
+  const latestLoadTime = loadSamples.reduce<number | undefined>(
+    (latest, sample) =>
+      [sample.iob, sample.iobBolus, sample.iobBasal, sample.cob].some(
+        Number.isFinite,
+      )
+        ? sample.timestampMs
+        : latest,
+    undefined,
+  );
+  const latestFactTime =
+    latestGlucoseTime === undefined
+      ? latestLoadTime
+      : Math.max(latestGlucoseTime, latestLoadTime ?? latestGlucoseTime);
   return {
     bgSamples,
+    loadSamples,
     foodItems,
     insulinData,
     basalProfileData,
@@ -160,12 +200,13 @@ export const buildDayGraphChartPresentation = (
       new Date(model.period.dayStartMs),
       new Date(model.period.dayEndMs),
     ],
-    fallbackAnchorTimeMs: bgSamples[bgSamples.length - 1]?.date,
+    fallbackAnchorTimeMs: latestFactTime,
+    dataAvailability: model.dataAvailability,
     availability: {
-      activeInsulin: bgSamples.some(
+      activeInsulin: loadSamples.some(
         sample => getSampleIobTotal(sample) != null,
       ),
-      activeCarbohydrates: bgSamples.some(sample =>
+      activeCarbohydrates: loadSamples.some(sample =>
         Number.isFinite(sample.cob),
       ),
       boluses: insulinData.some(event => event.type === 'bolus'),

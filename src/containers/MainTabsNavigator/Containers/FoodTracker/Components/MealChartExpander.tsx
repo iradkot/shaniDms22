@@ -1,5 +1,5 @@
 import React, {useMemo} from 'react';
-import {View, useWindowDimensions} from 'react-native';
+import {useWindowDimensions} from 'react-native';
 import styled, {useTheme} from 'styled-components/native';
 
 import StackedHomeCharts from 'app/containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
@@ -219,9 +219,11 @@ const MealChartExpander: React.FC<MealChartExpanderProps> = ({
       <PostMealAbsorptionBar meal={meal} />
 
       {/* Full stacked charts */}
-      {chartData.bgSamples.length > 0 && (
+      {(chartData.bgSamples.length > 0 || chartData.loadSamples?.length || chartData.insulinData.length > 0 || chartData.basalProfileData.length > 0) ? (
         <StackedHomeCharts
           bgSamples={chartData.bgSamples}
+          {...(chartData.loadSamples === undefined ? {} : {loadSamples: chartData.loadSamples})}
+          {...(chartData.dataAvailability === undefined ? {} : {dataAvailability: chartData.dataAvailability})}
           foodItems={chartData.foodItems}
           insulinData={chartData.insulinData}
           basalProfileData={chartData.basalProfileData}
@@ -233,7 +235,7 @@ const MealChartExpander: React.FC<MealChartExpanderProps> = ({
           showFullScreenButton={false}
           tooltipPlacement="top"
         />
-      )}
+      ) : null}
     </ChartExpanderContainer>
   );
 };

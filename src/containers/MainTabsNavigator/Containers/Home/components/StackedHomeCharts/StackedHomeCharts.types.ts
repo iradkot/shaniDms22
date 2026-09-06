@@ -3,6 +3,8 @@ import type {GestureResponderEvent} from 'react-native';
 import type {BgSample} from 'app/types/day_bgs.types';
 import type {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
+import type {ChartLoadSample} from 'app/utils/chartLoadSeries.utils';
+import type {ChartDataAvailability} from 'app/components/charts/miniChartData';
 
 /** Tooltip state exposed to parent when `tooltipPlacement="none"`. */
 export type StackedChartsTooltipModel = {
@@ -32,6 +34,8 @@ export type StackedHomeChartsProps = {
   /** Language used by the reusable chart labels and tooltip. */
   locale?: 'en' | 'he' | undefined;
   bgSamples: BgSample[];
+  loadSamples?: readonly ChartLoadSample[] | undefined;
+  dataAvailability?: ChartDataAvailability | undefined;
   foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
   insulinData?: InsulinDataEntry[] | undefined;
   basalProfileData?: BasalProfile | undefined;
@@ -117,8 +121,9 @@ export type StackedHomeChartsProps = {
   /**
    * Controls how mini charts are displayed.
    *
-   * - `separate` (default): Three distinct mini charts stacked vertically.
-   * - `mixed`: Compact aligned lanes, each with its own labelled units.
+   * - `separate` (default): Basal, active insulin and active carbs in distinct lanes.
+   * - `mixed`: One time plot with labelled independent scales for these three series.
+   * Delivered bolus doses retain their own lane in both modes.
    */
   chartMode?: 'separate' | 'mixed';
 

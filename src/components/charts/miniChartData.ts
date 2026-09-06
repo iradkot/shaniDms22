@@ -2,6 +2,9 @@ import type {BgSample} from 'app/types/day_bgs.types';
 import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {
   buildChartLoadSeries,
+  MAX_LOAD_CURSOR_DISTANCE_MS,
+  type ChartLoadSample,
+  type DatedChartLoadSample,
   type LoadPoint,
 } from 'app/utils/chartLoadSeries.utils';
 import {buildBasalDeliveryTimeline} from 'app/utils/insulin.utils/basalDeliveryTimeline';
@@ -11,6 +14,9 @@ export type MiniChartProps = {
   width: number;
   height: number;
   bgSamples: BgSample[];
+  /** Authoritative independent load readings. Undefined supports legacy enriched CGM. */
+  loadSamples?: readonly ChartLoadSample[] | undefined;
+  dataStatus?: ChartDataStatus | undefined;
   xDomain?: [Date, Date] | null | undefined;
   cursorTimeMs?: number | null | undefined;
   margin?:
@@ -20,8 +26,84 @@ export type MiniChartProps = {
   compact?: boolean | undefined;
 };
 
+export type ChartDataStatus = 'available' | 'stale' | 'unavailable';
+export type ChartDataAvailability = {
+  readonly treatments: ChartDataStatus;
+  readonly deviceStatus: ChartDataStatus;
+  readonly profile: ChartDataStatus;
+};
+
+export function basalChartStatus(
+  availability: ChartDataAvailability | undefined,
+): ChartDataStatus {
+  if (
+    !availability ||
+    (availability.profile === 'available' &&
+      availability.treatments === 'available')
+  ) {
+    return 'available';
+  }
+  return availability.profile === 'unavailable' &&
+    availability.treatments === 'unavailable'
+    ? 'unavailable'
+    : 'stale';
+}
+
+export function emptyMiniChartText(
+  locale: 'en' | 'he' | undefined,
+  status: ChartDataStatus,
+  emptyText: string,
+): string {
+  if (status === 'unavailable') {
+    return locale === 'he'
+      ? 'לא הצלחנו לטעון את הנתונים'
+      : 'Could not load this data';
+  }
+  if (status === 'stale') {
+    return locale === 'he'
+      ? 'אין נתונים שמורים בטווח הזה'
+      : 'No saved data in this range';
+  }
+  return emptyText;
+}
+
+export const resolveMiniLoadSamples = (
+  bgSamples: BgSample[],
+  loadSamples: readonly ChartLoadSample[] | undefined,
+): readonly DatedChartLoadSample[] =>
+  loadSamples === undefined
+    ? bgSamples
+    : loadSamples.map(sample => ({...sample, date: sample.timestampMs}));
+
+/** Select the nearest source sample, even when its load value is explicitly missing. */
+export function findMiniLoadSample(
+  samples: readonly DatedChartLoadSample[],
+  timeMs: number,
+  domain?: [Date, Date] | null,
+): DatedChartLoadSample | null {
+  if (!Number.isFinite(timeMs)) {
+    return null;
+  }
+  let nearest: DatedChartLoadSample | null = null;
+  let distance = Number.POSITIVE_INFINITY;
+  for (const sample of samples) {
+    if (
+      !Number.isFinite(sample.date) ||
+      (domain && (sample.date < +domain[0] || sample.date > +domain[1]))
+    ) {
+      continue;
+    }
+    const candidateDistance = Math.abs(sample.date - timeMs);
+    if (candidateDistance < distance) {
+      nearest = sample;
+      distance = candidateDistance;
+    }
+  }
+  return distance <= MAX_LOAD_CURSOR_DISTANCE_MS ? nearest : null;
+}
+
 export function resolveMiniDomain(
-  samples: BgSample[],
+  samples: readonly {date: number}[],
   domain?: [Date, Date] | null,
 ): [Date, Date] {
   if (domain && Number.isFinite(+domain[0]) && +domain[1] > +domain[0]) {
@@ -38,7 +120,7 @@ export function resolveMiniDomain(
 
 /** A gap means unknown, so it must never draw as zero or as a connecting line. */
 export function buildMiniLoadSegments(
-  samples: BgSample[],
+  samples: readonly DatedChartLoadSample[],
   domain: [Date, Date],
   kind: 'iob' | 'cob',
 ): LoadPoint[][] {

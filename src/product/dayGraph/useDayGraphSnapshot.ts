@@ -32,6 +32,7 @@ export const useDayGraphSnapshot = (
   const [reload, setReload] = useState(0);
   const [state, setState] = useState<ScopedState>();
   const busy = useRef(false);
+  const previousReload = useRef(reload);
   const refresh = useCallback(() => {
     if (!busy.current) {
       setReload(value => value + 1);
@@ -51,7 +52,12 @@ export const useDayGraphSnapshot = (
           ? {...current.value, refreshing: true, refreshFailed: false}
           : {kind: 'loading'},
     }));
-    const load = async () => source.loadDayGraph(period);
+    const forceRefresh = reload !== previousReload.current;
+    previousReload.current = reload;
+    const load = async () =>
+      forceRefresh
+        ? source.loadDayGraph(period, {forceRefresh: true})
+        : source.loadDayGraph(period);
     load()
       .then(snapshot => {
         if (active) {

@@ -22,11 +22,12 @@ import {productUiTokens} from '../ui';
 import {buildDayGraphChartPresentation} from './DayGraphChartAdapter';
 import type {DayGraphChartPreferencesRuntime} from './runtime';
 import {useDayGraphView} from './useDayGraphView';
+import {DayGraphSourceStatus} from './DayGraphSourceStatus';
 
 const COPY = {
   en: {
-    detailed: 'Detailed',
-    combined: 'Compact',
+    detailed: 'Separate',
+    combined: 'Overlay',
     hint: 'Tap to inspect. Drag sideways through time; swipe up or down to scroll.',
     factual:
       'Nightscout records and your journal entries keep their own source labels.',
@@ -51,8 +52,8 @@ const COPY = {
     desktop: 'Desktop',
   },
   he: {
-    detailed: 'מפורט',
-    combined: 'קומפקטי',
+    detailed: 'נפרד',
+    combined: 'משולב',
     hint: 'נגיעה לבדיקת נתון. גרירה לצדדים לשינוי השעה, ולמעלה או למטה לגלילה.',
     factual: 'רשומות Nightscout והרשומות מהיומן מוצגות עם מקור המידע שלהן.',
     glucose: 'סוכר',
@@ -332,10 +333,16 @@ export const RichDayGraphChart = ({
         ))}
       </View>
 
+      <DayGraphSourceStatus
+        locale={locale}
+        availability={chart.dataAvailability}
+      />
       <TouchProvider>
         <StackedHomeCharts
           basalProfileData={chart.basalProfileData}
           bgSamples={chart.bgSamples}
+          loadSamples={chart.loadSamples}
+          dataAvailability={chart.dataAvailability}
           cgmHeight={
             fullscreen
               ? Math.max(180, Math.min(380, viewport.height * 0.4))

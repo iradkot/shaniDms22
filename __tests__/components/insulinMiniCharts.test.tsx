@@ -79,7 +79,7 @@ describe('Mobile insulin lane presentation', () => {
       const lane = tree!.root
         .findAll(node => node.props.testID === 'lane')
         .find(node => typeof node.type !== 'function')!;
-      expect(StyleSheet.flatten(lane.props.style).height).toBeLessThan(
+      expect(StyleSheet.flatten(lane.props.style).minHeight).toBeLessThan(
         100 * Math.max(1, Dimensions.get('window').fontScale),
       );
       act(() => tree!.unmount());
@@ -211,7 +211,7 @@ describe('Mobile insulin lane presentation', () => {
     },
   );
 
-  it('keeps combined mode in 3 separately labelled and aligned SVG plots', () => {
+  it('overlays all three series on one time plot with separate labelled scales', () => {
     const tree = render(
       <MixedMiniChart
         {...props}
@@ -219,55 +219,81 @@ describe('Mobile insulin lane presentation', () => {
         bgSamples={[sample(0, {iob: 2, cob: 30})]}
       />,
     );
-    expect(tree.root.findAllByType(Svg)).toHaveLength(3);
+    expect(tree.root.findAllByType(Svg)).toHaveLength(1);
     expect(labels(tree)).toEqual(
       expect.arrayContaining([
-        'Basal · U/hr',
-        'Active insulin · U',
-        'Active carbs · g',
+        '┏━ Basal · U/hr',
+        '━ Active insulin · U',
+        '┄┄ Active carbs · g',
+        'Scale: 0 – 1',
+        'Scale: 0 – 2',
+        'Scale: 0 – 40',
+        'Each series has its own scale. Compare timing, not line heights.',
       ]),
     );
     act(() => tree.unmount());
   });
 
-  it('makes compact mode visibly denser than the separate phone lanes without losing units or the basal source key', () => {
-    const common = {
-      ...props,
-      height: 92,
-      basalProfileData: [{time: '00:00', value: 1}],
-      bgSamples: [sample(0, {iob: 2, cob: 30})],
-    };
+  it('keeps real zeros, signed loads and unknown gaps in the overlay without glucose', () => {
     const tree = render(
-      <>
-        <BasalMiniGraph {...common} testID="regular-basal" />
-        <ActiveInsulinMiniGraph {...common} testID="regular-iob" />
-        <CobMiniGraph {...common} testID="regular-cob" />
-        <MixedMiniChart {...common} height={300} />
-      </>,
+      <MixedMiniChart
+        {...props}
+        cursorTimeMs={15 * 60_000}
+        loadSamples={[
+          {timestampMs: 0, iob: -0.4, cob: 0},
+          {timestampMs: 5 * 60_000},
+          {timestampMs: 10 * 60_000, iob: 0.2, cob: 0},
+          {timestampMs: 15 * 60_000, iob: 0, cob: 0},
+          {timestampMs: 40 * 60_000, iob: -0.2, cob: 0},
+        ]}
+      />,
     );
-    const laneHeight = (testID: string) =>
-      StyleSheet.flatten(
-        tree.root.findAll(
-          node => node.props.testID === testID && node.props.style != null,
-        )[0]!.props.style,
-      ).height;
-    expect(laneHeight('mixed-basal-lane')).toBeLessThan(
-      laneHeight('regular-basal'),
+    expect(tree.root.findAllByType(Svg)).toHaveLength(1);
+    for (const kind of ['iob', 'cob']) {
+      const lines = tree.root
+        .findAllByType(Path)
+        .filter(node => node.props.testID === `${kind}-line-segment`);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]!.props.d.match(/L/g)).toHaveLength(1);
+      expect(
+        tree.root.findAllByProps({testID: `${kind}-single-point`}).length,
+      ).toBeGreaterThan(0);
+    }
+    expect(
+      tree.root.findAllByProps({testID: 'mixed-time-cursor'}).length,
+    ).toBeGreaterThan(0);
+    expect(labels(tree)).toContain('Scale: -0.5 – 0.5');
+    expect(labels(tree)).toContain('Scale: 0 – 1');
+    act(() => tree.unmount());
+  });
+
+  it('uses independent selected load samples and keeps an explicit missing sample unknown', () => {
+    const loads = [
+      {timestampMs: 0, iob: 2, cob: 30},
+      {timestampMs: 5 * 60_000},
+      {timestampMs: 10 * 60_000, iob: 0, cob: 0},
+    ];
+    const tree = render(
+      <ActiveInsulinMiniGraph
+        {...props}
+        loadSamples={loads}
+        cursorTimeMs={5 * 60_000}
+      />,
     );
-    expect(laneHeight('mixed-iob-lane')).toBeLessThan(
-      laneHeight('regular-iob'),
+    expect(labels(tree)).toContain('—');
+    expect(labels(tree)).toContain('No reading at this time');
+    act(() =>
+      tree.update(
+        <ThemeProvider theme={theme}>
+          <ActiveInsulinMiniGraph
+            {...props}
+            loadSamples={loads}
+            cursorTimeMs={10 * 60_000}
+          />
+        </ThemeProvider>,
+      ),
     );
-    expect(laneHeight('mixed-cob-lane')).toBeLessThan(
-      laneHeight('regular-cob'),
-    );
-    expect(labels(tree)).toEqual(
-      expect.arrayContaining([
-        'Basal · U/hr',
-        'Active insulin · U',
-        'Active carbs · g',
-        '━━ Temporary / suspended     ┄┄ Scheduled profile',
-      ]),
-    );
+    expect(labels(tree)).toContain('0 U');
     act(() => tree.unmount());
   });
 

@@ -1,19 +1,11 @@
 import {
   fetchBgDataForDateRangeUncached,
   fetchTreatmentsForDateRangeUncached,
-  fetchDeviceStatusForDateRangeUncached,
-  getUserProfileFromNightscout,
 } from 'app/api/apiRequests';
-import {enrichBgSamplesWithDeviceStatusForRange} from 'app/utils/stackedChartsData.utils';
-import {mergeDeviceStatusIntoBgSamples} from 'app/utils/mergeDeviceStatusIntoBgSamples.utils';
+import {mergeLoadSamplesIntoBgSamples} from 'app/utils/mergeDeviceStatusIntoBgSamples.utils';
 import {
   calculateTimeInRangePercentages,
 } from 'app/utils/glucose/timeInRange';
-import {
-  extractBasalProfileFromNightscoutProfileData,
-  mapNightscoutTreatmentsToCarbFoodItems,
-  mapNightscoutTreatmentsToInsulinDataEntries,
-} from 'app/utils/nightscoutTreatments.utils';
 import {computeAbsorption} from 'app/utils/mealAbsorption.utils';
 
 import {extractHypoEvents} from 'app/containers/MainTabsNavigator/Containers/Trends/utils/hypoInvestigation.utils';
@@ -48,11 +40,25 @@ import {
 } from 'app/services/agpComparisonIntelligence';
 import {buildLoopModeSummary} from 'app/services/aiAnalyst/loopModeSummaryTool';
 import {TimeValueEntry} from 'app/types/insulin.types';
+import {loadInsulinContext} from 'app/services/insulin/insulinDataSource';
+import {calculateInsulinContextMetrics} from 'app/services/insulin/insulinRangeMetrics';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW} from 'app/constants/GLUCOSE_WINDOWS';
 import type {TirThresholds} from 'app/types/loopAnalysis.types';
 
 type ToolResult = {ok: true; result: any} | {ok: false; error: string};
+
+async function loadProfileContext(dateIso: string) {
+  const profileAsOfMs = Date.parse(dateIso);
+  if (!Number.isFinite(profileAsOfMs)) {
+    throw new Error('A valid profile date is required.');
+  }
+  const context = await loadInsulinContext({startMs: profileAsOfMs - 1, endMs: profileAsOfMs + 1, profileAsOfMs});
+  if (context.availability.profile === 'unavailable') {
+    throw new Error('Basal profile data could not be loaded.');
+  }
+  return context;
+}
 
 export type AiAnalystToolName =
   | 'getCgmSamples'
@@ -346,8 +352,12 @@ export async function runAiAnalystTool(
         const startMs = endMs - rangeDays * 24 * 60 * 60 * 1000;
 
         const bg = await fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs), {throwOnError: true});
-        const enriched = includeDeviceStatus
-          ? await enrichBgSamplesWithDeviceStatusForRange({startMs, endMs, bgSamples: bg})
+        const context = includeDeviceStatus ? await loadInsulinContext({startMs, endMs}) : undefined;
+        if (context?.availability.deviceStatus === 'unavailable') {
+          throw new Error('Active insulin and carbohydrate data could not be loaded.');
+        }
+        const enriched = context
+          ? mergeLoadSamplesIntoBgSamples({bgSamples: bg, loadSamples: context.loadSamples})
           : bg;
 
         const values = (enriched ?? []).map(s => s?.sgv).filter(v => typeof v === 'number');
@@ -369,6 +379,7 @@ export async function runAiAnalystTool(
             count: enriched?.length ?? 0,
             stats: {minMgdl: min, maxMgdl: max, avgMgdl: avg},
             samples,
+            ...(context ? {availability: context.availability} : {}),
           },
         };
       }
@@ -396,9 +407,12 @@ export async function runAiAnalystTool(
         const endMs = Date.now();
         const startMs = endMs - rangeDays * 24 * 60 * 60 * 1000;
 
-        const treatments = await fetchTreatmentsForDateRangeUncached(new Date(startMs), new Date(endMs));
-        const insulinEntries = mapNightscoutTreatmentsToInsulinDataEntries(treatments);
-        const carbItems = mapNightscoutTreatmentsToCarbFoodItems(treatments);
+        const context = await loadInsulinContext({startMs, endMs});
+        if (context.availability.treatments !== 'available') {
+          throw new Error('Current insulin and carbohydrate treatment data could not be loaded.');
+        }
+        const insulinEntries = context.insulinData;
+        const carbItems = context.carbTreatments;
 
         const bolusTotal = insulinEntries
           .filter(e => e.type === 'bolus')
@@ -422,6 +436,7 @@ export async function runAiAnalystTool(
               insulinEntries: insulinEntries.slice(0, 100),
               carbTreatments: carbItems.slice(0, 100),
             },
+            availability: context.availability,
           },
         };
       }
@@ -509,8 +524,9 @@ export async function runAiAnalystTool(
 
       case 'getPumpProfile': {
         const dateIso = typeof args?.dateIso === 'string' ? args.dateIso : new Date().toISOString();
-        const profileData = await getUserProfileFromNightscout(dateIso);
-        const basalProfile = extractBasalProfileFromNightscoutProfileData(profileData as any);
+        const context = await loadProfileContext(dateIso);
+        const profileData = context.profileData;
+        const basalProfile = context.basalProfileData;
 
         // Keep payload small: include only the first returned profile and extracted basal.
         const first = Array.isArray(profileData) ? profileData?.[0] : (profileData as any)?.[0];
@@ -521,6 +537,7 @@ export async function runAiAnalystTool(
             dateIso,
             defaultProfile: first?.defaultProfile ?? null,
             extractedBasalProfile: basalProfile,
+            availability: context.availability,
             // Provide a shallow snapshot for debugging (avoid large nested stores)
             profileSummary: {
               startDate: first?.startDate ?? null,
@@ -597,7 +614,8 @@ export async function runAiAnalystTool(
 
       case 'getCurrentProfileSettings': {
         const dateIso = typeof args?.dateIso === 'string' ? args.dateIso : new Date().toISOString();
-        const profileData = await getUserProfileFromNightscout(dateIso);
+        const context = await loadProfileContext(dateIso);
+        const profileData = context.profileData;
         const first = Array.isArray(profileData) ? profileData?.[0] : (profileData as any)?.[0];
 
         const defaultProfileName = first?.defaultProfile ?? null;
@@ -608,7 +626,7 @@ export async function runAiAnalystTool(
         const targetHigh = profile?.target_high as TimeValueEntry[] | undefined;
         const isf = profile?.sens as TimeValueEntry[] | undefined;
         const carbRatio = profile?.carbratio as TimeValueEntry[] | undefined;
-        const basal = profile?.basal as TimeValueEntry[] | undefined;
+        const basal = context.basalProfileData;
         const diaHours = typeof profile?.dia === 'number' ? profile.dia : null;
 
         const snapshotTimes = [
@@ -645,6 +663,7 @@ export async function runAiAnalystTool(
               basal: Array.isArray(basal) ? basal : [],
             },
             snapshotByTime,
+            availability: context.availability,
           },
         };
       }
@@ -1207,10 +1226,8 @@ export async function runAiAnalystTool(
         const [
           currentBgData,
           previousBgData,
-          currentTreatments,
-          previousTreatments,
-          currentProfile,
-          previousProfile,
+          currentContext,
+          previousContext,
         ] = await Promise.all([
           fetchBgDataForDateRangeUncached(currentRange.start, currentRange.end, {
             throwOnError: true,
@@ -1218,15 +1235,12 @@ export async function runAiAnalystTool(
           fetchBgDataForDateRangeUncached(previousRange.start, previousRange.end, {
             throwOnError: true,
           }),
-          fetchTreatmentsForDateRangeUncached(currentRange.start, currentRange.end),
-          fetchTreatmentsForDateRangeUncached(previousRange.start, previousRange.end),
-          getUserProfileFromNightscout(currentRange.end.toISOString()).catch(
-            () => null,
-          ),
-          getUserProfileFromNightscout(previousRange.end.toISOString()).catch(
-            () => null,
-          ),
+          loadInsulinContext({startMs: currentStart, endMs: currentEnd}),
+          loadInsulinContext({startMs: previousStart, endMs: previousEnd}),
         ]);
+        if ([currentContext, previousContext].some(context => context.availability.treatments === 'unavailable')) {
+          throw new Error('Treatment data could not be loaded for one or both periods.');
+        }
 
         const [currentLoopMode, previousLoopMode] = await Promise.all([
           buildLoopModeSummary({
@@ -1246,10 +1260,10 @@ export async function runAiAnalystTool(
           previousRange,
           currentBgData,
           previousBgData,
-          currentTreatments,
-          previousTreatments,
-          currentProfile,
-          previousProfile,
+          currentTreatments: [...currentContext.treatments],
+          previousTreatments: [...previousContext.treatments],
+          currentProfile: currentContext.profileData,
+          previousProfile: previousContext.profileData,
           currentLoopMode,
           previousLoopMode,
         });
@@ -1267,6 +1281,7 @@ export async function runAiAnalystTool(
             corrections: analysis.evidence.corrections,
             loopMode: analysis.evidence.loopMode,
             settingsDiffs: analysis.evidence.settingsDiffs.slice(0, 20),
+            availability: {current: currentContext.availability, previous: previousContext.availability},
           },
         };
       }
@@ -1286,16 +1301,15 @@ export async function runAiAnalystTool(
           return {ok: false, error: 'Invalid date format. Use ISO date strings.'};
         }
 
-        const treatments = await fetchTreatmentsForDateRangeUncached(new Date(startMs), new Date(endMs));
-        const insulinEntries = mapNightscoutTreatmentsToInsulinDataEntries(treatments);
+        const context = await loadInsulinContext({startMs, endMs});
+        const insulinEntries = context.insulinData;
+        const metrics = calculateInsulinContextMetrics(context, new Date(startMs), new Date(endMs));
 
-        // Separate bolus and temp basal
+        // Delivery totals use the same scheduled/temporary basal timeline as charts.
         const boluses = insulinEntries.filter(e => e.type === 'bolus');
-        const tempBasals = insulinEntries.filter(e => e.type === 'tempBasal');
-
-        const totalBolus = boluses.reduce((sum, e) => sum + (e.amount ?? 0), 0);
-        const totalTempBasal = tempBasals.reduce((sum, e) => sum + (e.amount ?? 0), 0);
-        const totalDaily = totalBolus + totalTempBasal;
+        const totalBolus = metrics.totalBolus;
+        const totalTempBasal = metrics.totalTempBasal;
+        const totalDaily = metrics.totalInsulin;
 
         const days = Math.max(1, (endMs - startMs) / (24 * 60 * 60 * 1000));
         const avgDailyBolus = totalBolus / days;
@@ -1323,16 +1337,19 @@ export async function runAiAnalystTool(
             },
             totals: {
               bolusU: Math.round(totalBolus * 100) / 100,
+              basalU: Math.round(metrics.totalBasal * 100) / 100,
               tempBasalU: Math.round(totalTempBasal * 100) / 100,
               totalU: Math.round(totalDaily * 100) / 100,
             },
             dailyAverages: {
               bolusU: Math.round(avgDailyBolus * 100) / 100,
+              basalU: Math.round(metrics.totalBasal / days * 100) / 100,
               tempBasalU: Math.round(avgDailyTempBasal * 100) / 100,
-              totalU: Math.round((avgDailyBolus + avgDailyTempBasal) * 100) / 100,
+              totalU: Math.round(totalDaily / days * 100) / 100,
             },
             ratio: {
               bolusPercent: totalDaily > 0 ? Math.round((totalBolus / totalDaily) * 1000) / 10 : 0,
+              basalPercent: totalDaily > 0 ? Math.round((metrics.totalBasal / totalDaily) * 1000) / 10 : 0,
               tempBasalPercent: totalDaily > 0 ? Math.round((totalTempBasal / totalDaily) * 1000) / 10 : 0,
             },
             counts: {
@@ -1345,6 +1362,7 @@ export async function runAiAnalystTool(
                 .map(([h, u]) => ({hour: parseInt(h), totalU: Math.round(u * 100) / 100}))
                 .sort((a, b) => a.hour - b.hour),
             },
+            availability: context.availability,
           },
         };
       }
@@ -1358,12 +1376,14 @@ export async function runAiAnalystTool(
         const endMs = Date.now();
         const startMs = endMs - daysBack * 24 * 60 * 60 * 1000;
 
-        const [bg, treatments] = await Promise.all([
+        const [bg, context] = await Promise.all([
           fetchBgDataForDateRangeUncached(new Date(startMs), new Date(endMs), {throwOnError: true}),
-          fetchTreatmentsForDateRangeUncached(new Date(startMs), new Date(endMs)),
+          loadInsulinContext({startMs, endMs}),
         ]);
-
-        const carbItems = mapNightscoutTreatmentsToCarbFoodItems(treatments);
+        if (context.availability.treatments === 'unavailable') {
+          throw new Error('Meal treatment data could not be loaded.');
+        }
+        const carbItems = context.carbTreatments;
         const tirThresholds = getTirThresholdsFromGlucoseSettings();
         const targetMax = tirThresholds.targetMax;
         const peakProblemThreshold = Math.min(tirThresholds.highMax, targetMax + 20);
@@ -1455,6 +1475,7 @@ export async function runAiAnalystTool(
             range: {startMs, endMs, daysBack},
             mealType,
             mealCount: mealResponses.length,
+            availability: context.availability,
             averages: {
               avgRiseMgdl: avgRise !== null ? Math.round(avgRise) : null,
               avgPeakMgdl: avgPeak !== null ? Math.round(avgPeak) : null,
@@ -1491,14 +1512,15 @@ export async function runAiAnalystTool(
         const startDate = new Date(startMs);
         const endDate = new Date(endMs);
 
-        const [treatments, bgData, deviceStatus] = await Promise.all([
-          fetchTreatmentsForDateRangeUncached(startDate, endDate),
+        const [context, bgData] = await Promise.all([
+          loadInsulinContext({startMs, endMs}),
           fetchBgDataForDateRangeUncached(startDate, endDate, {throwOnError: true}),
-          fetchDeviceStatusForDateRangeUncached(startDate, endDate),
         ]);
-
-        const carbItems = mapNightscoutTreatmentsToCarbFoodItems(treatments);
-        const enrichedBg = mergeDeviceStatusIntoBgSamples({bgSamples: bgData, deviceStatus});
+        if (context.availability.treatments === 'unavailable' || context.availability.deviceStatus === 'unavailable') {
+          throw new Error('Meal or active carbohydrate data could not be loaded.');
+        }
+        const carbItems = context.carbTreatments;
+        const enrichedBg = mergeLoadSamplesIntoBgSamples({bgSamples: bgData, loadSamples: context.loadSamples});
 
         const TIR_WINDOW = 3 * 60 * 60 * 1000;
         const MIN_BG = 6;
@@ -1621,6 +1643,7 @@ export async function runAiAnalystTool(
             mealType,
             mealCount: mealResults.length,
             mealsWithAbsorptionData: withAbsorption.length,
+            availability: context.availability,
             summary: {
               totalCarbsEnteredG: totalEntered,
               totalCarbsAbsorbedG: totalAbsorbed,

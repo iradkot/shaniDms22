@@ -1,15 +1,12 @@
 import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
 import {decodeNightscoutGlucose as decodeBgSample} from './nightscoutGlucose';
 import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
-import {
-  InsulinDataEntry,
-  ProfileDataType,
-  TempBasalInsulinDataEntry,
-} from 'app/types/insulin.types';
+import {ProfileDataType} from 'app/types/insulin.types';
 import {BgSample} from 'app/types/day_bgs.types';
 import {bgSortFunction} from 'app/utils/bg.utils';
 import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
-import {mapNightscoutTreatmentsToInsulinDataEntries} from 'app/utils/nightscoutTreatments.utils';
+import {requestNightscoutRecords} from './nightscoutRecords';
+import {requestCompleteNightscoutRange} from './nightscoutRangeRecords';
 import {
   assertActiveNightscoutCacheScope,
   getActiveNightscoutCacheScope,
@@ -81,7 +78,8 @@ const estimateBgCountForRange = (startDate: Date, endDate: Date) => {
 
   // For longer ranges, it's common to have 1-minute CGM. If we under-estimate,
   // Nightscout will truncate the *earliest* readings which breaks month TIR.
-  const expectedPerDay = days >= 20 ? HIGH_FREQUENCY_READINGS_PER_DAY : EXPECTED_READINGS_PER_DAY;
+  const expectedPerDay =
+    days >= 20 ? HIGH_FREQUENCY_READINGS_PER_DAY : EXPECTED_READINGS_PER_DAY;
 
   // Add a bit of slack for sensors that report slightly faster / duplicates.
   const estimate = Math.ceil(days * expectedPerDay * 1.1);
@@ -156,7 +154,10 @@ export const fetchBgDataForDateRangeWithMetadata = async (
           };
         }
       } catch (cacheError) {
-        console.warn('fetchBgDataForDateRange: Failed reading cache', cacheError);
+        console.warn(
+          'fetchBgDataForDateRange: Failed reading cache',
+          cacheError,
+        );
       }
       assertActiveNightscoutCacheScope(cacheScope);
     }
@@ -197,7 +198,10 @@ export const fetchBgDataForDateRangeUncached = async (
     const bgData: BgSample[] = response.data ?? [];
     return bgData.sort(bgSortFunction(false));
   } catch (error: any) {
-    console.warn('fetchBgDataForDateRangeUncached: Failed to fetch BG data', error);
+    console.warn(
+      'fetchBgDataForDateRangeUncached: Failed to fetch BG data',
+      error,
+    );
     if (options?.throwOnError) {
       throw error;
     }
@@ -216,7 +220,10 @@ const estimateTreatmentsCountForRange = (startDate: Date, endDate: Date) => {
   );
 
   const estimate = Math.ceil(days * EXPECTED_TREATMENTS_PER_DAY * 1.2);
-  return Math.min(MAX_TREATMENTS_COUNT, Math.max(DEFAULT_TREATMENTS_COUNT, estimate));
+  return Math.min(
+    MAX_TREATMENTS_COUNT,
+    Math.max(DEFAULT_TREATMENTS_COUNT, estimate),
+  );
 };
 
 /**
@@ -228,7 +235,7 @@ export const fetchTreatmentsForDateRangeUncached = async (
   startDate: Date,
   endDate: Date,
   options?: {count?: number},
-): Promise<any[]> => {
+): Promise<Record<string, unknown>[]> => {
   const startIso = startDate.toISOString();
   const endIso = endDate.toISOString();
   const count =
@@ -236,20 +243,18 @@ export const fetchTreatmentsForDateRangeUncached = async (
       ? options.count
       : estimateTreatmentsCountForRange(startDate, endDate);
 
-  const apiUrl = `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${count}`;
-  try {
-    const response = await nightscoutInstance.get<any[]>(apiUrl);
-    return response.data ?? [];
-  } catch (error: any) {
-    console.warn('fetchTreatmentsForDateRangeUncached: Failed to fetch treatments', error);
-    return [];
-  }
+  return requestCompleteNightscoutRange(
+    limit =>
+      `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${limit}`,
+    count,
+    MAX_TREATMENTS_COUNT,
+  );
 };
 
 /**
  * Fetch device status entries for a range without writing to AsyncStorage.
  *
- * Device status is optional; returns [] on failure.
+ * Rejects unavailable data so callers can distinguish it from a known empty range.
  */
 export const fetchDeviceStatusForDateRangeUncached = async (
   startDate: Date,
@@ -263,20 +268,12 @@ export const fetchDeviceStatusForDateRangeUncached = async (
       ? options.count
       : estimateBgCountForRange(startDate, endDate);
 
-  const apiUrl = `/api/v1/devicestatus?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${count}`;
-  try {
-    const response = await nightscoutInstance.get<DeviceStatusEntry[]>(apiUrl);
-    return response.data ?? [];
-  } catch (error: any) {
-    console.warn(
-      'fetchDeviceStatusForDateRangeUncached: Failed to fetch device status',
-      error,
-    );
-    if (options?.throwOnError) {
-      throw error;
-    }
-    return [];
-  }
+  return requestCompleteNightscoutRange(
+    limit =>
+      `/api/v1/devicestatus?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${limit}`,
+    count,
+    MAX_BG_COUNT,
+  ) as Promise<DeviceStatusEntry[]>;
 };
 
 /**
@@ -294,8 +291,10 @@ export const fetchLatestBgEntry = async (): Promise<BgSample | null> => {
 
     const latestValid = rows
       .filter((item: any) => {
-        const sgv = typeof item?.sgv === 'number' ? item.sgv : Number(item?.sgv);
-        const ts = typeof item?.date === 'number' ? item.date : Number(item?.date);
+        const sgv =
+          typeof item?.sgv === 'number' ? item.sgv : Number(item?.sgv);
+        const ts =
+          typeof item?.date === 'number' ? item.date : Number(item?.date);
         return Number.isFinite(sgv) && Number.isFinite(ts) && sgv > 0;
       })
       .sort((a: any, b: any) => Number(b?.date ?? 0) - Number(a?.date ?? 0))[0];
@@ -313,20 +312,21 @@ export const fetchLatestBgEntry = async (): Promise<BgSample | null> => {
  * PRD: uses `/api/v1/devicestatus.json?count=1`.
  * Device status is optional; returns `null` on failure.
  */
-export const fetchLatestDeviceStatusEntry = async (): Promise<DeviceStatusEntry | null> => {
-  try {
-    const response = await nightscoutInstance.get<DeviceStatusEntry[]>(
-      '/api/v1/devicestatus.json?count=1',
-    );
-    return response.data?.[0] ?? null;
-  } catch (error: any) {
-    console.warn(
-      'fetchLatestDeviceStatusEntry: Failed to fetch latest device status',
-      error,
-    );
-    return null;
-  }
-};
+export const fetchLatestDeviceStatusEntry =
+  async (): Promise<DeviceStatusEntry | null> => {
+    try {
+      const records = await requestNightscoutRecords(
+        '/api/v1/devicestatus.json?count=1',
+      );
+      return (records[0] as DeviceStatusEntry | undefined) ?? null;
+    } catch (error: any) {
+      console.warn(
+        'fetchLatestDeviceStatusEntry: Failed to fetch latest device status',
+        error,
+      );
+      return null;
+    }
+  };
 
 export const fetchDeviceStatusForDateRangeWithMetadata = async (
   startDate: Date,
@@ -339,21 +339,22 @@ export const fetchDeviceStatusForDateRangeWithMetadata = async (
   const count = estimateBgCountForRange(startDate, endDate);
   const cacheScope = getActiveNightscoutCacheScope();
 
-  const apiUrl = `/api/v1/devicestatus?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${count}`;
   try {
-    const response = await nightscoutInstance.get<DeviceStatusEntry[]>(apiUrl);
+    const status = (await requestCompleteNightscoutRange(
+      limit =>
+        `/api/v1/devicestatus?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${limit}`,
+      count,
+      MAX_BG_COUNT,
+    )) as DeviceStatusEntry[];
     if (cacheScope) {
       assertActiveNightscoutCacheScope(cacheScope);
     }
-    const status = (Array.isArray(response.data) ? response.data : [])
-      .map(decodeObjectRecord)
-      .filter((item): item is Record<string, unknown> => item !== null) as DeviceStatusEntry[];
     const fetchedAtMs = Date.now();
     if (cacheScope) {
       try {
         await writeNightscoutRangeCache({
           scope: cacheScope,
-          resource: 'device-status.v2',
+          resource: 'device-status.v3',
           startMs: startDate.getTime(),
           endMs: endDate.getTime(),
           fetchedAtMs,
@@ -361,7 +362,10 @@ export const fetchDeviceStatusForDateRangeWithMetadata = async (
           getTimestampMs: nightscoutRecordTimestamp,
         });
       } catch (e) {
-        console.warn('fetchDeviceStatusForDateRange: Failed caching device status', e);
+        console.warn(
+          'fetchDeviceStatusForDateRange: Failed caching device status',
+          e,
+        );
       }
     }
 
@@ -376,10 +380,11 @@ export const fetchDeviceStatusForDateRangeWithMetadata = async (
       try {
         const cached = await readNightscoutRangeCache({
           scope: cacheScope,
-          resource: 'device-status.v2',
+          resource: 'device-status.v3',
           startMs: startDate.getTime(),
           endMs: endDate.getTime(),
-          decodeRecord: value => decodeObjectRecord(value) as DeviceStatusEntry | null,
+          decodeRecord: value =>
+            decodeObjectRecord(value) as DeviceStatusEntry | null,
           getTimestampMs: nightscoutRecordTimestamp,
         });
         assertActiveNightscoutCacheScope(cacheScope);
@@ -394,7 +399,10 @@ export const fetchDeviceStatusForDateRangeWithMetadata = async (
           };
         }
       } catch (cacheError) {
-        console.warn('fetchDeviceStatusForDateRange: Failed reading cache', cacheError);
+        console.warn(
+          'fetchDeviceStatusForDateRange: Failed reading cache',
+          cacheError,
+        );
       }
       assertActiveNightscoutCacheScope(cacheScope);
     }
@@ -405,7 +413,7 @@ export const fetchDeviceStatusForDateRangeWithMetadata = async (
 /**
  * Network-first treatments read with a bounded offline fallback.
  *
- * Unlike the legacy optional helper above, this method rejects when neither
+ * This method rejects when neither
  * Nightscout nor a complete cached range is available. Callers can therefore
  * mark a view incomplete instead of presenting an empty treatment list as fact.
  */
@@ -416,22 +424,23 @@ export const fetchTreatmentsForDateRangeWithMetadata = async (
   const startIso = startDate.toISOString();
   const endIso = endDate.toISOString();
   const count = estimateTreatmentsCountForRange(startDate, endDate);
-  const apiUrl = `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${count}`;
   const cacheScope = getActiveNightscoutCacheScope();
   try {
-    const response = await nightscoutInstance.get<unknown[]>(apiUrl);
+    const records = await requestCompleteNightscoutRange(
+      limit =>
+        `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${limit}`,
+      count,
+      MAX_TREATMENTS_COUNT,
+    );
     if (cacheScope) {
       assertActiveNightscoutCacheScope(cacheScope);
     }
-    const records = (Array.isArray(response.data) ? response.data : [])
-      .map(decodeObjectRecord)
-      .filter((item): item is Record<string, unknown> => item !== null);
     const fetchedAtMs = Date.now();
     if (cacheScope) {
       try {
         await writeNightscoutRangeCache({
           scope: cacheScope,
-          resource: 'treatments.v1',
+          resource: 'treatments.v2',
           startMs: startDate.getTime(),
           endMs: endDate.getTime(),
           fetchedAtMs,
@@ -455,7 +464,7 @@ export const fetchTreatmentsForDateRangeWithMetadata = async (
       try {
         const cached = await readNightscoutRangeCache({
           scope: cacheScope,
-          resource: 'treatments.v1',
+          resource: 'treatments.v2',
           startMs: startDate.getTime(),
           endMs: endDate.getTime(),
           decodeRecord: decodeObjectRecord,
@@ -495,7 +504,10 @@ export const fetchDeviceStatusForDateRange = async (
     ];
   } catch (error) {
     // Device status may not be enabled; preserve the optional legacy contract.
-    console.warn('fetchDeviceStatusForDateRange: Failed to fetch device status', error);
+    console.warn(
+      'fetchDeviceStatusForDateRange: Failed to fetch device status',
+      error,
+    );
     return [];
   }
 };
@@ -515,36 +527,6 @@ export const fetchBgDataForDate = async (date: Date): Promise<BgSample[]> => {
   }
 };
 
-export const getInsulinData = async (
-  date: Date,
-): Promise<InsulinDataEntry[]> => {
-  const {formattedStartDate, formattedEndDate} =
-    getFormattedStartEndOfDay(date);
-  const response = await nightscoutInstance.get<any[]>(
-    `/api/v1/treatments?find[created_at][$gte]=${formattedStartDate}&find[created_at][$lte]=${formattedEndDate}&count=${DEFAULT_TREATMENTS_COUNT}`,
-  );
-  return mapNightscoutTreatmentsToInsulinDataEntries(response.data);
-};
-
-export const getInsulinDataFromNightscout = async (
-  dateStr: string,
-  setIsLoading: (isLoading: boolean) => void = () => {},
-): Promise<TempBasalInsulinDataEntry[]> => {
-  // Adjusted return type to match expected data structure
-  try {
-    setIsLoading(true);
-    const apiUrl = `/api/v1/treatments?find[created_at][$gte]=${dateStr}T00:00:00Z&find[created_at][$lte]=${dateStr}T23:59:59Z&count=10`;
-    const response = await nightscoutInstance.get<TempBasalInsulinDataEntry[]>(apiUrl);
-    const data: TempBasalInsulinDataEntry[] = response.data ?? [];
-    setIsLoading(false);
-    return data; // Ensure this data is in the format your application expects
-  } catch (error) {
-    setIsLoading(false);
-    console.error('Error fetching insulin data:', error);
-    throw error; // Propagate error up for handling elsewhere
-  }
-};
-
 export const getUserProfileFromNightscout = async (
   date: string,
 ): Promise<ProfileDataType> => {
@@ -553,36 +535,5 @@ export const getUserProfileFromNightscout = async (
     ? new Date(asOfMs).toISOString()
     : new Date().toISOString();
   const apiUrl = `/api/v1/profiles?find[startDate][$lte]=${asOfIso}&sort[startDate]=-1&count=1`;
-  console.log(`Fetching basal profile data from Nightscout: ${apiUrl}`);
-
-  try {
-    // Using the nightscoutInstance to perform the GET request
-    const response = await nightscoutInstance.get(apiUrl);
-    if (response.status !== 200) {
-      throw new Error('Failed to fetch profile data');
-    }
-    // Assuming the response data directly matches the ProfileDataType structure
-    return response.data as ProfileDataType;
-  } catch (error: any) {
-    console.error('Error fetching basal profile data from Nightscout:', error);
-    throw error;
-  }
-};
-
-export const fetchInsulinDataForDateRange = async (
-  startDate: Date,
-  endDate: Date,
-): Promise<InsulinDataEntry[]> => {
-  const startIso = startDate.toISOString();
-  const endIso = endDate.toISOString();
-  const count = estimateTreatmentsCountForRange(startDate, endDate);
-  const apiUrl = `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${count}`;
-
-  try {
-    const response = await nightscoutInstance.get<any[]>(apiUrl);
-    return mapNightscoutTreatmentsToInsulinDataEntries(response.data);
-  } catch (error) {
-    console.error('Error fetching insulin data:', error);
-    throw error;
-  }
+  return (await requestNightscoutRecords(apiUrl)) as unknown as ProfileDataType;
 };

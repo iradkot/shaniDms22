@@ -1,6 +1,6 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Alert, Animated, I18nManager, LayoutAnimation, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, UIManager, View} from 'react-native';
-import {addDays, format, subDays} from 'date-fns';
+import React, {useCallback, useEffect, useMemo, useState, useSyncExternalStore} from 'react';
+import {ActivityIndicator, Alert, Animated, LayoutAnimation, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, UIManager, View} from 'react-native';
+import {format, subDays} from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useTheme} from 'styled-components/native';
 import {theme as appTheme} from 'app/style/theme';
@@ -9,9 +9,9 @@ import {useNavigation} from '@react-navigation/native';
 
 import {
   fetchBgDataForDateRangeUncached,
-  fetchTreatmentsForDateRangeUncached,
-  getUserProfileFromNightscout,
 } from 'app/api/apiRequests';
+import {loadInsulinContext, type InsulinContext} from 'app/services/insulin/insulinDataSource';
+import {getNightscoutConfigurationRevision, subscribeNightscoutConfiguration} from 'app/api/shaniNightscoutInstances';
 import {ThemeType} from 'app/types/theme';
 import {addOpacity} from 'app/style/styling.utils';
 import {
@@ -27,12 +27,6 @@ import {t as tr} from 'app/i18n/translations';
 import TimeInRangeRow from './components/TimeInRangeRow';
 import {buildFullScreenStackedChartsParams, fetchStackedChartsDataForRange} from 'app/utils/stackedChartsData.utils';
 import {pushFullScreenStackedCharts} from 'app/utils/fullscreenNavigation.utils';
-import {
-  extractBasalProfileFromNightscoutProfileData,
-  mapNightscoutTreatmentsToCarbFoodItems,
-  mapNightscoutTreatmentsToInsulinDataEntries,
-} from 'app/utils/nightscoutTreatments.utils';
-import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsulin';
 import {addMemoryEntry} from 'app/services/aiMemory/aiMemoryStore';
 import {useActiveAiWorkspaceScope} from 'app/services/aiMemory/useActiveAiWorkspaceScope';
 import notifee, {TriggerType} from '@notifee/react-native';
@@ -170,19 +164,19 @@ function computeMealBucketScores(params: {
 
 function buildMealEpisodes(params: {
   bgRows: Row[];
-  treatments: any[];
+  context: InsulinContext | undefined;
   hypo: number;
   hyper: number;
 }): MealEpisode[] {
-  const {bgRows, treatments, hypo, hyper} = params;
-  const meals = mapNightscoutTreatmentsToCarbFoodItems(treatments ?? []).map(m => ({
+  const {bgRows, context, hypo, hyper} = params;
+  const meals = (context?.carbTreatments ?? []).map(m => ({
     ts: Number(m.timestamp),
     carbs: Number(m.carbs ?? 0),
   }));
 
-  const boluses = (treatments ?? [])
-    .filter(t => t?.insulin && ['Bolus', 'Meal Bolus', 'Correction Bolus', 'Combo Bolus'].includes(t?.eventType))
-    .map(t => ({ts: Date.parse(t.created_at), insulin: Number(t.insulin || t.amount || 0)}))
+  const boluses = (context?.availability.treatments === 'available' ? context.insulinData : [])
+    .filter(entry => entry.type === 'bolus')
+    .map(entry => ({ts: Date.parse(entry.timestamp ?? ''), insulin: entry.type === 'bolus' ? entry.amount ?? 0 : 0}))
     .filter(x => Number.isFinite(x.ts) && Number.isFinite(x.insulin) && x.insulin > 0);
 
   return meals
@@ -362,8 +356,12 @@ const DailyReviewScreen: React.FC = () => {
   const {settings: glucoseSettings} = useGlucoseSettings();
   const {language} = useAppLanguage();
   const aiWorkspaceScope = useActiveAiWorkspaceScope();
+  const sourceRevision = useSyncExternalStore(subscribeNightscoutConfiguration, getNightscoutConfigurationRevision, getNightscoutConfigurationRevision);
+  const mounted = React.useRef(false);
+  const loadGeneration = React.useRef(0);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<'partial' | 'failed' | null>(null);
   const [estimatedTotalMs, setEstimatedTotalMs] = useState<number | null>(null);
   const [estimatedWorstMs, setEstimatedWorstMs] = useState<number | null>(null);
   const [loadingElapsedSec, setLoadingElapsedSec] = useState(0);
@@ -399,7 +397,6 @@ const DailyReviewScreen: React.FC = () => {
     return end;
   }, []);
   const yStart = useMemo(() => subDays(todayStart, 1), [todayStart]);
-  const prevDayStart = useMemo(() => subDays(yStart, 1), [yStart]);
   const wStart = useMemo(() => subDays(yStart, 7), [yStart]);
 
   const loadEstimatedDuration = useCallback(async () => {
@@ -447,35 +444,39 @@ const DailyReviewScreen: React.FC = () => {
     }
   }, []);
 
-  const getDayInsulinTotal = async (dayStart: Date): Promise<number> => {
-    const s = new Date(dayStart);
-    const e = addDays(new Date(dayStart), 1);
-    const [treatments, profileData] = await Promise.all([
-      fetchTreatmentsForDateRangeUncached(s, e),
-      getUserProfileFromNightscout(s.toISOString()),
-    ]);
-    const entries = mapNightscoutTreatmentsToInsulinDataEntries(treatments ?? []);
-    const basal = extractBasalProfileFromNightscoutProfileData(profileData);
-    const totals = calculateTotalInsulin(entries, basal, s, e);
-    return (totals.totalBasal || 0) + (totals.totalBolus || 0);
-  };
-
   const loadData = useCallback(async () => {
-    const [y, w, yTreatments, wTreatments] = await Promise.all([
+    if (!mounted.current || sourceRevision !== getNightscoutConfigurationRevision()) {
+      return;
+    }
+    const request = ++loadGeneration.current;
+    const isCurrent = () => mounted.current && request === loadGeneration.current && sourceRevision === getNightscoutConfigurationRevision();
+    setLoadError(null);
+    const [yResult, wResult, yContextResult, wContextResult] = await Promise.allSettled([
       fetchBgDataForDateRangeUncached(yStart, todayStart, {throwOnError: false}),
       fetchBgDataForDateRangeUncached(wStart, yStart, {throwOnError: false}),
-      fetchTreatmentsForDateRangeUncached(yStart, todayStart),
-      fetchTreatmentsForDateRangeUncached(wStart, yStart),
+      loadInsulinContext({startMs: +yStart, endMs: +todayStart}),
+      loadInsulinContext({startMs: +wStart, endMs: +yStart}),
     ]);
+    if (!isCurrent()) {
+      return;
+    }
+    const y = yResult.status === 'fulfilled' ? yResult.value : [];
+    const w = wResult.status === 'fulfilled' ? wResult.value : [];
+    const yContext = yContextResult.status === 'fulfilled' ? yContextResult.value : undefined;
+    const wContext = wContextResult.status === 'fulfilled' ? wContextResult.value : undefined;
+    if ([yResult, wResult, yContextResult, wContextResult].some(result => result.status === 'rejected') ||
+      [yContext, wContext].some(context => context !== undefined && Object.values(context.availability).some(status => status !== 'available'))) {
+      setLoadError('partial');
+    }
     const yList = ((y as any) ?? []) as Row[];
     setYRows(yList);
     setWRows((w as any) ?? []);
 
-    const yMeals = mapNightscoutTreatmentsToCarbFoodItems(yTreatments ?? []).map(m => ({
+    const yMeals = (yContext?.carbTreatments ?? []).map(m => ({
       timestamp: Number(m.timestamp),
       carbs: Number(m.carbs ?? 0),
     }));
-    const wMeals = mapNightscoutTreatmentsToCarbFoodItems(wTreatments ?? []).map(m => ({
+    const wMeals = (wContext?.carbTreatments ?? []).map(m => ({
       timestamp: Number(m.timestamp),
       carbs: Number(m.carbs ?? 0),
     }));
@@ -499,14 +500,14 @@ const DailyReviewScreen: React.FC = () => {
 
     const todayEpisodesList = buildMealEpisodes({
       bgRows: yList,
-      treatments: (yTreatments as any[]) ?? [],
+      context: yContext,
       hypo: glucoseSettings.hypo ?? 70,
       hyper: glucoseSettings.hyper ?? 180,
     });
     setTodayEpisodes(todayEpisodesList);
     const baselineEpisodes = buildMealEpisodes({
       bgRows: ((w as any) ?? []) as Row[],
-      treatments: (wTreatments as any[]) ?? [],
+      context: wContext,
       hypo: glucoseSettings.hypo ?? 70,
       hyper: glucoseSettings.hyper ?? 180,
     });
@@ -518,14 +519,6 @@ const DailyReviewScreen: React.FC = () => {
         targetMid: Math.round(((glucoseSettings.hypo ?? 70) + (glucoseSettings.hyper ?? 180)) / 2),
       }),
     );
-
-    // keep insulin calculation for parity with existing data flow
-    try {
-      await getDayInsulinTotal(yStart);
-      await getDayInsulinTotal(prevDayStart);
-    } catch {
-      // ignore
-    }
 
     let latestBrief = await getLatestDailyBrief(aiWorkspaceScope?.workspaceId);
     const expectedDate = format(yStart, 'yyyy-MM-dd');
@@ -555,6 +548,9 @@ const DailyReviewScreen: React.FC = () => {
       }
     }
 
+    if (!isCurrent()) {
+      return;
+    }
     if (latestBrief?.body) {
       const lines = latestBrief.body.split('\n').map((s: string) => s.trim()).filter(Boolean);
       setLlmSummaryLine(lines.find((l: string) => l.startsWith('📊')) || null);
@@ -569,10 +565,13 @@ const DailyReviewScreen: React.FC = () => {
       setWhyLine(null);
       setActionSource('fallback');
     }
-  }, [aiSettings.apiKey, aiSettings.enabled, aiSettings.openAiModel, aiSettings.personality, aiWorkspaceScope, glucoseSettings, prevDayStart, todayStart, wStart, yStart]);
+  }, [aiSettings.apiKey, aiSettings.enabled, aiSettings.openAiModel, aiSettings.personality, aiWorkspaceScope, glucoseSettings, sourceRevision, todayStart, wStart, yStart]);
 
   useEffect(() => {
-    let mounted = true;
+    let active = true;
+    mounted.current = true;
+    setYRows([]); setWRows([]); setMealScoresY([]); setMealScoresPrev([]); setMealInvestigations([]); setTodayEpisodes([]);
+    setLlmSummaryLine(null); setLlmKeyLine(null); setLlmActionLine(null); setWhyLine(null);
     loadingStartRef.current = Date.now();
     setLoadingElapsedSec(0);
     setLoading(true);
@@ -581,15 +580,23 @@ const DailyReviewScreen: React.FC = () => {
     void (async () => {
       try {
         await loadData();
+      } catch {
+        if (active) {
+          setLoadError('failed');
+        }
       } finally {
         const duration = Date.now() - loadingStartRef.current;
         persistLoadDuration(duration);
-        if (mounted) setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     })();
 
     return () => {
-      mounted = false;
+      active = false;
+      mounted.current = false;
+      loadGeneration.current += 1;
     };
   }, [loadData, loadEstimatedDuration, persistLoadDuration]);
 
@@ -620,8 +627,14 @@ const DailyReviewScreen: React.FC = () => {
         notify: false,
       });
       await loadData();
+    } catch {
+      if (mounted.current && sourceRevision === getNightscoutConfigurationRevision()) {
+        setLoadError('failed');
+      }
     } finally {
-      setRefreshingAction(false);
+      if (mounted.current && sourceRevision === getNightscoutConfigurationRevision()) {
+        setRefreshingAction(false);
+      }
     }
   };
 
@@ -698,36 +711,6 @@ const DailyReviewScreen: React.FC = () => {
   const lowDeltaMinutes = percentToRoundedMinutes(lowDelta);
   const highDeltaMinutes = percentToRoundedMinutes(highDelta);
 
-  const keyHighlightLine = useMemo(() => {
-    // Positive-first framing: prioritize wins before any challenge signals.
-    if (yTirPct >= 75) {
-      return language === 'he'
-        ? `נקודת האור: ${yTirPct}% זמן בטווח היעד אתמול.`
-        : `Highlight: ${yTirPct}% time in target range yesterday.`;
-    }
-
-    if (tirDelta > 0) {
-      return language === 'he'
-        ? `נרשם שיפור של ${tirDelta}% ב-TIR לעומת השבוע האחרון.`
-        : `You improved TIR by ${tirDelta}% vs the recent week.`;
-    }
-
-    if (lowDelta < 0) {
-      return language === 'he'
-        ? `הצלחת להפחית אירועי נמוך ב-${Math.abs(lowDelta)}% לעומת השבוע האחרון.`
-        : `You reduced low events by ${Math.abs(lowDelta)}% vs the recent week.`;
-    }
-
-    if (highDelta < 0) {
-      return language === 'he'
-        ? `הצלחת להפחית ערכים גבוהים ב-${Math.abs(highDelta)}% לעומת השבוע האחרון.`
-        : `You reduced high readings by ${Math.abs(highDelta)}% vs the recent week.`;
-    }
-
-    return language === 'he'
-      ? `נקודה חיובית: ${yTirPct}% מהזמן נשארת בטווח היעד.`
-      : `Positive anchor: you stayed in target range ${yTirPct}% of the time.`;
-  }, [highDelta, language, lowDelta, tirDelta, yTirPct]);
   const quickInsights = useMemo(() => {
     if (language === 'he') {
       return [
@@ -1186,6 +1169,13 @@ const DailyReviewScreen: React.FC = () => {
 
   return (
     <ScrollView style={{flex: 1, backgroundColor: theme.backgroundColor}} contentContainerStyle={{padding: 16, gap: 10}}>
+      {loadError !== null ? (
+        <Text accessibilityRole="alert" style={{color: theme.textColor, textAlign}}>
+          {loadError === 'partial'
+            ? (language === 'he' ? 'חלק מנתוני הסוכר, האינסולין או הארוחות חסרים או שאינם עדכניים.' : 'Some glucose, insulin, or meal data is unavailable or out of date.')
+            : (language === 'he' ? 'הסקירה לא נטענה במלואה. הנתונים הזמינים מוצגים למטה.' : 'The review could not be fully loaded. Available data is shown below.')}
+        </Text>
+      ) : null}
       <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
         <Pressable onPress={() => navigation.goBack()} style={{padding: 4}}><MaterialIcons name="arrow-back" size={24} color={theme.textColor} /></Pressable>
         <View>
@@ -1582,11 +1572,6 @@ const DailyReviewScreen: React.FC = () => {
 };
 
 export default DailyReviewScreen;
-
-
-
-
-
 
 
 

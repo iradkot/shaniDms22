@@ -6,6 +6,7 @@ import type {ThemeType} from 'app/types/theme';
 import {getChartPalette} from './chartPalette';
 import {
   formatMiniValue,
+  emptyMiniChartText,
   niceMiniAxis,
   type MiniChartProps,
 } from './miniChartData';
@@ -25,6 +26,7 @@ type Props = Pick<
   | 'locale'
   | 'testID'
   | 'compact'
+  | 'dataStatus'
 > & {
   title: string;
   color: string;
@@ -57,6 +59,7 @@ export default function MiniChartLane(props: Props) {
     locale,
     testID,
     compact = false,
+    dataStatus = 'available',
   } = props;
   const theme = useTheme();
   const palette = getChartPalette(theme);
@@ -100,7 +103,12 @@ export default function MiniChartLane(props: Props) {
   return (
     <View
       testID={testID}
-      style={{width, height: laneHeight, backgroundColor: palette.surface}}>
+      style={{
+        width,
+        height: hasData ? laneHeight : undefined,
+        minHeight: hasData ? undefined : laneHeight,
+        backgroundColor: palette.surface,
+      }}>
       <View
         style={[styles.header, {height: headerHeight, paddingRight: right}]}>
         <View style={[styles.headingRow, rtl ? styles.rowRtl : styles.rowLtr]}>
@@ -143,7 +151,7 @@ export default function MiniChartLane(props: Props) {
             {color: palette.mutedText},
             rtl ? styles.textRtl : styles.textLtr,
           ]}>
-          {emptyText}
+          {emptyMiniChartText(locale, dataStatus, emptyText)}
         </Text>
       ) : (
         <Svg
@@ -252,5 +260,6 @@ const createStyles = (theme: ThemeType) =>
         theme.typography.size.xs * theme.typography.lineHeight.normal,
       ),
       paddingHorizontal: theme.spacing.md,
+      paddingBottom: theme.spacing.sm,
     },
   });

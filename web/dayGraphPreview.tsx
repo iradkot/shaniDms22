@@ -130,6 +130,32 @@ const PreviewApp = () => {
   const [themeId, setThemeId] = useState<AppThemeId>('calmBlue');
   const theme = useMemo(() => getThemeById(themeId), [themeId]);
   const [visit, setVisit] = useState(0);
+  const [scenario, setScenario] = useState<
+    'full' | 'loads-only' | 'unavailable'
+  >('full');
+  const model = useMemo(() => {
+    if (scenario === 'full') {
+      return previewModel;
+    }
+    return buildDayGraph({
+      period: previewModel.period,
+      expectedSampleIntervalMs: 5 * MINUTE_MS,
+      glucoseSamples:
+        scenario === 'loads-only' ? [] : previewModel.glucoseSamples,
+      activeLoadSamples:
+        scenario === 'loads-only' ? previewModel.activeLoadSamples : [],
+      timelineItems: [],
+      ...(scenario === 'unavailable'
+        ? {
+            dataAvailability: {
+              treatments: 'unavailable',
+              deviceStatus: 'unavailable',
+              profile: 'unavailable',
+            },
+          }
+        : {}),
+    });
+  }, [scenario]);
   const [profiles, setProfiles] = useState<
     Partial<Record<PersonalizationLayout, StoredDayGraphPreferences>>
   >({});
@@ -173,18 +199,46 @@ const PreviewApp = () => {
           </View>
         </View>
         {import.meta.env.DEV && (
-          <View style={styles.themeGroup}>
-            {APP_THEME_OPTIONS.map(option => (
-              <button
-                aria-pressed={themeId === option.id}
-                data-testid={`preview-theme-${option.id}`}
-                key={option.id}
-                onClick={() => setThemeId(option.id)}
-                type="button">
-                {option.title}
-              </button>
-            ))}
-          </View>
+          <>
+            <div
+              hidden
+              data-testid="preview-theme-palette"
+              data-basal={theme.chart.basal}
+              data-bolus={theme.chart.bolus}
+              data-iob={theme.chart.iob}
+              data-cob={theme.chart.cob}
+            />
+            <View style={styles.themeGroup}>
+              {APP_THEME_OPTIONS.map(option => (
+                <button
+                  aria-pressed={themeId === option.id}
+                  data-testid={`preview-theme-${option.id}`}
+                  key={option.id}
+                  onClick={() => setThemeId(option.id)}
+                  type="button">
+                  {option.title}
+                </button>
+              ))}
+            </View>
+            <View style={styles.themeGroup}>
+              {(['full', 'loads-only', 'unavailable'] as const).map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  data-testid={`preview-scenario-${option}`}
+                  aria-pressed={scenario === option}
+                  onClick={() => setScenario(option)}>
+                  {
+                    {
+                      full: 'All synthetic sources',
+                      'loads-only': 'IOB / COB without glucose',
+                      unavailable: 'Sources unavailable',
+                    }[option]
+                  }
+                </button>
+              ))}
+            </View>
+          </>
         )}
         <button
           data-testid="preview-reopen-chart"
@@ -195,7 +249,7 @@ const PreviewApp = () => {
         <RichDayGraphChart
           key={visit}
           locale={locale}
-          model={previewModel}
+          model={model}
           preferences={{
             scopeKey: `preview:${layout}`,
             layout,

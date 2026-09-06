@@ -50,6 +50,71 @@ const press = (tree: renderer.ReactTestRenderer, testID: string): void => {
 };
 
 describe('DayGraphModuleView', () => {
+  it.each(['independent-loads', 'failed-load'] as const)(
+    'keeps %s visible instead of declaring a successful empty day',
+    async scenario => {
+      const start = new Date(2026, 7, 20).getTime();
+      const snapshot: DayGraphSnapshot = {
+        freshness: {kind: 'fresh', fetchedAtMs: start},
+        glucoseSamples: [],
+        timelineItems: [],
+        ...(scenario === 'independent-loads'
+          ? {
+              activeLoadSamples: [0, 1].map(index => ({
+                timestampMs: start + HOUR + index * 5 * MINUTE,
+                iobUnits: 1.5 - index * 0.1,
+                cobGrams: 20 - index,
+              })),
+            }
+          : {
+              dataAvailability: {
+                treatments: 'available',
+                deviceStatus: 'unavailable',
+                profile: 'available',
+              },
+            }),
+      };
+      let tree: renderer.ReactTestRenderer;
+      await act(async () => {
+        tree = renderer.create(
+          withTheme(
+            <DayGraphModuleView
+              dataSource={source(async () => snapshot)}
+              locale="he"
+              now={() => start + 2 * HOUR}
+            />,
+          ),
+        );
+      });
+      try {
+        expect(
+          tree!.root.findAllByProps({testID: 'day-graph-empty'}),
+        ).toHaveLength(0);
+        expect(
+          tree!.root.findByType(StackedHomeCharts).props.bgSamples,
+        ).toEqual([]);
+        expect(
+          tree!.root.findByProps({testID: 'day-graph-no-glucose'}),
+        ).toBeTruthy();
+        if (scenario === 'independent-loads') {
+          expect(
+            tree!.root.findAllByProps({testID: 'iob-line-segment'}).length,
+          ).toBeGreaterThan(0);
+          expect(
+            tree!.root.findAllByProps({testID: 'cob-line-segment'}).length,
+          ).toBeGreaterThan(0);
+        } else {
+          expect(textValues(tree!)).toContain(
+            'אינסולין פעיל ופחמימות פעילות: הטעינה נכשלה.',
+          );
+          expect(textValues(tree!)).not.toContain('אין נתוני אינסולין פעיל');
+        }
+      } finally {
+        act(() => tree!.unmount());
+      }
+    },
+  );
+
   it.each(['bolus', 'temp-basal', 'schedule'] as const)(
     'shows the %s insulin chart when glucose readings are unavailable and keeps the missing-glucose note',
     async insulinKind => {
@@ -147,6 +212,11 @@ describe('DayGraphModuleView', () => {
       );
     });
     press(tree!, 'day-graph-refresh');
+    const requestedPeriod = {dayStartMs: start, dayEndMs: nextLocalDay(start)};
+    expect(load).toHaveBeenNthCalledWith(1, requestedPeriod);
+    expect(load).toHaveBeenNthCalledWith(2, requestedPeriod, {
+      forceRefresh: true,
+    });
     expect(
       tree!.root.findByProps({testID: 'day-graph-glucose-chart'}),
     ).toBeTruthy();

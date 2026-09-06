@@ -1,7 +1,9 @@
 import {useMemo} from 'react';
 
-import type {BgSample} from 'app/types/day_bgs.types';
-import {getSampleIobTotal} from 'app/utils/chartLoadSeries.utils';
+import {
+  getSampleIobTotal,
+  type ChartLoadValues,
+} from 'app/utils/chartLoadSeries.utils';
 
 export type BgTooltipDerivedMetrics = {
   activeInsulinU: number | null;
@@ -11,7 +13,8 @@ export type BgTooltipDerivedMetrics = {
 };
 
 /**
- * Derives tooltip-friendly metrics from a focused BG sample.
+ * Derives tooltip metrics from the selected load fields, independently of glucose.
+ * Legacy callers may still supply an enriched BG sample.
  *
  * We support multiple Nightscout/device-status shapes:
  * - total IOB via `sample.iob`
@@ -20,7 +23,7 @@ export type BgTooltipDerivedMetrics = {
  * Returns `null` when the source value is missing.
  */
 export function useBgTooltipDerivedMetrics(
-  bgSample: BgSample | null,
+  bgSample: ChartLoadValues | null,
 ): BgTooltipDerivedMetrics {
   const activeInsulinU = useMemo(
     () => (bgSample ? getSampleIobTotal(bgSample) : null),

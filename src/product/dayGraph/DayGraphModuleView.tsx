@@ -359,14 +359,21 @@ export const DayGraphModuleView = ({
   const state = loadState;
 
   const nextDisabled = selectedDayStartMs >= todayStartMs;
-  const hasChartData = !!model && (
-    model.glucoseSamples.length > 0 ||
-    model.insulinEvents.length > 0 ||
-    model.basalSchedule.length > 0
-  );
+  const hasChartData =
+    !!model &&
+    (model.glucoseSamples.length > 0 ||
+      model.activeLoadSamples.length > 0 ||
+      model.insulinEvents.length > 0 ||
+      model.basalSchedule.length > 0);
+  const hasUnavailableChartData =
+    !!model &&
+    Object.values(model.dataAvailability).some(
+      status => status !== 'available',
+    );
   const isEmpty =
     state.kind === 'ready' &&
     !hasChartData &&
+    !hasUnavailableChartData &&
     model?.timelineItems.length === 0;
 
   return (
@@ -545,7 +552,7 @@ export const DayGraphModuleView = ({
                   </Text>
                 </View>
               ) : null}
-              {hasChartData ? (
+              {hasChartData || hasUnavailableChartData ? (
                 <View testID="day-graph-glucose-chart">
                   <RichDayGraphChart
                     locale={locale}

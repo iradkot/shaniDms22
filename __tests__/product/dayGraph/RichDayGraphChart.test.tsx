@@ -2,7 +2,7 @@ import React from 'react';
 import {withTheme} from '../../mocks/withTheme';
 import {Modal, Pressable, StyleSheet, Text, View} from 'react-native';
 import renderer, {act} from 'react-test-renderer';
-import {Line, Path, Rect, Text as SvgText} from 'react-native-svg';
+import Svg, {Line, Path, Rect, Text as SvgText} from 'react-native-svg';
 import {applyThemeToSingleton, getThemeById} from 'app/style/theme';
 import type {ThemeType} from 'app/types/theme';
 import {buildDayGraph} from 'app/modules/dayGraph';
@@ -63,6 +63,128 @@ describe('Rich Day Graph presentation', () => {
     if (tree) {
       act(() => tree.unmount());
     }
+  });
+
+  it('switches populated insulin and carbs between separate plots and one overlaid plot', () => {
+    const populatedModel = buildDayGraph({
+      period: {dayStartMs: 0, dayEndMs: 24 * HOUR},
+      expectedSampleIntervalMs: 5 * 60000,
+      glucoseSamples: [0, 1].map(index => ({
+        identity: {sourceId: 'fixture', recordId: `glucose-${index}`},
+        timestampMs: 8 * HOUR + index * 5 * 60000,
+        valueMgDl: 120,
+      })),
+      activeLoadSamples: [0, 1].map(index => ({
+        timestampMs: 8 * HOUR + index * 5 * 60000,
+        iobUnits: 1.5 - index * 0.1,
+        cobGrams: 30 - index,
+      })),
+      insulinEvents: [{kind: 'bolus', timestampMs: 8 * HOUR, units: 1.25}],
+      basalSchedule: [{secondsFromMidnight: 0, rateUnitsPerHour: 0.75}],
+      timelineItems: [],
+    });
+    act(() => {
+      tree = renderer.create(
+        withTheme(<RichDayGraphChart locale="en" model={populatedModel} />),
+      );
+    });
+    for (const testID of [
+      'basal-scheduled-segment',
+      'iob-line-segment',
+      'cob-line-segment',
+      'bolus-dose-bar',
+    ]) {
+      expect(tree.root.findAllByProps({testID}).length).toBeGreaterThan(0);
+    }
+    press(tree, 'day-graph-range-3');
+    const before = domain(tree);
+    press(tree, 'day-graph-chart-mode-combined');
+    const overlay = tree.root
+      .findAllByProps({testID: 'day-graph-rich-chart.mixed'})
+      .find(node => node.type === View)!;
+    expect(overlay.findAllByType(Svg)).toHaveLength(1);
+    expect(domain(tree)).toEqual(before);
+    press(tree, 'day-graph-chart-mode-detailed');
+    expect(
+      tree.root.findAllByProps({testID: 'day-graph-rich-chart.mixed'}),
+    ).toHaveLength(0);
+    expect(domain(tree)).toEqual(before);
+  });
+
+  it('renders independent loads and their inspector values without inventing glucose', () => {
+    const loadsOnly = buildDayGraph({
+      period: {dayStartMs: 0, dayEndMs: 24 * HOUR},
+      expectedSampleIntervalMs: 5 * 60000,
+      glucoseSamples: [],
+      activeLoadSamples: [0, 1].map(index => ({
+        timestampMs: 8 * HOUR + index * 5 * 60000,
+        iobUnits: 1.5 - index * 0.1,
+        cobGrams: 30 - index,
+      })),
+      timelineItems: [],
+    });
+    act(() => {
+      tree = renderer.create(
+        withTheme(<RichDayGraphChart locale="en" model={loadsOnly} />),
+      );
+    });
+    expect(chart(tree).bgSamples).toHaveLength(0);
+    expect(
+      tree.root.findAllByProps({testID: 'iob-line-segment'}).length,
+    ).toBeGreaterThan(0);
+    expect(
+      tree.root.findAllByProps({testID: 'cob-line-segment'}).length,
+    ).toBeGreaterThan(0);
+    expect(tree.root.findByType(HomeChartsTooltip).props).toMatchObject({
+      bgSample: null,
+      activeInsulinU: 1.4,
+      cobG: 29,
+    });
+    press(tree, 'day-graph-chart-mode-combined');
+    expect(
+      tree.root.findAllByProps({testID: 'iob-line-segment'}).length,
+    ).toBeGreaterThan(0);
+    expect(
+      tree.root.findAllByProps({testID: 'cob-line-segment'}).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('distinguishes failed and stale insulin sources from an empty successful response', () => {
+    const partial = {
+      ...model,
+      dataAvailability: {
+        treatments: 'unavailable',
+        deviceStatus: 'stale',
+        profile: 'available',
+      } as const,
+    };
+    act(() => {
+      tree = renderer.create(
+        withTheme(<RichDayGraphChart locale="en" model={partial} />),
+      );
+    });
+    expect(
+      tree.root.findAllByProps({testID: 'day-graph-source-status'}).length,
+    ).toBeGreaterThan(0);
+    const messages = tree.root
+      .findAllByType(Text)
+      .map(node => node.props.children);
+    expect(messages).toContain(
+      'Boluses, temporary basal and recorded carbs: could not load.',
+    );
+    expect(messages).toContain(
+      'Active insulin and active carbs: showing a previous copy.',
+    );
+    expect(messages).not.toContain('No bolus records in this range');
+    act(() =>
+      tree.update(withTheme(<RichDayGraphChart locale="en" model={model} />)),
+    );
+    expect(
+      tree.root.findAllByProps({testID: 'day-graph-source-status'}),
+    ).toHaveLength(0);
+    expect(
+      tree.root.findAllByType(Text).map(node => node.props.children),
+    ).toContain('No bolus records in this range');
   });
 
   it('updates surfaces, labels and every series from the active theme without resetting exploration or fullscreen', () => {
@@ -146,6 +268,8 @@ describe('Rich Day Graph presentation', () => {
       expectTheme(theme);
       expect(domain(tree)).toEqual(before);
     }
+    press(tree, 'day-graph-chart-mode-combined');
+    expectTheme(custom);
     press(tree, 'chart.cgmGraph.fullscreenButton');
     act(() => tree.update(content(dark)));
     expect(tree.root.findAllByType(Modal)).toHaveLength(1);

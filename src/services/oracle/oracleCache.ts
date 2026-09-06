@@ -22,9 +22,10 @@ import {
 } from 'app/services/nightscoutCacheScope';
 
 const ORACLE_CACHE_ENTRIES_RESOURCE = 'oracle.entries.v2';
-const ORACLE_CACHE_TREATMENTS_RESOURCE = 'oracle.treatments.v1';
-const ORACLE_CACHE_DEVICE_STATUS_RESOURCE = 'oracle.deviceStatus.v1';
-const ORACLE_CACHE_META_RESOURCE = 'oracle.meta.v2';
+// Older windows could contain an unverified, truncated Nightscout prefix.
+const ORACLE_CACHE_TREATMENTS_RESOURCE = 'oracle.treatments.v2';
+const ORACLE_CACHE_DEVICE_STATUS_RESOURCE = 'oracle.deviceStatus.v2';
+const ORACLE_CACHE_META_RESOURCE = 'oracle.meta.v3';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

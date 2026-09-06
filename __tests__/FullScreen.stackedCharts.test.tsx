@@ -2,6 +2,7 @@ import React from 'react';
 import renderer, {act} from 'react-test-renderer';
 import {ThemeProvider} from 'styled-components/native';
 import * as RN from 'react-native';
+import Svg from 'react-native-svg';
 
 import FullScreenViewScreen, {
   getStackedDisplayDomain,
@@ -216,7 +217,7 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
     });
   });
 
-  it('keeps every insulin lane and range control reachable in a short landscape viewport', async () => {
+  it('keeps the overlay, bolus lane and range controls reachable in a short landscape viewport', async () => {
     jest
       .mocked(RN.useWindowDimensions)
       .mockReturnValue({width: 640, height: 320, scale: 1, fontScale: 1});
@@ -268,7 +269,19 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
     expect(chartScroll.props.removeClippedSubviews).toBe(false);
     expect(railScroll.props.scrollEnabled).toBe(true);
     const lanes = chartScroll.findAllByType(MiniChartLane);
-    expect(lanes).toHaveLength(4);
+    expect(lanes).toHaveLength(1);
+    const overlay = chartScroll
+      .findAllByType(Svg)
+      .find(
+        svg => svg.findAllByProps({testID: 'iob-line-segment'}).length > 0,
+      )!;
+    expect(overlay).toBeDefined();
+    expect(
+      overlay.findAllByProps({testID: 'cob-line-segment'}).length,
+    ).toBeGreaterThan(0);
+    expect(
+      overlay.findAllByProps({testID: 'basal-scheduled-segment'}).length,
+    ).toBeGreaterThan(0);
     const laneHeight = lanes.reduce(
       (total, lane) =>
         total +
@@ -277,7 +290,9 @@ describe('FullScreenViewScreen stackedCharts mode', () => {
       0,
     );
     const charts = chartScroll.findByType(StackedHomeCharts);
-    expect(laneHeight + charts.props.cgmHeight).toBeGreaterThan(320);
+    expect(
+      laneHeight + overlay.props.height + charts.props.cgmHeight,
+    ).toBeGreaterThan(320);
     expect(charts.props.cgmHeight).toBeGreaterThanOrEqual(150);
     expect(charts.props.miniChartHeight).toBeGreaterThanOrEqual(110);
     expect(

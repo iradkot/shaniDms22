@@ -1,4 +1,4 @@
-import {nightscoutInstance} from '../../../api/shaniNightscoutInstances';
+import {fetchTreatmentsForDateRangeUncached} from '../../../api/apiRequests';
 import {getNightscoutBaseUrl} from '../../../api/shaniNightscoutInstances';
 import {
   JOURNAL_ERROR_CODES,
@@ -145,7 +145,9 @@ const sortByReference = <
       Math.abs(leftTimestamp - referenceMs) -
         Math.abs(rightTimestamp - referenceMs) ||
       leftTimestamp - rightTimestamp ||
-      String(left.record.recordKey).localeCompare(String(right.record.recordKey))
+      String(left.record.recordKey).localeCompare(
+        String(right.record.recordKey),
+      )
     );
   });
 
@@ -184,9 +186,7 @@ export const projectNightscoutMealCandidates = (
         snapshot: {
           kind: 'carbohydrate',
           externalCarbTime: timestamp,
-          ...(externalEntryTime === undefined
-            ? {}
-            : {externalEntryTime}),
+          ...(externalEntryTime === undefined ? {} : {externalEntryTime}),
           carbohydratesGrams: carbohydrates,
           ...(eventType === undefined ? {} : {eventType}),
           ...(enteredBy === undefined ? {} : {enteredBy}),
@@ -224,7 +224,8 @@ export const projectNightscoutMealCandidates = (
 };
 
 const isActivityEvent = (eventType: string | undefined): boolean =>
-  eventType !== undefined && /(exercise|activity|workout|sport)/i.test(eventType);
+  eventType !== undefined &&
+  /(exercise|activity|workout|sport)/i.test(eventType);
 
 export const projectNightscoutActivityCandidates = (
   values: readonly unknown[],
@@ -302,14 +303,10 @@ export const projectNightscoutActivityCandidates = (
 };
 
 const defaultTreatmentLoader: NightscoutTreatmentLoader = async window => {
-  const start = new Date(window.startMs).toISOString();
-  const end = new Date(window.endMs).toISOString();
-  const response = await nightscoutInstance.get<unknown>(
-    `/api/v1/treatments?find[created_at][$gte]=${encodeURIComponent(
-      start,
-    )}&find[created_at][$lte]=${encodeURIComponent(end)}&count=1000`,
+  return fetchTreatmentsForDateRangeUncached(
+    new Date(window.startMs),
+    new Date(window.endMs),
   );
-  return response.data;
 };
 
 const assertConfiguredSourceMatchesScope = (

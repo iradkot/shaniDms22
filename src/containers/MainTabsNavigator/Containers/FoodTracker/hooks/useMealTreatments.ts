@@ -1,17 +1,23 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
-import {startOfDay, endOfDay} from 'date-fns';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 
+import {fetchBgDataForDateRangeUncached} from 'app/api/apiRequests';
+import {filterInsulinDataToRange} from 'app/utils/nightscoutTreatments.utils';
 import {
-  fetchTreatmentsForDateRangeUncached,
-  fetchBgDataForDateRangeUncached,
-  fetchDeviceStatusForDateRangeUncached,
-  getUserProfileFromNightscout,
-} from 'app/api/apiRequests';
+  loadInsulinContext,
+  type InsulinContext,
+} from 'app/services/insulin/insulinDataSource';
 import {
-  mapNightscoutTreatmentsToCarbFoodItems,
-  mapNightscoutTreatmentsToInsulinDataEntries,
-  extractBasalProfileFromNightscoutProfileData,
-} from 'app/utils/nightscoutTreatments.utils';
+  getNightscoutConfigurationRevision,
+  subscribeNightscoutConfiguration,
+} from 'app/api/shaniNightscoutInstances';
 import {mergeDeviceStatusIntoBgSamples} from 'app/utils/mergeDeviceStatusIntoBgSamples.utils';
 import {
   calculateTimeInRangePercentages,
@@ -57,9 +63,15 @@ const CHART_POST_MS = 4 * 60 * 60 * 1000; // 4 hrs after
 
 /** Classify hour → meal slot. */
 function classifyMealSlot(hour: number): MealSlot {
-  if (hour >= 5 && hour < 11) return 'breakfast';
-  if (hour >= 11 && hour < 15) return 'lunch';
-  if (hour >= 15 && hour < 21) return 'dinner';
+  if (hour >= 5 && hour < 11) {
+    return 'breakfast';
+  }
+  if (hour >= 11 && hour < 15) {
+    return 'lunch';
+  }
+  if (hour >= 15 && hour < 21) {
+    return 'dinner';
+  }
   return 'snack';
 }
 
@@ -75,13 +87,17 @@ function computePostMealTir(
   const windowSamples = bgSamples.filter(
     s => s.date >= mealTs && s.date <= windowEnd,
   );
-  if (windowSamples.length < MIN_BG_READINGS) return null;
+  if (windowSamples.length < MIN_BG_READINGS) {
+    return null;
+  }
 
   const {percentages, validCount} = calculateTimeInRangePercentages(
     windowSamples,
     DEFAULT_THRESHOLDS,
   );
-  if (!validCount) return null;
+  if (!validCount) {
+    return null;
+  }
 
   return {
     score: Math.round(percentages.target),
@@ -94,10 +110,18 @@ function computePostMealTir(
 export interface UseMealTreatmentsResult {
   meals: MealEntry[];
   isLoading: boolean;
+  error: string | null;
+  dataAvailability: InsulinContext['availability'];
   /** Build chart data for a specific meal (filtered window). */
   getChartDataForMeal: (meal: MealEntry) => MealChartData;
-  refresh: () => void;
+  refresh: () => Promise<void>;
 }
+
+const UNAVAILABLE: InsulinContext['availability'] = {
+  treatments: 'unavailable',
+  deviceStatus: 'unavailable',
+  profile: 'unavailable',
+};
 
 /**
  * Fetches Nightscout treatments + BG + device-status for the given date range
@@ -113,42 +137,113 @@ export function useMealTreatments(
   const [insulinData, setInsulinData] = useState<InsulinDataEntry[]>([]);
   const [bgSamples, setBgSamples] = useState<BgSample[]>([]);
   const [basalProfile, setBasalProfile] = useState<BasalProfile>([]);
+  const [loadSamples, setLoadSamples] = useState<InsulinContext['loadSamples']>(
+    [],
+  );
+  const [dataAvailability, setDataAvailability] = useState(UNAVAILABLE);
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const revision = useSyncExternalStore(
+    subscribeNightscoutConfiguration,
+    getNightscoutConfigurationRevision,
+    getNightscoutConfigurationRevision,
+  );
+  const rangeStartMs = +rangeStart;
+  const rangeEndMs = +rangeEnd;
+  const period = useMemo(() => {
+    const start = new Date(rangeStartMs);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(rangeEndMs);
+    end.setHours(0, 0, 0, 0);
+    end.setDate(end.getDate() + 1);
+    return {startMs: +start, endMs: +end};
+  }, [rangeStartMs, rangeEndMs]);
+  const generation = useRef(0);
+  const mounted = useRef(false);
+  const scopeKey = `${revision}:${period.startMs}:${period.endMs}`;
+  const activeScope = useRef(scopeKey);
+  activeScope.current = scopeKey;
+  useLayoutEffect(() => {
+    mounted.current = true;
+    generation.current += 1;
+    setCarbTreatments([]);
+    setInsulinData([]);
+    setBgSamples([]);
+    setBasalProfile([]);
+    setLoadSamples([]);
+    setDataAvailability(UNAVAILABLE);
+    setError(null);
+    return () => {
+      mounted.current = false;
+      generation.current += 1;
+    };
+  }, [scopeKey]);
 
-  const start = useMemo(() => startOfDay(rangeStart), [rangeStart]);
-  const end = useMemo(() => endOfDay(rangeEnd), [rangeEnd]);
-
-  const fetchData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const [treatments, bgData, deviceStatus, profileData] =
-        await Promise.all([
-          fetchTreatmentsForDateRangeUncached(start, end),
-          fetchBgDataForDateRangeUncached(start, end),
-          fetchDeviceStatusForDateRangeUncached(start, end),
-          getUserProfileFromNightscout(new Date().toISOString()),
+  const fetchData = useCallback(
+    async (forceRefresh: boolean) => {
+      if (
+        !mounted.current ||
+        activeScope.current !== scopeKey ||
+        revision !== getNightscoutConfigurationRevision()
+      ) {
+        return;
+      }
+      const request = ++generation.current;
+      const isCurrent = () =>
+        mounted.current &&
+        request === generation.current &&
+        activeScope.current === scopeKey &&
+        revision === getNightscoutConfigurationRevision();
+      try {
+        setIsLoading(true);
+        setError(null);
+        const [bgData, context] = await Promise.all([
+          fetchBgDataForDateRangeUncached(
+            new Date(period.startMs),
+            new Date(period.endMs - 1),
+          ),
+          loadInsulinContext({...period, forceRefresh}),
         ]);
-
-      const enrichedBg = mergeDeviceStatusIntoBgSamples({
-        bgSamples: bgData,
-        deviceStatus,
-      });
-
-      setCarbTreatments(mapNightscoutTreatmentsToCarbFoodItems(treatments));
-      setInsulinData(mapNightscoutTreatmentsToInsulinDataEntries(treatments));
-      setBgSamples(enrichedBg);
-      setBasalProfile(
-        extractBasalProfileFromNightscoutProfileData(profileData),
-      );
-    } catch (err) {
-      console.error('useMealTreatments: fetch failed', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [start, end]);
+        if (!isCurrent()) {
+          return;
+        }
+        const enrichedBg = mergeDeviceStatusIntoBgSamples({
+          bgSamples: bgData,
+          deviceStatus: [...context.deviceStatus],
+        });
+        setCarbTreatments(context.carbTreatments);
+        setInsulinData(context.insulinData);
+        setBgSamples(enrichedBg);
+        setBasalProfile(context.basalProfileData);
+        setLoadSamples(context.loadSamples);
+        setDataAvailability(context.availability);
+      } catch {
+        if (isCurrent()) {
+          setError('Meal data could not be loaded.');
+          setDataAvailability(previous => ({
+            treatments:
+              previous.treatments === 'available'
+                ? 'stale'
+                : previous.treatments,
+            deviceStatus:
+              previous.deviceStatus === 'available'
+                ? 'stale'
+                : previous.deviceStatus,
+            profile:
+              previous.profile === 'available' ? 'stale' : previous.profile,
+          }));
+        }
+      } finally {
+        if (isCurrent()) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [period, revision, scopeKey],
+  );
 
   useEffect(() => {
-    fetchData();
+    fetchData(false);
   }, [fetchData]);
 
   // ── enrich each carb treatment into a MealEntry ──
@@ -161,10 +256,17 @@ export function useMealTreatments(
         const hour = new Date(ct.timestamp).getHours();
 
         // Absorption: uses shared utility (carbsEntered − COB at T+3h)
-        const absorption = computeAbsorption(ct.carbs, bgSamples, ct.timestamp);
+        const absorption = computeAbsorption(
+          ct.carbs,
+          dataAvailability.deviceStatus === 'available' ? bgSamples : [],
+          ct.timestamp,
+        );
 
         // Bolus insulin near this meal
-        const bolusInsulinU = sumBolusNearMeal(insulinData, ct.timestamp);
+        const bolusInsulinU =
+          dataAvailability.treatments === 'available'
+            ? sumBolusNearMeal(insulinData, ct.timestamp)
+            : null;
 
         return {
           id: ct.id,
@@ -180,7 +282,7 @@ export function useMealTreatments(
           tags: ct.tags ?? [],
         } satisfies MealEntry;
       });
-  }, [carbTreatments, bgSamples, insulinData]);
+  }, [carbTreatments, bgSamples, insulinData, dataAvailability]);
 
   // ── per-meal chart data builder ──
   const getChartDataForMeal = useCallback(
@@ -191,15 +293,11 @@ export function useMealTreatments(
       const filteredBg = bgSamples.filter(
         s => s.date >= windowStart && s.date <= windowEnd,
       );
-      const filteredInsulin = insulinData.filter(i => {
-        const ts =
-          i.timestamp != null
-            ? typeof i.timestamp === 'string'
-              ? Date.parse(i.timestamp)
-              : i.timestamp
-            : 0;
-        return ts >= windowStart && ts <= windowEnd;
-      });
+      const filteredInsulin = filterInsulinDataToRange(
+        insulinData,
+        windowStart,
+        windowEnd,
+      );
 
       // Food items in the window (the meal itself + any nearby)
       const filteredFood = carbTreatments.filter(
@@ -208,14 +306,34 @@ export function useMealTreatments(
 
       return {
         bgSamples: filteredBg,
+        loadSamples: loadSamples.filter(
+          sample =>
+            sample.timestampMs >= windowStart &&
+            sample.timestampMs <= windowEnd,
+        ),
+        dataAvailability,
         insulinData: filteredInsulin,
         foodItems: filteredFood,
         basalProfileData: basalProfile,
         xDomain: [new Date(windowStart), new Date(windowEnd)],
       };
     },
-    [bgSamples, insulinData, carbTreatments, basalProfile],
+    [
+      bgSamples,
+      insulinData,
+      carbTreatments,
+      basalProfile,
+      loadSamples,
+      dataAvailability,
+    ],
   );
-
-  return {meals, isLoading, getChartDataForMeal, refresh: fetchData};
+  const refresh = useCallback(() => fetchData(true), [fetchData]);
+  return {
+    meals,
+    isLoading,
+    error,
+    dataAvailability,
+    getChartDataForMeal,
+    refresh,
+  };
 }

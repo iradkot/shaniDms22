@@ -20,11 +20,7 @@ import {
   fetchStackedChartsDataForRange,
 } from 'app/utils/stackedChartsData.utils';
 import {pushFullScreenStackedCharts} from 'app/utils/fullscreenNavigation.utils';
-import {fetchTreatmentsForDateRangeUncached} from 'app/api/apiRequests';
-import {
-  mapNightscoutTreatmentsToCarbFoodItems,
-  mapNightscoutTreatmentsToInsulinDataEntries,
-} from 'app/utils/nightscoutTreatments.utils';
+import {loadInsulinContext} from 'app/services/insulin/insulinDataSource';
 
 import {
   extractHypoEvents,
@@ -300,50 +296,22 @@ const HypoInvestigationScreen: React.FC = () => {
 
       setIsFetchingTreatments(true);
       try {
-        const treatments = await fetchTreatmentsForDateRangeUncached(
-          new Date(rangeStartMs),
-          new Date(rangeEndMs),
-        );
+        const context = await loadInsulinContext({startMs: rangeStartMs, endMs: rangeEndMs});
         if (cancelled) return;
-        setRangeInsulinData(mapNightscoutTreatmentsToInsulinDataEntries(treatments));
-        setRangeFoodItems(mapNightscoutTreatmentsToCarbFoodItems(treatments));
+        setRangeInsulinData(context.insulinData);
+        setRangeFoodItems(context.carbTreatments);
+        setBasalProfileData(context.basalProfileData);
       } catch (e) {
         if (cancelled) return;
         setRangeInsulinData([]);
         setRangeFoodItems([]);
+        setBasalProfileData([]);
       } finally {
         if (!cancelled) setIsFetchingTreatments(false);
       }
     }
 
     fetchTreatments();
-    return () => {
-      cancelled = true;
-    };
-  }, [rangeEndMs, rangeStartMs]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchBasalProfile() {
-      if (rangeStartMs == null || rangeEndMs == null) return;
-      try {
-        const data = await fetchStackedChartsDataForRange({
-          startMs: rangeStartMs,
-          endMs: rangeEndMs,
-          existingBgSamples: [],
-          includeDeviceStatus: false,
-          includeTreatments: false,
-          includeProfile: true,
-        });
-        if (cancelled) return;
-        setBasalProfileData(data.basalProfileData);
-      } catch (e) {
-        if (!cancelled) setBasalProfileData([]);
-      }
-    }
-
-    fetchBasalProfile();
     return () => {
       cancelled = true;
     };

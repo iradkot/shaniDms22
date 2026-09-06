@@ -22,6 +22,110 @@ const externalCarb = (
 });
 
 describe('buildDayGraph', () => {
+  it('retains real load timestamps and known zero readings on days without glucose', () => {
+    const model = buildDayGraph({
+      period: {dayStartMs: 0, dayEndMs: DAY},
+      expectedSampleIntervalMs: 5 * MINUTE,
+      glucoseSamples: [],
+      timelineItems: [],
+      activeLoadSamples: [
+        {timestampMs: 2 * HOUR, iobUnits: -0.3, cobGrams: 0},
+        {timestampMs: HOUR, bolusIobUnits: 1.2},
+        {timestampMs: -MINUTE, iobUnits: 8},
+        {timestampMs: DAY, cobGrams: 20},
+        {timestampMs: HOUR + MINUTE, iobUnits: Number.NaN},
+      ],
+    });
+    expect(model.glucoseSamples).toEqual([]);
+    expect(model.activeLoadSamples).toEqual([
+      {timestampMs: HOUR, bolusIobUnits: 1.2},
+      {timestampMs: HOUR + MINUTE},
+      {timestampMs: 2 * HOUR, iobUnits: -0.3, cobGrams: 0},
+    ]);
+  });
+
+  it('retains explicit missing load readings and does not backfill them from enriched glucose', () => {
+    const input = {
+      period: {dayStartMs: 0, dayEndMs: DAY},
+      expectedSampleIntervalMs: 5 * MINUTE,
+      glucoseSamples: [
+        {
+          identity: {sourceId: 'ns', recordId: 'glucose'},
+          timestampMs: HOUR,
+          valueMgDl: 123,
+          iobUnits: 2,
+        },
+      ],
+      timelineItems: [],
+    };
+    const loads = [
+      {timestampMs: HOUR - MINUTE, iobUnits: 1.2},
+      {timestampMs: HOUR},
+      {timestampMs: HOUR + MINUTE, iobUnits: 1.1},
+    ];
+    const model = buildDayGraph({...input, activeLoadSamples: loads});
+    expect(model.activeLoadSamples).toEqual(loads);
+    expect(model.glucoseSamples[0]).not.toHaveProperty('iobUnits');
+    expect(input.glucoseSamples[0]?.iobUnits).toBe(2);
+    expect(
+      buildDayGraph({
+        ...input,
+        glucoseSamples: [
+          {
+            identity: {sourceId: 'ns', recordId: 'plain-glucose'},
+            timestampMs: HOUR,
+            valueMgDl: 123,
+          },
+        ],
+      }).activeLoadSamples,
+    ).toEqual([]);
+  });
+
+  it('preserves source availability separately from empty data and defaults older inputs to available', () => {
+    const input = {
+      period: {dayStartMs: 0, dayEndMs: DAY},
+      expectedSampleIntervalMs: 5 * MINUTE,
+      glucoseSamples: [],
+      timelineItems: [],
+    };
+    expect(buildDayGraph(input).dataAvailability).toEqual({
+      treatments: 'available',
+      deviceStatus: 'available',
+      profile: 'available',
+    });
+    const availability = {
+      treatments: 'unavailable',
+      deviceStatus: 'stale',
+      profile: 'available',
+    } as const;
+    expect(
+      buildDayGraph({...input, dataAvailability: availability})
+        .dataAvailability,
+    ).toEqual(availability);
+  });
+
+  it('does not replace explicitly empty load history with glucose-enriched values', () => {
+    const input = {
+      period: {dayStartMs: 0, dayEndMs: DAY},
+      expectedSampleIntervalMs: 5 * MINUTE,
+      glucoseSamples: [
+        {
+          identity: {sourceId: 'ns', recordId: 'glucose'},
+          timestampMs: HOUR,
+          valueMgDl: 123,
+          iobUnits: 2,
+        },
+      ],
+      timelineItems: [],
+    };
+    expect(buildDayGraph(input).activeLoadSamples).toEqual([
+      {timestampMs: HOUR, iobUnits: 2},
+    ]);
+    expect(
+      buildDayGraph({...input, activeLoadSamples: []}).activeLoadSamples,
+    ).toEqual([]);
+  });
+
   it('removes only repeated stable identities and keeps nearby carb records distinct', () => {
     const first = externalCarb('carb-1', 10 * MINUTE);
     const duplicate = {...first, title: 'Duplicate delivery'};

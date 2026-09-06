@@ -13,7 +13,7 @@
  * - DIA (Duration of Insulin Action)
  */
 
-import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
+import {requestNightscoutRecords} from 'app/api/nightscoutRecords';
 import {ProfileDataEntry, TimeValueEntry} from 'app/types/insulin.types';
 
 // =============================================================================
@@ -146,8 +146,7 @@ export async function fetchNightscoutProfiles(params: {
   }
 
   try {
-    const response = await nightscoutInstance.get<ProfileDataEntry[]>(apiUrl);
-    return response.data ?? [];
+    return await requestNightscoutRecords(apiUrl) as unknown as ProfileDataEntry[];
   } catch (error) {
     console.error('[settingsChangeDetection] Failed to fetch profiles:', error);
     if (throwOnError) {

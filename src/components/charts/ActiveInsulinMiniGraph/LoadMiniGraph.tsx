@@ -1,15 +1,15 @@
 import React, {useMemo} from 'react';
 import {Circle, Path} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
-import {MAX_LOAD_CURSOR_DISTANCE_MS} from 'app/utils/chartLoadSeries.utils';
-import {findClosestBgSample} from '../CgmGraph/utils';
 import MiniChartLane from '../MiniChartLane';
 import {getChartPalette} from '../chartPalette';
 import {
   buildMiniLoadSegments,
+  findMiniLoadSample,
   formatMiniTime,
   formatMiniValue,
   resolveMiniDomain,
+  resolveMiniLoadSamples,
   type MiniChartProps,
 } from '../miniChartData';
 
@@ -17,15 +17,19 @@ export default function LoadMiniGraph({
   kind,
   ...props
 }: MiniChartProps & {kind: 'iob' | 'cob'}) {
-  const {bgSamples, cursorTimeMs, locale = 'en', xDomain} = props;
+  const {bgSamples, loadSamples, cursorTimeMs, locale = 'en', xDomain} = props;
   const palette = getChartPalette(useTheme());
+  const samples = useMemo(
+    () => resolveMiniLoadSamples(bgSamples, loadSamples),
+    [bgSamples, loadSamples],
+  );
   const domain = useMemo(
-    () => resolveMiniDomain(bgSamples, xDomain),
-    [bgSamples, xDomain],
+    () => resolveMiniDomain(samples, xDomain),
+    [samples, xDomain],
   );
   const segments = useMemo(
-    () => buildMiniLoadSegments(bgSamples, domain, kind),
-    [bgSamples, domain, kind],
+    () => buildMiniLoadSegments(samples, domain, kind),
+    [samples, domain, kind],
   );
   const points = useMemo(() => segments.flat(), [segments]);
   const point = useMemo(() => {
@@ -39,7 +43,7 @@ export default function LoadMiniGraph({
     }
     const timeMs =
       cursorTimeMs ??
-      bgSamples.reduce(
+      samples.reduce(
         (latest, sample) =>
           sample.date >= +domain[0] && sample.date <= +domain[1]
             ? Math.max(latest, sample.date)
@@ -49,14 +53,11 @@ export default function LoadMiniGraph({
     if (!Number.isFinite(timeMs)) {
       return null;
     }
-    // Select the same sample as the inspector before looking for its load.
-    // A missing value must not silently fall back to a different finite sample.
-    const sample = findClosestBgSample(timeMs, bgSamples);
-    return sample &&
-      Math.abs(sample.date - timeMs) <= MAX_LOAD_CURSOR_DISTANCE_MS
+    const sample = findMiniLoadSample(samples, timeMs, domain);
+    return sample
       ? points.find(candidate => candidate.x === sample.date) ?? null
       : null;
-  }, [bgSamples, cursorTimeMs, domain, points]);
+  }, [samples, cursorTimeMs, domain, points]);
   const yDomain = useMemo<[number, number]>(() => {
     let min = 0;
     let max = 0;

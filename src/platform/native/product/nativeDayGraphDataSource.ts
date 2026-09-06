@@ -3,11 +3,9 @@ import {
   fetchDeviceStatusForDateRangeWithMetadata,
   fetchTreatmentsForDateRangeWithMetadata,
   getUserProfileFromNightscout,
-  type NightscoutRangeFreshness,
   type NightscoutRangeResult,
 } from '../../../api/apiRequests';
 import type {
-  DayGraphActiveLoadSample,
   DayGraphBasalScheduleEntry,
   DayGraphDataSource,
   DayGraphInsulinEvent,
@@ -15,19 +13,20 @@ import type {
   DayGraphTimelineItem,
 } from '../../../modules/dayGraph';
 import type {DeviceStatusEntry} from '../../../types/deviceStatus.types';
-import type {BasalProfile} from '../../../types/insulin.types';
+import type {
+  BasalProfile,
+  InsulinDataEntry,
+  ProfileDataType,
+} from '../../../types/insulin.types';
+import {getNightscoutConfigurationRevision} from '../../../api/shaniNightscoutInstances';
+import {
+  createInsulinContextLoader,
+  loadInsulinContext,
+  type InsulinContext,
+  type InsulinContextLoader,
+} from '../../../services/insulin/insulinDataSource';
 import {isE2E} from '../../../utils/e2e';
 import {makeE2EBgSamplesForRange} from '../../../utils/e2eFixtures';
-import {
-  extractLoad,
-  getDeviceStatusTimestampMs,
-} from '../../../utils/mergeDeviceStatusIntoBgSamples.utils';
-import {
-  extractBasalProfileFromNightscoutProfileData,
-  mapNightscoutTreatmentsToInsulinDataEntries,
-} from '../../../utils/nightscoutTreatments.utils';
-
-const TREATMENT_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 interface NativeDayGraphGlucoseRecord {
   readonly _id?: string;
@@ -74,6 +73,7 @@ interface NativeDayGraphJournalReader {
 }
 
 export interface NativeDayGraphDataSourceDependencies {
+  readonly loadInsulinContext?: InsulinContextLoader;
   readonly nightscoutSourceId?: string;
   readonly fetchGlucoseRecords?: (
     start: Date,
@@ -300,39 +300,11 @@ const treatmentItems = (
   return items;
 };
 
-const activeLoadSamples = (
-  values: readonly DeviceStatusEntry[],
-): readonly DayGraphActiveLoadSample[] =>
-  values.flatMap(value => {
-    const timestampMs = getDeviceStatusTimestampMs(value);
-    if (timestampMs === undefined) {
-      return [];
-    }
-    const load = extractLoad(value);
-    if (
-      load.iob === undefined &&
-      load.iobBolus === undefined &&
-      load.iobBasal === undefined &&
-      load.cob === undefined
-    ) {
-      return [];
-    }
-    return [
-      {
-        timestampMs,
-        ...(load.iob === undefined ? {} : {iobUnits: load.iob}),
-        ...(load.iobBolus === undefined ? {} : {bolusIobUnits: load.iobBolus}),
-        ...(load.iobBasal === undefined ? {} : {basalIobUnits: load.iobBasal}),
-        ...(load.cob === undefined ? {} : {cobGrams: load.cob}),
-      },
-    ];
-  });
-
 const insulinEvents = (
-  values: readonly unknown[],
+  values: readonly InsulinDataEntry[],
 ): readonly DayGraphInsulinEvent[] => {
   const result: DayGraphInsulinEvent[] = [];
-  mapNightscoutTreatmentsToInsulinDataEntries([...values]).forEach(entry => {
+  values.forEach(entry => {
     if (entry.type === 'bolus') {
       const timestampMs = Date.parse(entry.timestamp ?? '');
       if (entry.amount !== undefined && Number.isFinite(timestampMs)) {
@@ -387,32 +359,91 @@ const basalSchedule = (
       : [];
   });
 
+const emptyContext = (now: number): InsulinContext => ({
+  treatments: [],
+  deviceStatus: [],
+  profileData: null,
+  insulinData: [],
+  basalProfileData: [],
+  carbTreatments: [],
+  loadSamples: [],
+  availability: {
+    treatments: 'available',
+    deviceStatus: 'available',
+    profile: 'available',
+  },
+  freshness: {kind: 'fresh', fetchedAtMs: now},
+});
+
+const resolveInsulinLoader = (
+  dependencies: NativeDayGraphDataSourceDependencies,
+): InsulinContextLoader => {
+  if (dependencies.loadInsulinContext) {return dependencies.loadInsulinContext;}
+  if (
+    !(
+      dependencies.fetchTreatmentRange ||
+      dependencies.fetchTreatmentRecords ||
+      dependencies.fetchDeviceStatusRange ||
+      dependencies.fetchDeviceStatusRecords ||
+      dependencies.fetchProfile ||
+      dependencies.extractBasalProfile
+    )
+  )
+    {return loadInsulinContext;}
+  const now = dependencies.now ?? Date.now;
+  const fresh = <T>(records: readonly T[]): NightscoutRangeResult<T> => ({
+    records,
+    freshness: {kind: 'fresh', fetchedAtMs: now()},
+  });
+  return createInsulinContextLoader({
+    fetchTreatments: async (start, end) =>
+      dependencies.fetchTreatmentRange
+        ? dependencies.fetchTreatmentRange(start, end)
+        : dependencies.fetchTreatmentRecords
+        ? fresh(
+            (await dependencies.fetchTreatmentRecords(start, end)) as Record<
+              string,
+              unknown
+            >[],
+          )
+        : fetchTreatmentsForDateRangeWithMetadata(start, end),
+    fetchDeviceStatus: async (start, end) =>
+      dependencies.fetchDeviceStatusRange
+        ? dependencies.fetchDeviceStatusRange(start, end)
+        : dependencies.fetchDeviceStatusRecords
+        ? fresh(await dependencies.fetchDeviceStatusRecords(start, end))
+        : fetchDeviceStatusForDateRangeWithMetadata(start, end),
+    fetchProfile: async asOf =>
+      (dependencies.fetchProfile
+        ? await dependencies.fetchProfile(asOf)
+        : await getUserProfileFromNightscout(asOf)) as ProfileDataType,
+    ...(dependencies.extractBasalProfile
+      ? {extractBasalProfile: dependencies.extractBasalProfile}
+      : {}),
+    getScopeKey: () => String(getNightscoutConfigurationRevision()),
+    now,
+  });
+};
+
 export const createNativeDayGraphTimelineLoader = (
   dependencies: NativeDayGraphDataSourceDependencies = {},
 ): NativeDayGraphTimelineLoader => {
   const sourceId = resolveSourceId(dependencies);
-  const useE2EFixtures = dependencies.useE2EFixtures ?? isE2E;
+  const fixtures = dependencies.useE2EFixtures ?? isE2E;
   const locale = dependencies.locale ?? 'en';
-
+  const loadContext = resolveInsulinLoader(dependencies);
   return async period => {
-    let treatments: readonly unknown[] = [];
-    if (!useE2EFixtures) {
-      const start = new Date(period.dayStartMs);
-      const end = new Date(period.dayEndMs);
-      treatments = dependencies.fetchTreatmentRange
-        ? (await dependencies.fetchTreatmentRange(start, end)).records
-        : dependencies.fetchTreatmentRecords
-        ? await dependencies.fetchTreatmentRecords(start, end)
-        : (await fetchTreatmentsForDateRangeWithMetadata(start, end)).records;
-    }
+    const context = fixtures
+      ? emptyContext((dependencies.now ?? Date.now)())
+      : await loadContext({startMs: period.dayStartMs, endMs: period.dayEndMs});
     return [
-      ...treatmentItems(treatments, sourceId, locale),
+      ...treatmentItems(context.treatments, sourceId, locale),
       ...journalItems(dependencies.journal, period, locale),
     ];
   };
 };
 
-/** Native read-only projection over Nightscout plus the local-first Journal. */
+/** One factual insulin context supplies both the chart and its timeline. */
 export const createNativeDayGraphDataSource = (
   dependencies: NativeDayGraphDataSourceDependencies = {},
 ): DayGraphDataSource => {
@@ -422,169 +453,53 @@ export const createNativeDayGraphDataSource = (
   const useE2EFixtures = dependencies.useE2EFixtures ?? isE2E;
   const now = dependencies.now ?? Date.now;
   const locale = dependencies.locale ?? 'en';
-  const hasInjectedCoreLoader =
-    dependencies.fetchGlucoseRecords !== undefined ||
-    dependencies.fetchGlucoseRange !== undefined ||
-    dependencies.fetchTreatmentRecords !== undefined ||
-    dependencies.fetchTreatmentRange !== undefined ||
-    dependencies.loadTimelineItems !== undefined;
-
+  const loadContext = resolveInsulinLoader(dependencies);
   const fresh = <T>(records: readonly T[]): NightscoutRangeResult<T> => ({
     records,
     freshness: {kind: 'fresh', fetchedAtMs: now()},
   });
-
   const loadGlucoseRange = async (
     start: Date,
     end: Date,
   ): Promise<NightscoutRangeResult<NativeDayGraphGlucoseRecord>> => {
-    if (useE2EFixtures) {
-      return fresh<NativeDayGraphGlucoseRecord>(
+    if (useE2EFixtures)
+      {return fresh<NativeDayGraphGlucoseRecord>(
         fixtureGlucoseRecords(start, end),
-      );
-    }
-    if (dependencies.fetchGlucoseRange) {
-      return dependencies.fetchGlucoseRange(start, end);
-    }
-    if (dependencies.fetchGlucoseRecords) {
-      return fresh(await dependencies.fetchGlucoseRecords(start, end));
-    }
+      );}
+    if (dependencies.fetchGlucoseRange)
+      {return dependencies.fetchGlucoseRange(start, end);}
+    if (dependencies.fetchGlucoseRecords)
+      {return fresh(await dependencies.fetchGlucoseRecords(start, end));}
     return fetchBgDataForDateRangeWithMetadata(start, end);
   };
-
-  const incompleteReason =
-    locale === 'he'
-      ? 'חלק מנתוני Nightscout אינם עדכניים או אינם זמינים כרגע.'
-      : 'Some Nightscout data is out of date or currently unavailable.';
-
-  const loadTimelineRange = async (
-    period: DayGraphPeriod,
-  ): Promise<{
-    readonly items: readonly DayGraphTimelineItem[];
-    readonly treatments: readonly unknown[];
-    readonly freshness: NightscoutRangeFreshness;
-  }> => {
-    if (dependencies.loadTimelineItems) {
-      return {
-        items: await dependencies.loadTimelineItems(period),
-        treatments: [],
-        freshness: {kind: 'fresh', fetchedAtMs: now()},
-      };
-    }
-    if (useE2EFixtures) {
-      return {
-        items: journalItems(dependencies.journal, period, locale),
-        treatments: [],
-        freshness: {kind: 'fresh', fetchedAtMs: now()},
-      };
-    }
-    const start = new Date(period.dayStartMs - TREATMENT_LOOKBACK_MS);
-    const end = new Date(period.dayEndMs);
-    try {
-      const treatmentRange = dependencies.fetchTreatmentRange
-        ? await dependencies.fetchTreatmentRange(start, end)
-        : dependencies.fetchTreatmentRecords
-        ? fresh(await dependencies.fetchTreatmentRecords(start, end))
-        : await fetchTreatmentsForDateRangeWithMetadata(start, end);
-      return {
-        items: [
-          ...treatmentItems(treatmentRange.records, sourceId, locale),
-          ...journalItems(dependencies.journal, period, locale),
-        ].filter(
-          item =>
-            item.timestampMs >= period.dayStartMs &&
-            item.timestampMs < period.dayEndMs,
-        ),
-        treatments: treatmentRange.records,
-        freshness: treatmentRange.freshness,
-      };
-    } catch (error) {
-      console.warn(
-        'createNativeDayGraphDataSource: Treatments unavailable; timeline is incomplete',
-        error,
-      );
-      return {
-        items: journalItems(dependencies.journal, period, locale),
-        treatments: [],
-        freshness: {
-          kind: 'stale',
-          fetchedAtMs: now(),
-          reason: 'network-unavailable',
-        },
-      };
-    }
-  };
-
-  const loadDeviceStatuses = async (
-    start: Date,
-    end: Date,
-  ): Promise<readonly DeviceStatusEntry[]> => {
-    if (dependencies.fetchDeviceStatusRange) {
-      return (await dependencies.fetchDeviceStatusRange(start, end)).records;
-    }
-    if (dependencies.fetchDeviceStatusRecords) {
-      return dependencies.fetchDeviceStatusRecords(start, end);
-    }
-    if (useE2EFixtures || hasInjectedCoreLoader) {
-      return [];
-    }
-    try {
-      return (await fetchDeviceStatusForDateRangeWithMetadata(start, end))
-        .records;
-    } catch {
-      return [];
-    }
-  };
-
-  const loadBasalSchedule = async (
-    asOfIso: string,
-  ): Promise<readonly DayGraphBasalScheduleEntry[]> => {
-    if (useE2EFixtures) {
-      return [];
-    }
-    if (hasInjectedCoreLoader && dependencies.fetchProfile === undefined) {
-      return [];
-    }
-    const fetchProfile =
-      dependencies.fetchProfile ?? getUserProfileFromNightscout;
-    const extractProfile =
-      dependencies.extractBasalProfile ??
-      ((payload: unknown) =>
-        extractBasalProfileFromNightscoutProfileData(payload as any[]));
-    try {
-      return basalSchedule(extractProfile(await fetchProfile(asOfIso)));
-    } catch {
-      return [];
-    }
-  };
-
   return {
-    async loadDayGraph(period) {
+    async loadDayGraph(period, options) {
       const start = new Date(period.dayStartMs);
       const end = new Date(period.dayEndMs);
-      const [glucoseRange, timelineRange, deviceStatuses, profileSchedule] =
-        await Promise.all([
-          loadGlucoseRange(start, end),
-          loadTimelineRange(period),
-          loadDeviceStatuses(start, end),
-          loadBasalSchedule(start.toISOString()),
-        ]);
-      const freshnessInputs = [glucoseRange.freshness, timelineRange.freshness];
-      const staleInputs = freshnessInputs.filter(
-        (value): value is Extract<NightscoutRangeFreshness, {kind: 'stale'}> =>
-          value.kind === 'stale',
-      );
+      const [glucoseRange, context, suppliedTimeline] = await Promise.all([
+        loadGlucoseRange(start, end),
+        useE2EFixtures
+          ? Promise.resolve(emptyContext(now()))
+          : loadContext({
+              startMs: period.dayStartMs,
+              endMs: period.dayEndMs,
+              ...(options?.forceRefresh ? {forceRefresh: true} : {}),
+            }),
+        dependencies.loadTimelineItems
+          ? dependencies.loadTimelineItems(period)
+          : Promise.resolve(undefined),
+      ]);
+      const freshnessInputs = [glucoseRange.freshness, context.freshness];
       const fetchedAtMs = Math.min(
         ...freshnessInputs.map(value => value.fetchedAtMs),
       );
+      const stale = freshnessInputs.some(value => value.kind === 'stale');
       return {
         glucoseSamples: glucoseRange.records.map((sample, index) => ({
           identity: {
             sourceId,
             recordId:
-              ('_id' in sample && typeof sample._id === 'string'
-                ? sample._id.trim()
-                : '') ||
+              sample._id?.trim() ||
               `unidentified-glucose:${sample.date}:${sample.sgv}:${index}`,
           },
           timestampMs: sample.date,
@@ -594,14 +509,34 @@ export const createNativeDayGraphDataSource = (
             : {direction: sample.direction}),
           ...(sample.device === undefined ? {} : {device: sample.device}),
         })),
-        timelineItems: timelineRange.items,
-        activeLoadSamples: activeLoadSamples(deviceStatuses),
-        insulinEvents: insulinEvents(timelineRange.treatments),
-        basalSchedule: profileSchedule,
-        freshness:
-          staleInputs.length === 0
-            ? {kind: 'fresh', fetchedAtMs}
-            : {kind: 'stale', fetchedAtMs, reason: incompleteReason},
+        timelineItems: suppliedTimeline ?? [
+          ...treatmentItems(context.treatments, sourceId, locale),
+          ...journalItems(dependencies.journal, period, locale),
+        ],
+        activeLoadSamples: context.loadSamples.map(sample => ({
+          timestampMs: sample.timestampMs,
+          ...(sample.iob === undefined ? {} : {iobUnits: sample.iob}),
+          ...(sample.iobBolus === undefined
+            ? {}
+            : {bolusIobUnits: sample.iobBolus}),
+          ...(sample.iobBasal === undefined
+            ? {}
+            : {basalIobUnits: sample.iobBasal}),
+          ...(sample.cob === undefined ? {} : {cobGrams: sample.cob}),
+        })),
+        insulinEvents: insulinEvents(context.insulinData),
+        basalSchedule: basalSchedule(context.basalProfileData),
+        dataAvailability: context.availability,
+        freshness: stale
+          ? {
+              kind: 'stale',
+              fetchedAtMs,
+              reason:
+                locale === 'he'
+                  ? 'חלק מנתוני Nightscout אינם עדכניים או אינם זמינים כרגע.'
+                  : 'Some Nightscout data is out of date or currently unavailable.',
+            }
+          : {kind: 'fresh', fetchedAtMs},
       };
     },
   };

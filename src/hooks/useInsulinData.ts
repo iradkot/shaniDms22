@@ -1,67 +1,103 @@
-import {useCallback, useEffect, useState} from 'react';
-
 import {
-  fetchTreatmentsForDateRangeUncached,
-  getUserProfileFromNightscout,
-} from 'app/api/apiRequests';
-import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
-import {FoodItemDTO} from 'app/types/food.types';
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import {
-  extractBasalProfileFromNightscoutProfileData,
-  filterFoodItemsToRange,
-  filterInsulinDataToRange,
-  mapNightscoutTreatmentsToCarbFoodItems,
-  mapNightscoutTreatmentsToInsulinDataEntries,
-} from 'app/utils/nightscoutTreatments.utils';
+  getNightscoutConfigurationRevision,
+  subscribeNightscoutConfiguration,
+} from 'app/api/shaniNightscoutInstances';
+import {
+  loadInsulinContext,
+  type InsulinContext,
+} from 'app/services/insulin/insulinDataSource';
 
+const unavailable: InsulinContext['availability'] = {
+  treatments: 'unavailable',
+  profile: 'unavailable',
+  deviceStatus: 'unavailable',
+};
+
+/** React facade over the same source used by native charts and AI evidence. */
 export const useInsulinData = (date: Date) => {
-  const [insulinData, setInsulinData] = useState<InsulinDataEntry[]>([]);
-  const [basalProfileData, setBasalProfileData] = useState<BasalProfile>([]);
-  const [carbTreatments, setCarbTreatments] = useState<FoodItemDTO[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const revision = useSyncExternalStore(
+    subscribeNightscoutConfiguration,
+    getNightscoutConfigurationRevision,
+    getNightscoutConfigurationRevision,
+  );
+  const dateMs = date.getTime();
+  const period = useMemo(() => {
+    const start = new Date(dateMs);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    return {startMs: start.getTime(), endMs: end.getTime()};
+  }, [dateMs]);
+  const [context, setContext] = useState<InsulinContext | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const generation = useRef(0);
 
-  const getUpdatedInsulinData = useCallback(async () => {
-    try {
+  useLayoutEffect(() => {
+    generation.current += 1;
+    setContext(null);
+    setError(null);
+    return () => {
+      generation.current += 1;
+    };
+  }, [period, revision]);
+
+  const load = useCallback(
+    async (forceRefresh: boolean) => {
+      if (revision !== getNightscoutConfigurationRevision()) {
+        return;
+      }
+      const request = ++generation.current;
       setIsLoading(true);
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      const [treatments, profileData] = await Promise.all([
-        fetchTreatmentsForDateRangeUncached(
-          new Date(startOfDay.getTime() - 24 * 60 * 60 * 1000),
-          endOfDay,
-        ),
-        getUserProfileFromNightscout(date.toISOString()),
-      ]);
-
-      const nextInsulinData: InsulinDataEntry[] = filterInsulinDataToRange(
-        mapNightscoutTreatmentsToInsulinDataEntries(treatments),
-        startOfDay.getTime(),
-        endOfDay.getTime(),
-      );
-      const nextCarbTreatments: FoodItemDTO[] = filterFoodItemsToRange(
-        mapNightscoutTreatmentsToCarbFoodItems(treatments),
-        startOfDay.getTime(),
-        endOfDay.getTime(),
-      );
-
-      setInsulinData(nextInsulinData);
-      setCarbTreatments(nextCarbTreatments);
-
-      // Extract basal profile from profile data
-      setBasalProfileData(extractBasalProfileFromNightscoutProfileData(profileData));
-    } catch (error) {
-      console.error('Error fetching insulin or basal profile data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [date]);
+      setError(null);
+      try {
+        const next = await loadInsulinContext({...period, forceRefresh});
+        if (
+          request !== generation.current ||
+          revision !== getNightscoutConfigurationRevision()
+        ) {
+          return;
+        }
+        setContext(next);
+        if (Object.values(next.availability).includes('unavailable')) {
+          setError('Some insulin context could not be loaded.');
+        }
+      } catch {
+        if (request === generation.current) {
+          setError('Insulin context could not be loaded.');
+        }
+      } finally {
+        if (request === generation.current) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [period, revision],
+  );
 
   useEffect(() => {
-    getUpdatedInsulinData();
-  }, [getUpdatedInsulinData]);
+    load(false);
+  }, [load]);
+  const getUpdatedInsulinData = useCallback(() => load(true), [load]);
 
-  return {insulinData, basalProfileData, carbTreatments, isLoading, getUpdatedInsulinData};
+  return {
+    insulinData: context?.insulinData ?? [],
+    basalProfileData: context?.basalProfileData ?? [],
+    carbTreatments: context?.carbTreatments ?? [],
+    deviceStatus: context?.deviceStatus ?? [],
+    loadSamples: context?.loadSamples ?? [],
+    availability: context?.availability ?? unavailable,
+    isLoading,
+    error,
+    getUpdatedInsulinData,
+  };
 };

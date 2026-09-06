@@ -2,6 +2,8 @@ import {BgSample} from 'app/types/day_bgs.types';
 import {FoodItemDTO} from 'app/types/food.types';
 import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {TimeInRangePercentages} from 'app/utils/glucose/timeInRange';
+import type {ChartLoadSample} from 'app/utils/chartLoadSeries.utils';
+import type {InsulinContext} from 'app/services/insulin/insulinDataSource';
 
 /** A single meal row enriched with loop context. */
 export interface MealEntry {
@@ -39,6 +41,8 @@ export interface MealEntry {
 /** Chart-ready data scoped to a 5-hour window around a meal. */
 export interface MealChartData {
   bgSamples: BgSample[];
+  loadSamples?: readonly ChartLoadSample[];
+  dataAvailability?: InsulinContext['availability'];
   insulinData: InsulinDataEntry[];
   foodItems: FoodItemDTO[];
   basalProfileData: BasalProfile;

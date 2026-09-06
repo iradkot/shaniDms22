@@ -1,6 +1,7 @@
 import type {
   DayGraphActiveLoadSample,
   DayGraphBasalScheduleEntry,
+  DayGraphDataAvailability,
   DayGraphGlucoseSample,
   DayGraphInsulinEvent,
   DayGraphPeriod,
@@ -33,6 +34,8 @@ export interface DayGraphQuality {
 export interface DayGraphModel {
   readonly period: DayGraphPeriod;
   readonly glucoseSamples: readonly DayGraphGlucoseSample[];
+  /** Independent source readings retain their own time even without CGM data. */
+  readonly activeLoadSamples: readonly DayGraphActiveLoadSample[];
   /** Each segment can be drawn without visually bridging a known data gap. */
   readonly glucoseSegments: readonly (readonly DayGraphGlucoseSample[])[];
   readonly timelineItems: readonly DayGraphTimelineItem[];
@@ -40,6 +43,7 @@ export interface DayGraphModel {
   readonly glucoseSummary: DayGraphGlucoseSummary | undefined;
   readonly insulinEvents: readonly DayGraphInsulinEvent[];
   readonly basalSchedule: readonly DayGraphBasalScheduleEntry[];
+  readonly dataAvailability: DayGraphDataAvailability;
   readonly quality: DayGraphQuality;
 }
 
@@ -51,6 +55,7 @@ export interface BuildDayGraphInput {
   readonly activeLoadSamples?: readonly DayGraphActiveLoadSample[];
   readonly insulinEvents?: readonly DayGraphInsulinEvent[];
   readonly basalSchedule?: readonly DayGraphBasalScheduleEntry[];
+  readonly dataAvailability?: DayGraphDataAvailability;
 }
 
 const isNonEmptyString = (value: string): boolean => value.trim().length > 0;
@@ -175,6 +180,7 @@ const finite = (value: number | undefined): value is number =>
 
 const normalizeLoadSample = (
   sample: DayGraphActiveLoadSample,
+  preserveMissing: boolean,
 ): DayGraphActiveLoadSample | undefined => {
   if (!Number.isFinite(sample.timestampMs)) {
     return undefined;
@@ -191,6 +197,7 @@ const normalizeLoadSample = (
       ? sample.cobGrams
       : undefined;
   if (
+    !preserveMissing &&
     iobUnits === undefined &&
     bolusIobUnits === undefined &&
     basalIobUnits === undefined &&
@@ -209,14 +216,8 @@ const normalizeLoadSample = (
 
 const attachActiveLoad = (
   glucoseSamples: readonly DayGraphGlucoseSample[],
-  activeLoadSamples: readonly DayGraphActiveLoadSample[],
+  loads: readonly DayGraphActiveLoadSample[],
 ): readonly DayGraphGlucoseSample[] => {
-  const loads = activeLoadSamples
-    .map(normalizeLoadSample)
-    .filter(
-      (sample): sample is DayGraphActiveLoadSample => sample !== undefined,
-    )
-    .sort((left, right) => left.timestampMs - right.timestampMs);
   if (loads.length === 0) {
     return glucoseSamples;
   }
@@ -243,8 +244,13 @@ const attachActiveLoad = (
     ) {
       return sample;
     }
+    const withoutPreviousLoad = {...sample};
+    delete withoutPreviousLoad.iobUnits;
+    delete withoutPreviousLoad.bolusIobUnits;
+    delete withoutPreviousLoad.basalIobUnits;
+    delete withoutPreviousLoad.cobGrams;
     return {
-      ...sample,
+      ...withoutPreviousLoad,
       ...(closest.iobUnits === undefined ? {} : {iobUnits: closest.iobUnits}),
       ...(closest.bolusIobUnits === undefined
         ? {}
@@ -323,9 +329,20 @@ export const buildDayGraph = (input: BuildDayGraphInput): DayGraphModel => {
     validGlucoseSample(sample, input.period),
   );
   const glucose = deduplicate(validGlucose);
+  // Older sources may include load facts directly on a glucose record. Those
+  // facts keep that record's timestamp; explicit load history takes precedence.
+  const activeLoadSamples = (input.activeLoadSamples ?? glucose.values)
+    .map(sample =>
+      normalizeLoadSample(sample, input.activeLoadSamples !== undefined),
+    )
+    .filter(
+      (sample): sample is DayGraphActiveLoadSample =>
+        sample !== undefined && inside(sample.timestampMs, input.period),
+    )
+    .sort((left, right) => left.timestampMs - right.timestampMs);
   const sortedGlucose = attachActiveLoad(
     [...glucose.values].sort(compareByTimeAndIdentity),
-    input.activeLoadSamples ?? [],
+    activeLoadSamples,
   );
   const validTimeline = input.timelineItems.filter(item =>
     validTimelineItem(item, input.period),
@@ -348,12 +365,18 @@ export const buildDayGraph = (input: BuildDayGraphInput): DayGraphModel => {
   return {
     period: input.period,
     glucoseSamples: sortedGlucose,
+    activeLoadSamples,
     glucoseSegments: segmented.segments,
     timelineItems: sortedTimeline,
     dataGaps: segmented.gaps,
     glucoseSummary: summarize(sortedGlucose),
     insulinEvents,
     basalSchedule,
+    dataAvailability: input.dataAvailability ?? {
+      treatments: 'available',
+      deviceStatus: 'available',
+      profile: 'available',
+    },
     quality: {
       excludedGlucoseSampleCount:
         input.glucoseSamples.length - validGlucose.length,
