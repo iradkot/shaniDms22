@@ -1,5 +1,5 @@
 import React, {useCallback, useMemo} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {StyleSheet, Text, useWindowDimensions, View} from 'react-native';
 import Svg, {G, Line, Text as SvgText} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
@@ -12,6 +12,7 @@ import {
   buildMiniLoadSegments,
   formatMiniTime,
   formatMiniValue,
+  findMiniLoadSample,
   niceMiniAxis,
   resolveMiniDomain,
   resolveMiniLoadSamples,
@@ -37,6 +38,9 @@ const COPY = {
       'Solid step: temporary / suspended. Dashed step: scheduled profile.',
     range: 'Scale',
     noData: 'No data in this range',
+    noDataShort: 'No data',
+    unavailableShort: 'Unavailable',
+    staleShort: 'No saved data',
     empty: 'No basal, active insulin or active carbs data in this time range.',
     incomplete: 'Some data could not be loaded. Refresh the day to try again.',
   },
@@ -49,12 +53,19 @@ const COPY = {
     basalKey: 'מדרגה רציפה: בזאל זמני / השהיה. מקווקוות: פרופיל מתוכנן.',
     range: 'סולם',
     noData: 'אין נתונים בטווח הזה',
+    noDataShort: 'אין נתונים',
+    unavailableShort: 'לא נטען',
+    staleShort: 'אין מידע שמור',
     empty: 'אין נתוני בזאל, אינסולין פעיל או פחמימות פעילות בטווח הזה.',
     incomplete: 'חלק מהנתונים לא נטענו. אפשר לרענן את היום כדי לנסות שוב.',
   },
 } as const;
 
-/** One time plot; labelled independent scales keep rates, units and grams distinct. */
+/**
+ * One time plot with independent scales for rates, units and grams.
+ * Compact height includes its three-column legend; font scaling grows the
+ * legend while retaining the data plot's height.
+ */
 const MixedMiniChart: React.FC<Props> = props => {
   const {
     testID,
@@ -68,10 +79,12 @@ const MixedMiniChart: React.FC<Props> = props => {
     cursorTimeMs,
     locale = 'en',
     xDomain,
+    compact = false,
   } = props;
   const theme = useTheme();
   const palette = getChartPalette(theme);
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const fontScale = Math.max(1, useWindowDimensions().fontScale);
   const copy = COPY[locale];
   const rtl = locale === 'he';
   const samples = useMemo(
@@ -106,9 +119,27 @@ const MixedMiniChart: React.FC<Props> = props => {
     [basal, iob, cob],
   );
   const series = [
-    {key: 'basal', title: copy.basal, symbol: '┏━', hasData: basal.length > 0},
-    {key: 'iob', title: copy.iob, symbol: '━', hasData: iob.length > 0},
-    {key: 'cob', title: copy.cob, symbol: '┄┄', hasData: cob.length > 0},
+    {
+      key: 'basal',
+      title: copy.basal,
+      shortTitle: copy.basal,
+      symbol: '┏━',
+      hasData: basal.length > 0,
+    },
+    {
+      key: 'iob',
+      title: copy.iob,
+      shortTitle: 'IOB · U',
+      symbol: '━',
+      hasData: iob.length > 0,
+    },
+    {
+      key: 'cob',
+      title: copy.cob,
+      shortTitle: locale === 'he' ? 'פחמימות · g' : 'Carbs · g',
+      symbol: '┄┄',
+      hasData: cob.length > 0,
+    },
   ] as const;
   const hasData = series.some(item => item.hasData);
   const sourceStatuses = {
@@ -122,7 +153,21 @@ const MixedMiniChart: React.FC<Props> = props => {
   const left = props.margin?.left ?? 44;
   const right = props.margin?.right ?? 16;
   const plotWidth = Math.max(1, width - left - right);
-  const svgHeight = Math.max(150, Math.min(240, height));
+  const baseLegendHeight =
+    styles.compactValue.lineHeight * 3 + theme.spacing.xs * 2;
+  const wrapCompactText = compact && fontScale > 1;
+  const compactTextLines = wrapCompactText ? 2 : 1;
+  const compactTextHeight = Math.ceil(
+    styles.compactValue.lineHeight * fontScale * compactTextLines,
+  );
+  const legendHeight =
+    compactTextHeight * 2 +
+    Math.ceil(styles.compactValue.lineHeight * fontScale) +
+    theme.spacing.xs * 2;
+  const compactHeight = Math.max(128, height) + legendHeight - baseLegendHeight;
+  const svgHeight = compact
+    ? compactHeight - legendHeight
+    : Math.max(150, Math.min(240, height));
   const plotHeight = svgHeight - 34;
   const x = useCallback(
     (time: number) =>
@@ -143,23 +188,130 @@ const MixedMiniChart: React.FC<Props> = props => {
     Number.isFinite(cursorTimeMs) &&
     cursorTimeMs >= +domain[0] &&
     cursorTimeMs <= +domain[1];
+  const loadPoints = useMemo(
+    () => ({iob: compact ? iob.flat() : [], cob: compact ? cob.flat() : []}),
+    [compact, iob, cob],
+  );
+  const latestLoadTime = useMemo(
+    () =>
+      compact
+        ? samples.reduce(
+            (latest, sample) =>
+              sample.date >= +domain[0] && sample.date <= +domain[1]
+                ? Math.max(latest, sample.date)
+                : latest,
+            Number.NEGATIVE_INFINITY,
+          )
+        : Number.NEGATIVE_INFINITY,
+    [compact, samples, domain],
+  );
+  const selectedLoad = useMemo(
+    () =>
+      compact &&
+      (cursorTimeMs == null ||
+        (Number.isFinite(cursorTimeMs) &&
+          cursorTimeMs >= +domain[0] &&
+          cursorTimeMs <= +domain[1]))
+        ? findMiniLoadSample(samples, cursorTimeMs ?? latestLoadTime, domain)
+        : null,
+    [compact, samples, cursorTimeMs, latestLoadTime, domain],
+  );
+  const latestBasalTime = useMemo(
+    () =>
+      Math.min(
+        +domain[1],
+        Math.max(
+          +domain[0],
+          ...bgSamples.map(sample => sample.date).filter(Number.isFinite),
+        ),
+      ),
+    [bgSamples, domain],
+  );
+  const selectedBasal = useMemo(() => {
+    if (!compact) {
+      return undefined;
+    }
+    const time = cursorTimeMs ?? latestBasalTime;
+    return basal.find(
+      segment =>
+        time >= segment.startMs &&
+        (time < segment.endMs ||
+          (time === +domain[1] && time === segment.endMs)),
+    );
+  }, [compact, basal, cursorTimeMs, latestBasalTime, domain]);
+  const selectedIob = selectedLoad
+    ? loadPoints.iob.find(point => point.x === selectedLoad.date)?.y
+    : undefined;
+  const selectedCob = selectedLoad
+    ? loadPoints.cob.find(point => point.x === selectedLoad.date)?.y
+    : undefined;
+  const readout = {
+    basal: selectedBasal ? `${formatMiniValue(selectedBasal.rate)} U/hr` : '—',
+    iob: selectedIob == null ? '—' : `${formatMiniValue(selectedIob)} U`,
+    cob: selectedCob == null ? '—' : `${formatMiniValue(selectedCob)} g`,
+  };
   return (
-    <View testID={testID} style={[styles.shell, {width}]}>
-      <Text style={[styles.title, rtl && styles.rtl]}>{copy.title}</Text>
-      <View style={[styles.legend, rtl && styles.rowReverse]}>
+    <View
+      testID={testID}
+      style={[
+        styles.shell,
+        compact && styles.compactShell,
+        {width},
+        compact && hasData ? {height: compactHeight} : undefined,
+      ]}>
+      {!compact ? (
+        <Text style={[styles.title, rtl && styles.rtl]}>{copy.title}</Text>
+      ) : null}
+      <View
+        testID={testID ? `${testID}.scales` : undefined}
+        style={[
+          styles.legend,
+          compact && styles.compactLegend,
+          compact ? {height: legendHeight} : undefined,
+          rtl && styles.rowReverse,
+        ]}>
         {series.map(item => (
-          <View key={item.key} style={styles.scaleCard}>
+          <View
+            key={item.key}
+            style={[styles.scaleCard, compact && styles.compactScaleCard]}>
             <Text
               style={[
                 styles.seriesTitle,
+                compact ? {minHeight: compactTextHeight} : undefined,
                 {color: palette[item.key]},
                 rtl && styles.rtl,
-              ]}>{`${item.symbol} ${item.title}`}</Text>
-            <Text style={[styles.scale, rtl && styles.rtl]}>
+              ]}
+              accessibilityLabel={item.title}
+              {...(compact && !wrapCompactText ? {numberOfLines: 1} : {})}>
+              {compact ? item.shortTitle : `${item.symbol} ${item.title}`}
+            </Text>
+            {compact ? (
+              <Text
+                style={[
+                  styles.compactValue,
+                  {color: palette[item.key], minHeight: compactTextHeight},
+                ]}
+                {...(!wrapCompactText ? {numberOfLines: 1} : {})}>
+                {readout[item.key]}
+              </Text>
+            ) : null}
+            <Text
+              style={[
+                styles.scale,
+                rtl && styles.rtl,
+                compact && styles.compactScale,
+              ]}
+              {...(compact && !wrapCompactText ? {numberOfLines: 1} : {})}>
               {item.hasData
-                ? `${copy.range}: ${axes[item.key].domain
+                ? `${compact ? '' : `${copy.range}: `}${axes[item.key].domain
                     .map(formatMiniValue)
                     .join(' – ')}`
+                : compact
+                ? sourceStatuses[item.key] === 'unavailable'
+                  ? copy.unavailableShort
+                  : sourceStatuses[item.key] === 'stale'
+                  ? copy.staleShort
+                  : copy.noDataShort
                 : emptyMiniChartText(
                     locale,
                     sourceStatuses[item.key],
@@ -171,7 +323,9 @@ const MixedMiniChart: React.FC<Props> = props => {
       </View>
       {hasData ? (
         <>
-          <Text style={[styles.hint, rtl && styles.rtl]}>{copy.scales}</Text>
+          {!compact ? (
+            <Text style={[styles.hint, rtl && styles.rtl]}>{copy.scales}</Text>
+          ) : null}
           <Svg
             width={width}
             height={svgHeight}
@@ -188,6 +342,19 @@ const MixedMiniChart: React.FC<Props> = props => {
                   strokeWidth={1}
                 />
               ))}
+              {compact && axes.iob.domain[0] < 0 && axes.iob.domain[1] > 0 ? (
+                <Line
+                  testID="mixed-iob-zero-reference"
+                  x1={0}
+                  x2={plotWidth}
+                  y1={scales.iob(0)}
+                  y2={scales.iob(0)}
+                  stroke={palette.iob}
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                  opacity={0.5}
+                />
+              ) : null}
               <BasalOverlayMarks
                 segments={basal}
                 x={x}
@@ -238,7 +405,7 @@ const MixedMiniChart: React.FC<Props> = props => {
               ))}
             </G>
           </Svg>
-          {basal.length > 0 ? (
+          {basal.length > 0 && !compact ? (
             <Text style={[styles.hint, rtl && styles.rtl]}>
               {copy.basalKey}
             </Text>
@@ -256,6 +423,31 @@ const MixedMiniChart: React.FC<Props> = props => {
 const createStyles = (theme: ThemeType) =>
   StyleSheet.create({
     shell: {backgroundColor: theme.white, paddingVertical: theme.spacing.sm},
+    compactShell: {paddingVertical: 0},
+    compactLegend: {
+      flexWrap: 'nowrap',
+      gap: 0,
+      paddingHorizontal: theme.spacing.xs,
+      paddingVertical: theme.spacing.xs,
+    },
+    compactScaleCard: {
+      flex: 1,
+      flexBasis: 0,
+      minWidth: 0,
+      padding: 0,
+      paddingHorizontal: theme.spacing.xs,
+      backgroundColor: 'transparent',
+    },
+    compactValue: {
+      fontFamily: theme.fontFamily,
+      fontSize: theme.typography.size.xs,
+      lineHeight: Math.ceil(
+        theme.typography.size.xs * theme.typography.lineHeight.normal,
+      ),
+      fontWeight: '700',
+      writingDirection: 'ltr',
+    },
+    compactScale: {writingDirection: 'ltr'},
     title: {
       color: theme.textColor,
       fontFamily: theme.fontFamily,

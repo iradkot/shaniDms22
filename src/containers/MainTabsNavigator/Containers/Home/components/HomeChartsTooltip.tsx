@@ -1,5 +1,5 @@
-import React, {useMemo} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import React, {useMemo, useState} from 'react';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {
   getChartPalette,
   glucoseChartColor,
@@ -26,6 +26,8 @@ import {
 
 type Props = {
   compact?: boolean;
+  /** Lane readouts stay visible; supplementary selection details can expand. */
+  collapsible?: boolean;
   locale?: 'en' | 'he' | undefined;
   anchorTimeMs: number;
   bgSample: BgSample | null;
@@ -61,6 +63,7 @@ type Props = {
 
 const HomeChartsTooltip: React.FC<Props> = ({
   compact = false,
+  collapsible = false,
   locale,
   anchorTimeMs,
   bgSample,
@@ -80,6 +83,8 @@ const HomeChartsTooltip: React.FC<Props> = ({
   const compactStyles = useMemo(() => createCompactStyles(theme), [theme]);
   const {language: contextLanguage} = useAppLanguage();
   const language = locale ?? contextLanguage;
+  const [expanded, setExpanded] = useState(false);
+  const collapsed = collapsible && !expanded;
 
   const timeText = useMemo(
     () => formatDateToLocaleTimeString(anchorTimeMs),
@@ -207,12 +212,18 @@ const HomeChartsTooltip: React.FC<Props> = ({
     ];
     return (
       <View
-        pointerEvents="none"
+        pointerEvents={collapsible ? 'auto' : 'none'}
         style={[
           compactStyles.panel,
+          collapsible && compactStyles.summaryPanel,
           {backgroundColor: palette.surface, borderColor: palette.grid},
         ]}>
-        <View style={[compactStyles.header, he && compactStyles.reverse]}>
+        <View
+          style={[
+            compactStyles.header,
+            collapsible && compactStyles.summaryHeader,
+            he && compactStyles.reverse,
+          ]}>
           <Text style={[compactStyles.time, {color: palette.text}]}>
             {timeText}
           </Text>
@@ -224,64 +235,84 @@ const HomeChartsTooltip: React.FC<Props> = ({
               <Icon name={bgTrendIcon} size={18} color={bgColor} />
             ) : null}
           </View>
+          {collapsible ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{expanded}}
+              aria-expanded={expanded}
+              accessibilityLabel={
+                he ? 'פרטי הנקודה שנבחרה' : 'Selected point details'
+              }
+              onPress={() => setExpanded(value => !value)}
+              style={compactStyles.detailsButton}
+              testID="chart-inspector-toggle-details">
+              <Text style={[compactStyles.label, {color: palette.text}]}>
+                {he ? 'פרטים' : 'Details'} {expanded ? '⌃' : '⌄'}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
-        <View style={[compactStyles.grid, he && compactStyles.reverse]}>
-          {cells.map(cell => (
-            <View key={cell.key} style={compactStyles.cell}>
-              <Text
-                style={[
-                  compactStyles.label,
-                  {color: palette.mutedText},
-                  he && compactStyles.rtl,
-                ]}
-                numberOfLines={1}>
-                <Text style={{color: cell.color}}>{cell.symbol} </Text>
-                {cell.label}
-              </Text>
-              <Text
-                style={[
-                  compactStyles.value,
-                  {color: palette.text},
-                  he ? compactStyles.alignRight : compactStyles.alignLeft,
-                  /\d/.test(cell.value) || !he
-                    ? compactStyles.ltrFlow
-                    : compactStyles.rtlFlow,
-                ]}
-                testID={`chart-inspector-value-${cell.key}`}
-                numberOfLines={1}>
-                {cell.value}
-              </Text>
+        {!collapsed ? (
+          <>
+            <View style={[compactStyles.grid, he && compactStyles.reverse]}>
+              {cells.map(cell => (
+                <View key={cell.key} style={compactStyles.cell}>
+                  <Text
+                    style={[
+                      compactStyles.label,
+                      {color: palette.mutedText},
+                      he && compactStyles.rtl,
+                    ]}
+                    numberOfLines={1}>
+                    <Text style={{color: cell.color}}>{cell.symbol} </Text>
+                    {cell.label}
+                  </Text>
+                  <Text
+                    style={[
+                      compactStyles.value,
+                      {color: palette.text},
+                      he ? compactStyles.alignRight : compactStyles.alignLeft,
+                      /\d/.test(cell.value) || !he
+                        ? compactStyles.ltrFlow
+                        : compactStyles.rtlFlow,
+                    ]}
+                    testID={`chart-inspector-value-${cell.key}`}
+                    numberOfLines={1}>
+                    {cell.value}
+                  </Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
-        <Text
-          style={[
-            compactStyles.context,
-            {color: palette.mutedText},
-            he && compactStyles.rtl,
-          ]}
-          numberOfLines={1}>
-          {tr(language, 'home.tooltipCarbs')}:{' '}
-          {carbsText === '—' ? noRecord : carbsText}
-        </Text>
-        <Text
-          style={[
-            compactStyles.context,
-            {color: palette.mutedText},
-            he && compactStyles.rtl,
-          ]}
-          numberOfLines={1}>
-          {bolusDetailsText
-            ? `${he ? 'בולוס' : 'Bolus'}: ${bolusDetailsText}`
-            : activeDetailsText ??
-              (bgSample
-                ? `${
-                    he ? 'מדידת סוכר' : 'Glucose reading'
-                  }: ${formatDateToLocaleTimeString(bgSample.date)}`
-                : he
-                ? 'אין מדידת סוכר סמוכה לשעה זו'
-                : 'No glucose reading near this time')}
-        </Text>
+            <Text
+              style={[
+                compactStyles.context,
+                {color: palette.mutedText},
+                he && compactStyles.rtl,
+              ]}
+              numberOfLines={1}>
+              {tr(language, 'home.tooltipCarbs')}:{' '}
+              {carbsText === '—' ? noRecord : carbsText}
+            </Text>
+            <Text
+              style={[
+                compactStyles.context,
+                {color: palette.mutedText},
+                he && compactStyles.rtl,
+              ]}
+              numberOfLines={1}>
+              {bolusDetailsText
+                ? `${he ? 'בולוס' : 'Bolus'}: ${bolusDetailsText}`
+                : activeDetailsText ??
+                  (bgSample
+                    ? `${
+                        he ? 'מדידת סוכר' : 'Glucose reading'
+                      }: ${formatDateToLocaleTimeString(bgSample.date)}`
+                    : he
+                    ? 'אין מדידת סוכר סמוכה לשעה זו'
+                    : 'No glucose reading near this time')}
+            </Text>
+          </>
+        ) : null}
       </View>
     );
   }
@@ -405,6 +436,24 @@ const createCompactStyles = (theme: ThemeType) =>
       padding: theme.spacing.md,
       borderWidth: 1,
       borderRadius: theme.borderRadius,
+    },
+    summaryPanel: {
+      margin: theme.spacing.xs,
+      marginBottom: 0,
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 0,
+    },
+    summaryHeader: {
+      marginBottom: 0,
+      minHeight: 44,
+      flexWrap: 'wrap',
+      columnGap: theme.spacing.xs,
+    },
+    detailsButton: {
+      minHeight: 44,
+      minWidth: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     header: {
       flexDirection: 'row',

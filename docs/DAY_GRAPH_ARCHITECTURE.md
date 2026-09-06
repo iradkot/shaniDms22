@@ -34,6 +34,36 @@ chart-specific theme or read the mutable theme singleton from chart renderers.
   provide their own `ChartGestureRoot` and scroll boundary. Web adapters use
   ordinary views and browser touch events, preserving page scrolling and zoom.
 
+## Phone overview layout
+
+The Day Graph page measures its actual scroll viewport and chart offset. It
+passes the remaining height to `RichDayGraphChart`, excluding the host's
+navigation and safe areas through measurement rather than fixed deductions.
+The chart measures its controls, selection header and insulin block to allocate
+the glucose plot. Fullscreen uses its own measured scroll viewport.
+
+Phone layouts show one compact date bar, a collapsible selection inspector and
+aligned glucose, bolus, basal, IOB and COB lanes. Compact lane height includes
+the native label row and plot; compact overlay height includes all three
+independently labelled scales. All readouts use the inspector's selected time,
+including its initial anchor, and retain the shared missing-data rules.
+
+Summary and meal context follow the overview. Source failures and stale-data
+notices remain visible above it. Expanded details, larger system fonts and very
+short screens may require normal scrolling; never clip data or disable font
+scaling to force a fit. Theme typography and measured lane heights determine
+layout. All series keep their existing data and palette.
+
+`yarn verify:chart-viewport` runs the real product shell and Day Graph module
+with synthetic data. Start `yarn web --host 127.0.0.1 --port 5174` first and use
+the Playwright environment variables described below. The check asserts actual
+initial viewport bounds of all five plots, including visible system insets and
+navigation, at 390×844 and 360×740 in both languages and all four themes. It
+also checks small-screen scrolling, fullscreen, scale alignment, text clipping
+and selected values. Screenshots and measurements are saved under ignored
+`artifacts/chart-viewport`. DOM visibility alone is insufficient: an element
+can be visible while lying below the screen.
+
 ## Rendering and input performance
 
 The native observer retains only the newest pending horizontal position while

@@ -1,6 +1,6 @@
 import React from 'react';
 import {Dimensions, Text, StyleSheet} from 'react-native';
-import Svg, {Line, Rect, Path} from 'react-native-svg';
+import Svg, {Line, Rect, Path, Text as SvgText} from 'react-native-svg';
 import renderer, {act} from 'react-test-renderer';
 import {ThemeProvider} from 'styled-components/native';
 import BasalMiniGraph from 'app/components/charts/BasalMiniGraph/BasalMiniGraph';
@@ -49,6 +49,206 @@ const labels = (tree: renderer.ReactTestRenderer) =>
   tree.root.findAllByType(Text).map(node => node.props.children);
 
 describe('Mobile insulin lane presentation', () => {
+  beforeEach(() => {
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    jest.spyOn(Dimensions, 'get').mockImplementation(name => ({
+      ...(name === 'window' ? window : screen),
+      fontScale: 1,
+    }));
+  });
+  afterEach(() => jest.restoreAllMocks());
+  it.each([
+    ['basal', BasalMiniGraph],
+    ['bolus', BolusMiniGraph],
+    ['iob', ActiveInsulinMiniGraph],
+    ['cob', CobMiniGraph],
+  ] as const)(
+    'fits a populated compact %s lane in its requested height',
+    (_kind, Component) => {
+      const tree = render(
+        <Component
+          {...props}
+          compact
+          height={64}
+          bgSamples={[
+            sample(0, {iob: -0.5, cob: 20}),
+            sample(300000, {iob: 1, cob: 15}),
+          ]}
+          {...{
+            basalProfileData: [{time: '00:00', value: 0.8}],
+            insulinData: [
+              {type: 'bolus' as const, amount: 2, timestamp: stamp(1)},
+            ],
+          }}
+        />,
+      );
+      const svg = tree.root.findByType(Svg);
+      const lane = tree.root
+        .findAllByProps({testID: 'lane'})
+        .find(node => typeof node.type !== 'function')!;
+      expect(StyleSheet.flatten(lane.props.style).height).toBe(64);
+      expect(svg.props.height).toBeGreaterThanOrEqual(44);
+      expect(tree.root.findAllByType(SvgText)).toHaveLength(2);
+      if (_kind === 'bolus') {
+        expect(labels(tree)).toContain('Bolus · U · range total');
+      }
+      if (_kind === 'iob') {
+        expect(
+          labels(tree).some(
+            value => typeof value === 'string' && value.includes('Latest'),
+          ),
+        ).toBe(true);
+      }
+      expect(
+        tree.root
+          .findAllByType(Line)
+          .filter(node => node.props.strokeDasharray === '3 3').length,
+      ).toBe(_kind === 'iob' ? 1 : 0);
+      act(() => tree.unmount());
+    },
+  );
+
+  it('fits the compact overlay and three independent scales in one row', () => {
+    const tree = render(
+      <MixedMiniChart
+        {...props}
+        compact
+        height={140}
+        locale="he"
+        bgSamples={[
+          sample(0, {iob: -0.5, cob: 20}),
+          sample(300000, {iob: 1, cob: 15}),
+        ]}
+        basalProfileData={[{time: '00:00', value: 0.8}]}
+        cursorTimeMs={0}
+      />,
+    );
+    const lane = tree.root
+      .findAllByProps({testID: 'lane'})
+      .find(node => typeof node.type !== 'function')!;
+    expect(StyleSheet.flatten(lane.props.style).height).toBe(140);
+    const legend = tree.root.findByProps({testID: 'lane.scales'});
+    expect(StyleSheet.flatten(legend.props.style).flexWrap).toBe('nowrap');
+    expect(tree.root.findByType(Svg).props.height).toBeGreaterThanOrEqual(75);
+    expect(labels(tree)).toContain('-0.5 U');
+    expect(labels(tree)).toContain('20 g');
+    const scaleLabel = tree.root
+      .findAllByType(Text)
+      .find(
+        node =>
+          typeof node.props.children === 'string' &&
+          node.props.children.includes(' – '),
+      )!;
+    expect(StyleSheet.flatten(scaleLabel.props.style).writingDirection).toBe(
+      'ltr',
+    );
+    expect(
+      tree.root
+        .findAllByType(Line)
+        .filter(node => node.props.testID === 'mixed-iob-zero-reference'),
+    ).toHaveLength(1);
+    act(() => tree.unmount());
+  });
+
+  it('grows compact text space for large fonts without shrinking the data plot', () => {
+    const dimensions = Dimensions.get('window');
+    jest.mocked(Dimensions.get).mockReturnValue({...dimensions, fontScale: 2});
+    const readings = [
+      sample(0, {iob: -0.5, cob: 20}),
+      sample(300000, {iob: 1, cob: 15}),
+    ];
+    const tree = render(
+      <>
+        <ActiveInsulinMiniGraph
+          {...props}
+          compact
+          height={64}
+          bgSamples={readings}
+        />
+        <MixedMiniChart
+          {...props}
+          testID="mixed"
+          compact
+          height={140}
+          bgSamples={readings}
+        />
+      </>,
+    );
+    const lane = tree.root
+      .findAllByProps({testID: 'lane'})
+      .find(node => typeof node.type !== 'function')!;
+    expect(StyleSheet.flatten(lane.props.style).height).toBeGreaterThan(64);
+    expect(
+      tree.root.findAllByType(Svg)[0]!.props.height,
+    ).toBeGreaterThanOrEqual(44);
+    const mixed = tree.root
+      .findAllByProps({testID: 'mixed'})
+      .find(node => typeof node.type !== 'function')!;
+    expect(StyleSheet.flatten(mixed.props.style).height).toBeGreaterThan(140);
+    expect(
+      tree.root.findAllByType(Svg)[1]!.props.height,
+    ).toBeGreaterThanOrEqual(75);
+    act(() => tree.unmount());
+  });
+
+  it('keeps an unavailable compact lane explicit and smaller than a populated lane', () => {
+    const tree = render(
+      <ActiveInsulinMiniGraph
+        {...props}
+        compact
+        height={64}
+        dataStatus="unavailable"
+      />,
+    );
+    expect(labels(tree)).toContain('Could not load this data');
+    expect(tree.root.findAllByType(Svg)).toHaveLength(0);
+    const lane = tree.root
+      .findAllByProps({testID: 'lane'})
+      .find(node => typeof node.type !== 'function')!;
+    expect(StyleSheet.flatten(lane.props.style).minHeight).toBeLessThan(64);
+    act(() => tree.unmount());
+  });
+
+  it('updates compact overlay readouts without redrawing its source paths or carrying readings outside the range', () => {
+    const readings = [
+      sample(0, {iob: -0.5, cob: 20}),
+      sample(300000, {iob: 1, cob: 15}),
+    ];
+    const paths = jest.spyOn(Path.prototype, 'render');
+    const chart = (time: number) => (
+      <MixedMiniChart
+        {...props}
+        compact
+        height={140}
+        bgSamples={readings}
+        cursorTimeMs={time}
+      />
+    );
+    const tree = render(chart(0));
+    const initialPaths = paths.mock.calls.length;
+    for (let frame = 1; frame <= 60; frame++) {
+      act(() =>
+        tree.update(
+          <ThemeProvider theme={theme}>{chart(frame * 5000)}</ThemeProvider>,
+        ),
+      );
+    }
+    expect(paths.mock.calls.length).toBe(initialPaths);
+    expect(labels(tree)).toContain('1 U');
+    expect(labels(tree)).toContain('15 g');
+    for (const time of [-1, 20 * 60000]) {
+      act(() =>
+        tree.update(<ThemeProvider theme={theme}>{chart(time)}</ThemeProvider>),
+      );
+      expect(labels(tree)).not.toContain('1 U');
+      expect(labels(tree)).not.toContain('-0.5 U');
+      expect(labels(tree)).not.toContain('15 g');
+      expect(labels(tree)).not.toContain('20 g');
+    }
+    act(() => tree.unmount());
+  });
+
   it.each([
     ['Basal', BasalMiniGraph, 'Basal · U/hr', 'No basal data'],
     [

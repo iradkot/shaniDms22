@@ -1,5 +1,5 @@
 import type {ChartMargin} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
-import type {GestureResponderEvent} from 'react-native';
+import type {GestureResponderEvent, LayoutChangeEvent} from 'react-native';
 import type {BgSample} from 'app/types/day_bgs.types';
 import type {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
@@ -51,6 +51,10 @@ export type StackedHomeChartsProps = {
    * Height (px) of each mini chart (basal + active insulin).
    */
   miniChartHeight: number;
+  /** Compact overview keeps every series visible; expanded details stay available. */
+  compact?: boolean;
+  onHeaderLayout?: ((event: LayoutChangeEvent) => void) | undefined;
+  onInsulinLayout?: ((event: LayoutChangeEvent) => void) | undefined;
 
   /**
    * Optional override for the x-axis time domain.

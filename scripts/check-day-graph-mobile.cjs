@@ -75,10 +75,20 @@ async function assertOverlay(page, {hasBasal = true} = {}) {
       `Overlay must label ${unit.trim()} separately`,
     );
   }
-  assert(
-    labels.includes('לכל סדרה סולם משלה'),
-    'Overlay must explain the independent scales',
+  const scales = overlay
+    .getByTestId('day-graph-rich-chart.mixed.scales')
+    .locator(':scope > div');
+  assert.equal(
+    await scales.count(),
+    3,
+    'Overlay must expose three separate scales',
   );
+  for (const [index, unit] of ['U/hr', ' U', ' g'].entries()) {
+    assert(
+      (await scales.nth(index).innerText()).includes(unit),
+      'Each overlay scale must identify its own unit',
+    );
+  }
   return overlay;
 }
 
@@ -105,11 +115,21 @@ async function tapPlot(page, cdp, plot, fraction, expectedMinutes) {
     'All plots must inspect the same touched time',
   );
   const values = {};
+  const detailsToggle = page.getByTestId('chart-inspector-toggle-details');
+  const expandDetails =
+    (await detailsToggle.count()) > 0 &&
+    (await detailsToggle.getAttribute('aria-expanded')) !== 'true';
+  if (expandDetails) {
+    await detailsToggle.click();
+  }
   for (const key of ['iob', 'cob']) {
     values[key] = await page
       .getByTestId(`chart-inspector-value-${key}`)
       .innerText();
     assert(/\d/.test(values[key]), `Selected ${key} must show an actual value`);
+  }
+  if (expandDetails) {
+    await detailsToggle.click();
   }
   return values;
 }
@@ -399,7 +419,13 @@ async function run() {
         'Fullscreen must inspect the same source values',
       );
       if (width < 768) {
+        // The compact fullscreen overview now fits at normal phone heights.
+        // Exercise simultaneous scrolling in a short viewport where it is needed.
+        await page.setViewportSize({width, height: 500});
+        await page.waitForTimeout(100);
         await scrollAndInspectPlot(page, cdp, overlay.locator('svg'));
+        await page.setViewportSize({width, height: 844});
+        await page.waitForTimeout(100);
       }
       assert.equal(
         await page

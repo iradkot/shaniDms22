@@ -107,7 +107,13 @@ const BolusMiniGraph: React.FC<Props> = props => {
   return (
     <MiniChartLane
       {...props}
-      title={locale === 'he' ? 'בולוס · U' : 'Bolus · U'}
+      title={`${locale === 'he' ? 'בולוס · U' : 'Bolus · U'}${
+        props.compact && cursorTimeMs == null
+          ? locale === 'he'
+            ? ' · סה״כ בטווח'
+            : ' · range total'
+          : ''
+      }`}
       color={palette.bolus}
       emptyText={
         locale === 'he'

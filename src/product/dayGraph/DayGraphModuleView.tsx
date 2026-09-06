@@ -1,12 +1,15 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
-import type {ScrollView} from 'react-native';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import type {LayoutChangeEvent, ScrollView} from 'react-native';
 import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import {useTheme} from 'styled-components/native';
+import type {ThemeType} from '../../types/theme';
 import type {
   DayGraphDataSource,
   DayGraphModel,
@@ -28,6 +31,7 @@ import {useRefreshingNow} from '../time';
 
 const MINUTE_MS = 60 * 1000;
 const DEFAULT_SAMPLE_INTERVAL_MS = 5 * MINUTE_MS;
+const PHONE_VIEWPORT_MAX_WIDTH = 768;
 
 export type DayGraphInitialFocus = Extract<
   DestinationFocus,
@@ -52,6 +56,7 @@ const COPY = {
     previous: 'Previous day',
     next: 'Next day',
     today: 'Today',
+    showToday: 'Show today',
     loading: 'Loading this day…',
     error: 'This day could not be loaded.',
     retry: 'Try again',
@@ -93,6 +98,7 @@ const COPY = {
     previous: 'היום הקודם',
     next: 'היום הבא',
     today: 'היום',
+    showToday: 'הצגת היום',
     loading: 'טוען את היום…',
     error: 'לא הצלחנו לטעון את היום הזה.',
     retry: 'ניסיון נוסף',
@@ -164,6 +170,16 @@ const formatDay = (timestampMs: number, locale: DestinationLocale): string =>
     day: 'numeric',
     month: 'long',
     year: 'numeric',
+  }).format(new Date(timestampMs));
+
+const formatCompactDay = (
+  timestampMs: number,
+  locale: DestinationLocale,
+): string =>
+  new Intl.DateTimeFormat(locale === 'he' ? 'he-IL' : 'en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
   }).format(new Date(timestampMs));
 
 const formatTime = (timestampMs: number, locale: DestinationLocale): string =>
@@ -316,6 +332,9 @@ export const DayGraphModuleView = ({
 }: DayGraphModuleViewProps) => {
   const copy = COPY[locale];
   const rtl = locale === 'he';
+  const theme = useTheme() as ThemeType;
+  const phoneStyles = useMemo(() => createPhoneStyles(theme), [theme]);
+  const phone = useWindowDimensions().width < PHONE_VIEWPORT_MAX_WIDTH;
   const currentTimeMs = useRefreshingNow({now});
   const todayStartMs = startOfLocalDay(currentTimeMs);
   const initialDayStartMs = validInitialDay(initialFocus, now);
@@ -325,7 +344,38 @@ export const DayGraphModuleView = ({
     number | undefined
   >(initialFocus?.atMs);
   const pageRef = useRef<ScrollView>(null);
-  const chartTop = useRef(0);
+  const chartTop = useRef<number | undefined>(undefined);
+  const measuredPageHeight = useRef<number | undefined>(undefined);
+  const [pageViewportHeight, setPageViewportHeight] = useState<number>();
+  const [chartTopInPage, setChartTopInPage] = useState<number>();
+  const handlePageLayout = useCallback((event: LayoutChangeEvent) => {
+    const height = event.nativeEvent.layout.height;
+    if (!Number.isFinite(height) || height <= 0) {
+      return;
+    }
+    const roundedHeight = Math.round(height);
+    if (measuredPageHeight.current === roundedHeight) {
+      return;
+    }
+    measuredPageHeight.current = roundedHeight;
+    setPageViewportHeight(roundedHeight);
+  }, []);
+  const handleChartLayout = useCallback((event: LayoutChangeEvent) => {
+    const top = event.nativeEvent.layout.y;
+    if (!Number.isFinite(top) || top < 0) {
+      return;
+    }
+    const roundedTop = Math.round(top);
+    if (chartTop.current === roundedTop) {
+      return;
+    }
+    chartTop.current = roundedTop;
+    setChartTopInPage(roundedTop);
+  }, []);
+  const availableChartHeight =
+    phone && pageViewportHeight !== undefined && chartTopInPage !== undefined
+      ? Math.max(0, pageViewportHeight - chartTopInPage - theme.spacing.sm)
+      : undefined;
   const period = useMemo(
     () => periodForLocalDay(selectedDayStartMs),
     [selectedDayStartMs],
@@ -376,77 +426,8 @@ export const DayGraphModuleView = ({
     !hasUnavailableChartData &&
     model?.timelineItems.length === 0;
 
-  return (
-    <ProductPage
-      scrollRef={pageRef}
-      locale={locale}
-      subtitle={copy.subtitle}
-      testID="day-graph-module-view"
-      title={copy.title}>
-      <Text style={[styles.selectedDate, rtl && styles.rtlText]}>
-        {formatDay(selectedDayStartMs, locale)}
-      </Text>
-      <View style={[styles.controls, rtl && styles.rowReverse]}>
-        <Pressable
-          accessibilityLabel={copy.previous}
-          accessibilityRole="button"
-          onPress={() =>
-            setSelectedDayStartMs(value => moveLocalDays(value, -1))
-          }
-          style={({pressed}) => [styles.dayControl, pressed && styles.pressed]}
-          testID="day-graph-previous">
-          <Text style={styles.dayControlText}>
-            {rtl ? '‹' : '‹'} {copy.previous}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setSelectedDayStartMs(todayStartMs)}
-          style={({pressed}) => [
-            styles.todayControl,
-            pressed && styles.pressed,
-          ]}
-          testID="day-graph-today">
-          <Text style={styles.todayControlText}>{copy.today}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel={copy.next}
-          accessibilityRole="button"
-          accessibilityState={{disabled: nextDisabled}}
-          disabled={nextDisabled}
-          onPress={() =>
-            setSelectedDayStartMs(value => moveLocalDays(value, 1))
-          }
-          style={({pressed}) => [
-            styles.dayControl,
-            nextDisabled && styles.disabled,
-            pressed && styles.pressed,
-          ]}
-          testID="day-graph-next">
-          <Text style={styles.dayControlText}>{copy.next} ›</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          disabled={
-            state.kind === 'loading' ||
-            (state.kind === 'ready' && state.refreshing)
-          }
-          onPress={refresh}
-          style={styles.dayControl}
-          testID="day-graph-refresh">
-          <Text style={styles.dayControlText}>
-            {state.kind === 'ready' && state.refreshing
-              ? copy.refreshing
-              : copy.refresh}
-          </Text>
-        </Pressable>
-      </View>
-      {state.kind === 'ready' && state.refreshFailed ? (
-        <Text style={styles.staleDetail} testID="day-graph-refresh-error">
-          {copy.refreshFailed}
-        </Text>
-      ) : null}
-
+  const preMealContent = (
+    <>
       {preMealAssistance?.settings.enabled &&
       preMealAssistance.intentActive === false &&
       preMealAssistance.onStartIntent &&
@@ -483,6 +464,224 @@ export const DayGraphModuleView = ({
           runtime={preMealAssistance}
         />
       ) : null}
+    </>
+  );
+
+  const summaryContent = model ? (
+    <View
+      accessible
+      accessibilityLabel={accessibilitySummary(model, locale)}
+      style={phone ? phoneStyles.summaryCard : styles.summaryCard}
+      testID="day-graph-accessible-summary">
+      <Text
+        style={[
+          phone ? phoneStyles.detailText : styles.summaryText,
+          rtl && styles.rtlText,
+        ]}>
+        {accessibilitySummary(model, locale)}
+      </Text>
+    </View>
+  ) : null;
+
+  const graphContent = model ? (
+    <>
+      {model.glucoseSamples.length === 0 ? (
+        <View
+          style={phone ? phoneStyles.noGlucose : styles.subtleCard}
+          testID="day-graph-no-glucose">
+          <Text
+            style={[
+              phone ? phoneStyles.statusText : styles.stateText,
+              rtl && styles.rtlText,
+            ]}>
+            {copy.noGlucose}
+          </Text>
+        </View>
+      ) : null}
+      <View onLayout={handleChartLayout} testID="day-graph-chart-frame">
+        {hasChartData || hasUnavailableChartData ? (
+          <View testID="day-graph-glucose-chart">
+            <RichDayGraphChart
+              locale={locale}
+              model={model}
+              selectedTimestampMs={selectedTimestampMs}
+              {...(availableChartHeight === undefined
+                ? {}
+                : {availableHeight: availableChartHeight})}
+              {...(chartPreferences === undefined
+                ? {}
+                : {preferences: chartPreferences})}
+            />
+          </View>
+        ) : null}
+      </View>
+      {model.dataGaps.length > 0 ? (
+        <View
+          style={phone ? phoneStyles.summaryCard : styles.gapCard}
+          testID="day-graph-data-gaps">
+          <Text
+            style={[
+              phone ? phoneStyles.detailTitle : styles.gapTitle,
+              rtl && styles.rtlText,
+            ]}>
+            {model.dataGaps.length}{' '}
+            {model.dataGaps.length === 1 ? copy.dataGap : copy.dataGaps}
+          </Text>
+          <Text
+            style={[
+              phone ? phoneStyles.detailText : styles.gapDetail,
+              rtl && styles.rtlText,
+            ]}>
+            {copy.gapExplanation}
+          </Text>
+        </View>
+      ) : null}
+    </>
+  ) : null;
+
+  return (
+    <ProductPage
+      scrollRef={pageRef}
+      compact={phone}
+      onLayout={handlePageLayout}
+      style={phone && phoneStyles.page}
+      {...(phone ? {header: null} : {})}
+      locale={locale}
+      subtitle={copy.subtitle}
+      testID="day-graph-module-view"
+      title={copy.title}>
+      {!phone ? (
+        <Text
+          style={[styles.selectedDate, rtl && styles.rtlText]}
+          testID="day-graph-selected-date">
+          {formatDay(selectedDayStartMs, locale)}
+        </Text>
+      ) : null}
+      <View
+        style={[
+          phone ? phoneStyles.controls : styles.controls,
+          rtl && styles.rowReverse,
+        ]}
+        testID="day-graph-day-controls">
+        <Pressable
+          accessibilityLabel={copy.previous}
+          accessibilityRole="button"
+          onPress={() =>
+            setSelectedDayStartMs(value => moveLocalDays(value, -1))
+          }
+          style={({pressed}) => [
+            phone ? phoneStyles.iconControl : styles.dayControl,
+            pressed && styles.pressed,
+          ]}
+          testID="day-graph-previous">
+          <Text style={phone ? phoneStyles.iconText : styles.dayControlText}>
+            {phone ? (rtl ? '›' : '‹') : `‹ ${copy.previous}`}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          {...(phone
+            ? {
+                accessibilityLabel: `${copy.title}: ${formatDay(
+                  selectedDayStartMs,
+                  locale,
+                )}`,
+                accessibilityHint: copy.showToday,
+              }
+            : {})}
+          onPress={() => setSelectedDayStartMs(todayStartMs)}
+          style={({pressed}) => [
+            phone ? phoneStyles.todayControl : styles.todayControl,
+            pressed && styles.pressed,
+          ]}
+          testID="day-graph-today">
+          {phone ? (
+            <>
+              <View
+                style={[phoneStyles.todayTitleRow, rtl && styles.rowReverse]}
+                testID="day-graph-phone-heading">
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={1}
+                  style={phoneStyles.todayTitle}>
+                  {copy.title}
+                </Text>
+                <Text
+                  style={phoneStyles.todayAction}>{` · ${copy.today}`}</Text>
+              </View>
+              <Text
+                accessibilityLabel={formatDay(selectedDayStartMs, locale)}
+                numberOfLines={1}
+                style={phoneStyles.todayDate}
+                testID="day-graph-selected-date">
+                {formatCompactDay(selectedDayStartMs, locale)}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.todayControlText}>{copy.today}</Text>
+          )}
+        </Pressable>
+        <Pressable
+          accessibilityLabel={copy.next}
+          accessibilityRole="button"
+          accessibilityState={{disabled: nextDisabled}}
+          disabled={nextDisabled}
+          onPress={() =>
+            setSelectedDayStartMs(value => moveLocalDays(value, 1))
+          }
+          style={({pressed}) => [
+            phone ? phoneStyles.iconControl : styles.dayControl,
+            nextDisabled && styles.disabled,
+            pressed && styles.pressed,
+          ]}
+          testID="day-graph-next">
+          <Text style={phone ? phoneStyles.iconText : styles.dayControlText}>
+            {phone ? (rtl ? '‹' : '›') : `${copy.next} ›`}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            state.kind === 'ready' && state.refreshing
+              ? copy.refreshing
+              : copy.refresh
+          }
+          accessibilityState={{
+            disabled:
+              state.kind === 'loading' ||
+              (state.kind === 'ready' && state.refreshing),
+            busy: state.kind === 'ready' && state.refreshing,
+          }}
+          disabled={
+            state.kind === 'loading' ||
+            (state.kind === 'ready' && state.refreshing)
+          }
+          onPress={refresh}
+          style={phone ? phoneStyles.iconControl : styles.dayControl}
+          testID="day-graph-refresh">
+          {phone && state.kind === 'ready' && state.refreshing ? (
+            <ActivityIndicator color={theme.textColor} size="small" />
+          ) : (
+            <Text style={phone ? phoneStyles.iconText : styles.dayControlText}>
+              {phone
+                ? '↻'
+                : state.kind === 'ready' && state.refreshing
+                ? copy.refreshing
+                : copy.refresh}
+            </Text>
+          )}
+        </Pressable>
+      </View>
+      {state.kind === 'ready' && state.refreshFailed ? (
+        <Text
+          accessibilityRole="alert"
+          style={phone ? phoneStyles.statusText : styles.staleDetail}
+          testID="day-graph-refresh-error">
+          {copy.refreshFailed}
+        </Text>
+      ) : null}
+
+      {!phone ? preMealContent : null}
 
       {state.kind === 'loading' ? (
         <View style={styles.stateCard} testID="day-graph-loading">
@@ -516,11 +715,21 @@ export const DayGraphModuleView = ({
       ) : state.kind === 'ready' && model ? (
         <>
           {state.snapshot.freshness.kind === 'stale' ? (
-            <View style={styles.staleCard} testID="day-graph-stale">
-              <Text style={[styles.staleTitle, rtl && styles.rtlText]}>
+            <View
+              style={phone ? phoneStyles.staleCard : styles.staleCard}
+              testID="day-graph-stale">
+              <Text
+                style={[
+                  phone ? phoneStyles.detailTitle : styles.staleTitle,
+                  rtl && styles.rtlText,
+                ]}>
                 {copy.stale}
               </Text>
-              <Text style={[styles.staleDetail, rtl && styles.rtlText]}>
+              <Text
+                style={[
+                  phone ? phoneStyles.statusText : styles.staleDetail,
+                  rtl && styles.rtlText,
+                ]}>
                 {state.snapshot.freshness.reason ??
                   `${copy.staleAt}: ${formatTime(
                     state.snapshot.freshness.fetchedAtMs,
@@ -530,55 +739,28 @@ export const DayGraphModuleView = ({
             </View>
           ) : null}
 
-          <View
-            accessible
-            accessibilityLabel={accessibilitySummary(model, locale)}
-            style={styles.summaryCard}
-            testID="day-graph-accessible-summary">
-            <Text style={[styles.summaryText, rtl && styles.rtlText]}>
-              {accessibilitySummary(model, locale)}
-            </Text>
-          </View>
-
-          <View
-            onLayout={event => {
-              chartTop.current = event.nativeEvent.layout.y;
-            }}>
+          {!phone ? summaryContent : null}
+          {phone ? (
+            graphContent
+          ) : (
             <ProductSection locale={locale} title={copy.graph}>
-              {model.glucoseSamples.length === 0 ? (
-                <View style={styles.subtleCard} testID="day-graph-no-glucose">
-                  <Text style={[styles.stateText, rtl && styles.rtlText]}>
-                    {copy.noGlucose}
-                  </Text>
-                </View>
-              ) : null}
-              {hasChartData || hasUnavailableChartData ? (
-                <View testID="day-graph-glucose-chart">
-                  <RichDayGraphChart
-                    locale={locale}
-                    model={model}
-                    selectedTimestampMs={selectedTimestampMs}
-                    {...(chartPreferences === undefined
-                      ? {}
-                      : {preferences: chartPreferences})}
-                  />
-                </View>
-              ) : null}
-              {model.dataGaps.length > 0 ? (
-                <View style={styles.gapCard} testID="day-graph-data-gaps">
-                  <Text style={[styles.gapTitle, rtl && styles.rtlText]}>
-                    {model.dataGaps.length}{' '}
-                    {model.dataGaps.length === 1 ? copy.dataGap : copy.dataGaps}
-                  </Text>
-                  <Text style={[styles.gapDetail, rtl && styles.rtlText]}>
-                    {copy.gapExplanation}
-                  </Text>
-                </View>
-              ) : null}
+              {graphContent}
             </ProductSection>
-          </View>
+          )}
+          {phone ? summaryContent : null}
 
-          <ProductSection locale={locale} title={copy.timeline}>
+          {phone ? (
+            <Text
+              accessibilityRole="header"
+              style={[phoneStyles.sectionTitle, rtl && styles.rtlText]}>
+              {copy.timeline}
+            </Text>
+          ) : (
+            <ProductSection locale={locale} title={copy.timeline}>
+              {null}
+            </ProductSection>
+          )}
+          <>
             {model.timelineItems.length === 0 ? (
               <View style={styles.subtleCard} testID="day-graph-no-timeline">
                 <Text style={[styles.stateText, rtl && styles.rtlText]}>
@@ -599,7 +781,7 @@ export const DayGraphModuleView = ({
                     onFocus={() => {
                       setSelectedTimestampMs(item.timestampMs);
                       pageRef.current?.scrollTo({
-                        y: chartTop.current,
+                        y: chartTop.current ?? 0,
                         animated: true,
                       });
                     }}
@@ -614,12 +796,90 @@ export const DayGraphModuleView = ({
                 ))}
               </View>
             )}
-          </ProductSection>
+          </>
         </>
       ) : null}
+      {phone ? preMealContent : null}
     </ProductPage>
   );
 };
+
+const createPhoneStyles = (theme: ThemeType) =>
+  StyleSheet.create({
+    page: {backgroundColor: theme.backgroundColor},
+    controls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+      marginBottom: theme.spacing.xs,
+    },
+    iconControl: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 44,
+      minHeight: 44,
+      borderWidth: 1,
+      borderColor: theme.borderColor,
+      borderRadius: theme.borderRadius,
+    },
+    iconText: {color: theme.textColor, fontSize: 26, lineHeight: 30},
+    todayControl: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      flex: 1,
+      minHeight: 44,
+      backgroundColor: theme.buttonBackgroundColor,
+      borderRadius: theme.borderRadius,
+    },
+    todayTitleRow: {flexDirection: 'row', alignItems: 'center'},
+    todayTitle: {
+      color: theme.buttonTextColor,
+      fontSize: theme.typography.size.xs,
+      lineHeight: Math.ceil(theme.typography.size.xs * 1.35),
+      fontWeight: '700',
+    },
+    todayAction: {
+      color: theme.buttonTextColor,
+      fontSize: theme.typography.size.xs,
+      lineHeight: Math.ceil(theme.typography.size.xs * 1.35),
+    },
+    todayDate: {
+      color: theme.buttonTextColor,
+      fontSize: theme.typography.size.xs,
+      lineHeight: Math.ceil(theme.typography.size.xs * 1.35),
+    },
+    staleCard: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+      paddingVertical: theme.spacing.xs,
+    },
+    statusText: {color: theme.textColor, fontSize: 12, lineHeight: 17},
+    noGlucose: {paddingVertical: theme.spacing.xs},
+    summaryCard: {
+      borderColor: theme.borderColor,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius,
+      padding: theme.spacing.sm,
+      marginTop: theme.spacing.sm,
+    },
+    detailTitle: {
+      color: theme.textColor,
+      fontSize: 12,
+      lineHeight: 17,
+      fontWeight: '700',
+    },
+    sectionTitle: {
+      color: theme.textColor,
+      fontSize: 18,
+      lineHeight: 24,
+      fontWeight: '700',
+      marginTop: theme.spacing.lg,
+      marginBottom: theme.spacing.sm,
+    },
+    detailText: {color: theme.textColor, fontSize: 12, lineHeight: 18},
+  });
 
 const styles = StyleSheet.create({
   rowReverse: {flexDirection: 'row-reverse'},

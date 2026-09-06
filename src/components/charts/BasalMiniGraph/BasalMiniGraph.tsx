@@ -118,7 +118,13 @@ const BasalMiniGraph: React.FC<Props> = props => {
   return (
     <MiniChartLane
       {...props}
-      title={locale === 'he' ? 'בזאל · U/hr' : 'Basal · U/hr'}
+      title={`${locale === 'he' ? 'בזאל · U/hr' : 'Basal · U/hr'}${
+        props.compact && current
+          ? ` · ${source}${
+              cursorTimeMs == null ? ` · ${formatMiniTime(readoutMs)}` : ''
+            }`
+          : ''
+      }`}
       color={palette.basal}
       emptyText={locale === 'he' ? 'אין נתוני בזאל' : 'No basal data'}
       hasData={segments.length > 0}

@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {
   Modal,
   Pressable,
@@ -24,6 +24,8 @@ import {useDayGraphView} from './useDayGraphView';
 import {DayGraphSourceStatus} from './DayGraphSourceStatus';
 import {ChartScrollView} from '../../components/charts/interaction/ChartScrollView';
 import {ChartGestureRoot} from '../../components/charts/interaction/ChartGestureRoot';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import {E2E_TEST_IDS} from '../../constants/E2E_TEST_IDS';
 
 const COPY = {
   en: {
@@ -42,6 +44,7 @@ const COPY = {
     earlier: 'Earlier hours',
     later: 'Later hours',
     fullScreenTitle: 'Day graph',
+    fullScreen: 'Full screen',
     close: 'Back to day',
     save: 'Remember this view',
     saving: 'Saving on this device…',
@@ -67,6 +70,7 @@ const COPY = {
     earlier: 'שעות קודמות',
     later: 'שעות הבאות',
     fullScreenTitle: 'גרף יומי',
+    fullScreen: 'מסך מלא',
     close: 'חזרה ליום',
     save: 'שמירת התצוגה כברירת מחדל',
     saving: 'שומר במכשיר…',
@@ -83,6 +87,8 @@ export interface RichDayGraphChartProps {
   readonly model: DayGraphModel;
   readonly selectedTimestampMs?: number | undefined;
   readonly preferences?: DayGraphChartPreferencesRuntime;
+  /** Actual space left in the host scroll viewport, excluding its chrome. */
+  readonly availableHeight?: number;
 }
 
 export const RichDayGraphChart = ({
@@ -90,6 +96,7 @@ export const RichDayGraphChart = ({
   model,
   selectedTimestampMs,
   preferences,
+  availableHeight,
 }: RichDayGraphChartProps) => {
   const theme = useTheme() as ThemeType;
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -114,6 +121,13 @@ export const RichDayGraphChart = ({
   const [measuredWidth, setMeasuredWidth] = useState(initialWidth);
   const [fullscreenWidth, setFullscreenWidth] = useState(viewport.width);
   const [fullscreen, setFullscreen] = useState(false);
+  const [fullscreenHeight, setFullscreenHeight] = useState(viewport.height);
+  const [controlsHeight, setControlsHeight] = useState(96);
+  const [stackHeaderHeight, setStackHeaderHeight] = useState(74);
+  const [insulinLayout, setInsulinLayout] = useState<{
+    mode: string;
+    height: number;
+  }>();
   const chart = useMemo(() => buildDayGraphChartPresentation(model), [model]);
   const dayStartMs = model.period.dayStartMs;
   const dayEndMs = model.period.dayEndMs;
@@ -154,6 +168,51 @@ export const RichDayGraphChart = ({
     Math.floor(fullscreen ? fullscreenWidth : measuredWidth) - 2,
   );
   const wide = chartWidth >= 720;
+  const compact = !wide || fullscreen;
+  const heightBudget = fullscreen
+    ? fullscreenHeight
+    : availableHeight ?? viewport.height - 160;
+  const miniHeight = 64;
+  const insulinHeight =
+    insulinLayout?.mode === mode
+      ? insulinLayout.height
+      : mode === 'separate'
+      ? 4 * miniHeight
+      : miniHeight + 144;
+  const measureHeader = useCallback((event: LayoutChangeEvent) => {
+    const height = Math.ceil(event.nativeEvent.layout.height);
+    if (Number.isFinite(height) && height > 0) {
+      setStackHeaderHeight(current => (current === height ? current : height));
+    }
+  }, []);
+  const measureInsulin = useCallback(
+    (event: LayoutChangeEvent) => {
+      const height = Math.ceil(event.nativeEvent.layout.height);
+      if (Number.isFinite(height) && height > 0) {
+        setInsulinLayout(current =>
+          current?.mode === mode && current.height === height
+            ? current
+            : {mode, height},
+        );
+      }
+    },
+    [mode],
+  );
+  // Keep a readable floor and allow normal scrolling on short screens or large
+  // system fonts. The measured host already excludes navigation and safe areas.
+  const compactCgmHeight = Math.round(
+    Math.max(
+      120,
+      Math.min(
+        210,
+        heightBudget -
+          controlsHeight -
+          stackHeaderHeight -
+          insulinHeight -
+          theme.spacing.xs,
+      ),
+    ),
+  );
   const availability = [
     {key: 'glucose', label: copy.glucose, visible: chart.bgSamples.length > 0},
     {key: 'boluses', label: copy.boluses, visible: chart.availability.boluses},
@@ -203,16 +262,24 @@ export const RichDayGraphChart = ({
       ) : null}
     </View>
   ) : null;
-  const compact = fullscreen && viewport.width >= 600;
   const content = (
     <View
       onLayout={onLayout}
       style={styles.shell}
       testID="day-graph-rich-chart">
       <View
+        onLayout={event => {
+          const height = Math.ceil(event.nativeEvent.layout.height);
+          if (Number.isFinite(height) && height > 0) {
+            setControlsHeight(current =>
+              current === height ? current : height,
+            );
+          }
+        }}
+        testID="day-graph-chart-controls"
         style={[
-          compact && styles.compactControls,
-          compact && rtl && styles.rowReverse,
+          wide && fullscreen && styles.compactControls,
+          wide && fullscreen && rtl && styles.rowReverse,
         ]}>
         <View
           style={[
@@ -220,7 +287,12 @@ export const RichDayGraphChart = ({
             compact && styles.compactToolbar,
             rtl && styles.rowReverse,
           ]}>
-          <View style={[styles.modeGroup, rtl && styles.rowReverse]}>
+          <View
+            style={[
+              styles.modeGroup,
+              compact && styles.compactModeGroup,
+              rtl && styles.rowReverse,
+            ]}>
             <Pressable
               accessibilityRole="button"
               accessibilityState={{selected: mode === 'separate'}}
@@ -258,14 +330,29 @@ export const RichDayGraphChart = ({
               </Text>
             </Pressable>
           </View>
-          {!fullscreen ? (
+          {!compact ? (
             <Text style={[styles.hint, rtl && styles.rtlText]}>
               {copy.hint}
             </Text>
           ) : null}
+          {!fullscreen && compact ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={copy.fullScreen}
+              onPress={() => setFullscreen(true)}
+              style={styles.fullscreenButton}
+              testID={E2E_TEST_IDS.charts.cgmGraphFullScreenButton}>
+              <Icon name="fullscreen" size={22} color={theme.textColor} />
+            </Pressable>
+          ) : null}
         </View>
 
-        <View style={[styles.legend, rtl && styles.rowReverse]}>
+        <View
+          style={[
+            styles.legend,
+            compact && styles.compactRanges,
+            rtl && styles.rowReverse,
+          ]}>
           {(['full-day', 12, 6, 3] as const).map(hours => (
             <Pressable
               key={hours}
@@ -320,37 +407,40 @@ export const RichDayGraphChart = ({
             </>
           ) : null}
         </View>
+        <DayGraphSourceStatus
+          locale={locale}
+          availability={chart.dataAvailability}
+        />
       </View>
 
-      <View style={[styles.legend, rtl && styles.rowReverse]}>
-        {availability.map(item => (
-          <View key={item.key} style={styles.legendPill}>
-            <Text
-              style={[styles.legendSymbol, {color: legendColors[item.key]}]}>
-              {item.key === 'boluses' ? '▮' : item.key === 'basal' ? '┏━' : '━'}
-            </Text>
-            <Text style={styles.legendLabel}>{item.label}</Text>
-          </View>
-        ))}
-      </View>
+      {!compact ? (
+        <View style={[styles.legend, rtl && styles.rowReverse]}>
+          {availability.map(item => (
+            <View key={item.key} style={styles.legendPill}>
+              <Text
+                style={[styles.legendSymbol, {color: legendColors[item.key]}]}>
+                {item.key === 'boluses'
+                  ? '▮'
+                  : item.key === 'basal'
+                  ? '┏━'
+                  : '━'}
+              </Text>
+              <Text style={styles.legendLabel}>{item.label}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
-      <DayGraphSourceStatus
-        locale={locale}
-        availability={chart.dataAvailability}
-      />
       <TouchProvider>
         <StackedHomeCharts
+          compact={compact}
+          onHeaderLayout={measureHeader}
+          onInsulinLayout={measureInsulin}
           basalProfileData={chart.basalProfileData}
           bgSamples={chart.bgSamples}
           loadSamples={chart.loadSamples}
           dataAvailability={chart.dataAvailability}
-          cgmHeight={
-            fullscreen
-              ? Math.max(180, Math.min(380, viewport.height * 0.4))
-              : wide
-              ? 290
-              : 240
-          }
+          cgmHeight={compact ? compactCgmHeight : 290}
           chartMode={mode}
           fallbackAnchorTimeMs={Math.max(
             startMs,
@@ -362,14 +452,11 @@ export const RichDayGraphChart = ({
           foodItems={chart.foodItems}
           insulinData={chart.insulinData}
           locale={locale}
-          miniChartHeight={
-            fullscreen
-              ? Math.max(70, Math.min(112, viewport.height * 0.15))
-              : wide
-              ? 112
-              : 92
-          }
-          showFullScreenButton={!fullscreen}
+          miniChartHeight={compact ? miniHeight : 112}
+          {...(compact
+            ? {margin: {top: 8, right: 15, bottom: 24, left: 50}}
+            : {})}
+          showFullScreenButton={!fullscreen && !compact}
           onPressFullScreen={() => setFullscreen(true)}
           testID="day-graph-rich-chart"
           tooltipAlign="auto"
@@ -380,6 +467,9 @@ export const RichDayGraphChart = ({
         />
       </TouchProvider>
 
+      {compact ? (
+        <Text style={[styles.hint, rtl && styles.rtlText]}>{copy.hint}</Text>
+      ) : null}
       {preferenceControls}
       <Text style={[styles.factual, rtl && styles.rtlText]}>
         {copy.factual}
@@ -429,6 +519,14 @@ export const RichDayGraphChart = ({
               </Pressable>
             </View>
             <ChartScrollView
+              onLayout={event => {
+                const height = Math.floor(event.nativeEvent.layout.height);
+                if (Number.isFinite(height) && height > 0) {
+                  setFullscreenHeight(current =>
+                    current === height ? current : height,
+                  );
+                }
+              }}
               style={styles.fullscreen}
               contentContainerStyle={styles.fullscreenContent}>
               {content}
@@ -449,7 +547,25 @@ const createStyles = (theme: ThemeType) =>
       justifyContent: 'space-between',
       backgroundColor: theme.secondaryColor,
     },
-    compactToolbar: {borderBottomWidth: 0, padding: theme.spacing.sm},
+    compactToolbar: {
+      borderBottomWidth: 0,
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 0,
+    },
+    compactModeGroup: {padding: 0},
+    compactRanges: {
+      paddingTop: 0,
+      paddingBottom: 0,
+      paddingHorizontal: theme.spacing.sm,
+    },
+    fullscreenButton: {
+      minHeight: 44,
+      minWidth: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: theme.borderRadius,
+      backgroundColor: theme.backgroundColor,
+    },
     fullscreen: {flex: 1, backgroundColor: theme.backgroundColor},
     fullscreenContent: {padding: theme.spacing.sm},
     fullscreenHeader: {

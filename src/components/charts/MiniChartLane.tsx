@@ -67,26 +67,27 @@ export default function MiniChartLane(props: Props) {
   const fontScale = Math.max(1, useWindowDimensions().fontScale);
   const left = props.margin?.left ?? 44;
   const right = props.margin?.right ?? 16;
-  const titleLineHeight = styles.title.lineHeight;
+  const titleLineHeight = compact
+    ? styles.compactText.lineHeight
+    : styles.title.lineHeight;
   const detailLineHeight = styles.detail.lineHeight;
-  const baseHeaderHeight =
-    theme.spacing.xs +
-    titleLineHeight +
-    (compact ? 0 : detailLineHeight) +
-    (hint && hasData ? detailLineHeight + theme.spacing.xs : 0) +
-    theme.spacing.sm;
+  const baseHeaderHeight = compact
+    ? titleLineHeight + theme.spacing.xs / 2
+    : theme.spacing.xs +
+      titleLineHeight +
+      (compact ? 0 : detailLineHeight) +
+      (hint && hasData ? detailLineHeight + theme.spacing.xs : 0) +
+      theme.spacing.sm;
   const headerHeight = Math.ceil(baseHeaderHeight * fontScale);
   const baseLaneHeight = compact
-    ? hint
-      ? 110
-      : 90
+    ? Math.max(64, height)
     : Math.max(hint ? 124 : 110, height);
   const laneHeight = hasData
     ? baseLaneHeight + headerHeight - baseHeaderHeight
-    : Math.ceil((compact ? 64 : 80) * fontScale);
+    : Math.ceil((compact ? 42 : 80) * fontScale);
   const svgHeight = laneHeight - headerHeight;
   const plotWidth = Math.max(1, width - left - right);
-  const plotHeight = Math.max(1, svgHeight - 16);
+  const plotHeight = Math.max(1, svgHeight - (compact ? 14 : 16));
   const [minimum, maximum] = yDomain;
   const axis = useMemo(
     () => niceMiniAxis([minimum, maximum]),
@@ -108,7 +109,7 @@ export default function MiniChartLane(props: Props) {
   );
   const {x, y} = plot;
   const marks = useMemo(() => children(plot), [children, plot]);
-  const ticks = axis.ticks;
+  const ticks = compact ? axis.domain : axis.ticks;
   const cursorVisible =
     cursorTimeMs != null &&
     Number.isFinite(cursorTimeMs) &&
@@ -125,19 +126,30 @@ export default function MiniChartLane(props: Props) {
         backgroundColor: palette.surface,
       }}>
       <View
-        style={[styles.header, {height: headerHeight, paddingRight: right}]}>
+        style={[
+          styles.header,
+          compact && styles.compactHeader,
+          {height: headerHeight, paddingRight: right},
+        ]}>
         <View style={[styles.headingRow, rtl ? styles.rowRtl : styles.rowLtr]}>
           <Text
             style={[
               styles.title,
+              compact && styles.compactText,
               {color},
               rtl ? styles.textRtl : styles.textLtr,
-            ]}>
+            ]}
+            {...(compact ? {numberOfLines: 1} : {})}>
             {title}
           </Text>
           {hasData ? (
             <View style={styles.readout}>
-              <Text style={[styles.value, {color: palette.text}]}>
+              <Text
+                style={[
+                  styles.value,
+                  compact && styles.compactText,
+                  {color: palette.text},
+                ]}>
                 {valueText}
               </Text>
               {detailText && !compact ? (
@@ -148,7 +160,7 @@ export default function MiniChartLane(props: Props) {
             </View>
           ) : null}
         </View>
-        {hint && hasData ? (
+        {hint && hasData && !compact ? (
           <Text
             style={[
               styles.hint,
@@ -227,6 +239,13 @@ export default function MiniChartLane(props: Props) {
 const createStyles = (theme: ThemeType) =>
   StyleSheet.create({
     header: {paddingTop: theme.spacing.xs, paddingLeft: theme.spacing.sm},
+    compactHeader: {paddingTop: theme.spacing.xs / 2},
+    compactText: {
+      fontSize: theme.typography.size.xs,
+      lineHeight: Math.ceil(
+        theme.typography.size.xs * theme.typography.lineHeight.tight,
+      ),
+    },
     rowRtl: {flexDirection: 'row-reverse'},
     rowLtr: {flexDirection: 'row'},
     textRtl: {textAlign: 'right'},

@@ -135,7 +135,13 @@ export default function LoadMiniGraph({
   return (
     <MiniChartLane
       {...props}
-      title={title}
+      title={`${title}${
+        props.compact && cursorTimeMs == null && point
+          ? ` · ${locale === 'he' ? 'אחרון' : 'Latest'} ${formatMiniTime(
+              point.x,
+            )}`
+          : ''
+      }`}
       color={color}
       emptyText={emptyText}
       hasData={points.length > 0}

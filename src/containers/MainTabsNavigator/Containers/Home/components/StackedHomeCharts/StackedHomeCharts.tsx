@@ -54,6 +54,9 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     width,
     cgmHeight,
     miniChartHeight,
+    compact = false,
+    onHeaderLayout,
+    onInsulinLayout,
     xDomain,
     fallbackAnchorTimeMs,
     margin: marginOverride,
@@ -119,6 +122,9 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     tooltipAlign,
     showFallback: tooltipPlacement === 'panel',
   });
+  // Compact lane readouts all describe the inspector's time, including its
+  // initial latest-reading selection. Independent streams keep their gap rules.
+  const inspectionTimeMs = compact ? cgmAnchorTimeMs : cursorTimeMs;
 
   const resolvedLoadSamples = useMemo(
     () => resolveMiniLoadSamples(bgSamples, loadSamples),
@@ -206,6 +212,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
       {...emittedTooltipModel}
       locale={resolvedLocale}
       compact={tooltipPlacement === 'panel'}
+      collapsible={compact && tooltipPlacement === 'panel'}
     />
   );
 
@@ -220,54 +227,64 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
   return (
     <View testID={testID}>
-      {tooltipPlacement === 'panel' ? (
-        <View testID={tooltipDockTestID}>{inspector}</View>
-      ) : null}
-      {/* 'top' placement: tooltip in normal flow ABOVE the chart stack */}
-      {renderTooltipInternally &&
-      tooltipPlacement === 'top' &&
-      shouldShowTooltip ? (
-        <TooltipDock testID={tooltipDockTestID} $align={resolvedTooltipAlign}>
-          {inspector}
-        </TooltipDock>
-      ) : null}
+      <View onLayout={onHeaderLayout}>
+        {tooltipPlacement === 'panel' ? (
+          <View testID={tooltipDockTestID}>{inspector}</View>
+        ) : null}
+        {/* 'top' placement: tooltip in normal flow ABOVE the chart stack */}
+        {renderTooltipInternally &&
+        tooltipPlacement === 'top' &&
+        shouldShowTooltip ? (
+          <TooltipDock testID={tooltipDockTestID} $align={resolvedTooltipAlign}>
+            {inspector}
+          </TooltipDock>
+        ) : null}
 
-      <View
-        style={[
-          styles.chartHeader,
-          showFullScreenButton && styles.headerWithButton,
-        ]}>
-        <Text
+        <View
           style={[
-            styles.glucoseTitle,
-            {color: theme.textColor},
-            resolvedLocale === 'he' ? styles.rtl : styles.ltr,
+            styles.chartHeader,
+            compact && styles.compactHeader,
+            compact && resolvedLocale === 'he' && styles.rtlHeader,
+            showFullScreenButton && styles.headerWithButton,
           ]}>
-          {resolvedLocale === 'he' ? 'סוכר' : 'Glucose'} · mg/dL
-        </Text>
-        {!!foodItems?.length && (
           <Text
             style={[
-              styles.carbKey,
-              {color: theme.colors.carbs},
+              styles.glucoseTitle,
+              {color: theme.textColor},
               resolvedLocale === 'he' ? styles.rtl : styles.ltr,
             ]}>
-            {resolvedLocale === 'he' ? '● פחמימות שנרשמו' : '● Recorded carbs'}
+            {resolvedLocale === 'he' ? 'סוכר' : 'Glucose'} · mg/dL
           </Text>
-        )}
-        {showFullScreenButton && onPressFullScreen ? (
-          <FullScreenButtonOverlay>
-            <FullScreenButton
-              testID={E2E_TEST_IDS.charts.cgmGraphFullScreenButton}
-              onPress={onPressFullScreen}
-              accessibilityRole="button"
-              accessibilityLabel={
-                resolvedLocale === 'he' ? 'מסך מלא' : 'Full screen'
-              }>
-              <Icon name="fullscreen" size={22} color={theme.textColor} />
-            </FullScreenButton>
-          </FullScreenButtonOverlay>
-        ) : null}
+          {!!foodItems?.length && (
+            <Text
+              style={[
+                styles.carbKey,
+                {color: theme.colors.carbs},
+                resolvedLocale === 'he' ? styles.rtl : styles.ltr,
+              ]}>
+              {compact
+                ? resolvedLocale === 'he'
+                  ? '● פחמימות · g'
+                  : '● Carbs · g'
+                : resolvedLocale === 'he'
+                ? '● פחמימות שנרשמו'
+                : '● Recorded carbs'}
+            </Text>
+          )}
+          {showFullScreenButton && onPressFullScreen ? (
+            <FullScreenButtonOverlay>
+              <FullScreenButton
+                testID={E2E_TEST_IDS.charts.cgmGraphFullScreenButton}
+                onPress={onPressFullScreen}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  resolvedLocale === 'he' ? 'מסך מלא' : 'Full screen'
+                }>
+                <Icon name="fullscreen" size={22} color={theme.textColor} />
+              </FullScreenButton>
+            </FullScreenButtonOverlay>
+          ) : null}
+        </View>
       </View>
       <ChartStack
         testID={cgmTouchAreaTestID}
@@ -309,7 +326,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
               tooltipMode="external"
               onTooltipChange={handleTooltipChange}
               handleTouchEvents={false}
-              cursorTimeMs={cursorTimeMs}
+              cursorTimeMs={inspectionTimeMs}
             />
           ) : (
             <View
@@ -331,25 +348,28 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
 
       {/* Mini charts area — observe touch without taking over ScrollView's responder. */}
       <ChartTouchSurface
+        onLayout={onInsulinLayout}
         {...stackedTouchHandlers}
         {...mouseHandlers}
         style={touchSurfaceStyle}
         testID={testID ? `${testID}.insulinTouchArea` : undefined}>
         <View pointerEvents="none">
           <BolusMiniGraph
+            compact={compact}
             locale={resolvedLocale}
             bgSamples={bgSamples}
             insulinData={insulinData}
             dataStatus={dataAvailability?.treatments}
             width={width}
-            height={Math.max(100, miniChartHeight)}
+            height={compact ? miniChartHeight : Math.max(100, miniChartHeight)}
             xDomain={xDomain}
             margin={stackedChartsMargin}
-            cursorTimeMs={cursorTimeMs}
+            cursorTimeMs={inspectionTimeMs}
             testID={testID ? `${testID}.bolus` : undefined}
           />
           {chartMode === 'mixed' ? (
             <MixedMiniChart
+              compact={compact}
               locale={resolvedLocale}
               bgSamples={bgSamples}
               loadSamples={loadSamples}
@@ -357,7 +377,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
               insulinData={insulinData}
               basalProfileData={basalProfileData}
               width={width}
-              height={Math.max(170, miniChartHeight * 2)}
+              height={compact ? 144 : Math.max(170, miniChartHeight * 2)}
               xDomain={xDomain}
               margin={{
                 top: 16,
@@ -365,12 +385,13 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
                 bottom: 16,
                 left: stackedChartsMargin.left,
               }}
-              cursorTimeMs={cursorTimeMs}
+              cursorTimeMs={inspectionTimeMs}
               testID={testID ? `${testID}.mixed` : undefined}
             />
           ) : (
             <>
               <BasalMiniGraph
+                compact={compact}
                 locale={resolvedLocale}
                 bgSamples={bgSamples}
                 insulinData={insulinData}
@@ -385,11 +406,12 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
                   bottom: 12,
                   left: stackedChartsMargin.left,
                 }}
-                cursorTimeMs={cursorTimeMs}
+                cursorTimeMs={inspectionTimeMs}
                 testID={testID ? `${testID}.basal` : undefined}
               />
 
               <ActiveInsulinMiniGraph
+                compact={compact}
                 locale={resolvedLocale}
                 bgSamples={bgSamples}
                 loadSamples={loadSamples}
@@ -403,11 +425,12 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
                   bottom: 12,
                   left: stackedChartsMargin.left,
                 }}
-                cursorTimeMs={cursorTimeMs}
+                cursorTimeMs={inspectionTimeMs}
                 testID={testID ? `${testID}.iob` : undefined}
               />
 
               <CobMiniGraph
+                compact={compact}
                 locale={resolvedLocale}
                 bgSamples={bgSamples}
                 loadSamples={loadSamples}
@@ -421,7 +444,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
                   bottom: 12,
                   left: stackedChartsMargin.left,
                 }}
-                cursorTimeMs={cursorTimeMs}
+                cursorTimeMs={inspectionTimeMs}
                 testID={testID ? `${testID}.cob` : undefined}
               />
             </>
@@ -450,6 +473,14 @@ const createStyles = (theme: ThemeType) =>
       justifyContent: 'center',
     },
     headerWithButton: {paddingRight: 64},
+    compactHeader: {
+      minHeight: 24,
+      paddingTop: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    rtlHeader: {flexDirection: 'row-reverse'},
     glucoseTitle: {
       fontWeight: '700',
       fontFamily: theme.fontFamily,

@@ -65,6 +65,32 @@ describe('Rich Day Graph presentation', () => {
     }
   });
 
+  it('keeps the phone overview compact while selected point details expand independently', () => {
+    act(() => {
+      tree = renderer.create(
+        withTheme(
+          <RichDayGraphChart locale="he" model={model} availableHeight={580} />,
+        ),
+      );
+    });
+    const before = domain(tree);
+    const height = chart(tree).cgmHeight;
+    const insulinValues = () =>
+      tree.root.findAllByProps({testID: 'chart-inspector-value-iob'});
+    expect(
+      control(tree, 'chart-inspector-toggle-details').props.accessibilityState
+        .expanded,
+    ).toBe(false);
+    expect(insulinValues()).toHaveLength(0);
+    press(tree, 'chart-inspector-toggle-details');
+    expect(insulinValues().length).toBeGreaterThan(0);
+    expect(chart(tree).cgmHeight).toBe(height);
+    expect(domain(tree)).toEqual(before);
+    press(tree, 'chart-inspector-toggle-details');
+    expect(insulinValues()).toHaveLength(0);
+    expect(domain(tree)).toEqual(before);
+  });
+
   it('switches populated insulin and carbs between separate plots and one overlaid plot', () => {
     const populatedModel = buildDayGraph({
       period: {dayStartMs: 0, dayEndMs: 24 * HOUR},
@@ -245,6 +271,12 @@ describe('Rich Day Graph presentation', () => {
         expect(marks.map(mark => mark.props[prop])).toEqual(
           marks.map(() => color),
         );
+      }
+      if (
+        !control(tree, 'chart-inspector-toggle-details').props
+          .accessibilityState.expanded
+      ) {
+        press(tree, 'chart-inspector-toggle-details');
       }
       const inspector = tree.root.findByType(HomeChartsTooltip);
       const inspectorColors = inspector
