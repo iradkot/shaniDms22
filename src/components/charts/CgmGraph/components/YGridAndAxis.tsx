@@ -58,4 +58,4 @@ const YGridAndAxis = ({
   );
 };
 
-export default YGridAndAxis;
+export default React.memo(YGridAndAxis);

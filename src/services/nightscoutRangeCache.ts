@@ -64,22 +64,34 @@ interface StoredEnvelope {
   readonly records: readonly StoredRecord[];
 }
 
-interface CacheCandidate {
+interface CacheMetadata {
   readonly key: string;
   readonly byteSize: number;
   readonly lastAccessedAtMs: number;
   readonly updatedAtMs: number;
-  readonly compactedValue: string;
   readonly windowCount: number;
+  /** Earliest row/window that can expire; window starts alone need no rewrite. */
+  readonly nextPruneMs: number;
 }
 
+interface CacheCandidate extends CacheMetadata {
+  readonly compactedValue?: string;
+}
+
+// This index contains no readings. Persisted v1 envelopes remain authoritative:
+// unknown keys are inspected once, touched entries are decoded normally, and
+// expired entries are compacted before the shared byte/LRU budget is enforced.
+const knownCacheMetadata = new Map<string, CacheMetadata>();
 let cacheQueue: Promise<void> = Promise.resolve();
 
 const enqueueCacheOperation = <T>(operation: () => Promise<T>): Promise<T> => {
   const result = cacheQueue.then(operation, operation);
   cacheQueue = result.then(
     () => undefined,
-    () => undefined,
+    () => {
+      // A partially failed storage operation must not leave trusted metadata.
+      knownCacheMetadata.clear();
+    },
   );
   return result;
 };
@@ -174,7 +186,10 @@ const decodeStoredRecord = (value: unknown): StoredRecord | null => {
     return null;
   }
   const timestampMs = finiteNumber(value.timestampMs);
-  if (timestampMs === null || !Object.prototype.hasOwnProperty.call(value, 'value')) {
+  if (
+    timestampMs === null ||
+    !Object.prototype.hasOwnProperty.call(value, 'value')
+  ) {
     return null;
   }
   return {timestampMs, value: value.value};
@@ -216,7 +231,10 @@ const decodeEnvelope = (
   }
   const windows = value.windows.map(decodeWindow);
   const records = value.records.map(decodeStoredRecord);
-  if (windows.some(window => window === null) || records.some(row => row === null)) {
+  if (
+    windows.some(window => window === null) ||
+    records.some(row => row === null)
+  ) {
     return null;
   }
   return {
@@ -289,6 +307,28 @@ const removeOverlappingWindows = (
   return next;
 };
 
+const envelopeMetadata = (
+  key: string,
+  serialized: string,
+  envelope: StoredEnvelope,
+): CacheMetadata => {
+  let nextPruneMs = Number.POSITIVE_INFINITY;
+  envelope.windows.forEach(window => {
+    nextPruneMs = Math.min(nextPruneMs, window.endMs);
+  });
+  envelope.records.forEach(record => {
+    nextPruneMs = Math.min(nextPruneMs, record.timestampMs);
+  });
+  return {
+    key,
+    byteSize: utf8ByteLength(key) + utf8ByteLength(serialized),
+    lastAccessedAtMs: envelope.lastAccessedAtMs,
+    updatedAtMs: envelope.updatedAtMs,
+    windowCount: envelope.windows.length,
+    nextPruneMs,
+  };
+};
+
 const cacheCandidate = (
   key: string,
   serialized: string,
@@ -298,21 +338,19 @@ const cacheCandidate = (
   if (!envelope) {
     return null;
   }
+  const metadata = envelopeMetadata(key, serialized, envelope);
+  if (metadata.nextPruneMs >= cutoffMs) {
+    return metadata;
+  }
   const trimmed = trimEnvelope(envelope, cutoffMs);
   const compactedValue = JSON.stringify(trimmed);
-  return {
-    key,
-    byteSize: utf8ByteLength(key) + utf8ByteLength(compactedValue),
-    lastAccessedAtMs: trimmed.lastAccessedAtMs,
-    updatedAtMs: trimmed.updatedAtMs,
-    compactedValue,
-    windowCount: trimmed.windows.length,
-  };
+  return {...envelopeMetadata(key, compactedValue, trimmed), compactedValue};
 };
 
 const makeRoomAndStore = async (
   key: string,
   serialized: string,
+  envelope: StoredEnvelope,
   nowMs: number,
   retentionMs: number,
   maxBytes: number,
@@ -323,11 +361,29 @@ const makeRoomAndStore = async (
   const allKeys = storageKeys.filter(candidate =>
     candidate.startsWith(`${CACHE_PREFIX}:`),
   );
-  const existing = await AsyncStorage.multiGet(allKeys);
+  const presentKeys = new Set(allKeys);
+  knownCacheMetadata.forEach((_, candidateKey) => {
+    if (!presentKeys.has(candidateKey)) {
+      knownCacheMetadata.delete(candidateKey);
+    }
+  });
   const corruptKeys: string[] = [];
   const expiredKeys: string[] = [];
   const candidates: CacheCandidate[] = [];
   const cutoffMs = nowMs - retentionMs;
+  const keysToInspect = allKeys.filter(candidateKey => {
+    if (candidateKey === key) {
+      return false;
+    }
+    const metadata = knownCacheMetadata.get(candidateKey);
+    if (metadata && metadata.nextPruneMs >= cutoffMs) {
+      candidates.push(metadata);
+      return false;
+    }
+    return true;
+  });
+  const existing =
+    keysToInspect.length > 0 ? await AsyncStorage.multiGet(keysToInspect) : [];
   existing.forEach(([candidateKey, value]) => {
     if (candidateKey === key || value === null) {
       return;
@@ -366,28 +422,45 @@ const makeRoomAndStore = async (
   }
 
   const keysToRemove = [
-    ...new Set([
-      ...legacyKeys,
-      ...corruptKeys,
-      ...expiredKeys,
-      ...evictedKeys,
-    ]),
+    ...new Set([...legacyKeys, ...corruptKeys, ...expiredKeys, ...evictedKeys]),
   ];
   if (keysToRemove.length > 0) {
     await AsyncStorage.multiRemove(keysToRemove);
+    keysToRemove.forEach(removedKey => knownCacheMetadata.delete(removedKey));
   }
   const removedKeySet = new Set(keysToRemove);
   const compactedUpdates = retained
-    .filter(candidate => !removedKeySet.has(candidate.key))
-    .map(candidate => [candidate.key, candidate.compactedValue] as [string, string]);
+    .filter(
+      candidate =>
+        !removedKeySet.has(candidate.key) &&
+        candidate.compactedValue !== undefined,
+    )
+    .map(
+      candidate =>
+        [candidate.key, candidate.compactedValue] as [string, string],
+    );
   if (compactedUpdates.length > 0) {
     await AsyncStorage.multiSet(compactedUpdates);
   }
+  retained.forEach(candidate => {
+    if (!removedKeySet.has(candidate.key)) {
+      knownCacheMetadata.set(candidate.key, {
+        key: candidate.key,
+        byteSize: candidate.byteSize,
+        lastAccessedAtMs: candidate.lastAccessedAtMs,
+        updatedAtMs: candidate.updatedAtMs,
+        windowCount: candidate.windowCount,
+        nextPruneMs: candidate.nextPruneMs,
+      });
+    }
+  });
   if (!canStoreNewEntry) {
     await AsyncStorage.removeItem(key);
+    knownCacheMetadata.delete(key);
     return;
   }
   await AsyncStorage.setItem(key, serialized);
+  knownCacheMetadata.set(key, envelopeMetadata(key, serialized, envelope));
 };
 
 export const readNightscoutRangeCache = <T>(
@@ -410,6 +483,7 @@ export const readNightscoutRangeCache = <T>(
     const key = cacheKey(input.scope, input.resource);
     const serialized = await AsyncStorage.getItem(key);
     if (serialized === null) {
+      knownCacheMetadata.delete(key);
       return null;
     }
     const decoded = decodeEnvelope(serialized, {
@@ -418,6 +492,7 @@ export const readNightscoutRangeCache = <T>(
     });
     if (!decoded) {
       await AsyncStorage.removeItem(key);
+      knownCacheMetadata.delete(key);
       return null;
     }
     const envelope = trimEnvelope(decoded, cutoffMs);
@@ -431,11 +506,15 @@ export const readNightscoutRangeCache = <T>(
     }
     const records: T[] = [];
     for (const stored of envelope.records) {
-      if (stored.timestampMs < input.startMs || stored.timestampMs > input.endMs) {
+      if (
+        stored.timestampMs < input.startMs ||
+        stored.timestampMs > input.endMs
+      ) {
         continue;
       }
       const record = input.decodeRecord(stored.value);
-      const timestampMs = record === null ? undefined : input.getTimestampMs(record);
+      const timestampMs =
+        record === null ? undefined : input.getTimestampMs(record);
       if (
         record === null ||
         timestampMs === undefined ||
@@ -443,6 +522,7 @@ export const readNightscoutRangeCache = <T>(
         timestampMs !== stored.timestampMs
       ) {
         await AsyncStorage.removeItem(key);
+        knownCacheMetadata.delete(key);
         return null;
       }
       records.push(record);
@@ -451,7 +531,12 @@ export const readNightscoutRangeCache = <T>(
       ...envelope,
       lastAccessedAtMs: nowMs,
     };
-    await AsyncStorage.setItem(key, JSON.stringify(accessed));
+    const accessedSerialized = JSON.stringify(accessed);
+    await AsyncStorage.setItem(key, accessedSerialized);
+    knownCacheMetadata.set(
+      key,
+      envelopeMetadata(key, accessedSerialized, accessed),
+    );
     return {records, fetchedAtMs};
   });
 
@@ -490,7 +575,8 @@ export const writeNightscoutRangeCache = <T>(
         };
     const recordsOutsideRange = trimmed.records.filter(
       record =>
-        record.timestampMs < effectiveStartMs || record.timestampMs > input.endMs,
+        record.timestampMs < effectiveStartMs ||
+        record.timestampMs > input.endMs,
     );
     const replacementRecords: StoredRecord[] = [];
     input.records.forEach(value => {
@@ -530,6 +616,7 @@ export const writeNightscoutRangeCache = <T>(
     await makeRoomAndStore(
       key,
       JSON.stringify(envelope),
+      envelope,
       nowMs,
       retentionMs,
       maxBytes,

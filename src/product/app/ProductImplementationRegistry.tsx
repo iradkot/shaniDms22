@@ -461,7 +461,7 @@ const coreProductImplementationRegistrations = [
         {...(host.trendsRuntime?.therapyContext === undefined
           ? {}
           : {
-              therapyContextQuality: host.trendsRuntime.therapyContext.quality,
+              therapyContext: host.trendsRuntime.therapyContext,
             })}
       />
     ),
@@ -538,7 +538,9 @@ const coreProductImplementationRegistrations = [
         <TherapyContextModuleView
           dataSource={therapyContext.dataSource}
           locale={host.locale}
-          quality={therapyContext.quality}
+          {...(therapyContext.quality === undefined
+            ? {}
+            : {quality: therapyContext.quality})}
         />
       ) : undefined;
     },

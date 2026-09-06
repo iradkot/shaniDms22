@@ -9,7 +9,7 @@ type Coordinates = {
   color: string;
 };
 
-export function BasalOverlayMarks({
+export const BasalOverlayMarks = React.memo(function BasalOverlayMarks({
   segments,
   x,
   y,
@@ -61,10 +61,10 @@ export function BasalOverlayMarks({
       })}
     </>
   );
-}
+});
 
 /** Separate segments preserve missing samples and long gaps in both lines and fills. */
-export function LoadOverlayMarks({
+export const LoadOverlayMarks = React.memo(function LoadOverlayMarks({
   kind,
   segments,
   x,
@@ -122,4 +122,4 @@ export function LoadOverlayMarks({
       })}
     </>
   );
-}
+});

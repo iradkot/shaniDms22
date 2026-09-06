@@ -53,11 +53,7 @@ const write = (
     policy: customPolicy,
   });
 
-const read = (
-  scope: typeof alpha,
-  resource: string,
-  customPolicy = policy,
-) =>
+const read = (scope: typeof alpha, resource: string, customPolicy = policy) =>
   readNightscoutRangeCache({
     scope,
     resource,
@@ -76,10 +72,7 @@ describe('bounded Nightscout range cache', () => {
   it('isolates normalized ranges by opaque Nightscout source identity', async () => {
     await AsyncStorage.multiSet([
       ['bgData-legacy-unscoped', '[{"sgv":99}]'],
-      [
-        'nightscout-cache.v1:old-source:bg-data.v2:exact-query',
-        '[{"sgv":99}]',
-      ],
+      ['nightscout-cache.v1:old-source:bg-data.v2:exact-query', '[{"sgv":99}]'],
     ]);
     await write(alpha, 'bg-data.test', [{timestampMs: START, value: 101}]);
 
@@ -94,7 +87,9 @@ describe('bounded Nightscout range cache', () => {
     );
     expect(keys).toHaveLength(1);
     expect(keys[0]).not.toContain('https://');
-    await expect(AsyncStorage.getItem('bgData-legacy-unscoped')).resolves.toBeNull();
+    await expect(
+      AsyncStorage.getItem('bgData-legacy-unscoped'),
+    ).resolves.toBeNull();
     await expect(
       AsyncStorage.getItem(
         'nightscout-cache.v1:old-source:bg-data.v2:exact-query',
@@ -162,7 +157,9 @@ describe('bounded Nightscout range cache', () => {
       }),
     ).resolves.toBeNull();
     expect(
-      (await AsyncStorage.getAllKeys()).filter(isNightscoutRangeCacheStorageKey),
+      (await AsyncStorage.getAllKeys()).filter(
+        isNightscoutRangeCacheStorageKey,
+      ),
     ).toHaveLength(0);
     await expect(
       AsyncStorage.getItem('deviceStatus-legacy-offline'),
@@ -194,30 +191,41 @@ describe('bounded Nightscout range cache', () => {
     const stored = JSON.parse((await AsyncStorage.getItem(mixedKey!))!) as {
       records: Array<{timestampMs: number}>;
     };
-    expect(stored.records).toEqual([{timestampMs: recentTimestamp, value: expect.anything()}]);
+    expect(stored.records).toEqual([
+      {timestampMs: recentTimestamp, value: expect.anything()},
+    ]);
   });
 
   it('evicts least-recently-used source resources deterministically at the byte cap', async () => {
     const smallLimit = 1_250;
     const padding = 'x'.repeat(300);
-    await write(alpha, 'resource-a', [
-      {timestampMs: START, value: 1, padding},
-    ], {now: () => NOW - 2_000, maxBytes: smallLimit});
-    await write(beta, 'resource-b', [
-      {timestampMs: START, value: 2, padding},
-    ], {now: () => NOW - 1_000, maxBytes: smallLimit});
-    await write(alpha, 'resource-c', [
-      {timestampMs: START, value: 3, padding},
-    ], {now: () => NOW, maxBytes: smallLimit});
+    await write(
+      alpha,
+      'resource-a',
+      [{timestampMs: START, value: 1, padding}],
+      {now: () => NOW - 2_000, maxBytes: smallLimit},
+    );
+    await write(beta, 'resource-b', [{timestampMs: START, value: 2, padding}], {
+      now: () => NOW - 1_000,
+      maxBytes: smallLimit,
+    });
+    await write(
+      alpha,
+      'resource-c',
+      [{timestampMs: START, value: 3, padding}],
+      {now: () => NOW, maxBytes: smallLimit},
+    );
 
     await expect(
       read(alpha, 'resource-a', {now: () => NOW, maxBytes: smallLimit}),
     ).resolves.toBeNull();
     await expect(
       read(alpha, 'resource-c', {now: () => NOW, maxBytes: smallLimit}),
-    ).resolves.toEqual(expect.objectContaining({
-      records: [expect.objectContaining({value: 3})],
-    }));
+    ).resolves.toEqual(
+      expect.objectContaining({
+        records: [expect.objectContaining({value: 3})],
+      }),
+    );
   });
 
   it('skips an oversized entry without evicting a valid smaller cache', async () => {
@@ -226,15 +234,20 @@ describe('bounded Nightscout range cache', () => {
       now: () => NOW - 1,
       maxBytes,
     });
-    await write(beta, 'oversized-data', [
-      {timestampMs: START, value: 2, padding: 'x'.repeat(2_000)},
-    ], {now: () => NOW, maxBytes});
+    await write(
+      beta,
+      'oversized-data',
+      [{timestampMs: START, value: 2, padding: 'x'.repeat(2_000)}],
+      {now: () => NOW, maxBytes},
+    );
 
     await expect(
       read(alpha, 'small-data', {now: () => NOW, maxBytes}),
-    ).resolves.toEqual(expect.objectContaining({
-      records: [expect.objectContaining({value: 1})],
-    }));
+    ).resolves.toEqual(
+      expect.objectContaining({
+        records: [expect.objectContaining({value: 1})],
+      }),
+    );
     await expect(
       read(beta, 'oversized-data', {now: () => NOW, maxBytes}),
     ).resolves.toBeNull();
@@ -268,5 +281,119 @@ describe('bounded Nightscout range cache', () => {
       records: [{timestampMs: END, value: 2}],
       fetchedAtMs: NOW - 1_000,
     });
+  });
+
+  it('does not reload or rewrite unrelated unexpired payloads on a range refresh', async () => {
+    await write(alpha, 'glucose', [{timestampMs: START, value: 100}]);
+    await write(beta, 'device-status', [
+      {timestampMs: START, value: 2, padding: 'x'.repeat(100_000)},
+    ]);
+    const unrelatedKey = (await AsyncStorage.getAllKeys()).find(key =>
+      key.endsWith(':device-status'),
+    )!;
+    const unrelatedBefore = await AsyncStorage.getItem(unrelatedKey);
+    jest.mocked(AsyncStorage.multiGet).mockClear();
+    jest.mocked(AsyncStorage.multiSet).mockClear();
+
+    await write(alpha, 'glucose', [{timestampMs: START, value: 110}]);
+
+    expect(
+      jest.mocked(AsyncStorage.multiGet).mock.calls.flatMap(([keys]) => keys),
+    ).not.toContain(unrelatedKey);
+    expect(
+      jest
+        .mocked(AsyncStorage.multiSet)
+        .mock.calls.flatMap(([entries]) => entries.map(([key]) => key)),
+    ).not.toContain(unrelatedKey);
+    expect(await AsyncStorage.getItem(unrelatedKey)).toBe(unrelatedBefore);
+    await expect(read(alpha, 'glucose')).resolves.toEqual({
+      records: [{timestampMs: START, value: 110}],
+      fetchedAtMs: NOW - 1_000,
+    });
+  });
+
+  it('inspects a persisted resource once without rewriting its unchanged payload', async () => {
+    const key = 'nightscout-range-cache.v1:beta_opaque:persisted';
+    const serialized = JSON.stringify({
+      version: 1,
+      sourceIdentity: beta.sourceIdentity,
+      resource: 'persisted',
+      updatedAtMs: NOW,
+      lastAccessedAtMs: NOW,
+      windows: [{startMs: START, endMs: END, fetchedAtMs: NOW}],
+      records: [{timestampMs: START, value: {timestampMs: START, value: 2}}],
+    });
+    await AsyncStorage.setItem(key, serialized);
+    jest.mocked(AsyncStorage.multiGet).mockClear();
+    jest.mocked(AsyncStorage.multiSet).mockClear();
+
+    await write(alpha, 'glucose', [{timestampMs: START, value: 100}]);
+    expect(
+      jest.mocked(AsyncStorage.multiGet).mock.calls.flatMap(([keys]) => keys),
+    ).toContain(key);
+    expect(
+      jest
+        .mocked(AsyncStorage.multiSet)
+        .mock.calls.flatMap(([entries]) =>
+          entries.map(([entryKey]) => entryKey),
+        ),
+    ).not.toContain(key);
+    expect(await AsyncStorage.getItem(key)).toBe(serialized);
+  });
+
+  it('invalidates metadata after storage failure before enforcing the next budget', async () => {
+    await write(beta, 'retained', [{timestampMs: START, value: 2}]);
+    const retainedKey = (await AsyncStorage.getAllKeys()).find(key =>
+      key.endsWith(':retained'),
+    )!;
+    jest
+      .mocked(AsyncStorage.setItem)
+      .mockRejectedValueOnce(new Error('disk full'));
+    await expect(
+      write(alpha, 'glucose', [{timestampMs: START, value: 100}]),
+    ).rejects.toThrow('disk full');
+    jest.mocked(AsyncStorage.multiGet).mockClear();
+
+    await write(alpha, 'glucose', [{timestampMs: START, value: 110}]);
+    expect(
+      jest.mocked(AsyncStorage.multiGet).mock.calls.flatMap(([keys]) => keys),
+    ).toContain(retainedKey);
+    await expect(read(beta, 'retained')).resolves.toEqual({
+      records: [{timestampMs: START, value: 2}],
+      fetchedAtMs: NOW - 1_000,
+    });
+  });
+
+  it('uses a cached read to update resource recency before the next eviction', async () => {
+    const maxBytes = 1_500;
+    const padding = 'x'.repeat(200);
+    await write(
+      alpha,
+      'recently-read',
+      [{timestampMs: START, value: 1, padding}],
+      {
+        now: () => NOW - 3_000,
+        maxBytes,
+      },
+    );
+    await write(beta, 'unused', [{timestampMs: START, value: 2, padding}], {
+      now: () => NOW - 2_000,
+      maxBytes,
+    });
+    await expect(
+      read(alpha, 'recently-read', {
+        now: () => NOW - 1_000,
+        maxBytes,
+      }),
+    ).resolves.not.toBeNull();
+
+    await write(alpha, 'newest', [{timestampMs: START, value: 3, padding}], {
+      now: () => NOW,
+      maxBytes,
+    });
+
+    await expect(read(alpha, 'recently-read')).resolves.not.toBeNull();
+    await expect(read(beta, 'unused')).resolves.toBeNull();
+    await expect(read(alpha, 'newest')).resolves.not.toBeNull();
   });
 });

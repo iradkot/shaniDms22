@@ -96,9 +96,12 @@ describe('Product landing views', () => {
           locale="en"
           onOpenDestination={onOpenDestination}
           runtime={runtime}
-          therapyContextQuality={{
-            sourceReliability: 'unverified',
-            coveragePercent: 100,
+          therapyContext={{
+            dataSource: {loadTherapyContext: jest.fn()},
+            quality: {
+              sourceReliability: 'unverified',
+              coveragePercent: 100,
+            },
           }}
         />,
       );
@@ -113,9 +116,12 @@ describe('Product landing views', () => {
           locale="he"
           onOpenDestination={onOpenDestination}
           runtime={runtime}
-          therapyContextQuality={{
-            sourceReliability: 'reliable',
-            coveragePercent: 70,
+          therapyContext={{
+            dataSource: {loadTherapyContext: jest.fn()},
+            quality: {
+              sourceReliability: 'reliable',
+              coveragePercent: 70,
+            },
           }}
         />,
       );

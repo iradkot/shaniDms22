@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useRef} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef} from 'react';
 import {BackHandler, Text} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import {useTheme} from 'styled-components/native';
@@ -18,11 +18,29 @@ import HistoryDetailScreen from './screens/HistoryDetailScreen';
 import MissionChatScreen from './screens/MissionChatScreen';
 import EvidenceScreen from './screens/EvidenceScreen';
 import {Container, Header, Title, Subtle, Card, Button, ButtonText} from './styled';
+import {
+  createMarkdownItInstance,
+  createSelectableMarkdownRules,
+  createMarkdownStyle,
+} from './helpers/markdownConfig';
 
 const AiAnalyst: React.FC = () => {
   const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
   const engine = useAiAnalystEngine();
+  // The shared engine also runs behind Product screens that never render
+  // legacy Markdown. Keep these presentation resources with their own view.
+  const markdownInstance = useMemo(() => createMarkdownItInstance(), []);
+  const markdownRules = useMemo(() => createSelectableMarkdownRules(), []);
+  const markdownStyle = useMemo(() => createMarkdownStyle(theme), [theme]);
+  const markdown = useMemo(
+    () => ({
+      instance: markdownInstance,
+      rules: markdownRules,
+      style: markdownStyle,
+    }),
+    [markdownInstance, markdownRules, markdownStyle],
+  );
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
   const consumedContextRef = useRef<string | null>(null);
@@ -152,7 +170,7 @@ const AiAnalyst: React.FC = () => {
       <HistoryDetailScreen
         historyItems={engine.historyItems}
         detailId={engine.state.id}
-        markdown={engine.markdown}
+        markdown={markdown}
         onBack={() => engine.setState({mode: 'history'})}
         onDelete={engine.deleteConversation}
         onContinue={engine.resumeConversation}
@@ -183,7 +201,7 @@ const AiAnalyst: React.FC = () => {
         onAssistantFeedback={engine.onAssistantFeedback}
         onOpenEvidence={engine.openEvidence}
         scrollRef={engine.scrollRef}
-        markdown={engine.markdown}
+        markdown={markdown}
       />
     );
   }

@@ -16,6 +16,8 @@ const generatedFolders = [
   'android/app/build',
   'ios/build',
   'functions/lib',
+  'artifacts',
+  'e2e/results',
 ];
 const generatedOutputs = generatedFolders.map(
   folder =>

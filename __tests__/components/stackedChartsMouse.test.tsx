@@ -23,6 +23,7 @@ describe('Stacked chart mouse inspection', () => {
     });
     return null;
   };
+  beforeEach(() => jest.useFakeTimers());
   afterEach(() => {
     act(() => tree.unmount());
     jest.useRealTimers();
@@ -37,6 +38,7 @@ describe('Stacked chart mouse inspection', () => {
     });
     act(() => {
       current.mouseHandlers.onMouseMove?.(point(317.5));
+      jest.advanceTimersByTime(20);
     });
     expect(current.chartsTooltip?.touchTimeMs).toBe(500);
     expect(
@@ -44,6 +46,7 @@ describe('Stacked chart mouse inspection', () => {
     ).toBe(false);
     act(() => {
       current.mouseHandlers.onMouseMove?.(point(800));
+      jest.advanceTimersByTime(20);
     });
     expect(current.chartsTooltip?.touchTimeMs).toBe(1000);
     const preventDefault = jest.fn();
@@ -53,7 +56,9 @@ describe('Stacked chart mouse inspection', () => {
     expect(preventDefault).toHaveBeenCalledTimes(1);
     expect(current.chartsTooltip?.touchTimeMs).toBe(0);
     act(() => {
+      current.mouseHandlers.onMouseMove?.(point(400));
       current.mouseHandlers.onMouseLeave?.();
+      jest.advanceTimersByTime(20);
     });
     expect(current.chartsTooltip).toBeNull();
   });
@@ -65,6 +70,7 @@ describe('Stacked chart mouse inspection', () => {
     });
     act(() => {
       current.mouseHandlers.onMouseMove?.(point(Number.NaN));
+      jest.advanceTimersByTime(20);
     });
     expect(current.chartsTooltip).toBeNull();
   });
@@ -100,6 +106,7 @@ describe('Stacked chart mouse inspection', () => {
     expect(preventDefault).not.toHaveBeenCalled();
     act(() => jest.advanceTimersByTime(801));
     act(() => current.mouseHandlers.onMouseMove?.(point(351)));
+    act(() => jest.advanceTimersByTime(20));
     expect(current.chartsTooltip?.touchTimeMs).toBe(600);
     act(() => current.mouseHandlers.onMouseLeave?.());
     expect(current.chartsTooltip).toBeNull();

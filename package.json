@@ -26,12 +26,13 @@
     "verify:functions": "npm --prefix functions run verify",
     "verify:ios-release-config": "node --test scripts/__tests__/ios-release-config.test.mjs",
     "verify:metro-config": "node --test scripts/__tests__/metro-output-boundary.test.cjs",
+    "verify:chart-worklets": "node --test scripts/__tests__/chart-worklets.test.cjs",
     "test:rules:firestore": "npx --yes firebase-tools@13.35.1 emulators:exec --only firestore --project shani-rules-test \"node --test scripts/__tests__/firestore-journal.rules.test.mjs scripts/__tests__/firestore-personalization.rules.test.mjs scripts/__tests__/firestore-alerts.rules.test.mjs scripts/__tests__/firestore-legacy.rules.test.mjs\"",
     "test:rules:storage": "npx --yes firebase-tools@13.35.1 emulators:exec --only storage --project shani-meal-images-rules-test \"node --test scripts/__tests__/storage-meal-images.rules.test.mjs\"",
     "verify:rules": "yarn test:rules:firestore && yarn test:rules:storage",
     "verify:rewrite": "yarn security:release && yarn typecheck:rewrite && yarn lint:rewrite && yarn test:rewrite",
     "verify:web": "yarn typecheck:web && yarn lint:web && yarn test:web && yarn build:web",
-    "verify:all": "yarn security:release && yarn verify:ios-release-config && yarn verify:metro-config && yarn typecheck:rewrite && yarn typecheck:web && yarn lint:rewrite && yarn test:all --silent && yarn verify:functions && yarn verify:rules && yarn build:web",
+    "verify:all": "yarn security:release && yarn verify:ios-release-config && yarn verify:metro-config && yarn verify:chart-worklets && yarn typecheck:rewrite && yarn typecheck:web && yarn lint:rewrite && yarn test:all --silent && yarn verify:functions && yarn verify:rules && yarn build:web",
     "lint": "eslint .",
     "build:android:debug": "node scripts/run-android-gradle.mjs :app:assembleDebug",
     "build:android:preview": "node scripts/run-android-gradle.mjs -PALLOW_DEBUG_RELEASE_SIGNING=true :app:assembleRelease",
@@ -48,7 +49,11 @@
     "e2e:contracts": "jest __tests__/e2e --runInBand",
     "e2e:maestro:install:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-maestro-windows.ps1",
     "e2e:maestro:android:summary": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-maestro-android.ps1",
-    "perf:cgm-selection": "jest __tests__/perf/cgmSelection.perf.test.ts --runInBand"
+    "perf:cgm-selection": "jest __tests__/perf/cgmSelection.perf.test.ts --runInBand",
+    "perf:app": "node scripts/check-app-performance.cjs",
+    "perf:app:browser": "node scripts/check-app-performance.cjs --browser",
+    "build:perf:web": "vite build --config vite.performance.config.mjs",
+    "preview:perf:web": "vite preview --config vite.performance.config.mjs --host 127.0.0.1"
   },
   "dependencies": {
     "@dr.pogodin/react-native-fs": "2.30.3",

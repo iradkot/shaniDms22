@@ -42,7 +42,9 @@ describe('chart gesture adapters', () => {
     expect(scroll.handlerName).toBe('NativeViewGestureHandler');
     expect(scroll.config.disallowInterruption).toBe(false);
     expect(detectors[0]!.props.children.type).toBe(ScrollView);
-    const [glucose, insulin] = detectors.slice(1).map(node => node.props.gesture);
+    const [glucose, insulin] = detectors
+      .slice(1)
+      .map(node => node.props.gesture);
     expect(glucose).not.toBe(insulin);
     expect(glucose.config.simultaneousWith).toEqual([scroll]);
     expect(insulin.config.simultaneousWith).toEqual([scroll]);
@@ -101,8 +103,9 @@ describe('chart gesture adapters', () => {
     });
     expect(tree!.root.findAllByType(GestureDetector)).toHaveLength(0);
     expect(tree!.root.findByType(ScrollView).props.onScroll).toBe(onScroll);
-    expect(tree!.root.findByType(WebTouchSurface).findByType(View).props.onTouchMove)
-      .toBe(onTouchMove);
+    expect(
+      tree!.root.findByType(WebTouchSurface).findByType(View).props.onTouchMove,
+    ).toBe(onTouchMove);
     act(() => tree!.unmount());
   });
 
@@ -170,6 +173,7 @@ describe('chart gesture adapters', () => {
       // Local coordinates can move with scrolling; the initial page origin
       // remains the stable anchor used by the production inspector hook.
       gesture.handlers.onTouchesMove?.(nativeTouch(900, 160, -100), manager);
+      jest.advanceTimersByTime(20);
     });
     expect(state!.chartsTooltip?.touchTimeMs).toBe(600);
     expect(tree!.root.findAllByType(GestureDetector)[1]!.props.gesture).toBe(

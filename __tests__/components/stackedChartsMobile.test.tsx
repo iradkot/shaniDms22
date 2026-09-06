@@ -12,8 +12,10 @@ const touch = (locationX: number, pageX: number, pageY = 200) =>
 describe('Mobile chart inspection', () => {
   let current: ReturnType<typeof useStackedChartsTouchTooltip>;
   let tree: renderer.ReactTestRenderer;
+  let renders = 0;
   const onTouchSessionChange = jest.fn();
   const Harness = ({endMs = 1000, width = 400}) => {
+    renders++;
     current = useStackedChartsTouchTooltip({
       bgSamples: [],
       width,
@@ -52,11 +54,38 @@ describe('Mobile chart inspection', () => {
     expect(onTouchSessionChange).toHaveBeenLastCalledWith(null);
   });
 
+  it('renders only the latest move once per frame, rather than replaying a touch burst', () => {
+    act(() => current.touchHandlers.onTouchStart(touch(217.5, 317.5)));
+    renders = 0;
+    for (let sample = 1; sample <= 120; sample++) {
+      act(() => current.touchHandlers.onTouchMove(touch(0, 317.5 + sample)));
+    }
+    expect(renders).toBe(0);
+    act(() => jest.advanceTimersByTime(20));
+    expect(renders).toBe(1);
+    expect(current.chartsTooltip?.touchTimeMs).toBe(858);
+  });
+
+  it('flushes the latest queued position on release and drops it on a range change', () => {
+    act(() => current.touchHandlers.onTouchStart(touch(217.5, 317.5)));
+    act(() => current.touchHandlers.onTouchMove(touch(0, 351)));
+    act(() => current.touchHandlers.onTouchEnd());
+    expect(current.chartsTooltip?.touchTimeMs).toBe(600);
+    act(() => current.touchHandlers.onTouchStart(touch(217.5, 317.5)));
+    act(() => current.touchHandlers.onTouchMove(touch(0, 384.5)));
+    act(() => tree.update(<Harness endMs={2000} />));
+    act(() => jest.advanceTimersByTime(20));
+    expect(current.chartsTooltip).toBeNull();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('does not jump when movement crosses an SVG child with a different local origin', () => {
     act(() => current.touchHandlers.onTouchStart(touch(217.5, 317.5)));
     act(() => current.touchHandlers.onTouchMove(touch(12, 351)));
+    act(() => jest.advanceTimersByTime(20));
     expect(current.chartsTooltip?.touchTimeMs).toBe(600);
     act(() => current.touchHandlers.onTouchMove(touch(90, 384.5)));
+    act(() => jest.advanceTimersByTime(20));
     expect(current.chartsTooltip?.touchTimeMs).toBe(700);
   });
 
@@ -72,10 +101,13 @@ describe('Mobile chart inspection', () => {
     act(() => current.touchHandlers.onTouchStart(touch(217.5, 317.5)));
     const session = lastSession();
     act(() => session.handlePageTouchMove(touch(0, 351)));
+    act(() => jest.advanceTimersByTime(20));
     expect(current.chartsTooltip?.touchTimeMs).toBe(600);
     act(() => session.handlePageTouchMove(touch(0, -100)));
+    act(() => jest.advanceTimersByTime(20));
     expect(current.chartsTooltip?.touchTimeMs).toBe(0);
     act(() => session.handlePageTouchMove(touch(0, 1000)));
+    act(() => jest.advanceTimersByTime(20));
     expect(current.chartsTooltip?.touchTimeMs).toBe(1000);
     act(() => session.handlePageTouchEnd());
     act(() => session.handlePageTouchMove(touch(0, 351)));
@@ -94,8 +126,10 @@ describe('Mobile chart inspection', () => {
     expect(current.chartsTooltip?.touchTimeMs).toBe(500);
 
     act(() => session.handlePageTouchMove(touch(0, 351, 260)));
+    act(() => jest.advanceTimersByTime(20));
     expect(current.chartsTooltip?.touchTimeMs).toBe(600);
     act(() => session.handlePageTouchMove(touch(0, 384.5, 220)));
+    act(() => jest.advanceTimersByTime(20));
     expect(current.chartsTooltip?.touchTimeMs).toBe(700);
 
     act(() => session.handlePageTouchEnd());
@@ -118,8 +152,10 @@ describe('Mobile chart inspection', () => {
     const session = lastSession();
 
     act(() => current.touchHandlers.onTouchMove(scrollTouch(351, 280)));
+    act(() => jest.advanceTimersByTime(20));
     expect(current.chartsTooltip?.touchTimeMs).toBe(600);
     act(() => session.handlePageTouchMove(scrollTouch(384.5, 360)));
+    act(() => jest.advanceTimersByTime(20));
     expect(current.chartsTooltip?.touchTimeMs).toBe(700);
     expect(onTouchSessionChange).toHaveBeenLastCalledWith(session);
     expect(preventDefault).not.toHaveBeenCalled();
@@ -178,6 +214,7 @@ describe('Mobile chart inspection', () => {
     );
     expect(current.chartsTooltip?.touchTimeMs).toBe(500);
     act(() => current.touchHandlers.onTouchMove(touch(4, 265.5)));
+    act(() => jest.advanceTimersByTime(20));
     expect(current.chartsTooltip?.touchTimeMs).toBe(600);
   });
 

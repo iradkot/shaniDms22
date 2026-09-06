@@ -13,6 +13,8 @@ test('Metro ignores generated folders that other builds can replace', () => {
     'android/app/build',
     'ios/build',
     'functions/lib',
+    'artifacts',
+    'e2e/results',
   ]) {
     assert.ok(blocked(path.join(root, folder)), folder);
     assert.ok(blocked(path.join(root, folder, 'assets', 'output.js')), folder);
@@ -25,6 +27,8 @@ test('the exclusion is rooted and never hides source or similarly named modules'
     'index.js',
     'releases-notes/source.ts',
     'src/releases/view.ts',
+    'src/artifacts/view.ts',
+    'e2e/maestro/charts-smoke.yaml',
     'node_modules/example/lib/index.js',
     'android/app/src/main/java/App.kt',
   ]) {

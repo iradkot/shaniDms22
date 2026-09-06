@@ -12,7 +12,7 @@ export interface TrendsModuleRuntime {
   readonly showGri?: boolean;
   readonly therapyContext?: {
     readonly dataSource: TherapyContextDataSource;
-    /** Lightweight source evidence used to hide the secondary destination. */
-    readonly quality: TherapyContextQualityGateInput;
+    /** Optional existing evidence; views load and validate it only when opened. */
+    readonly quality?: TherapyContextQualityGateInput;
   };
 }

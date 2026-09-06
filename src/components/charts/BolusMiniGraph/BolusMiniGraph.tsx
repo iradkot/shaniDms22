@@ -3,7 +3,7 @@ import {G, Line, Rect} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import type {InsulinDataEntry} from 'app/types/insulin.types';
 import {BOLUS_DETECTION_WINDOW_MS} from '../CgmGraph/constants/bolusHoverConfig';
-import MiniChartLane from '../MiniChartLane';
+import MiniChartLane, {type MiniChartPlot} from '../MiniChartLane';
 import {getChartPalette} from '../chartPalette';
 import {
   buildMiniBolusPoints,
@@ -14,6 +14,51 @@ import {
 } from '../miniChartData';
 
 type Props = MiniChartProps & {insulinData?: InsulinDataEntry[] | undefined};
+
+const BolusBar = React.memo(function BolusBar({
+  bar,
+  plot,
+  highlighted,
+  color,
+  surface,
+}: {
+  bar: {point: {x: number; y: number}; base: number; top: number};
+  plot: MiniChartPlot;
+  highlighted: boolean;
+  color: string;
+  surface: string;
+}) {
+  const {point, base, top} = bar;
+  const center = plot.x(point.x);
+  const barWidth = 5;
+  const barHeight = plot.y(base) - plot.y(top);
+  return (
+    <G>
+      <Rect
+        testID="bolus-dose-bar"
+        x={Math.max(0, Math.min(plot.width - barWidth, center - barWidth / 2))}
+        y={plot.y(top)}
+        width={barWidth}
+        height={Math.max(1, barHeight)}
+        rx={1.5}
+        fill={color}
+        stroke={surface}
+        strokeWidth={0.5}
+        opacity={highlighted ? 1 : 0.8}
+      />
+      {highlighted ? (
+        <Line
+          x1={center - 4}
+          y1={plot.y(top)}
+          x2={center + 4}
+          y2={plot.y(top)}
+          stroke={color}
+          strokeWidth={2.5}
+        />
+      ) : null}
+    </G>
+  );
+});
 
 const BolusMiniGraph: React.FC<Props> = props => {
   const {bgSamples, insulinData, xDomain, cursorTimeMs, locale = 'en'} = props;
@@ -76,41 +121,16 @@ const BolusMiniGraph: React.FC<Props> = props => {
       detailText={detail}>
       {plot => (
         <>
-          {bars.map(({point, base, top}, index) => {
-            const center = plot.x(point.x);
-            const barWidth = 5;
-            const barHeight = plot.y(base) - plot.y(top);
-            const highlighted = selected.includes(point);
-            return (
-              <G key={`${point.x}-${index}`}>
-                <Rect
-                  testID="bolus-dose-bar"
-                  x={Math.max(
-                    0,
-                    Math.min(plot.width - barWidth, center - barWidth / 2),
-                  )}
-                  y={plot.y(top)}
-                  width={barWidth}
-                  height={Math.max(1, barHeight)}
-                  rx={1.5}
-                  fill={palette.bolus}
-                  stroke={palette.surface}
-                  strokeWidth={0.5}
-                  opacity={highlighted ? 1 : 0.8}
-                />
-                {highlighted ? (
-                  <Line
-                    x1={center - 4}
-                    y1={plot.y(top)}
-                    x2={center + 4}
-                    y2={plot.y(top)}
-                    stroke={palette.bolus}
-                    strokeWidth={2.5}
-                  />
-                ) : null}
-              </G>
-            );
-          })}
+          {bars.map((bar, index) => (
+            <BolusBar
+              key={`${bar.point.x}-${index}`}
+              bar={bar}
+              plot={plot}
+              highlighted={selected.includes(bar.point)}
+              color={palette.bolus}
+              surface={palette.surface}
+            />
+          ))}
         </>
       )}
     </MiniChartLane>

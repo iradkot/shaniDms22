@@ -11,7 +11,7 @@ import {
   type MiniChartProps,
 } from './miniChartData';
 
-type Plot = {
+export type MiniChartPlot = {
   width: number;
   height: number;
   x: (time: number) => number;
@@ -37,7 +37,7 @@ type Props = Pick<
   valueText: string;
   detailText?: string | undefined;
   hint?: string | undefined;
-  children: (plot: Plot) => React.ReactNode;
+  children: (plot: MiniChartPlot) => React.ReactNode;
 };
 
 /** Native text can wrap/scale on phones without colliding inside the plot. */
@@ -87,12 +87,27 @@ export default function MiniChartLane(props: Props) {
   const svgHeight = laneHeight - headerHeight;
   const plotWidth = Math.max(1, width - left - right);
   const plotHeight = Math.max(1, svgHeight - 16);
-  const x = (time: number) =>
-    ((time - +domain[0]) / (+domain[1] - +domain[0])) * plotWidth;
-  const axis = niceMiniAxis(yDomain);
-  const y = (value: number) =>
-    plotHeight -
-    ((value - axis.domain[0]) / (axis.domain[1] - axis.domain[0])) * plotHeight;
+  const [minimum, maximum] = yDomain;
+  const axis = useMemo(
+    () => niceMiniAxis([minimum, maximum]),
+    [minimum, maximum],
+  );
+  const startMs = +domain[0];
+  const endMs = +domain[1];
+  const plot = useMemo<MiniChartPlot>(
+    () => ({
+      width: plotWidth,
+      height: plotHeight,
+      x: time => ((time - startMs) / (endMs - startMs)) * plotWidth,
+      y: value =>
+        plotHeight -
+        ((value - axis.domain[0]) / (axis.domain[1] - axis.domain[0])) *
+          plotHeight,
+    }),
+    [plotWidth, plotHeight, startMs, endMs, axis],
+  );
+  const {x, y} = plot;
+  const marks = useMemo(() => children(plot), [children, plot]);
   const ticks = axis.ticks;
   const cursorVisible =
     cursorTimeMs != null &&
@@ -190,7 +205,7 @@ export default function MiniChartLane(props: Props) {
                 strokeDasharray="3 3"
               />
             ) : null}
-            {children({width: plotWidth, height: plotHeight, x, y})}
+            {marks}
             {cursorVisible ? (
               <Line
                 x1={x(cursorTimeMs!)}

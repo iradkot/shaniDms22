@@ -63,9 +63,6 @@ jest.mock('app/services/aiMemory/useActiveAiWorkspaceScope', () => ({
 jest.mock('app/services/aiAnalyst/useAiWorkspaceIsolationBoundary', () => ({
   useAiWorkspaceIsolationBoundary: () => undefined,
 }));
-jest.mock('app/hooks/useLatestNightscoutSnapshot', () => ({
-  useLatestNightscoutSnapshot: () => ({snapshot: undefined}),
-}));
 jest.mock(
   'app/containers/MainTabsNavigator/Containers/AiAnalyst/helpers/markdownConfig',
   () => ({

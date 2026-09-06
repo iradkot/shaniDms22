@@ -1,6 +1,8 @@
-import React, {useMemo} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
+  assertTherapyContextSnapshot,
   evaluateTherapyContextAvailability,
+  type TherapyContextDataSource,
   type TherapyContextQualityGateInput,
 } from '../../modules/trends';
 import {
@@ -17,6 +19,10 @@ import type {
   ResolvedDestinationTarget,
 } from '../destinations';
 import {DestinationTileGroup, ProductPage} from '../ui';
+import type {TrendsModuleRuntime} from './runtime';
+
+const THERAPY_CONTEXT_PERIOD_MS = 14 * 24 * 60 * 60 * 1000;
+const systemNow = (): number => Date.now();
 
 const PRIMARY_DESTINATIONS = [
   CORE_DESTINATION_IDS.trendsOverview,
@@ -57,7 +63,8 @@ export interface TrendsLandingViewProps {
   readonly runtime: DestinationRuntimeContext;
   readonly registry?: DestinationRegistry;
   readonly onOpenDestination: (destination: AvailableDestinationTarget) => void;
-  readonly therapyContextQuality?: TherapyContextQualityGateInput;
+  readonly therapyContext?: TrendsModuleRuntime['therapyContext'];
+  readonly now?: () => number;
 }
 
 const resolveMany = (
@@ -79,8 +86,53 @@ export const TrendsLandingView = ({
   registry = coreDestinationRegistry,
   runtime,
   onOpenDestination,
-  therapyContextQuality,
+  therapyContext,
+  now = systemNow,
 }: TrendsLandingViewProps) => {
+  const dataSource = therapyContext?.dataSource;
+  const initialQuality = therapyContext?.quality;
+  const [loadedQuality, setLoadedQuality] = useState<{
+    readonly dataSource: TherapyContextDataSource;
+    readonly quality: TherapyContextQualityGateInput;
+  }>();
+  // Opening Trends activates this optional evidence read. The app host only
+  // provides the capability, so Hub/Day Graph startup does no historical work.
+  useEffect(() => {
+    if (dataSource === undefined || initialQuality !== undefined) {
+      return undefined;
+    }
+    let active = true;
+    const endMs = now();
+    const period = {startMs: endMs - THERAPY_CONTEXT_PERIOD_MS, endMs};
+    dataSource
+      .loadTherapyContext(period)
+      .then(snapshot => {
+        if (!active) {
+          return;
+        }
+        assertTherapyContextSnapshot(snapshot);
+        if (
+          snapshot.period.startMs !== period.startMs ||
+          snapshot.period.endMs !== period.endMs
+        ) {
+          throw new Error('Therapy Context returned a different period.');
+        }
+        setLoadedQuality({dataSource, quality: snapshot.quality});
+      })
+      .catch(() => {
+        if (active) {
+          setLoadedQuality(undefined);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [dataSource, initialQuality, now]);
+  const therapyContextQuality =
+    initialQuality ??
+    (loadedQuality?.dataSource === dataSource
+      ? loadedQuality?.quality
+      : undefined);
   const primary = useMemo(
     () => resolveMany(registry, PRIMARY_DESTINATIONS, runtime),
     [registry, runtime],

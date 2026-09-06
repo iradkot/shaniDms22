@@ -34,6 +34,7 @@ import {addOpacity} from 'app/style/styling.utils';
 import {
   findMiniLoadSample,
   resolveMiniLoadSamples,
+  resolveMiniDomain,
   basalChartStatus,
 } from 'app/components/charts/miniChartData';
 import type {
@@ -119,16 +120,22 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     showFallback: tooltipPlacement === 'panel',
   });
 
+  const resolvedLoadSamples = useMemo(
+    () => resolveMiniLoadSamples(bgSamples, loadSamples),
+    [bgSamples, loadSamples],
+  );
   const independentLoadSample = useMemo(
     () =>
       loadSamples === undefined
         ? tooltipBgSample
-        : findMiniLoadSample(
-            resolveMiniLoadSamples(bgSamples, loadSamples),
-            cgmAnchorTimeMs,
-            xDomain,
-          ),
-    [loadSamples, tooltipBgSample, bgSamples, cgmAnchorTimeMs, xDomain],
+        : findMiniLoadSample(resolvedLoadSamples, cgmAnchorTimeMs, xDomain),
+    [
+      loadSamples,
+      tooltipBgSample,
+      resolvedLoadSamples,
+      cgmAnchorTimeMs,
+      xDomain,
+    ],
   );
   const {activeInsulinU, activeInsulinBolusU, activeInsulinBasalU, cobG} =
     useBgTooltipDerivedMetrics(independentLoadSample);
@@ -138,9 +145,14 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
     carbEvents: tooltipCarbEvents as any,
   });
 
+  const basalDomain = useMemo(
+    () => resolveMiniDomain(bgSamples, xDomain),
+    [bgSamples, xDomain],
+  );
   const basalRateUhr = useBasalRateAtTime({
     enabled: shouldShowTooltip,
     timeMs: cgmAnchorTimeMs,
+    domain: basalDomain,
     insulinData,
     basalProfileData,
   });

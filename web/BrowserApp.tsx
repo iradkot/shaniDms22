@@ -10,7 +10,6 @@ import React, {
 import {useWindowDimensions} from 'react-native';
 import type {JournalWorkspace} from '../src/modules/journal';
 import type {MealImagesRuntime} from '../src/modules/mealMedia';
-import type {TherapyContextQualityGateInput} from '../src/modules/trends';
 import {
   coreDestinationRegistry,
   type DestinationLocale,
@@ -78,10 +77,6 @@ const DEFAULT_THRESHOLDS = {
   targetMaxMgDl: 180,
   highMaxMgDl: 250,
 } as const;
-const UNVERIFIED_THERAPY_CONTEXT: TherapyContextQualityGateInput = {
-  sourceReliability: 'unverified',
-  coveragePercent: 0,
-};
 
 type RuntimeGlobal = typeof globalThis & {
   __SHANI_WEB_CONFIG__?: {
@@ -315,8 +310,6 @@ const BrowserProduct = (props: {
     authConnection,
   } = props;
   const {resources} = state;
-  const [therapyContextQuality, setTherapyContextQuality] =
-    useState<TherapyContextQualityGateInput>(UNVERIFIED_THERAPY_CONTEXT);
   const preMealAssistance = useSyncExternalStore(
     resources.preMealAssistance.subscribe,
     resources.preMealAssistance.getSnapshot,
@@ -342,34 +335,6 @@ const BrowserProduct = (props: {
       state.workspace,
     ],
   );
-  useEffect(() => {
-    let active = true;
-    setTherapyContextQuality(UNVERIFIED_THERAPY_CONTEXT);
-    if (dataSources === undefined) {
-      return () => {
-        active = false;
-      };
-    }
-    const endMs = Date.now();
-    dataSources.therapyContext
-      .loadTherapyContext({
-        startMs: endMs - 14 * 24 * 60 * 60 * 1000,
-        endMs,
-      })
-      .then(snapshot => {
-        if (active) {
-          setTherapyContextQuality(snapshot.quality);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setTherapyContextQuality(UNVERIFIED_THERAPY_CONTEXT);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [dataSources]);
   const runtime = useMemo(
     () =>
       createWebDestinationRuntime({
@@ -411,7 +376,9 @@ const BrowserProduct = (props: {
     locale,
     enabled: resources.aiEnabled,
     credentialConfigured: resources.aiConfigured,
-    ...(aiEvidenceProvider === undefined ? {} : {evidenceProvider: aiEvidenceProvider}),
+    ...(aiEvidenceProvider === undefined
+      ? {}
+      : {evidenceProvider: aiEvidenceProvider}),
     onOpenSettings: openConnections,
   });
   const settingsDataSource = useMemo(
@@ -488,7 +455,6 @@ const BrowserProduct = (props: {
               thresholds: DEFAULT_THRESHOLDS,
               therapyContext: {
                 dataSource: dataSources.therapyContext,
-                quality: therapyContextQuality,
               },
             },
             dayGraphRuntime: {
@@ -897,8 +863,7 @@ export const BrowserApp = () => {
     return activateBrowserNightscoutStatusMonitor({
       currentStatus: statusMonitorNightscout,
       readStatus: () => BrowserNightscoutClient.status(statusMonitorApi),
-      onIdentityChanged: () =>
-        setConnectionRevision(revision => revision + 1),
+      onIdentityChanged: () => setConnectionRevision(revision => revision + 1),
     });
   }, [statusMonitorApi, statusMonitorNightscout]);
 

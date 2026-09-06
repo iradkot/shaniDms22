@@ -62,9 +62,9 @@ function fixture() {
 describe('native chart touch observation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.mocked(runOnJS).mockImplementation(
-      callback => callback as (...args: unknown[]) => void,
-    );
+    jest
+      .mocked(runOnJS)
+      .mockImplementation(callback => callback as (...args: unknown[]) => void);
   });
 
   it('pairs with scrolling without activating or capturing the pan', () => {
@@ -100,6 +100,41 @@ describe('native chart touch observation', () => {
     expect(callbacks.onTouchCancel).not.toHaveBeenCalled();
     expect(manager.end).not.toHaveBeenCalled();
     expect(manager.fail).not.toHaveBeenCalled();
+  });
+
+  it('does not flood the JS thread with vertical scrolling coordinates', () => {
+    const {gesture, manager} = fixture();
+    gesture.handlers.onTouchesDown?.(event(), manager);
+    jest.mocked(runOnJS).mockClear();
+    for (let sample = 0; sample < 120; sample++) {
+      gesture.handlers.onTouchesMove?.(
+        event([point(80, 60 - sample)]),
+        manager,
+      );
+    }
+    expect(runOnJS).not.toHaveBeenCalled();
+  });
+
+  it('keeps one pending move when JS is busy and then delivers the newest position', () => {
+    const jsQueue: Array<() => void> = [];
+    jest.mocked(runOnJS).mockImplementation(callback => (...args) => {
+      jsQueue.push(() => (callback as (...values: unknown[]) => void)(...args));
+    });
+    const {gesture, manager, callbacks} = fixture();
+    gesture.handlers.onTouchesDown?.(event(), manager);
+    jsQueue.shift()?.();
+    for (let sample = 1; sample <= 120; sample++) {
+      gesture.handlers.onTouchesMove?.(
+        event([point(80 + sample, 60 - sample)]),
+        manager,
+      );
+    }
+    expect(jsQueue).toHaveLength(1);
+    while (jsQueue.length) {jsQueue.shift()?.();}
+    expect(callbacks.onTouchMove).toHaveBeenCalledTimes(2);
+    expect(callbacks.onTouchMove).toHaveBeenLastCalledWith({
+      nativeEvent: expect.objectContaining({pageX: 220}),
+    });
   });
 
   it('ends only after the finger lifts and ignores native terminal cancellation', () => {
@@ -176,22 +211,24 @@ describe('native chart touch observation', () => {
 
   it('reads current callbacks without replacing the native gesture', () => {
     let onTouchMove = jest.fn();
-    const observer = createNativeChartTouchGesture(
-      Gesture.Native(),
-      () => ({onTouchMove}),
-    );
+    const observer = createNativeChartTouchGesture(Gesture.Native(), () => ({
+      onTouchMove,
+    }));
     const {manager} = fixture();
     observer.gesture.handlers.onTouchesDown?.(event(), manager);
     const previous = onTouchMove;
     onTouchMove = jest.fn();
-    observer.gesture.handlers.onTouchesMove?.(event(), manager);
+    observer.gesture.handlers.onTouchesMove?.(event([point(100)]), manager);
     expect(previous).not.toHaveBeenCalled();
     expect(onTouchMove).toHaveBeenCalledTimes(1);
   });
 
   it('ends synchronously in the worklet without a JS to UI round trip', () => {
     const {manager} = fixture();
-    const {gesture} = createNativeChartTouchGesture(Gesture.Native(), () => ({}));
+    const {gesture} = createNativeChartTouchGesture(
+      Gesture.Native(),
+      () => ({}),
+    );
     gesture.handlers.onTouchesDown?.(event(), manager);
     gesture.handlers.onTouchesUp?.(event([point()], [point()], 0), manager);
     expect(runOnUI).not.toHaveBeenCalled();
@@ -200,14 +237,9 @@ describe('native chart touch observation', () => {
 
   it('ends the first native contact before delayed JS callbacks can affect a second contact', () => {
     const jsQueue: Array<() => void> = [];
-    jest.mocked(runOnJS).mockImplementation(
-      callback =>
-        (...args) => {
-          jsQueue.push(() =>
-            (callback as (...values: unknown[]) => void)(...args),
-          );
-        },
-    );
+    jest.mocked(runOnJS).mockImplementation(callback => (...args) => {
+      jsQueue.push(() => (callback as (...values: unknown[]) => void)(...args));
+    });
     const {gesture, callbacks, manager} = fixture();
     gesture.handlers.onTouchesDown?.(event(), manager);
     gesture.handlers.onTouchesUp?.(event([point()], [point()], 0), manager);
@@ -233,14 +265,9 @@ describe('native chart touch observation', () => {
 
   it('ignores queued UI deliveries after the surface unmounts', () => {
     const jsQueue: Array<() => void> = [];
-    jest.mocked(runOnJS).mockImplementation(
-      callback =>
-        (...args) => {
-          jsQueue.push(() =>
-            (callback as (...values: unknown[]) => void)(...args),
-          );
-        },
-    );
+    jest.mocked(runOnJS).mockImplementation(callback => (...args) => {
+      jsQueue.push(() => (callback as (...values: unknown[]) => void)(...args));
+    });
     const {gesture, callbacks, manager, dispose} = fixture();
     gesture.handlers.onTouchesDown?.(event(), manager);
     gesture.handlers.onTouchesMove?.(event([point(120)]), manager);

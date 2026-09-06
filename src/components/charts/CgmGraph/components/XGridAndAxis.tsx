@@ -48,4 +48,4 @@ const XGridAndAxis = (props: {
   );
 };
 
-export default XGridAndAxis;
+export default React.memo(XGridAndAxis);

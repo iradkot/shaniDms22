@@ -294,4 +294,26 @@ const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error('The preview root is missing.');
 }
-createRoot(rootElement).render(<PreviewApp />);
+document.documentElement.dataset.chartBuildMode = import.meta.env.PROD
+  ? 'production'
+  : 'development';
+// Synthetic preview only: the application runtime never imports this entry.
+declare global {
+  interface Window {
+    chartRenderMetrics?: {commits: number; totalMs: number; maxMs: number};
+  }
+}
+createRoot(rootElement).render(
+  <React.Profiler
+    id="day-graph-preview"
+    onRender={(_id, _phase, actualDuration) => {
+      const metrics = window.chartRenderMetrics;
+      if (metrics) {
+        metrics.commits++;
+        metrics.totalMs += actualDuration;
+        metrics.maxMs = Math.max(metrics.maxMs, actualDuration);
+      }
+    }}>
+    <PreviewApp />
+  </React.Profiler>,
+);

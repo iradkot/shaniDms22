@@ -1,7 +1,7 @@
 import React, {useMemo} from 'react';
 import {Circle, Path} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
-import MiniChartLane from '../MiniChartLane';
+import MiniChartLane, {type MiniChartPlot} from '../MiniChartLane';
 import {getChartPalette} from '../chartPalette';
 import {
   buildMiniLoadSegments,
@@ -12,6 +12,47 @@ import {
   resolveMiniLoadSamples,
   type MiniChartProps,
 } from '../miniChartData';
+
+const LoadMarks = React.memo(function LoadMarks({
+  segments,
+  plot,
+  color,
+  kind,
+}: {
+  segments: ReturnType<typeof buildMiniLoadSegments>;
+  plot: MiniChartPlot;
+  color: string;
+  kind: 'iob' | 'cob';
+}) {
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.length > 1 ? (
+          <Path
+            key={index}
+            testID={`${kind}-line-segment`}
+            d={segment
+              .map((p, i) => `${i ? 'L' : 'M'}${plot.x(p.x)} ${plot.y(p.y)}`)
+              .join(' ')}
+            fill="none"
+            stroke={color}
+            strokeWidth={2.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ) : segment[0] ? (
+          <Circle
+            key={index}
+            cx={plot.x(segment[0].x)}
+            cy={plot.y(segment[0].y)}
+            r={2.5}
+            fill={color}
+          />
+        ) : null,
+      )}
+    </>
+  );
+});
 
 export default function LoadMiniGraph({
   kind,
@@ -104,32 +145,12 @@ export default function LoadMiniGraph({
       detailText={detailText}>
       {plot => (
         <>
-          {segments.map((segment, index) =>
-            segment.length > 1 ? (
-              <Path
-                key={index}
-                testID={`${kind}-line-segment`}
-                d={segment
-                  .map(
-                    (p, i) => `${i ? 'L' : 'M'}${plot.x(p.x)} ${plot.y(p.y)}`,
-                  )
-                  .join(' ')}
-                fill="none"
-                stroke={color}
-                strokeWidth={2.5}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-            ) : segment[0] ? (
-              <Circle
-                key={index}
-                cx={plot.x(segment[0].x)}
-                cy={plot.y(segment[0].y)}
-                r={2.5}
-                fill={color}
-              />
-            ) : null,
-          )}
+          <LoadMarks
+            segments={segments}
+            plot={plot}
+            color={color}
+            kind={kind}
+          />
           {point ? (
             <Circle
               cx={plot.x(point.x)}

@@ -83,8 +83,7 @@ const COPY = {
     hours: 'שעות',
     inRange: 'בטווח',
     noModeRange: 'מדד הטווח אינו זמין',
-    neutral:
-      'אלו תצפיות מאותן תקופות. הן אינן קובעות מדוע הערכים היו שונים.',
+    neutral: 'אלו תצפיות מאותן תקופות. הן אינן קובעות מדוע הערכים היו שונים.',
     noFacts: 'אין עובדות הקשר מסווגות בתקופה הזו.',
   },
 } as const;
@@ -98,15 +97,18 @@ type LoadState =
 export interface TherapyContextModuleViewProps {
   readonly locale: DestinationLocale;
   readonly dataSource: TherapyContextDataSource;
-  readonly quality: TherapyContextQualityGateInput;
+  readonly quality?: TherapyContextQualityGateInput;
   readonly now?: () => number;
 }
 
 const systemNow = (): number => Date.now();
 
 const initialState = (
-  quality: TherapyContextQualityGateInput,
+  quality: TherapyContextQualityGateInput | undefined,
 ): LoadState => {
+  if (quality === undefined) {
+    return {kind: 'loading'};
+  }
   const gate = evaluateTherapyContextAvailability(quality);
   if (gate.available) {
     return {kind: 'loading'};
@@ -141,8 +143,7 @@ const modeLabel = (
   locale: DestinationLocale,
 ): string => {
   const copy = COPY[locale];
-  const title =
-    mode.mode === 'closed-loop' ? copy.closedLoop : copy.openLoop;
+  const title = mode.mode === 'closed-loop' ? copy.closedLoop : copy.openLoop;
   const range =
     mode.targetRangePercent === undefined
       ? copy.noModeRange
@@ -168,10 +169,13 @@ export const TherapyContextModuleView = ({
   }, [now, rangeDays]);
 
   useEffect(() => {
-    const gate = evaluateTherapyContextAvailability(quality);
+    const gate =
+      quality === undefined
+        ? undefined
+        : evaluateTherapyContextAvailability(quality);
     const request = requestSequence.current + 1;
     requestSequence.current = request;
-    if (!gate.available) {
+    if (gate && !gate.available) {
       setState({
         kind: 'unavailable',
         reason: gate.reason === 'coverage-low' ? 'coverage' : 'unverified',

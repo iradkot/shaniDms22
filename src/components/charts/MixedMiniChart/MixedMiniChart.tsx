@@ -1,4 +1,4 @@
-import React, {useMemo} from 'react';
+import React, {useCallback, useMemo} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import Svg, {G, Line, Text as SvgText} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
@@ -124,10 +124,20 @@ const MixedMiniChart: React.FC<Props> = props => {
   const plotWidth = Math.max(1, width - left - right);
   const svgHeight = Math.max(150, Math.min(240, height));
   const plotHeight = svgHeight - 34;
-  const x = (time: number) =>
-    ((time - +domain[0]) / (+domain[1] - +domain[0])) * plotWidth;
-  const scale = (range: [number, number]) => (value: number) =>
-    plotHeight - ((value - range[0]) / (range[1] - range[0])) * plotHeight;
+  const x = useCallback(
+    (time: number) =>
+      ((time - +domain[0]) / (+domain[1] - +domain[0])) * plotWidth,
+    [domain, plotWidth],
+  );
+  const scales = useMemo(() => {
+    const scale = (range: [number, number]) => (value: number) =>
+      plotHeight - ((value - range[0]) / (range[1] - range[0])) * plotHeight;
+    return {
+      basal: scale(axes.basal.domain),
+      iob: scale(axes.iob.domain),
+      cob: scale(axes.cob.domain),
+    };
+  }, [axes, plotHeight]);
   const cursorVisible =
     cursorTimeMs != null &&
     Number.isFinite(cursorTimeMs) &&
@@ -181,21 +191,21 @@ const MixedMiniChart: React.FC<Props> = props => {
               <BasalOverlayMarks
                 segments={basal}
                 x={x}
-                y={scale(axes.basal.domain)}
+                y={scales.basal}
                 color={palette.basal}
               />
               <LoadOverlayMarks
                 kind="iob"
                 segments={iob}
                 x={x}
-                y={scale(axes.iob.domain)}
+                y={scales.iob}
                 color={palette.iob}
               />
               <LoadOverlayMarks
                 kind="cob"
                 segments={cob}
                 x={x}
-                y={scale(axes.cob.domain)}
+                y={scales.cob}
                 color={palette.cob}
               />
               {cursorVisible ? (

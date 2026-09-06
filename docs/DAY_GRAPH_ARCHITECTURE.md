@@ -34,6 +34,30 @@ chart-specific theme or read the mutable theme singleton from chart renderers.
   provide their own `ChartGestureRoot` and scroll boundary. Web adapters use
   ordinary views and browser touch events, preserving page scrolling and zoom.
 
+## Rendering and input performance
+
+The native observer retains only the newest pending horizontal position while
+one move waits on JavaScript. Vertical-only movement never crosses that bridge.
+Gesture end/failure still happens immediately on the UI thread. A release sends
+its final position before ending inspection. Worklet callbacks must capture
+already-initialized JavaScript receivers; `verify:chart-worklets` executes the
+production Babel output to check this, rather than only calling JS mocks.
+
+`utils/latestFrame` coalesces transient input into one React selection update
+per animation frame. Stacked and standalone charts share it. It never processes
+medical records, persistent events or network data. Release flushes the latest
+position; new touches, range changes and unmount discard obsolete work.
+
+Static glucose marks, axes, load paths and basal geometry are separate from the
+cursor and selected bolus styling. Source normalization and the canonical basal
+timeline are prepared when data/range changes, not during every finger move.
+Chart inputs must be treated as immutable: supply a new array/object when its
+facts change. Theme, dimensions and data references invalidate cached geometry.
+No glucose reading is discarded to meet a rendering budget.
+
+See [performance checks](./PERFORMANCE.md) for the repeatable application budget
+and browser profiling commands.
+
 ## Data rules
 
 Native insulin data is loaded by `services/insulin/insulinDataSource.ts`.

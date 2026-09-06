@@ -4,6 +4,7 @@ import type {
 } from '../../../product/destinations';
 import type {CurrentSnapshotViewModel} from '../../../product/hub';
 import type {LatestNightscoutSnapshotState} from './LatestNightscoutSnapshotStateContext';
+import {selectLatestNightscoutSample} from './latestNightscoutSample';
 
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
@@ -41,59 +42,6 @@ const COPY = {
     hours: (count: number) => `לפני ${count} ש׳`,
   },
 } as const;
-
-interface ValidSnapshotSample {
-  readonly sgv: number;
-  readonly date?: number;
-  readonly direction?: string;
-  readonly iob?: number;
-  readonly cob?: number;
-  readonly staleLevel?: 'fresh' | 'stale' | 'very-stale';
-}
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const finiteNumber = (value: unknown): number | undefined =>
-  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-
-const parseSnapshotSample = (
-  untrustedSnapshot: unknown,
-): ValidSnapshotSample | undefined => {
-  if (!isRecord(untrustedSnapshot)) {
-    return undefined;
-  }
-  const enrichedBg = untrustedSnapshot.enrichedBg;
-  if (!isRecord(enrichedBg)) {
-    return undefined;
-  }
-  const sgv = finiteNumber(enrichedBg.sgv);
-  if (sgv === undefined) {
-    return undefined;
-  }
-
-  const rawDirection = enrichedBg.direction;
-  const direction = typeof rawDirection === 'string' ? rawDirection : undefined;
-  const rawStaleLevel = untrustedSnapshot.staleLevel;
-  const staleLevel =
-    rawStaleLevel === 'fresh' ||
-    rawStaleLevel === 'stale' ||
-    rawStaleLevel === 'very-stale'
-      ? rawStaleLevel
-      : undefined;
-  const date = finiteNumber(enrichedBg.date);
-  const iob = finiteNumber(enrichedBg.iob);
-  const cob = finiteNumber(enrichedBg.cob);
-
-  return {
-    sgv,
-    ...(date === undefined ? {} : {date}),
-    ...(direction === undefined ? {} : {direction}),
-    ...(iob === undefined ? {} : {iob}),
-    ...(cob === undefined ? {} : {cob}),
-    ...(staleLevel === undefined ? {} : {staleLevel}),
-  };
-};
 
 const formatAge = (
   date: number | undefined,
@@ -139,7 +87,7 @@ export const createCurrentSnapshotViewModel = ({
   state,
   target,
 }: CreateCurrentSnapshotViewModelInput): CurrentSnapshotViewModel => {
-  const sample = parseSnapshotSample(state.snapshot);
+  const sample = selectLatestNightscoutSample(state.snapshot);
   const offline = hasError(state.error);
   const copy = COPY[locale];
 

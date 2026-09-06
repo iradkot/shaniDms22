@@ -38,7 +38,7 @@ export type ToolEnvelope =
   | {type: 'final'; content: string};
 
 // ---------------------------------------------------------------------------
-// Markdown config bundle (returned by the hook, consumed by screens)
+// Markdown presentation config shared by the legacy chat views.
 // ---------------------------------------------------------------------------
 
 export interface MarkdownConfig {
@@ -81,9 +81,6 @@ export interface AiAnalystEngine {
 
   // Refs
   scrollRef: RefObject<ScrollView | null>;
-
-  // Markdown rendering
-  markdown: MarkdownConfig;
 
   // Navigation / actions
   openSettings: () => void;

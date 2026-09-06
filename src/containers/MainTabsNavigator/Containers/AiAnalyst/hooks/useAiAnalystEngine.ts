@@ -1,10 +1,8 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {Alert, Keyboard, ScrollView, Share} from 'react-native';
 import {launchImageLibrary} from 'react-native-image-picker';
-import {useTheme} from 'styled-components/native';
 import {useNavigation} from '@react-navigation/native';
 
-import {ThemeType} from 'app/types/theme';
 import * as SCREEN_NAMES from 'app/constants/SCREEN_NAMES';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
@@ -35,7 +33,8 @@ import {useActiveAiWorkspaceScope} from 'app/services/aiMemory/useActiveAiWorksp
 import {useAiWorkspaceIsolationBoundary} from 'app/services/aiAnalyst/useAiWorkspaceIsolationBoundary';
 import {buildLoopAdvisorOpening} from 'app/services/aiAnalyst/loopAdvisorOpening';
 import {guardAssistantOutput} from 'app/services/aiAnalyst/assistantOutputGuard';
-import {useLatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
+import {useLatestNightscoutSnapshotState} from 'app/platform/native/product/LatestNightscoutSnapshotStateContext';
+import {selectLatestNightscoutSample} from 'app/platform/native/product/latestNightscoutSample';
 
 import {ScreenState, AnalystMode, AiAnalystEngine, EvidenceRequest, MissionKey, CompactKpi} from '../types';
 import {
@@ -71,11 +70,6 @@ import {
 } from '../helpers/textParsing';
 import {DEFAULT_TOOL_SYSTEM_PROMPT, buildSystemPrompt} from '../llm/prompts';
 import {runAiAnalystAgentOrchestra, runLlmToolLoop, withTimeout} from '../llm';
-import {
-  createMarkdownItInstance,
-  createSelectableMarkdownRules,
-  createMarkdownStyle,
-} from '../helpers/markdownConfig';
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -87,7 +81,6 @@ const modelTemperatureOptions = (model: string, defaultTemperature = DEFAULT_TEM
 };
 
 export function useAiAnalystEngine(): AiAnalystEngine {
-  const theme = useTheme() as ThemeType;
   const navigation = useNavigation<any>();
   const {settings: aiSettings} = useAiSettings();
   const {settings: glucoseSettings} = useGlucoseSettings();
@@ -106,17 +99,27 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     hasKey ? {mode: 'dashboard'} : {mode: 'locked'},
   );
 
-  // Keep screen mode in sync with key presence.
-  if (state.mode === 'locked' && hasKey) {
-    setTimeout(() => setState({mode: 'dashboard'}), 0);
-  }
-  if (state.mode !== 'locked' && !hasKey) {
-    setTimeout(() => setState({mode: 'locked'}), 0);
-  }
+  // Synchronize credentials after rendering without scheduling duplicate timers.
+  useEffect(() => {
+    setState(current => {
+      if (!hasKey && current.mode !== 'locked') {
+        return {mode: 'locked'};
+      }
+      if (hasKey && current.mode === 'locked') {
+        return {mode: 'dashboard'};
+      }
+      return current;
+    });
+  }, [hasKey, state.mode]);
 
-  const {snapshot: liveSnapshot} = useLatestNightscoutSnapshot({
-    pollingEnabled: state.mode === 'mission',
-  });
+  const liveSnapshot = useLatestNightscoutSnapshotState();
+  const liveSample = useMemo(
+    () =>
+      liveSnapshot.error == null
+        ? selectLatestNightscoutSample(liveSnapshot.snapshot)
+        : undefined,
+    [liveSnapshot.snapshot, liveSnapshot.error],
+  );
 
   // ── Chat state ──────────────────────────────────────────────────────────
   const [uiMessages, setUiMessages] = useState<LlmChatMessage[]>([]);
@@ -197,11 +200,6 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     abortActive: abortForWorkspaceChange,
     resetSession: resetForWorkspaceChange,
   });
-
-  // ── Markdown config (memoised) ──────────────────────────────────────────
-  const markdownItInstance = useMemo(() => createMarkdownItInstance(), []);
-  const selectableMarkdownRules = useMemo(() => createSelectableMarkdownRules(), []);
-  const markdownStyle = useMemo(() => createMarkdownStyle(theme), [theme]);
 
   // ── LLM provider ───────────────────────────────────────────────────────
   const provider = useMemo(() => {
@@ -1254,11 +1252,14 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     [aiWorkspaceScope, state],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (state.mode !== 'mission') return;
 
-    const bg = liveSnapshot?.enrichedBg ?? null;
-    if (!bg) return;
+    const bg = liveSample;
+    if (!bg) {
+      setCompactKpi(null);
+      return;
+    }
 
     setCompactKpi({
       bgMgdl: typeof bg.sgv === 'number' ? Math.round(bg.sgv) : null,
@@ -1267,7 +1268,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
       cobG: typeof bg.cob === 'number' ? Math.round(bg.cob) : null,
       sampleTimeMs: typeof bg.date === 'number' ? bg.date : null,
     });
-  }, [liveSnapshot?.enrichedBg, state.mode, trendArrowFromDirection]);
+  }, [liveSample, state.mode, trendArrowFromDirection]);
 
   // ====================================================================
   // Evidence navigation
@@ -1316,12 +1317,6 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
     scrollRef,
 
-    markdown: {
-      instance: markdownItInstance,
-      rules: selectableMarkdownRules,
-      style: markdownStyle,
-    },
-
     openSettings,
     openHistory,
     clearHistory: clearAllHistory,
@@ -1343,7 +1338,3 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     exportSession,
   };
 }
-
-
-
-

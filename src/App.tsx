@@ -31,15 +31,12 @@ import {
   RANKS_INFO_SCREEN,
   LOOP_ADJUSTMENT_ASSIST_SCREEN,
 } from './constants/SCREEN_NAMES';
-import MainTabsNavigator from './containers/MainTabsNavigator/MainTabsNavigator';
 import ProductExperienceScreen from './containers/ProductExperienceScreen';
 import {TabsSettingsProvider} from 'app/contexts/TabsSettingsContext';
 import {
   GlucoseSettingsProvider,
   useGlucoseSettings,
 } from 'app/contexts/GlucoseSettingsContext';
-import AddNotificationScreen from './containers/forms/AddNotificationScreen/AddNotificationScreen';
-import EditNotificationScreen from 'app/containers/forms/EditNotificationScreen/EditNotificationScreen';
 import {getApp} from '@react-native-firebase/app';
 import {getAuth} from '@react-native-firebase/auth';
 import {
@@ -73,17 +70,6 @@ import {
   useThemeSettings,
 } from 'app/contexts/ThemeSettingsContext';
 import {ThemeType as Theme} from 'app/types/theme';
-import CameraScreen from 'app/components/CameraScreen/CameraScreen';
-import AddFoodItemScreen from 'app/containers/forms/Food/AddFoodItem';
-import AddSportItem from 'app/containers/forms/Sport/AddSportItem';
-import {SportItemsProvider} from 'app/contexts/SportItemsContext';
-import EditFoodItemScreen from './containers/forms/Food/EditFoodItemScreen';
-import EditSportItem from './containers/forms/Sport/EditSportItem';
-import FullScreenViewScreen from 'app/containers/FullScreen/FullScreenViewScreen';
-import HypoInvestigationScreen from 'app/containers/MainTabsNavigator/Containers/Trends/HypoInvestigationScreen';
-import DailyReviewScreen from 'app/containers/MainTabsNavigator/Containers/Home/DailyReviewScreen';
-import RanksInfoScreen from 'app/containers/MainTabsNavigator/Containers/Home/RanksInfoScreen';
-import LoopAdjustmentAssistScreen from 'app/containers/MainTabsNavigator/Containers/Home/LoopAdjustmentAssistScreen';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {TouchProvider} from './components/charts/CgmGraph/contextStores/TouchContext';
 import {isE2E} from 'app/utils/e2e';
@@ -131,11 +117,16 @@ const messagingInstance = getMessaging(getApp());
  * Keep that eager fetch behind the legacy route so the new Hub can start
  * without loading sport data that it does not render.
  */
-const LegacyTabsWithSportItems: React.FC = () => (
-  <SportItemsProvider>
-    <MainTabsNavigator />
-  </SportItemsProvider>
-);
+const LegacyTabsWithSportItems: React.FC = () => {
+  const {SportItemsProvider} = require('./contexts/SportItemsContext');
+  const MainTabsNavigator =
+    require('./containers/MainTabsNavigator/MainTabsNavigator').default;
+  return (
+    <SportItemsProvider>
+      <MainTabsNavigator />
+    </SportItemsProvider>
+  );
+};
 
 interface AppContainerProps {
   theme: Theme;
@@ -448,7 +439,9 @@ const AppInner: () => React.ReactElement = () => {
                               headerTitle: '',
                             }}
                             name={ADD_NOTIFICATION_SCREEN}
-                            component={AddNotificationScreen}
+                            getComponent={() =>
+                              require('./containers/forms/AddNotificationScreen/AddNotificationScreen').default
+                            }
                           />
                           <Stack.Screen
                             options={{
@@ -456,7 +449,9 @@ const AppInner: () => React.ReactElement = () => {
                               headerTitle: '',
                             }}
                             name={EDIT_NOTIFICATION_SCREEN}
-                            component={EditNotificationScreen}
+                            getComponent={() =>
+                              require('./containers/forms/EditNotificationScreen/EditNotificationScreen').default
+                            }
                           />
                           <Stack.Screen
                             options={{
@@ -464,7 +459,9 @@ const AppInner: () => React.ReactElement = () => {
                               headerTitle: '',
                             }}
                             name={ADD_FOOD_ITEM_SCREEN}
-                            component={AddFoodItemScreen}
+                            getComponent={() =>
+                              require('./containers/forms/Food/AddFoodItem').default
+                            }
                           />
                           <Stack.Screen
                             options={{
@@ -472,7 +469,9 @@ const AppInner: () => React.ReactElement = () => {
                               headerTitle: '',
                             }}
                             name={CAMERA_SCREEN}
-                            component={CameraScreen}
+                            getComponent={() =>
+                              require('./components/CameraScreen/CameraScreen').default
+                            }
                           />
                           <Stack.Screen
                             options={{
@@ -480,7 +479,9 @@ const AppInner: () => React.ReactElement = () => {
                               headerTitle: '',
                             }}
                             name={ADD_SPORT_ITEM_SCREEN}
-                            component={AddSportItem}
+                            getComponent={() =>
+                              require('./containers/forms/Sport/AddSportItem').default
+                            }
                           />
                           <Stack.Screen
                             options={{
@@ -488,7 +489,9 @@ const AppInner: () => React.ReactElement = () => {
                               headerTitle: '',
                             }}
                             name={EDIT_SPORT_ITEM_SCREEN}
-                            component={EditSportItem}
+                            getComponent={() =>
+                              require('./containers/forms/Sport/EditSportItem').default
+                            }
                           />
                           <Stack.Screen
                             options={{
@@ -496,7 +499,9 @@ const AppInner: () => React.ReactElement = () => {
                               headerTitle: '',
                             }}
                             name={EDIT_FOOD_ITEM_SCREEN}
-                            component={EditFoodItemScreen}
+                            getComponent={() =>
+                              require('./containers/forms/Food/EditFoodItemScreen').default
+                            }
                           />
                           <Stack.Screen
                             options={({route}: any) => ({
@@ -504,7 +509,9 @@ const AppInner: () => React.ReactElement = () => {
                               orientation: getFullScreenOrientation(route),
                             })}
                             name={FULL_SCREEN_VIEW_SCREEN}
-                            component={FullScreenViewScreen}
+                            getComponent={() =>
+                              require('./containers/FullScreen/FullScreenViewScreen').default
+                            }
                           />
 
                           <Stack.Screen
@@ -512,7 +519,9 @@ const AppInner: () => React.ReactElement = () => {
                               headerShown: false,
                             }}
                             name={DAILY_REVIEW_SCREEN}
-                            component={DailyReviewScreen}
+                            getComponent={() =>
+                              require('./containers/MainTabsNavigator/Containers/Home/DailyReviewScreen').default
+                            }
                           />
 
                           <Stack.Screen
@@ -525,7 +534,9 @@ const AppInner: () => React.ReactElement = () => {
                               },
                             }}
                             name={RANKS_INFO_SCREEN}
-                            component={RanksInfoScreen}
+                            getComponent={() =>
+                              require('./containers/MainTabsNavigator/Containers/Home/RanksInfoScreen').default
+                            }
                           />
 
                           <Stack.Screen
@@ -541,7 +552,9 @@ const AppInner: () => React.ReactElement = () => {
                               },
                             }}
                             name={LOOP_ADJUSTMENT_ASSIST_SCREEN}
-                            component={LoopAdjustmentAssistScreen}
+                            getComponent={() =>
+                              require('./containers/MainTabsNavigator/Containers/Home/LoopAdjustmentAssistScreen').default
+                            }
                           />
 
                           <Stack.Screen
@@ -557,7 +570,9 @@ const AppInner: () => React.ReactElement = () => {
                               },
                             }}
                             name={HYPO_INVESTIGATION_SCREEN}
-                            component={HypoInvestigationScreen}
+                            getComponent={() =>
+                              require('./containers/MainTabsNavigator/Containers/Trends/HypoInvestigationScreen').default
+                            }
                           />
                         </Stack.Navigator>
                       </NavigationContainer>

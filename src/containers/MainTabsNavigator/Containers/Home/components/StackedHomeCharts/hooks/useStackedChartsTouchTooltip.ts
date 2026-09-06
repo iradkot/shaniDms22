@@ -8,6 +8,7 @@ import {buildExternalTooltipPayloadFromLocationX} from 'app/components/charts/Cg
 import type {BgSample} from 'app/types/day_bgs.types';
 import type {StackedChartsTouchSession} from '../StackedHomeCharts.types';
 import type {ChartTouchEvent} from 'app/components/charts/interaction/chartTouch.types';
+import {createLatestFrame} from 'app/utils/latestFrame';
 
 type UseStackedChartsTouchTooltipParams = {
   bgSamples: BgSample[];
@@ -77,6 +78,11 @@ export function useStackedChartsTouchTooltip({
   const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionCallbackRef = useRef(onTouchSessionChange);
   sessionCallbackRef.current = onTouchSessionChange;
+  const commitRawXRef = useRef<(rawX: number) => void>(() => {});
+  const selectionFrame = useMemo(
+    () => createLatestFrame<number>(rawX => commitRawXRef.current(rawX)),
+    [],
+  );
 
   const clearTooltipTimer = useCallback(() => {
     if (tooltipTimerRef.current != null) {
@@ -91,9 +97,10 @@ export function useStackedChartsTouchTooltip({
   }, []);
 
   const clearTooltipState = useCallback(() => {
+    selectionFrame.cancel();
     lastPayloadRef.current = null;
     setChartsTooltip(null);
-  }, []);
+  }, [selectionFrame]);
 
   const scheduleTooltipAutoHide = useCallback(() => {
     clearTooltipTimer();
@@ -122,12 +129,18 @@ export function useStackedChartsTouchTooltip({
       lastPayloadRef.current = payload;
       setChartsTooltip(payload);
       if (!payload) {
+        selectionFrame.cancel();
         releaseTouchSession();
       } else if (payload.autoHide) {
         scheduleTooltipAutoHide();
       }
     },
-    [clearTooltipTimer, releaseTouchSession, scheduleTooltipAutoHide],
+    [
+      clearTooltipTimer,
+      releaseTouchSession,
+      scheduleTooltipAutoHide,
+      selectionFrame,
+    ],
   );
 
   const extent = useMemo(() => d3.extent(bgSamples, s => s.date), [bgSamples]);
@@ -158,11 +171,17 @@ export function useStackedChartsTouchTooltip({
     // Visibility is independent of gesture ownership: a tap stays readable,
     // but must never keep the page in an active chart-touch session.
     ignoreMouseUntilRef.current = Date.now() + SYNTHETIC_MOUSE_DELAY_MS;
+    selectionFrame.flush();
     releaseTouchSession();
     if (lastPayloadRef.current) {
       scheduleTooltipAutoHide();
     }
-  }, [releaseTouchSession, scheduleTooltipAutoHide]);
+  }, [releaseTouchSession, scheduleTooltipAutoHide, selectionFrame]);
+
+  commitRawXRef.current = (rawX: number) => {
+    const payload = buildTooltipPayloadFromRawX(rawX);
+    if (payload) {handleTooltipChange(payload);}
+  };
 
   const handleTouchMove = useCallback(
     (event: ChartTouchEvent) => {
@@ -188,14 +207,11 @@ export function useStackedChartsTouchTooltip({
         }
         active.horizontal = true;
       }
-      const payload = buildTooltipPayloadFromRawX(
+      selectionFrame.schedule(
         (point.pageX - active.pageOriginX) * active.scale,
       );
-      if (payload) {
-        handleTooltipChange(payload);
-      }
     },
-    [buildTooltipPayloadFromRawX, handleTooltipChange, handleTouchEnd],
+    [selectionFrame, handleTouchEnd],
   );
 
   const pageTouchSession = useMemo<StackedChartsTouchSession>(
@@ -246,6 +262,7 @@ export function useStackedChartsTouchTooltip({
         scale,
         horizontal: false,
       };
+      selectionFrame.cancel();
       handleTooltipChange(payload);
       sessionCallbackRef.current?.(pageTouchSession);
     },
@@ -255,6 +272,7 @@ export function useStackedChartsTouchTooltip({
       handleTouchEnd,
       pageTouchSession,
       releaseTouchSession,
+      selectionFrame,
       width,
     ],
   );
@@ -288,14 +306,9 @@ export function useStackedChartsTouchTooltip({
       }
       const scale =
         isFiniteNumber(rect.width) && rect.width > 0 ? width / rect.width : 1;
-      const payload = buildTooltipPayloadFromRawX(
-        (event.nativeEvent.clientX - rect.left) * scale,
-      );
-      if (payload) {
-        handleTooltipChange(payload);
-      }
+      selectionFrame.schedule((event.nativeEvent.clientX - rect.left) * scale);
     },
-    [buildTooltipPayloadFromRawX, handleTooltipChange, ignoreMouse, width],
+    [selectionFrame, ignoreMouse, width],
   );
 
   const mouseHandlers =
@@ -306,6 +319,7 @@ export function useStackedChartsTouchTooltip({
             if (!ignoreMouse(event)) {
               event.preventDefault?.();
               handleMousePoint(event);
+              selectionFrame.flush();
             }
           },
           onMouseLeave: () => {
@@ -337,9 +351,10 @@ export function useStackedChartsTouchTooltip({
   useEffect(
     () => () => {
       clearTooltipTimer();
+      selectionFrame.cancel();
       releaseTouchSession();
     },
-    [clearTooltipTimer, releaseTouchSession],
+    [clearTooltipTimer, releaseTouchSession, selectionFrame],
   );
 
   return {chartsTooltip, handleTooltipChange, touchHandlers, mouseHandlers};

@@ -65,7 +65,9 @@ describe('TherapyContextModuleView', () => {
       );
     });
 
-    expect(tree!.root.findByProps({testID: 'trends-evidence-metadata'})).toBeTruthy();
+    expect(
+      tree!.root.findByProps({testID: 'trends-evidence-metadata'}),
+    ).toBeTruthy();
     expect(allText(tree!)).toEqual(
       expect.stringContaining('Insulin recorded 210 U'),
     );
@@ -95,8 +97,57 @@ describe('TherapyContextModuleView', () => {
     });
 
     expect(load).not.toHaveBeenCalled();
-    expect(tree!.root.findByProps({testID: 'therapy-context-unavailable'})).toBeTruthy();
+    expect(
+      tree!.root.findByProps({testID: 'therapy-context-unavailable'}),
+    ).toBeTruthy();
     expect(allText(tree!)).toContain('המקור עדיין לא מסווג באופן אמין');
+    act(() => tree!.unmount());
+  });
+
+  it('loads a direct destination without requiring an eager host quality request', async () => {
+    const dataSource = source();
+    const load = jest.spyOn(dataSource, 'loadTherapyContext');
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(
+        <TherapyContextModuleView
+          dataSource={dataSource}
+          locale="en"
+          now={() => 100 * DAY_MS}
+        />,
+      );
+    });
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(allText(tree!)).toContain('Insulin recorded 210 U');
+    act(() => tree!.unmount());
+  });
+
+  it('applies the returned quality gate after loading a direct destination', async () => {
+    const validSource = source();
+    const dataSource: TherapyContextDataSource = {
+      loadTherapyContext: async period => {
+        const result = await validSource.loadTherapyContext(period);
+        return {
+          ...result,
+          quality: {sourceReliability: 'reliable', coveragePercent: 20},
+          evidence: {
+            ...result.evidence,
+            coveragePercent: 20,
+            coverageQuality: 'low',
+          },
+        };
+      },
+    };
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(
+        <TherapyContextModuleView dataSource={dataSource} locale="en" />,
+      );
+    });
+    expect(
+      tree!.root.findByProps({testID: 'therapy-context-unavailable'}),
+    ).toBeTruthy();
+    expect(allText(tree!)).not.toContain('Insulin recorded 210 U');
     act(() => tree!.unmount());
   });
 });

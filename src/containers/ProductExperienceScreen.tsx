@@ -67,7 +67,6 @@ import {
 } from 'app/product/settings';
 import {useLegacyAiAnalystModuleRuntime} from 'app/platform/native/ai';
 import {sha1WorkspaceIdentityDigest} from 'app/modules/workspaces';
-import type {TherapyContextQualityGateInput} from 'app/modules/trends';
 import {useGlucoseRuleNotifications} from 'app/hooks/useGlucoseRuleNotifications';
 import {unregisterDeviceToken} from 'app/services/rebaseService';
 import {usePreMealNotifications} from 'app/hooks/usePreMealNotifications';
@@ -78,10 +77,6 @@ type RootNavigation = NavigationProp<Record<string, object | undefined>>;
 const EMPTY_OUTBOX = [] as const;
 const subscribeToNothing = (): (() => void) => () => undefined;
 const getEmptyOutbox = () => EMPTY_OUTBOX;
-const UNVERIFIED_THERAPY_CONTEXT: TherapyContextQualityGateInput = {
-  sourceReliability: 'unverified',
-  coveragePercent: 0,
-};
 
 const ProductExperienceScreen = ({
   navigation,
@@ -108,8 +103,6 @@ const ProductExperienceScreen = ({
   const [settingsDetail, setSettingsDetail] = useState<
     SettingsDetailSection | undefined
   >();
-  const [therapyContextQuality, setTherapyContextQuality] =
-    useState<TherapyContextQualityGateInput>(UNVERIFIED_THERAPY_CONTEXT);
   const {width, height} = useWindowDimensions();
   const firebaseUser = getAuth(getApp()).currentUser;
   const firebaseUserId = firebaseUser?.uid;
@@ -224,51 +217,26 @@ const ProductExperienceScreen = ({
     journal.status === 'ready' ? journal.workspace : undefined;
   const therapyContextDataSource = useMemo(
     () =>
-      createNativeTherapyContextDataSource({
-        glucoseDataSource: trendsDataSource,
-        ...(activeJournalWorkspace === undefined
-          ? {}
-          : {journal: activeJournalWorkspace}),
-        thresholds: {
-          targetMinMgDl: glucoseSettings.hypo,
-          targetMaxMgDl: glucoseSettings.hyper,
-        },
-      }),
+      activeProfile
+        ? createNativeTherapyContextDataSource({
+            glucoseDataSource: trendsDataSource,
+            ...(activeJournalWorkspace === undefined
+              ? {}
+              : {journal: activeJournalWorkspace}),
+            thresholds: {
+              targetMinMgDl: glucoseSettings.hypo,
+              targetMaxMgDl: glucoseSettings.hyper,
+            },
+          })
+        : undefined,
     [
+      activeProfile,
       activeJournalWorkspace,
       glucoseSettings.hyper,
       glucoseSettings.hypo,
       trendsDataSource,
     ],
   );
-  useEffect(() => {
-    let active = true;
-    setTherapyContextQuality(UNVERIFIED_THERAPY_CONTEXT);
-    if (activeProfile === undefined) {
-      return () => {
-        active = false;
-      };
-    }
-    const endMs = Date.now();
-    therapyContextDataSource
-      .loadTherapyContext({
-        startMs: endMs - 14 * 24 * 60 * 60 * 1000,
-        endMs,
-      })
-      .then(snapshot => {
-        if (active) {
-          setTherapyContextQuality(snapshot.quality);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setTherapyContextQuality(UNVERIFIED_THERAPY_CONTEXT);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [activeProfile, therapyContextDataSource]);
   const trendsRuntime = useMemo(
     () => ({
       dataSource: trendsDataSource,
@@ -278,22 +246,15 @@ const ProductExperienceScreen = ({
         targetMaxMgDl: glucoseSettings.hyper,
         highMaxMgDl: glucoseSettings.severeHyper,
       },
-      ...(activeProfile === undefined
+      ...(therapyContextDataSource === undefined
         ? {}
         : {
             therapyContext: {
               dataSource: therapyContextDataSource,
-              quality: therapyContextQuality,
             },
           }),
     }),
-    [
-      activeProfile,
-      glucoseSettings,
-      therapyContextDataSource,
-      therapyContextQuality,
-      trendsDataSource,
-    ],
+    [glucoseSettings, therapyContextDataSource, trendsDataSource],
   );
   const opaqueNightscoutSourceId =
     activeJournalWorkspace?.scope.nightscoutSourceId ??
@@ -320,11 +281,7 @@ const ProductExperienceScreen = ({
           ? {}
           : {journal: activeJournalWorkspace}),
       }),
-    [
-      activeJournalWorkspace,
-      language,
-      opaqueNightscoutSourceId,
-    ],
+    [activeJournalWorkspace, language, opaqueNightscoutSourceId],
   );
   const preMealIntentStore = useMemo(
     () =>
