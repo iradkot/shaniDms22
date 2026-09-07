@@ -73,7 +73,8 @@ permissions cause the script to stop for review.
 It runs backend verification and calls `gcloud functions deploy shaniApi`
 directly. No Firebase-wide deployment, rules deployment, function deletion or
 unrelated function update occurs. It sets the app model to `gpt-5.5` and mirrors
-the function's memory, timeout and concurrency options explicitly. The exported
+the function's memory, one CPU, timeout and concurrency options explicitly. A
+full CPU is required for concurrency greater than one. The exported
 Firebase `onRequest` handler is an HTTP request handler usable as the gcloud
 entry point; the Google Node.js buildpack compiles `lib/index.js` via
 `GOOGLE_NODE_RUN_SCRIPTS=build`. `.gcloudignore` excludes local credentials,

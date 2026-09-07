@@ -164,7 +164,7 @@ if ($PSCmdlet.ShouldProcess("$ProjectId/$Region/$functionName", 'Verify backend 
   Invoke-Gcloud -Arguments @('functions', 'deploy', $functionName, '--gen2', "--region=$Region",
     '--entry-point=shaniApi', '--runtime=nodejs22', "--source=$sourcePath",
     "--ignore-file=$(Join-Path $sourcePath '.gcloudignore')", '--trigger-http', '--allow-unauthenticated',
-    "--run-service-account=$serviceAccountEmail", '--memory=512MiB', '--timeout=90s',
+    "--run-service-account=$serviceAccountEmail", '--memory=512MiB', '--cpu=1', '--timeout=90s',
     '--max-instances=20', '--concurrency=40', '--set-build-env-vars=GOOGLE_NODE_RUN_SCRIPTS=build',
     "--set-env-vars=$envValues") | Out-Host
 
