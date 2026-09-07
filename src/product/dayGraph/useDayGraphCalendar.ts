@@ -3,7 +3,6 @@ import {
   buildDayGraphCalendar,
   moveLocalDays,
   periodForLocalMonth,
-  startOfLocalDay,
   type DayGraphCalendarDay,
   type DayGraphDataSource,
   type DayGraphSnapshot,
@@ -91,13 +90,14 @@ export const useDayGraphCalendar = ({
       return undefined;
     }
     let active = true;
+    const controller = new AbortController();
     setState({cache, key, summary: previous, loading: true, failed: false});
     Promise.resolve()
       .then(() =>
-        source.loadCalendarGlucose!({
-          dayStartMs: month.dayStartMs,
-          dayEndMs: fetchEndMs,
-        }),
+        source.loadCalendarGlucose!(
+          {dayStartMs: month.dayStartMs, dayEndMs: fetchEndMs},
+          {signal: controller.signal},
+        ),
       )
       .then(snapshot => {
         if (!active) {
@@ -132,6 +132,7 @@ export const useDayGraphCalendar = ({
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [cache, source, open, key, month.dayStartMs, fetchEndMs, request, reload]);
 
@@ -172,6 +173,5 @@ export const useDayGraphCalendar = ({
         current?.failed === true ||
         (!summary && selectedDaySnapshot?.freshness.kind === 'stale')),
     retry,
-    todayStartMs: startOfLocalDay(nowMs),
   };
 };

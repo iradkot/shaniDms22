@@ -6,6 +6,10 @@ import {
   type DayGraphCalendarSnapshot,
 } from 'app/modules/dayGraph';
 
+// Jest runs in Node; keep its environment type local instead of adding Node
+// globals to the shared native/Web TypeScript project.
+declare const process: {readonly env: {readonly TZ?: string}};
+
 const minute = 60_000;
 const day = new Date(2026, 8, 7).getTime();
 const snapshot = (
@@ -155,6 +159,11 @@ describe('Day graph calendar summaries', () => {
     for (const date of [new Date(2026, 2, 8), new Date(2026, 10, 1)]) {
       const start = date.getTime();
       const end = moveLocalDays(start, 1);
+      // yarn test:calendar starts a fresh Node process in this zone. Assert
+      // the actual duration so an ignored TZ cannot silently skip DST coverage.
+      if (process.env.TZ === 'America/New_York') {
+        expect((end - start) / 3_600_000).toBe(date.getMonth() === 2 ? 23 : 25);
+      }
       const samples: [number, number][] = [];
       for (let time = start; time < end; time += 5 * minute) {
         samples.push([time, 120]);

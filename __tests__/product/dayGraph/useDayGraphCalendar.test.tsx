@@ -67,10 +67,10 @@ describe('lazy date calendar reads', () => {
     try {
       expect(loadCalendarGlucose).not.toHaveBeenCalled();
       await update(tree, {...input, open: true});
-      expect(loadCalendarGlucose).toHaveBeenCalledWith({
-        dayStartMs: month,
-        dayEndMs: moveLocalDays(day, 1),
-      });
+      expect(loadCalendarGlucose).toHaveBeenCalledWith(
+        {dayStartMs: month, dayEndMs: moveLocalDays(day, 1)},
+        {signal: expect.any(AbortSignal)},
+      );
       expect(latest.days.find(item => item.dayStartMs === day)?.status).toBe(
         'data',
       );
@@ -264,6 +264,91 @@ describe('lazy date calendar reads', () => {
         status: 'data',
         timeInRangePct: 100,
       });
+    } finally {
+      act(() => tree.unmount());
+    }
+  });
+
+  it('does not restart a pending download on clock ticks and cancels it on close', async () => {
+    const pending = deferred<DayGraphCalendarSnapshot>();
+    const loadCalendarGlucose = jest.fn<
+      Promise<DayGraphCalendarSnapshot>,
+      Parameters<NonNullable<DayGraphDataSource['loadCalendarGlucose']>>
+    >(() => pending.promise);
+    const input = {
+      ...props({loadDayGraph: jest.fn(), loadCalendarGlucose}),
+      open: true,
+    };
+    const tree = await mount(input);
+    try {
+      const signal = loadCalendarGlucose.mock.calls[0]?.[1]?.signal;
+      expect(signal?.aborted).toBe(false);
+      await update(tree, {
+        ...input,
+        nowMs: nowMs + 60_000,
+        thresholds: {...input.thresholds},
+      });
+      expect(loadCalendarGlucose).toHaveBeenCalledTimes(1);
+      expect(signal?.aborted).toBe(false);
+      await update(tree, {...input, open: false});
+      expect(signal?.aborted).toBe(true);
+      await act(async () => pending.resolve(snapshot()));
+      expect(latest.days).toEqual([]);
+    } finally {
+      act(() => tree.unmount());
+    }
+  });
+
+  it('refreshes an expired summary on reopen while retaining its visible readings', async () => {
+    const pending = deferred<DayGraphCalendarSnapshot>();
+    const loadCalendarGlucose = jest
+      .fn()
+      .mockResolvedValueOnce(snapshot())
+      .mockReturnValueOnce(pending.promise);
+    const input = {
+      ...props({loadDayGraph: jest.fn(), loadCalendarGlucose}),
+      open: true,
+    };
+    const tree = await mount(input);
+    try {
+      await update(tree, {...input, open: false});
+      await update(tree, {...input, nowMs: nowMs + 5 * 60_000});
+      expect(loadCalendarGlucose).toHaveBeenCalledTimes(2);
+      expect(latest.loading).toBe(true);
+      expect(latest.days.find(item => item.dayStartMs === day)?.status).toBe(
+        'data',
+      );
+      await act(async () => pending.reject(new Error('offline')));
+      expect(latest.loading).toBe(false);
+      expect(latest.failed).toBe(true);
+      expect(latest.stale).toBe(true);
+      expect(latest.days.find(item => item.dayStartMs === day)?.status).toBe(
+        'data',
+      );
+    } finally {
+      act(() => tree.unmount());
+    }
+  });
+
+  it('bounds retained summaries to three months and reloads an evicted month', async () => {
+    const loadCalendarGlucose = jest.fn(async () => snapshot());
+    const input = {
+      ...props({loadDayGraph: jest.fn(), loadCalendarGlucose}),
+      open: true,
+    };
+    const tree = await mount(input);
+    try {
+      for (const monthIndex of [7, 6, 5]) {
+        await update(tree, {
+          ...input,
+          monthStartMs: new Date(2026, monthIndex, 1).getTime(),
+        });
+      }
+      expect(loadCalendarGlucose).toHaveBeenCalledTimes(4);
+      await update(tree, {...input, monthStartMs: previous});
+      expect(loadCalendarGlucose).toHaveBeenCalledTimes(4);
+      await update(tree, input);
+      expect(loadCalendarGlucose).toHaveBeenCalledTimes(5);
     } finally {
       act(() => tree.unmount());
     }

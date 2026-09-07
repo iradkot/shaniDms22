@@ -80,7 +80,7 @@ describe('BrowserNightscoutClient', () => {
     });
   });
 
-  it('reports raw saturated glucose as incomplete even when decoding removes most rows and never caches it', async () => {
+  it('rejects raw saturated glucose even when decoding removes most rows and never caches it', async () => {
     const storage = new MemoryStorage();
     const requestJson = jest.fn()
       .mockResolvedValueOnce({version: 1, data: [
@@ -92,11 +92,31 @@ describe('BrowserNightscoutClient', () => {
       api: {requestJson}, storage, sourceId: 'source-1', workspaceId: 'workspace-1',
       now: () => 1_700_000_100_000,
     });
-    await expect(client.readEntries(1_699_999_900_000, 1_700_000_100_000)).resolves.toMatchObject({
-      records: [{sgv: 123}], complete: false,
-    });
+    await expect(client.readEntries(1_699_999_900_000, 1_700_000_100_000)).rejects.toThrow('incomplete');
     expect(storage.values.size).toBe(0);
     await expect(client.readEntries(1_699_999_900_000, 1_700_000_100_000)).rejects.toThrow('offline');
+  });
+
+  it('falls back to existing stale glucose after saturation instead of replacing it with a truncated response', async () => {
+    const storage = new MemoryStorage();
+    const requestJson = jest.fn()
+      .mockResolvedValueOnce({version: 1, data: [
+        {_id: 'saved', date: 1_700_000_000_000, sgv: 100},
+      ]})
+      .mockResolvedValueOnce({version: 1, data: Array(15_000).fill(
+        {_id: 'truncated', date: 1_700_000_000_000, sgv: 300},
+      )});
+    const client = new BrowserNightscoutClient({
+      api: {requestJson}, storage, sourceId: 'source-1', workspaceId: 'workspace-1',
+      now: () => 1_700_000_100_000,
+    });
+    await client.readEntries(1_699_999_900_000, 1_700_000_100_000);
+    await expect(client.readEntries(1_699_999_900_000, 1_700_000_100_000)).resolves.toMatchObject({
+      records: [{_id: 'saved', sgv: 100}],
+      freshness: {kind: 'stale'},
+      complete: false,
+    });
+    expect([...storage.values.values()].join('')).not.toContain('truncated');
   });
 
   it('sends the expected identity and reboots instead of serving cached data after drift', async () => {

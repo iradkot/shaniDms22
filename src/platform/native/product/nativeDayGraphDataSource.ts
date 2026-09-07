@@ -493,10 +493,11 @@ export const createNativeDayGraphDataSource = (
     return fetchBgDataForDateRangeWithMetadata(start, end);
   };
   return {
-    async loadCalendarGlucose(period) {
+    async loadCalendarGlucose(period, options) {
       const revision = getNightscoutConfigurationRevision();
       return loadCalendarGlucoseRange({
         period,
+        ...(options?.signal === undefined ? {} : {signal: options.signal}),
         assertCurrent: () => {
           if (getNightscoutConfigurationRevision() !== revision) {
             throw new Error(

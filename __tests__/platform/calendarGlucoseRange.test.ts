@@ -14,6 +14,68 @@ const snapshot = (timestampMs: number) => ({
 });
 
 describe('calendar glucose range loading', () => {
+  it('rejects a pre-aborted request before starting any chunks', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const loadChunk = jest.fn(async () => snapshot(1));
+    await expect(
+      loadCalendarGlucoseRange({
+        period: {dayStartMs: 0, dayEndMs: DAY},
+        signal: controller.signal,
+        loadChunk,
+      }),
+    ).rejects.toMatchObject({name: 'AbortError'});
+    expect(loadChunk).not.toHaveBeenCalled();
+  });
+
+  it('rejects cancellation immediately and stops queued chunks even when active native reads ignore abort', async () => {
+    const controller = new AbortController();
+    const finish: (() => void)[] = [];
+    const loadChunk = jest.fn(async period => {
+      await new Promise<void>(resolve => finish.push(resolve));
+      return snapshot(period.dayStartMs);
+    });
+    const request = loadCalendarGlucoseRange({
+      period: {dayStartMs: 0, dayEndMs: 31 * DAY},
+      signal: controller.signal,
+      loadChunk,
+    });
+    expect(loadChunk).toHaveBeenCalledTimes(2);
+    controller.abort();
+    await expect(request).rejects.toMatchObject({name: 'AbortError'});
+    finish.forEach(resolve => resolve());
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(loadChunk).toHaveBeenCalledTimes(2);
+  });
+
+  it('never converts an adapter AbortError into a partial success', async () => {
+    const abortError = new Error('cancelled');
+    abortError.name = 'AbortError';
+    await expect(
+      loadCalendarGlucoseRange({
+        period: {dayStartMs: 0, dayEndMs: 14 * DAY},
+        loadChunk: async period => {
+          if (period.dayStartMs > 0) {
+            throw abortError;
+          }
+          return snapshot(1);
+        },
+      }),
+    ).rejects.toMatchObject({name: 'AbortError'});
+  });
+
+  it('removes its abort listener after a successful load', async () => {
+    const controller = new AbortController();
+    const remove = jest.spyOn(controller.signal, 'removeEventListener');
+    await loadCalendarGlucoseRange({
+      period: {dayStartMs: 0, dayEndMs: DAY},
+      signal: controller.signal,
+      loadChunk: async () => snapshot(1),
+    });
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
   it('limits requests to seven days and two concurrent reads, including a DST-length month', async () => {
     let active = 0;
     let maximumActive = 0;

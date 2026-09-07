@@ -208,14 +208,16 @@ export const createBrowserNightscoutDataSources = (input: {
     },
   };
   const dayGraph: DayGraphDataSource = {
-    async loadCalendarGlucose(period) {
+    async loadCalendarGlucose(period, options) {
       return loadCalendarGlucoseRange({
         period,
+        ...(options?.signal === undefined ? {} : {signal: options.signal}),
         assertCurrent: () => input.client.assertCurrentSource?.(),
         loadChunk: async chunk => {
           const entries = await input.client.readEntries(
             chunk.dayStartMs,
             chunk.dayEndMs,
+            options?.signal,
           );
           return {
             glucoseSamples: entries.records.map((entry, index) => ({

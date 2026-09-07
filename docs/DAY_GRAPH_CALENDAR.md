@@ -4,6 +4,8 @@ The date control opens a calendar instead of resetting the graph to today.
 Browsing a month/year does not change or reload the graph. Selecting a day
 closes the calendar and opens that local day; Today is an explicit shortcut.
 Dates remain selectable while summaries load or fail. Future dates are disabled.
+Historical selections survive midnight; a graph already showing today follows
+the new day. Explicit navigation to another date still takes priority.
 
 ## Display and integrity
 
@@ -25,6 +27,9 @@ Dates remain selectable while summaries load or fail. Future dates are disabled.
 - `src/product/dayGraph/DayGraphCalendarModal.tsx`: presentation and selection.
 - `src/product/dayGraph/useDayGraphCalendar.ts`: lazy scoped reads, race rejection,
   retry, and up to three small month summaries in memory (five-minute freshness).
+  Superseded reads are cancelled on month/source changes and on close. Browser
+  requests are aborted; native requests already in flight may finish, but no
+  further chunks are started and obsolete results are discarded.
   It does not persist additional raw glucose history. Already visible day data
   remains discoverable if a month cannot be loaded offline.
 - Optional `DayGraphDataSource.loadCalendarGlucose`: glucose only; no insulin,
@@ -34,7 +39,9 @@ Dates remain selectable while summaries load or fail. Future dates are disabled.
 
 The native glucose reader now proves non-saturation with the existing complete
 range reader before caching. Web checks the raw entries response count before
-decoding. Stale, truncated and partially failed reads never prove an empty date.
+decoding and uses the existing error/cache fallback when saturated. Truncated
+responses are never exposed as fresh data to the graph or Trends. Stale and
+partially failed reads never prove an empty date.
 Existing platform cache policies are unchanged: an uncached historical date may
 remain unknown offline and become available after reconnecting.
 
@@ -46,9 +53,17 @@ leap days, future guards, lazy loading, retries, source changes and late respons
 Platform tests cover saturation, chunking, stale/partial responses and isolation.
 The local-day suite also passes with `TZ=America/New_York` across both DST changes.
 
-Verified 2026-09-07: 1,390 application tests across 255 suites passed, native/Web
-strict TypeScript passed, and scoped lint passed. Test log:
-`releases/qa/day-graph-calendar-tests.log`.
+Run `yarn test:calendar` for the domain, UI, hook, native/Web adapters and related
+Nightscout integrity tests. The cross-platform runner also starts a separate
+Node process in `America/New_York` and verifies genuine 23-hour and 25-hour days,
+regardless of the developer machine's timezone. Hook regressions cover expiry,
+the three-month memory bound, cancellation and clock ticks during a download.
+`yarn verify:all` includes this command, so existing CI and release checks also
+exercise the timezone-sensitive paths.
+
+Verified 2026-09-07 after the DX/integrity follow-up: 1,412 application tests across
+256 suites passed, native/Web strict TypeScript passed, and scoped lint passed.
+The focused calendar command passed 95 tests plus the eight-test DST rerun.
 
 Browser QA uses only synthetic data in `web/day-graph-viewport-preview.html`:
 Hebrew 390/320px, English dark desktop, landscape, month/year jump, historical

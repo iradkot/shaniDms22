@@ -142,6 +142,10 @@ export interface DayGraphCalendarDay {
 export interface DayGraphDataSource {
   readonly loadCalendarGlucose?: (
     period: DayGraphPeriod,
+    options?: {
+      /** Rejects obsolete loads and stops queued chunks; native in-flight transport may finish. */
+      readonly signal?: AbortSignal;
+    },
   ) => Promise<DayGraphCalendarSnapshot>;
   readonly loadDayGraph: (
     period: DayGraphPeriod,

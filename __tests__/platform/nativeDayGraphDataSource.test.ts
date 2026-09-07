@@ -33,6 +33,27 @@ const journal = {
 };
 
 describe('createNativeDayGraphDataSource', () => {
+  it('stops queued calendar chunks after abort even while native glucose requests are still settling', async () => {
+    const controller = new AbortController();
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => {finish = resolve;});
+    const fetchGlucoseRecords = jest.fn(async () => {
+      await pending;
+      return [];
+    });
+    const source = createNativeDayGraphDataSource({fetchGlucoseRecords, useE2EFixtures: false});
+    const request = source.loadCalendarGlucose!({
+      dayStartMs: 0, dayEndMs: 31 * 24 * 60 * 60 * 1000,
+    }, {signal: controller.signal});
+    expect(fetchGlucoseRecords).toHaveBeenCalledTimes(2);
+    controller.abort();
+    await expect(request).rejects.toMatchObject({name: 'AbortError'});
+    finish();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fetchGlucoseRecords).toHaveBeenCalledTimes(2);
+  });
+
   it('loads calendar glucose only, with bounded chunks and a known complete empty response', async () => {
     const fetchGlucoseRecords = jest.fn(async () => []);
     const loadInsulinContext = jest.fn();

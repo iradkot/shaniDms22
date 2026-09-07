@@ -809,29 +809,26 @@ export class BrowserNightscoutClient {
       if (!Array.isArray(value)) {
         throw new Error('Nightscout range is invalid.');
       }
+      if (resource === 'entries' && value.length >= ENTRIES_RANGE_LIMIT) {
+        throw new Error('Nightscout returned an incomplete glucose range.');
+      }
       const records = value.map(decode).filter((row): row is T => row !== null);
       const fetchedAtMs = this.now();
-      const complete =
-        resource === 'entries'
-          ? value.length < ENTRIES_RANGE_LIMIT
-          : undefined;
-      if (complete !== false) {
-        await this.storeCache(key, {
-          schemaVersion: 2,
-          sourceId: this.options.sourceId,
-          workspaceId: this.options.workspaceId,
-          resource,
-          startMs,
-          endMs,
-          fetchedAtMs,
-          lastAccessedAtMs: fetchedAtMs,
-          data: records,
-        });
-      }
+      await this.storeCache(key, {
+        schemaVersion: 2,
+        sourceId: this.options.sourceId,
+        workspaceId: this.options.workspaceId,
+        resource,
+        startMs,
+        endMs,
+        fetchedAtMs,
+        lastAccessedAtMs: fetchedAtMs,
+        data: records,
+      });
       return {
         records,
         freshness: {kind: 'fresh', fetchedAtMs},
-        ...(complete === undefined ? {} : {complete}),
+        ...(resource === 'entries' ? {complete: true} : {}),
       };
     } catch (error) {
       if (signal?.aborted) {

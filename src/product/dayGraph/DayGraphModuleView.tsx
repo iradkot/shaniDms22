@@ -154,14 +154,6 @@ const periodForLocalDay = (dayStartMs: number): DayGraphPeriod => ({
   dayEndMs: moveLocalDays(dayStartMs, 1),
 });
 
-const validInitialDay = (
-  initialFocus: DayGraphInitialFocus | undefined,
-  now: () => number,
-): number =>
-  initialFocus && Number.isFinite(initialFocus.dayStartMs)
-    ? initialFocus.dayStartMs
-    : startOfLocalDay(now());
-
 const formatDay = (timestampMs: number, locale: DestinationLocale): string =>
   new Intl.DateTimeFormat(locale === 'he' ? 'he-IL' : 'en-GB', {
     weekday: 'long',
@@ -336,9 +328,14 @@ export const DayGraphModuleView = ({
   const phone = useWindowDimensions().width < PHONE_VIEWPORT_MAX_WIDTH;
   const currentTimeMs = useRefreshingNow({now});
   const todayStartMs = startOfLocalDay(currentTimeMs);
-  const initialDayStartMs = validInitialDay(initialFocus, now);
+  const requestedDayStartMs =
+    initialFocus && Number.isFinite(initialFocus.dayStartMs)
+      ? initialFocus.dayStartMs
+      : undefined;
+  const initialDayStartMs = requestedDayStartMs ?? todayStartMs;
   const [selectedDayStartMs, setSelectedDayStartMs] =
     useState(initialDayStartMs);
+  const previousDayContext = useRef({requestedDayStartMs, todayStartMs});
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarMonthMs, setCalendarMonthMs] = useState(() =>
     startOfLocalMonth(initialDayStartMs),
@@ -395,10 +392,18 @@ export const DayGraphModuleView = ({
   );
 
   useEffect(() => {
-    setSelectedDayStartMs(current =>
-      current === initialDayStartMs ? current : initialDayStartMs,
-    );
-  }, [initialDayStartMs]);
+    const previous = previousDayContext.current;
+    previousDayContext.current = {requestedDayStartMs, todayStartMs};
+    if (previous.requestedDayStartMs !== requestedDayStartMs) {
+      // A navigation request owns its date, including returning to the default.
+      setSelectedDayStartMs(requestedDayStartMs ?? todayStartMs);
+    } else if (previous.todayStartMs !== todayStartMs) {
+      // Follow live days across midnight, but never replace a historical choice.
+      setSelectedDayStartMs(current =>
+        current === previous.todayStartMs ? todayStartMs : current,
+      );
+    }
+  }, [requestedDayStartMs, todayStartMs]);
   useEffect(() => {
     setSelectedTimestampMs(initialFocus?.atMs);
   }, [initialFocus?.atMs, selectedDayStartMs]);

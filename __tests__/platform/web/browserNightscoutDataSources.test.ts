@@ -69,6 +69,30 @@ const sources = (client: ReturnType<typeof clientFixture>) =>
   });
 
 describe('createBrowserNightscoutDataSources Day Graph', () => {
+  it('forwards the calendar signal to browser glucose reads and stops queued chunks on abort', async () => {
+    const controller = new AbortController();
+    const client = clientFixture();
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => {finish = resolve;});
+    client.readEntries.mockImplementation(async () => {
+      await pending;
+      return range([]);
+    });
+    const request = sources(client).dayGraph.loadCalendarGlucose!({
+      dayStartMs, dayEndMs: dayStartMs + 31 * 24 * HOUR,
+    }, {signal: controller.signal});
+    expect(client.readEntries).toHaveBeenNthCalledWith(
+      1, dayStartMs, dayStartMs + 7 * 24 * HOUR, controller.signal,
+    );
+    expect(client.readEntries).toHaveBeenCalledTimes(2);
+    controller.abort();
+    await expect(request).rejects.toMatchObject({name: 'AbortError'});
+    finish();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(client.readEntries).toHaveBeenCalledTimes(2);
+  });
+
   it('loads only glucose in bounded calendar chunks and proves empty ranges only with completeness metadata', async () => {
     const client = clientFixture();
     client.readEntries.mockImplementation(async () => ({...range([]), complete: true}));
