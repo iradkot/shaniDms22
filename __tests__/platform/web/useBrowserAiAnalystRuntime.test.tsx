@@ -23,7 +23,11 @@ describe('browser AI analyst runtime', () => {
   it('preserves a failed question and retries it without duplicate history', async () => {
     const requestJson = jest
       .fn<Promise<unknown>, [string]>()
-      .mockRejectedValueOnce(new Error('Temporary failure'))
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Provider echoed sk-secret-test-content'), {
+          code: 'provider_quota_exceeded',
+        }),
+      )
       .mockResolvedValueOnce({version: 1, content: 'Review this with care.'});
     const service = new BrowserAiService({requestJson});
     const storage = new MemoryStorage();
@@ -51,7 +55,8 @@ describe('browser AI analyst runtime', () => {
 
     expect(runtime?.snapshot).toMatchObject({
       draft: 'What changed overnight?',
-      error: 'Temporary failure',
+      error:
+        'OpenAI API credit or quota is exhausted. Check billing and project limits in OpenAI.',
       messages: [],
     });
 

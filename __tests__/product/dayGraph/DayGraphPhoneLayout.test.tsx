@@ -120,7 +120,7 @@ describe('Day Graph first native phone layout', () => {
     expect(RN.StyleSheet.flatten(page(tree!).props.style).backgroundColor).toBe(
       theme.backgroundColor,
     );
-    for (const id of ['previous', 'today', 'next', 'refresh']) {
+    for (const id of ['previous', 'pick-date', 'next', 'refresh']) {
       const button = tree!.root
         .findAllByType(RN.Pressable)
         .find(node => node.props.testID === `day-graph-${id}`)!;
@@ -182,7 +182,8 @@ describe('Day Graph first native phone layout', () => {
     press(tree!, 'day-graph-previous');
     await act(async () => {});
     expect(load.mock.calls[1]![0].dayEndMs).toBe(DAY_START);
-    press(tree!, 'day-graph-today');
+    press(tree!, 'day-graph-pick-date');
+    press(tree!, 'day-graph-calendar-today');
     await act(async () => {});
     expect(load.mock.calls[2]![0].dayStartMs).toBe(DAY_START);
     const next = tree!.root

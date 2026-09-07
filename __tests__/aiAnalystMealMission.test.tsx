@@ -25,9 +25,10 @@ jest.mock('styled-components/native', () => ({
 }));
 jest.mock('app/contexts/AiSettingsContext', () => ({
   useAiSettings: () => ({
+    credentialSyncStatus: {state: 'configured', pending: false},
     settings: {
       enabled: true,
-      apiKey: 'test-key',
+      apiKey: '__shani_server_vault__',
       openAiModel: 'test-model',
       personality: 'neutral',
     },
@@ -156,6 +157,24 @@ describe('legacy AI engine meal mission', () => {
     expect(captured?.uiMessages).toEqual([
       {role: 'assistant', content: 'Dinner observations'},
     ]);
+    act(() => tree!.unmount());
+  });
+
+  it('shows an actionable connection error and restores the exact question for retry', async () => {
+    runLoop.mockRejectedValue(Object.assign(new Error('Sensitive provider detail'), {
+      code: 'provider_quota_exceeded',
+    }));
+    let tree: renderer.ReactTestRenderer;
+    act(() => { tree = renderer.create(<Harness />); });
+    act(() => {
+      captured?.setState({mode: 'mission', mission: 'openChat'});
+      captured?.setInput('Help me understand today');
+    });
+    await act(async () => { await captured?.sendFollowUp(); });
+    expect(captured?.errorText).toContain('billing and project limits');
+    expect(captured?.errorText).not.toContain('Sensitive provider detail');
+    expect(captured?.input).toBe('Help me understand today');
+    expect(captured?.uiMessages).toEqual([]);
     act(() => tree!.unmount());
   });
 });

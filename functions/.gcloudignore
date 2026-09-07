@@ -1,0 +1,8 @@
+.gcloudignore
+.git
+node_modules/
+lib/
+.env
+.env.*
+.npmrc
+*.log

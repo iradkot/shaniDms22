@@ -259,6 +259,9 @@ const coreProductImplementationRegistrations = [
         <DayGraphModuleView
           dataSource={host.dayGraphRuntime.dataSource}
           locale={host.locale}
+          {...(host.trendsRuntime
+            ? {rangeThresholds: host.trendsRuntime.thresholds}
+            : {})}
           onOpenJournalEntry={item => {
             if (
               item.kind === 'journal-meal' ||
@@ -318,6 +321,9 @@ const coreProductImplementationRegistrations = [
           dataSource={host.dailyOverviewRuntime.dataSource}
           locale={host.locale}
           thresholds={host.dailyOverviewRuntime.thresholds}
+          {...(host.dailyOverviewRuntime.layoutPreferences === undefined
+            ? {}
+            : {layoutPreferences: host.dailyOverviewRuntime.layoutPreferences})}
           {...(host.request.focus === undefined
             ? {}
             : {focus: host.request.focus})}

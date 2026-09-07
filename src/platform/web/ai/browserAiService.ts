@@ -1,5 +1,13 @@
 import type {AiConversationMessage} from '../../../modules/ai';
-import type {AuthenticatedWebApiClient} from '../api';
+import {WebApiError, type AuthenticatedWebApiClient} from '../api';
+
+const AI_REQUEST_TIMEOUT_MS = 85_000;
+const invalidResponse = () =>
+  new WebApiError(
+    502,
+    'invalid_response',
+    'The AI server returned an invalid response.',
+  );
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -23,23 +31,54 @@ export class BrowserAiService {
       value.version !== 1 ||
       typeof value.configured !== 'boolean'
     ) {
-      throw new Error('AI credential status is invalid.');
+      throw invalidResponse();
     }
     return value.configured;
   }
 
   async provision(credential: string): Promise<void> {
-    await this.api.requestJson('/v1/vault/llm/provision', {
+    const normalized = credential.trim();
+    if (!normalized || /\s/.test(normalized)) {
+      throw new WebApiError(
+        400,
+        'invalid_credential',
+        'The API key is invalid.',
+      );
+    }
+    const value = await this.api.requestJson('/v1/vault/llm/provision', {
       method: 'POST',
-      body: {version: 1, provider: 'openai', credential},
+      body: {version: 1, provider: 'openai', credential: normalized},
     });
+    if (!isRecord(value) || value.version !== 1 || value.configured !== true) {
+      throw invalidResponse();
+    }
   }
 
   async remove(): Promise<void> {
-    await this.api.requestJson('/v1/vault/llm/remove', {
+    const value = await this.api.requestJson('/v1/vault/llm/remove', {
       method: 'POST',
       body: {version: 1, provider: 'openai'},
     });
+    if (!isRecord(value) || value.version !== 1 || value.configured !== false) {
+      throw invalidResponse();
+    }
+  }
+
+  async testConnection(): Promise<void> {
+    const value = await this.api.requestJson('/v1/vault/llm/test', {
+      method: 'POST',
+      timeoutMs: AI_REQUEST_TIMEOUT_MS,
+      body: {version: 1, provider: 'openai', model: this.model},
+    });
+    if (
+      !isRecord(value) ||
+      value.version !== 1 ||
+      value.provider !== 'openai' ||
+      value.model !== this.model ||
+      value.connected !== true
+    ) {
+      throw invalidResponse();
+    }
   }
 
   async chat(
@@ -51,6 +90,7 @@ export class BrowserAiService {
   ): Promise<string> {
     const value = await this.api.requestJson('/v1/llm/chat', {
       method: 'POST',
+      timeoutMs: AI_REQUEST_TIMEOUT_MS,
       body: {
         version: 1,
         provider: 'openai',
@@ -67,7 +107,7 @@ export class BrowserAiService {
       value.content.trim().length === 0 ||
       value.content.length > 200_000
     ) {
-      throw new Error('AI response is invalid.');
+      throw invalidResponse();
     }
     return value.content.trim();
   }
@@ -80,6 +120,7 @@ export class BrowserAiService {
   }): Promise<string> {
     const value = await this.api.requestJson('/v1/llm/meal-image', {
       method: 'POST',
+      timeoutMs: AI_REQUEST_TIMEOUT_MS,
       body: {
         version: 1,
         provider: 'openai',
@@ -92,9 +133,11 @@ export class BrowserAiService {
     if (
       !isRecord(value) ||
       value.version !== 1 ||
-      typeof value.content !== 'string'
+      typeof value.content !== 'string' ||
+      value.content.trim().length === 0 ||
+      value.content.length > 200_000
     ) {
-      throw new Error('AI image response is invalid.');
+      throw invalidResponse();
     }
     return value.content.trim();
   }

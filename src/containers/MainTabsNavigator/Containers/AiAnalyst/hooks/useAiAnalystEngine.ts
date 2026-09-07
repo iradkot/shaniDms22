@@ -14,6 +14,11 @@ import {AI_ANALYST_SYSTEM_PROMPT} from 'app/services/llm/systemPrompts';
 import {createLlmProvider} from 'app/services/llm/llmClient';
 import {LlmChatMessage} from 'app/services/llm/llmTypes';
 import {analyzeMealImageViaProxy} from 'app/services/llm/shaniLlmProxy';
+import {isConfiguredAiCredential} from 'app/services/llm/credentialReadiness';
+import {
+  aiConnectionErrorMessage,
+  getAiConnectionErrorCode,
+} from 'app/product/settings/aiConnectionFeedback';
 import {buildHypoDetectiveContext} from 'app/services/aiAnalyst/hypoDetectiveContextBuilder';
 import {runAiAnalystTool} from 'app/services/aiAnalyst/aiAnalystLocalTools';
 import {
@@ -92,7 +97,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   const currentWorkspaceIdentityRef = useRef(aiWorkspaceIdentity);
   currentWorkspaceIdentityRef.current = aiWorkspaceIdentity;
 
-  const hasKey = (aiSettings.apiKey ?? '').trim().length > 0;
+  const hasKey = isConfiguredAiCredential(aiSettings.apiKey) && aiWorkspaceScope !== null;
 
   // ── Screen routing ──────────────────────────────────────────────────────
   const [state, setState] = useState<ScreenState>(() =>
@@ -201,11 +206,20 @@ export function useAiAnalystEngine(): AiAnalystEngine {
     resetSession: resetForWorkspaceChange,
   });
 
+  useEffect(() => {
+    if (!hasKey || !aiSettings.enabled) {
+      abortForWorkspaceChange();
+      setIsBusy(false);
+      setProgressText('');
+    }
+  }, [abortForWorkspaceChange, aiSettings.enabled, hasKey]);
+
   // ── LLM provider ───────────────────────────────────────────────────────
   const provider = useMemo(() => {
+    if (!hasKey || !aiSettings.enabled) return null;
     try { return createLlmProvider(aiSettings); }
     catch { return null; }
-  }, [aiSettings]);
+  }, [aiSettings, hasKey]);
 
   const trendArrowFromDirection = useCallback((direction: unknown): string | null => {
     const d = typeof direction === 'string' ? direction : '';
@@ -351,17 +365,13 @@ export function useAiAnalystEngine(): AiAnalystEngine {
   );
 
   const handleMissionError = useCallback(
-    (error: any, runId: number, fallbackMessage: string) => {
+    (error: any, runId: number, _fallbackMessage: string) => {
       if (runSeqRef.current !== runId) return;
-      const msg =
-        error?.name === 'AbortError'
-          ? 'Stopped'
-          : error?.message
-            ? String(error.message)
-            : fallbackMessage;
-      if (msg !== 'Stopped') setErrorText(msg);
+      if (error?.name !== 'AbortError') {
+        setErrorText(aiConnectionErrorMessage(language, getAiConnectionErrorCode(error)));
+      }
     },
-    [],
+    [language],
   );
 
   const finaliseMission = useCallback((runId: number) => {
@@ -842,7 +852,11 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
       const isEmpty = /empty response from openai/i.test(msg);
       setErrorText(
-        isEmpty ? 'OpenAI returned an empty response (often transient). Tap Send to retry.' : msg,
+        isEmpty
+          ? language === 'he'
+            ? 'OpenAI החזירה תשובה ריקה. אפשר ללחוץ שוב על שליחה.'
+            : 'OpenAI returned an empty response. Tap Send to retry.'
+          : aiConnectionErrorMessage(language, getAiConnectionErrorCode(error)),
       );
 
       // Roll back the last user message so retry doesn't duplicate.
@@ -865,7 +879,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
 
       setInput(originalText);
     },
-    [persistHistorySnapshot],
+    [language, persistHistorySnapshot],
   );
 
   const analyzePendingMealImage = useCallback(
@@ -949,7 +963,7 @@ export function useAiAnalystEngine(): AiAnalystEngine {
           }
         } catch (e: any) {
           if (runSeqRef.current !== runId) return;
-          const errText = String(e?.message ?? 'unknown error');
+          const errText = aiConnectionErrorMessage(language, getAiConnectionErrorCode(e));
           setErrorText(
             language === 'he'
               ? `ניתוח התמונה נכשל (${errText}). אפשר ללחוץ שוב שליחה, בלי להעלות את התמונה מחדש.`
@@ -961,8 +975,8 @@ export function useAiAnalystEngine(): AiAnalystEngine {
               role: 'user',
               content:
                 language === 'he'
-                  ? `הערת מערכת: לא הצלחתי לנתח את התמונה הפעם (${String(e?.message ?? 'unknown error')}). נתח לפי טקסט בלבד.`
-                  : `System note: image analysis failed this time (${String(e?.message ?? 'unknown error')}). Continue with text-only analysis.`,
+                  ? 'הערת מערכת: ניתוח התמונה לא הצליח הפעם. נתח לפי טקסט בלבד.'
+                  : 'System note: image analysis failed this time. Continue with text-only analysis.',
             },
           ];
         } finally {

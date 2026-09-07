@@ -63,6 +63,11 @@ class FakeUpstream implements LlmUpstream {
   validateCalls: string[] = [];
   chatCalls: {credential: string; request: ChatRequest}[] = [];
   imageCalls: {credential: string; request: MealImageRequest}[] = [];
+  connectionCalls: {credential: string; model: string}[] = [];
+
+  async testConnection(credential: string, model: string): Promise<void> {
+    this.connectionCalls.push({credential, model});
+  }
 
   async validateCredential(credential: string): Promise<ProviderValidation> {
     this.validateCalls.push(credential);
@@ -218,6 +223,66 @@ test('provisions a validated credential without returning it', async () => {
   assert.deepEqual(response.body, {version: 1, configured: true});
   assert.equal(JSON.stringify(response.body).includes(credential), false);
   assert.equal(await setup.vault.get('user-1', 'openai'), credential);
+});
+
+test('checks Responses access with the current users vaulted credential and approved model', async () => {
+  const setup = dependencies();
+  await setup.vault.put('other-user', 'openai', 'other-users-secret');
+  await setup.vault.put('user-1', 'openai', 'vault-only-secret');
+  const response = new CapturedResponse();
+  await setup.handler(request('/v1/vault/llm/test', {
+    version: 1, provider: 'openai', model: 'gpt-5-mini',
+  }), response);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body, {
+    version: 1, provider: 'openai', model: 'gpt-5-mini', connected: true,
+  });
+  assert.deepEqual(setup.upstream.connectionCalls, [{
+    credential: 'vault-only-secret', model: 'gpt-5-mini',
+  }]);
+  assert.deepEqual(setup.upstream.validateCalls, []);
+  assert.deepEqual(setup.upstream.chatCalls, []);
+  assert.equal(JSON.stringify(response.body).includes('secret'), false);
+});
+
+test('connection test rejects missing credentials, extra context, unsupported models and unauthenticated calls', async () => {
+  for (const scenario of [
+    {body: {version: 1, provider: 'openai', model: 'gpt-5-mini'}, code: 'credential_missing', status: 409},
+    {body: {version: 1, provider: 'openai', model: 'gpt-5-mini', messages: ['private data']}, code: 'invalid_request', status: 400},
+    {body: {version: 1, provider: 'openai', model: 'gpt-5-mini', credential: 'untrusted-key'}, code: 'invalid_request', status: 400},
+    {body: {version: 1, provider: 'openai', model: 'unapproved'}, code: 'unsupported_model', status: 400},
+    {body: {version: 1, provider: 'anthropic', model: 'gpt-5-mini'}, code: 'unsupported_provider', status: 400},
+    {body: {version: 1, provider: 'openai', model: 'gpt-5-mini'}, headers: {}, code: 'unauthenticated', status: 401},
+  ]) {
+    const setup = dependencies();
+    const response = new CapturedResponse();
+    await setup.handler(request('/v1/vault/llm/test', scenario.body,
+      scenario.headers ? {headers: scenario.headers} : {}), response);
+    assert.equal(response.statusCode, scenario.status);
+    assert.equal((response.body as {code: string}).code, scenario.code);
+    assert.deepEqual(setup.upstream.connectionCalls, []);
+  }
+});
+
+test('expired or revoked app sessions return a sign-in error without exposing verifier details', async () => {
+  const setup = dependencies();
+  const handler = createShaniApiHandler({
+    ...setup,
+    auth: {verify: async () => { throw new Error('private Firebase token details'); }},
+    allowedModels: new Set(['gpt-5-mini']),
+    allowedOrigins: new Set(),
+  });
+  const response = new CapturedResponse();
+  await handler(request('/v1/vault/llm/provision', {
+    version: 1, provider: 'openai', credential: 'private-provider-key',
+  }), response);
+
+  assert.equal(response.statusCode, 401);
+  assert.deepEqual(response.body, {
+    version: 1, code: 'unauthenticated', message: 'Authentication required',
+  });
+  assert.deepEqual(setup.upstream.validateCalls, []);
 });
 
 test('rejects unknown request fields and unsupported models', async () => {

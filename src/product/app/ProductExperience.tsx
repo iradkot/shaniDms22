@@ -49,12 +49,15 @@ import {
   recordRecentModule,
   selectLayoutProfile,
   updateDayGraphPreferences,
+  updateDailyOverviewPreferences,
   DEFAULT_DAY_GRAPH_PREFERENCES,
+  DEFAULT_DAILY_OVERVIEW_PREFERENCES,
 } from '../personalization';
 import type {
   PersonalizationLayout,
   PersonalizationQuestionnaireStage,
   ProductPersonalizationChange,
+  ProductPersonalizationSaveOptions,
   StoredProductPersonalization,
 } from '../personalization';
 import type {TrendsModuleRuntime} from '../trends';
@@ -143,6 +146,7 @@ export interface ProductExperienceProps {
   readonly onNavigationIntentConsumed?: (intentId: string) => void;
   readonly onPersonalizationChange?: (
     change: ProductPersonalizationChange,
+    options?: ProductPersonalizationSaveOptions,
   ) => Promise<void>;
   readonly onOpenLegacy?: (destination: AvailableDestinationTarget) => void;
 }
@@ -247,6 +251,36 @@ export const ProductExperience = ({
                         personalizationLayout,
                         value,
                       ),
+                    ),
+                }),
+          },
+        }
+      : undefined;
+  const activeDailyOverviewRuntime: DailyOverviewModuleRuntime | undefined =
+    dailyOverviewRuntime
+      ? {
+          ...dailyOverviewRuntime,
+          layoutPreferences: {
+            scopeKey: JSON.stringify([
+              journalWorkspace?.scope.productUserId ?? 'local',
+              personalizationLayout,
+            ]),
+            layout: personalizationLayout,
+            value:
+              layoutProfile.dailyOverview ?? DEFAULT_DAILY_OVERVIEW_PREFERENCES,
+            hydrated: personalization !== undefined,
+            ...(onPersonalizationChange === undefined
+              ? {}
+              : {
+                  onSave: value =>
+                    onPersonalizationChange(
+                      current =>
+                        updateDailyOverviewPreferences(
+                          current,
+                          personalizationLayout,
+                          value,
+                        ),
+                      {optimistic: false},
                     ),
                 }),
           },
@@ -519,7 +553,9 @@ export const ProductExperience = ({
           ...(activeTrendsRuntime === undefined
             ? {}
             : {trendsRuntime: activeTrendsRuntime}),
-          ...(dailyOverviewRuntime === undefined ? {} : {dailyOverviewRuntime}),
+          ...(activeDailyOverviewRuntime === undefined
+            ? {}
+            : {dailyOverviewRuntime: activeDailyOverviewRuntime}),
           ...(activeDayGraphRuntime === undefined
             ? {}
             : {dayGraphRuntime: activeDayGraphRuntime}),

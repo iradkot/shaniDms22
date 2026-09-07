@@ -8,6 +8,7 @@ import {
 import type {
   DayGraphBasalScheduleEntry,
   DayGraphDataSource,
+  DayGraphGlucoseSample,
   DayGraphInsulinEvent,
   DayGraphPeriod,
   DayGraphTimelineItem,
@@ -27,6 +28,7 @@ import {
 } from '../../../services/insulin/insulinDataSource';
 import {isE2E} from '../../../utils/e2e';
 import {makeE2EBgSamplesForRange} from '../../../utils/e2eFixtures';
+import {loadCalendarGlucoseRange} from '../../nightscout/loadCalendarGlucoseRange';
 
 interface NativeDayGraphGlucoseRecord {
   readonly _id?: string;
@@ -35,6 +37,23 @@ interface NativeDayGraphGlucoseRecord {
   readonly direction?: string;
   readonly device?: string;
 }
+
+const glucoseSamples = (
+  records: readonly NativeDayGraphGlucoseRecord[],
+  sourceId: string,
+): readonly DayGraphGlucoseSample[] =>
+  records.map((sample, index) => ({
+    identity: {
+      sourceId,
+      recordId:
+        sample._id?.trim() ||
+        `unidentified-glucose:${sample.date}:${sample.sgv}:${index}`,
+    },
+    timestampMs: sample.date,
+    valueMgDl: sample.sgv,
+    ...(sample.direction === undefined ? {} : {direction: sample.direction}),
+    ...(sample.device === undefined ? {} : {device: sample.device}),
+  }));
 
 interface NativeDayGraphMealSnapshot {
   readonly id: string;
@@ -457,6 +476,7 @@ export const createNativeDayGraphDataSource = (
   const fresh = <T>(records: readonly T[]): NightscoutRangeResult<T> => ({
     records,
     freshness: {kind: 'fresh', fetchedAtMs: now()},
+    complete: true,
   });
   const loadGlucoseRange = async (
     start: Date,
@@ -473,6 +493,31 @@ export const createNativeDayGraphDataSource = (
     return fetchBgDataForDateRangeWithMetadata(start, end);
   };
   return {
+    async loadCalendarGlucose(period) {
+      const revision = getNightscoutConfigurationRevision();
+      return loadCalendarGlucoseRange({
+        period,
+        assertCurrent: () => {
+          if (getNightscoutConfigurationRevision() !== revision) {
+            throw new Error(
+              'Nightscout source changed while loading the calendar.',
+            );
+          }
+        },
+        loadChunk: async chunk => {
+          const result = await loadGlucoseRange(
+            new Date(chunk.dayStartMs),
+            new Date(chunk.dayEndMs),
+          );
+          return {
+            glucoseSamples: glucoseSamples(result.records, sourceId),
+            freshness: result.freshness,
+            complete:
+              result.complete === true && result.freshness.kind === 'fresh',
+          };
+        },
+      });
+    },
     async loadDayGraph(period, options) {
       const start = new Date(period.dayStartMs);
       const end = new Date(period.dayEndMs);
@@ -495,20 +540,7 @@ export const createNativeDayGraphDataSource = (
       );
       const stale = freshnessInputs.some(value => value.kind === 'stale');
       return {
-        glucoseSamples: glucoseRange.records.map((sample, index) => ({
-          identity: {
-            sourceId,
-            recordId:
-              sample._id?.trim() ||
-              `unidentified-glucose:${sample.date}:${sample.sgv}:${index}`,
-          },
-          timestampMs: sample.date,
-          valueMgDl: sample.sgv,
-          ...(sample.direction === undefined
-            ? {}
-            : {direction: sample.direction}),
-          ...(sample.device === undefined ? {} : {device: sample.device}),
-        })),
+        glucoseSamples: glucoseSamples(glucoseRange.records, sourceId),
         timelineItems: suppliedTimeline ?? [
           ...treatmentItems(context.treatments, sourceId, locale),
           ...journalItems(dependencies.journal, period, locale),

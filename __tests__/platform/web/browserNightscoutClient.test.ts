@@ -71,11 +71,32 @@ describe('BrowserNightscoutClient', () => {
         },
       ],
       freshness: {kind: 'fresh', fetchedAtMs: 1_700_000_100_000},
+      complete: true,
     });
     await expect(client.readEntries(startMs, endMs)).resolves.toMatchObject({
       records: [{_id: 'entry-1', sgv: 112}],
       freshness: {kind: 'stale'},
+      complete: false,
     });
+  });
+
+  it('reports raw saturated glucose as incomplete even when decoding removes most rows and never caches it', async () => {
+    const storage = new MemoryStorage();
+    const requestJson = jest.fn()
+      .mockResolvedValueOnce({version: 1, data: [
+        {_id: 'one', date: 1_700_000_000_000, sgv: 123},
+        ...Array(14_999).fill(null),
+      ]})
+      .mockRejectedValueOnce(new Error('offline'));
+    const client = new BrowserNightscoutClient({
+      api: {requestJson}, storage, sourceId: 'source-1', workspaceId: 'workspace-1',
+      now: () => 1_700_000_100_000,
+    });
+    await expect(client.readEntries(1_699_999_900_000, 1_700_000_100_000)).resolves.toMatchObject({
+      records: [{sgv: 123}], complete: false,
+    });
+    expect(storage.values.size).toBe(0);
+    await expect(client.readEntries(1_699_999_900_000, 1_700_000_100_000)).rejects.toThrow('offline');
   });
 
   it('sends the expected identity and reboots instead of serving cached data after drift', async () => {

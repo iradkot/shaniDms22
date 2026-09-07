@@ -9,6 +9,7 @@ import {
 } from '../shell';
 import {
   MAX_PERSISTED_RECENT_MODULES,
+  DAILY_OVERVIEW_CARD_IDS,
   PERSONALIZATION_LAYOUTS,
   PERSONALIZATION_QUESTIONNAIRE_STAGES,
   RELATIONSHIPS_TO_DATA_SUBJECT,
@@ -19,6 +20,7 @@ import {
   type StoredAccountPersonalization,
   type StoredDevicePersonalization,
   type StoredDayGraphPreferences,
+  type StoredDailyOverviewPreferences,
   type StoredLayoutPersonalization,
   type StoredLayoutProfile,
   type StoredProductPersonalization,
@@ -354,6 +356,44 @@ const parseDayGraphPreferencesAt = (
   return {schemaVersion: 1, mode, windowHours};
 };
 
+const parseDailyOverviewPreferencesAt = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): StoredDailyOverviewPreferences | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isPlainObject(value)) {
+    issues.push({path, message: 'Expected Daily Overview preferences'});
+    return undefined;
+  }
+  rejectUnknownKeys(
+    value,
+    ['schemaVersion', 'rangeStyle', 'cardOrder'],
+    path,
+    issues,
+  );
+  requireSchemaVersion(value, path, issues);
+  const {rangeStyle, cardOrder} = value;
+  if (rangeStyle !== 'ring' && rangeStyle !== 'bar' && rangeStyle !== 'list') {
+    issues.push({path: `${path}.rangeStyle`, message: 'Unknown range style'});
+    return undefined;
+  }
+  if (
+    !Array.isArray(cardOrder) ||
+    cardOrder.length !== DAILY_OVERVIEW_CARD_IDS.length ||
+    !DAILY_OVERVIEW_CARD_IDS.every(id => cardOrder.includes(id))
+  ) {
+    issues.push({
+      path: `${path}.cardOrder`,
+      message: 'Expected every Daily Overview card exactly once',
+    });
+    return undefined;
+  }
+  return {schemaVersion: 1, rangeStyle, cardOrder: [...cardOrder]};
+};
+
 const parseLayoutProfileAt = (
   value: unknown,
   path: string,
@@ -373,6 +413,7 @@ const parseLayoutProfileAt = (
       'showGri',
       'shell',
       'dayGraph',
+      'dailyOverview',
     ],
     path,
     issues,
@@ -383,6 +424,11 @@ const parseLayoutProfileAt = (
   const dayGraph = parseDayGraphPreferencesAt(
     value.dayGraph,
     `${path}.dayGraph`,
+    issues,
+  );
+  const dailyOverview = parseDailyOverviewPreferencesAt(
+    value.dailyOverview,
+    `${path}.dailyOverview`,
     issues,
   );
   if (!layout || !shell) {
@@ -400,6 +446,7 @@ const parseLayoutProfileAt = (
     showGri: readBoolean(value.showGri ?? false, `${path}.showGri`, issues),
     shell,
     ...(dayGraph === undefined ? {} : {dayGraph}),
+    ...(dailyOverview === undefined ? {} : {dailyOverview}),
   };
 };
 

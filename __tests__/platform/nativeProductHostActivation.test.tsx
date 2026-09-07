@@ -48,6 +48,8 @@ jest.mock('app/contexts/GlucoseSettingsContext', () => ({
 jest.mock('app/contexts/AiSettingsContext', () => ({
   useAiSettings: () => ({
     settings: {enabled: false, apiKey: ''},
+    credentialSyncStatus: {state: 'idle', pending: false},
+    retryCredentialSync: jest.fn(),
     setSetting: jest.fn(),
   }),
 }));

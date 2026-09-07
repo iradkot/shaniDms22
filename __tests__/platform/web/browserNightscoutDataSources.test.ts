@@ -3,6 +3,7 @@ import {
   BrowserNightscoutClient,
   createBrowserNightscoutDataSources,
   loadBrowserCurrentSnapshot,
+  WebApiError,
 } from 'app/platform/web';
 import {
   CORE_DESTINATION_IDS,
@@ -68,6 +69,80 @@ const sources = (client: ReturnType<typeof clientFixture>) =>
   });
 
 describe('createBrowserNightscoutDataSources Day Graph', () => {
+  it('loads only glucose in bounded calendar chunks and proves empty ranges only with completeness metadata', async () => {
+    const client = clientFixture();
+    client.readEntries.mockImplementation(async () => ({...range([]), complete: true}));
+    const result = await sources(client).dayGraph.loadCalendarGlucose!({
+      dayStartMs, dayEndMs: dayStartMs + 31 * 24 * HOUR,
+    });
+    expect(client.readEntries).toHaveBeenCalledTimes(5);
+    expect(client.readTreatments).not.toHaveBeenCalled();
+    expect(client.readDeviceStatusesForRange).not.toHaveBeenCalled();
+    expect(client.readBasalProfile).not.toHaveBeenCalled();
+    expect(result.complete).toBe(true);
+    expect(result.glucoseSamples).toEqual([]);
+  });
+
+  it('does not infer completeness from successfully decoded glucose without raw metadata', async () => {
+    const result = await sources(clientFixture()).dayGraph.loadCalendarGlucose!({dayStartMs, dayEndMs});
+    expect(result.glucoseSamples).toHaveLength(1);
+    expect(result.complete).toBe(false);
+    expect(result.freshness.kind).toBe('stale');
+  });
+
+  it('retains successful glucose chunks when another chunk is unavailable', async () => {
+    const client = clientFixture();
+    client.readEntries.mockRejectedValueOnce(new Error('offline'));
+    client.readEntries.mockResolvedValueOnce(range([
+      {_id: 'g2', date: dayStartMs + 8 * 24 * HOUR, sgv: 120},
+    ]));
+    const result = await sources(client).dayGraph.loadCalendarGlucose!({
+      dayStartMs, dayEndMs: dayStartMs + 14 * 24 * HOUR,
+    });
+    expect(result.glucoseSamples).toHaveLength(1);
+    expect(result.complete).toBe(false);
+    expect(result.freshness.kind).toBe('stale');
+  });
+
+  it('preserves stale glucose for the calendar without claiming current completeness', async () => {
+    const client = {
+      ...clientFixture(),
+      readEntries: async () => ({
+        records: [{_id: 'g1', date: dayStartMs + HOUR, sgv: 120}],
+        freshness: {kind: 'stale' as const, fetchedAtMs: 123},
+        complete: true,
+      }),
+    };
+    const result = await createBrowserNightscoutDataSources({
+      client: client as unknown as BrowserNightscoutClient,
+      sourceId: 'source-1', locale: 'en', journal,
+    }).dayGraph.loadCalendarGlucose!({dayStartMs, dayEndMs});
+    expect(result.glucoseSamples).toHaveLength(1);
+    expect(result.complete).toBe(false);
+    expect(result.freshness).toEqual({kind: 'stale', fetchedAtMs: 123});
+  });
+
+  it('rejects a calendar load if any chunk detects a source identity change', async () => {
+    const requestJson = jest.fn()
+      .mockResolvedValueOnce({version: 1, data: [{date: dayStartMs + HOUR, sgv: 120}]})
+      .mockRejectedValueOnce(new WebApiError(409, 'nightscout_identity_mismatch', 'changed'));
+    const client = new BrowserNightscoutClient({
+      api: {requestJson},
+      storage: {
+        getItem: async () => null,
+        setItem: async () => {},
+        removeItem: async () => {},
+        getAllKeys: async () => [],
+      },
+      sourceId: 'source-1', workspaceId: 'workspace-1', now: () => dayEndMs,
+    });
+    await expect(createBrowserNightscoutDataSources({
+      client, sourceId: 'source-1', locale: 'en', journal,
+    }).dayGraph.loadCalendarGlucose!({
+      dayStartMs, dayEndMs: dayStartMs + 14 * 24 * HOUR,
+    })).rejects.toThrow('source changed');
+  });
+
   it('does not display an old IOB/COB reading as current alongside fresh glucose', async () => {
     const nowMs = dayStartMs + HOUR;
     const client = clientFixture();

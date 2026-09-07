@@ -13,6 +13,70 @@ const textValues = (tree: renderer.ReactTestRenderer): string[] =>
     );
 
 describe('SettingsDetailView', () => {
+  it('explains a pending upload and lets the user retry without pasting again', async () => {
+    const retry = jest.fn(async () => undefined);
+    let tree!: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <SettingsDetailView
+          locale="he"
+          section="ai-credentials"
+          status={{
+            credentialConfigured: false,
+            credentialSyncState: 'error',
+            credentialSyncPending: true,
+            credentialErrorCode: 'backend_unconfigured',
+          }}
+          onRetryAiCredential={retry}
+          onClose={() => undefined}
+        />,
+      );
+    });
+    expect(textValues(tree)).toContain(
+      'השינוי במפתח ממתין לסנכרון. הפעולה עדיין לא הושלמה.',
+    );
+    expect(textValues(tree).join(' ')).toContain('נדרש תיקון בפריסה');
+    await act(async () => {
+      tree.root
+        .findAllByProps({testID: 'settings-detail-retry-ai'})
+        .find(node => node.type === Pressable)!
+        .props.onPress();
+    });
+    expect(retry).toHaveBeenCalledTimes(1);
+    act(() => tree.unmount());
+  });
+
+  it('shows a safe, actionable key error and retains the entered key for correction', async () => {
+    let tree!: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <SettingsDetailView
+          locale="en"
+          section="ai-credentials"
+          status={{credentialConfigured: false}}
+          onClose={() => undefined}
+          onSaveAiCredential={async () => {
+            throw Object.assign(new Error('raw secret in upstream error'), {
+              code: 'invalid_credential',
+            });
+          }}
+        />,
+      );
+    });
+    act(() => tree.root.findByType(TextInput).props.onChangeText('sk-test'));
+    await act(async () => {
+      tree.root
+        .findAllByProps({testID: 'settings-detail-save-ai'})
+        .find(node => node.type === Pressable)!
+        .props.onPress();
+    });
+    expect(textValues(tree)).toContain(
+      'OpenAI rejected this key. Copy the full API key and try again.',
+    );
+    expect(textValues(tree).join(' ')).not.toContain('raw secret');
+    expect(tree.root.findByType(TextInput).props.value).toBe('sk-test');
+    act(() => tree.unmount());
+  });
   it('saves a newly entered AI key without ever rendering the saved key', async () => {
     const saveCredential = jest.fn(async () => undefined);
     let tree: renderer.ReactTestRenderer;
@@ -32,7 +96,7 @@ describe('SettingsDetailView', () => {
     expect(textValues(tree!)).toEqual(
       expect.arrayContaining([
         'AI credential',
-        'A credential is configured. Its value is never shown.',
+        'An OpenAI key is saved securely. Test the connection to check that AI is available.',
         'Advisory only. The AI cannot change therapy or Nightscout data.',
       ]),
     );

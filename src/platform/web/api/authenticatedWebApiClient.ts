@@ -31,6 +31,7 @@ export class AuthenticatedWebApiClient {
       readonly method?: 'GET' | 'POST';
       readonly body?: unknown;
       readonly signal?: AbortSignal;
+      readonly timeoutMs?: number;
     } = {},
   ): Promise<unknown> {
     if (!/^\/v1\/[a-z0-9/_-]+(?:\?[a-z0-9%&=._-]+)?$/i.test(path)) {
@@ -38,7 +39,7 @@ export class AuthenticatedWebApiClient {
     }
     const abortScope = createRequestAbortScope({
       ...(options.signal === undefined ? {} : {signal: options.signal}),
-      timeoutMs: this.options.timeoutMs ?? 25_000,
+      timeoutMs: options.timeoutMs ?? this.options.timeoutMs ?? 25_000,
     });
     try {
       abortScope.throwIfAborted();
@@ -64,22 +65,36 @@ export class AuthenticatedWebApiClient {
         abortScope.throwIfAborted();
       } catch (error) {
         abortScope.throwIfAborted();
-        throw new WebApiError(
-          response.status,
-          'invalid_response',
-          'The server returned an invalid response.',
-        );
+        if (response.ok) {
+          throw new WebApiError(
+            response.status,
+            'invalid_response',
+            'The server returned an invalid response.',
+          );
+        }
       }
       if (!response.ok) {
         const code =
-          isRecord(value) && typeof value.code === 'string'
+          isRecord(value) &&
+          typeof value.code === 'string' &&
+          /^[a-z][a-z_]{0,63}$/.test(value.code)
             ? value.code
+            : response.status === 401
+            ? 'unauthenticated'
+            : response.status === 404
+            ? 'not_found'
+            : response.status === 429
+            ? 'rate_limited'
+            : response.status >= 500
+            ? 'upstream_unavailable'
             : 'request_failed';
-        const message =
-          isRecord(value) && typeof value.message === 'string'
-            ? value.message
-            : 'The request could not be completed.';
-        throw new WebApiError(response.status, code, message);
+        // Provider errors can echo credentials or user content. Only the stable
+        // code crosses this boundary; presentation maps it to trusted copy.
+        throw new WebApiError(
+          response.status,
+          code,
+          'The request could not be completed.',
+        );
       }
       return value;
     } catch (error) {
@@ -89,7 +104,10 @@ export class AuthenticatedWebApiClient {
       if (abortScope.kind === 'timeout') {
         throw new WebApiError(408, 'timeout', 'The request timed out.');
       }
-      throw error;
+      if (error instanceof WebApiError) {
+        throw error;
+      }
+      throw new WebApiError(0, 'network', 'The server could not be reached.');
     } finally {
       abortScope.dispose();
     }

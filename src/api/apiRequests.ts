@@ -33,6 +33,8 @@ export type NightscoutRangeFreshness =
 export interface NightscoutRangeResult<T> {
   readonly records: readonly T[];
   readonly freshness: NightscoutRangeFreshness;
+  /** Present for glucose reads; cached history cannot prove current empty days. */
+  readonly complete?: boolean;
 }
 
 const objectRecord = (value: unknown): Record<string, unknown> | null =>
@@ -94,13 +96,17 @@ export const fetchBgDataForDateRangeWithMetadata = async (
   const endIso = endDate.toISOString();
   const count = estimateBgCountForRange(startDate, endDate);
   const cacheScope = getActiveNightscoutCacheScope();
-  const apiUrl: string = `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=${count}`;
   try {
-    const response = await nightscoutInstance.get<BgSample[]>(apiUrl);
+    const records = await requestCompleteNightscoutRange(
+      limit =>
+        `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=${limit}`,
+      count,
+      MAX_BG_COUNT,
+    );
     if (cacheScope) {
       assertActiveNightscoutCacheScope(cacheScope);
     }
-    const sortedBgData = (Array.isArray(response.data) ? response.data : [])
+    const sortedBgData = records
       .map(decodeBgSample)
       .filter((sample): sample is BgSample => sample !== null)
       .sort(bgSortFunction(false));
@@ -126,6 +132,7 @@ export const fetchBgDataForDateRangeWithMetadata = async (
     return {
       records: sortedBgData,
       freshness: {kind: 'fresh', fetchedAtMs},
+      complete: true,
     };
   } catch (error: unknown) {
     if (cacheScope) {
@@ -146,6 +153,7 @@ export const fetchBgDataForDateRangeWithMetadata = async (
           );
           return {
             records: [...cached.records].sort(bgSortFunction(false)),
+            complete: false,
             freshness: {
               kind: 'stale',
               fetchedAtMs: cached.fetchedAtMs,

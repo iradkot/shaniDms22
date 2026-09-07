@@ -5,6 +5,12 @@ import {
   type AuthenticatedWebApiClient,
   type BrowserNightscoutStatus,
 } from '../src/platform/web';
+import {
+  aiConnectionErrorMessage,
+  getAiConnectionErrorCode,
+  OPENAI_API_KEYS_URL,
+  OPENAI_BILLING_URL,
+} from '../src/product/settings/aiConnectionFeedback';
 
 const COPY = {
   en: {
@@ -23,11 +29,24 @@ const COPY = {
     aiHint:
       'The provider key is encrypted on the server. AI remains advisory only.',
     aiKey: 'OpenAI API key',
-    saveAi: 'Save and verify key',
+    saveAi: 'Save key',
     removeAi: 'Remove AI key',
-    configured: 'Configured',
+    configured: 'Key saved · connection not tested',
     notConfigured: 'Not configured',
     saving: 'Saving…',
+    testing: 'Testing…',
+    testAi: 'Test saved key',
+    testHint:
+      'The test sends a short request to OpenAI without health data. A small API charge may apply.',
+    saved: 'Key saved securely. Test the connection to confirm OpenAI access.',
+    verified: 'OpenAI connection verified. AI is ready to use.',
+    removed: 'AI key removed.',
+    createKey: 'Open OpenAI API keys',
+    billing: 'Open API billing',
+    billingHint:
+      'OpenAI API usage is billed separately from a ChatGPT subscription. Connect with an API key from OpenAI.',
+    failed:
+      'The connection could not be updated. Check your connection and try again.',
   },
   he: {
     title: 'חיבורים',
@@ -43,11 +62,24 @@ const COPY = {
     ai: 'AI Analyst',
     aiHint: 'מפתח הספק מוצפן בשרת. ה־AI נשאר לייעוץ בלבד.',
     aiKey: 'מפתח API של OpenAI',
-    saveAi: 'שמירה ואימות המפתח',
+    saveAi: 'שמירת מפתח',
     removeAi: 'הסרת מפתח AI',
-    configured: 'מוגדר',
+    configured: 'מפתח נשמר · החיבור טרם נבדק',
     notConfigured: 'לא מוגדר',
     saving: 'שומר…',
+    testing: 'בודק…',
+    testAi: 'בדיקת המפתח השמור',
+    testHint:
+      'הבדיקה שולחת בקשה קצרה ל־OpenAI ללא מידע רפואי. ייתכן חיוב API קטן.',
+    saved:
+      'המפתח נשמר בצורה מאובטחת. יש לבדוק את החיבור כדי לוודא גישה ל־OpenAI.',
+    verified: 'החיבור ל־OpenAI נבדק בהצלחה. ה־AI מוכן לשימוש.',
+    removed: 'מפתח ה־AI הוסר.',
+    createKey: 'פתיחת מפתחות API ב־OpenAI',
+    billing: 'פתיחת חיוב API',
+    billingHint:
+      'השימוש ב־OpenAI API מחויב בנפרד ממנוי ChatGPT. החיבור מתבצע באמצעות מפתח API מ־OpenAI.',
+    failed: 'לא הצלחנו לעדכן את החיבור. יש לבדוק את חיבור האינטרנט ולנסות שוב.',
   },
 } as const;
 
@@ -63,22 +95,40 @@ export const ConnectionPanel = (props: {
   const [nightscoutUrl, setNightscoutUrl] = useState('');
   const [nightscoutKey, setNightscoutKey] = useState('');
   const [aiKey, setAiKey] = useState('');
+  const [aiConfigured, setAiConfigured] = useState(props.aiConfigured);
+  const [aiVerified, setAiVerified] = useState(false);
+  const [nightscoutConfigured, setNightscoutConfigured] = useState(
+    props.nightscout.configured,
+  );
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState<string | undefined>(undefined);
+  const [messageIsError, setMessageIsError] = useState(false);
 
-  const run = async (operation: () => Promise<void>) => {
+  const run = async (operation: () => Promise<void>, ai = false) => {
     setBusy(true);
     setMessage(undefined);
     try {
       await operation();
-      setNightscoutKey('');
-      setAiKey('');
-      props.onChanged();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Request failed.');
+      setMessageIsError(true);
+      setMessage(
+        ai
+          ? aiConnectionErrorMessage(
+              props.locale,
+              getAiConnectionErrorCode(error),
+            )
+          : copy.failed,
+      );
     } finally {
       setBusy(false);
+      setTesting(false);
     }
+  };
+
+  const success = (text: string) => {
+    setMessageIsError(false);
+    setMessage(text);
   };
 
   return (
@@ -91,21 +141,22 @@ export const ConnectionPanel = (props: {
         role="dialog">
         <div className="web-panel-heading">
           <h2>{copy.title}</h2>
-          <button onClick={props.onClose} type="button">
+          <button disabled={busy} onClick={props.onClose} type="button">
             {copy.close}
           </button>
         </div>
         {message ? (
-          <p className="web-panel-error" role="alert">
+          <p
+            className={messageIsError ? 'web-panel-error' : undefined}
+            role={messageIsError ? 'alert' : 'status'}>
             {message}
           </p>
         ) : null}
         <div className="web-connection-card">
           <div className="web-card-title-row">
             <h3>{copy.nightscout}</h3>
-            <span
-              className={props.nightscout.configured ? 'connected' : undefined}>
-              {props.nightscout.configured ? copy.connected : copy.notConnected}
+            <span className={nightscoutConfigured ? 'connected' : undefined}>
+              {nightscoutConfigured ? copy.connected : copy.notConnected}
             </span>
           </div>
           <p>{copy.nsHint}</p>
@@ -140,17 +191,25 @@ export const ConnectionPanel = (props: {
                     url: nightscoutUrl,
                     apiKey: nightscoutKey,
                   });
+                  setNightscoutKey('');
+                  setNightscoutConfigured(true);
+                  props.onChanged();
                 })
               }
               type="button">
               {busy ? copy.saving : copy.connect}
             </button>
-            {props.nightscout.configured ? (
+            {nightscoutConfigured ? (
               <button
                 className="secondary"
                 disabled={busy}
                 onClick={() =>
-                  run(() => BrowserNightscoutClient.remove(props.api))
+                  run(async () => {
+                    await BrowserNightscoutClient.remove(props.api);
+                    setNightscoutKey('');
+                    setNightscoutConfigured(false);
+                    props.onChanged();
+                  })
                 }
                 type="button">
                 {copy.disconnect}
@@ -161,15 +220,37 @@ export const ConnectionPanel = (props: {
         <div className="web-connection-card">
           <div className="web-card-title-row">
             <h3>{copy.ai}</h3>
-            <span className={props.aiConfigured ? 'connected' : undefined}>
-              {props.aiConfigured ? copy.configured : copy.notConfigured}
+            <span className={aiVerified ? 'connected' : undefined}>
+              {aiVerified
+                ? copy.connected
+                : aiConfigured
+                ? copy.configured
+                : copy.notConfigured}
             </span>
           </div>
           <p>{copy.aiHint}</p>
+          <p>{copy.billingHint}</p>
+          <div className="web-panel-actions">
+            <a
+              href={OPENAI_API_KEYS_URL}
+              target="_blank"
+              rel="noopener noreferrer">
+              {copy.createKey}
+            </a>
+            <a
+              href={OPENAI_BILLING_URL}
+              target="_blank"
+              rel="noopener noreferrer">
+              {copy.billing}
+            </a>
+          </div>
           <label>
             <span>{copy.aiKey}</span>
             <input
               autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              dir="ltr"
               disabled={busy}
               onChange={event => setAiKey(event.target.value)}
               type="password"
@@ -180,23 +261,55 @@ export const ConnectionPanel = (props: {
             <button
               disabled={busy || !aiKey.trim()}
               onClick={() =>
-                run(() => new BrowserAiService(props.api).provision(aiKey))
+                run(async () => {
+                  await new BrowserAiService(props.api).provision(aiKey);
+                  setAiKey('');
+                  setAiConfigured(true);
+                  setAiVerified(false);
+                  success(copy.saved);
+                  props.onChanged();
+                }, true)
               }
               type="button">
-              {busy ? copy.saving : copy.saveAi}
+              {busy && !testing ? copy.saving : copy.saveAi}
             </button>
-            {props.aiConfigured ? (
+            {aiConfigured ? (
               <button
                 className="secondary"
                 disabled={busy}
                 onClick={() =>
-                  run(() => new BrowserAiService(props.api).remove())
+                  run(async () => {
+                    setTesting(true);
+                    setAiVerified(false);
+                    await new BrowserAiService(props.api).testConnection();
+                    setAiVerified(true);
+                    success(copy.verified);
+                  }, true)
+                }
+                type="button">
+                {testing ? copy.testing : copy.testAi}
+              </button>
+            ) : null}
+            {aiConfigured ? (
+              <button
+                className="secondary"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await new BrowserAiService(props.api).remove();
+                    setAiKey('');
+                    setAiConfigured(false);
+                    setAiVerified(false);
+                    success(copy.removed);
+                    props.onChanged();
+                  }, true)
                 }
                 type="button">
                 {copy.removeAi}
               </button>
             ) : null}
           </div>
+          <p>{copy.testHint}</p>
         </div>
       </section>
     </div>

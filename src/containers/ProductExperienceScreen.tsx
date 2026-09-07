@@ -22,6 +22,8 @@ import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {useNightscoutConfig} from 'app/contexts/NightscoutConfigContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
+import {testLlmConnection} from 'app/services/llm/shaniLlmProxy';
+import {isConfiguredAiCredential} from 'app/services/llm/credentialReadiness';
 import {useProactiveCareSettings} from 'app/contexts/ProactiveCareSettingsContext';
 import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {ProductExperience} from 'app/product/app';
@@ -54,6 +56,7 @@ import {
 import {
   getPersonalizationLayout,
   type ProductPersonalizationChange,
+  type ProductPersonalizationSaveOptions,
 } from 'app/product/personalization';
 import {useRefreshingNow} from 'app/product/time';
 import {useNativeProductPersonalization} from 'app/platform/native/personalization';
@@ -94,7 +97,12 @@ const ProductExperienceScreen = ({
     recoverLegacyProfiles,
   } = useNightscoutConfig();
   const {settings: glucoseSettings} = useGlucoseSettings();
-  const {settings: aiSettings, setSetting: setAiSetting} = useAiSettings();
+  const {
+    settings: aiSettings,
+    setSetting: setAiSetting,
+    credentialSyncStatus,
+    retryCredentialSync,
+  } = useAiSettings();
   const {settings: proactiveCareSettings, setSetting: setProactiveCareSetting} =
     useProactiveCareSettings();
   const [preMealIntent, setPreMealIntent] = useState<
@@ -106,6 +114,8 @@ const ProductExperienceScreen = ({
   const {width, height} = useWindowDimensions();
   const firebaseUser = getAuth(getApp()).currentUser;
   const firebaseUserId = firebaseUser?.uid;
+  const aiCredentialConfigured =
+    Boolean(firebaseUserId) && isConfiguredAiCredential(aiSettings.apiKey);
   const accountDisplayLabel =
     firebaseUser?.displayName?.trim() || firebaseUser?.email?.trim();
   const journal = useNativeJournalWorkspace({
@@ -511,11 +521,14 @@ const ProductExperienceScreen = ({
       : undefined;
 
   const savePersonalization = useCallback(
-    async (change: ProductPersonalizationChange) => {
+    async (
+      change: ProductPersonalizationChange,
+      options?: ProductPersonalizationSaveOptions,
+    ) => {
       if (personalization.status !== 'ready') {
         throw new Error('Product preferences are unavailable.');
       }
-      const saved = await personalization.save(change);
+      const saved = await personalization.save(change, options);
       if (!saved) {
         throw new Error('Product preferences could not be saved.');
       }
@@ -567,7 +580,7 @@ const ProductExperienceScreen = ({
         setLanguage,
         ai: {
           enabled: aiSettings.enabled,
-          credentialConfigured: aiSettings.apiKey.trim().length > 0,
+          credentialConfigured: aiCredentialConfigured,
           setEnabled: enabled => setAiSetting('enabled', enabled),
         },
         preMealAssistance: {
@@ -600,7 +613,7 @@ const ProductExperienceScreen = ({
   }, [
     activeProfile,
     accountDisplayLabel,
-    aiSettings.apiKey,
+    aiCredentialConfigured,
     aiSettings.enabled,
     firebaseUser,
     journal.status,
@@ -745,10 +758,19 @@ const ProductExperienceScreen = ({
             onSaveAiCredential={async credential =>
               setAiSetting('apiKey', credential)
             }
+            onRetryAiCredential={retryCredentialSync}
+            onTestAiConnection={() =>
+              testLlmConnection(aiSettings.provider, aiSettings.openAiModel)
+            }
             onSignOut={signOut}
             section={settingsDetail}
             status={{
-              credentialConfigured: aiSettings.apiKey.trim().length > 0,
+              credentialConfigured: aiCredentialConfigured,
+              credentialSyncState: credentialSyncStatus.state,
+              credentialSyncPending: credentialSyncStatus.pending,
+              ...(credentialSyncStatus.state === 'error'
+                ? {credentialErrorCode: credentialSyncStatus.code}
+                : {}),
             }}
           />
         ) : null}

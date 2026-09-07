@@ -526,11 +526,21 @@ service cloud.firestore {
         && value.windowHours in ['full-day', 3, 6, 12];
     }
 
+    function validDailyOverviewPreferences(value) {
+      return value is map
+        && value.keys().hasOnly(['schemaVersion', 'rangeStyle', 'cardOrder'])
+        && value.schemaVersion == 1
+        && value.rangeStyle in ['ring', 'bar', 'list']
+        && value.cardOrder is list
+        && value.cardOrder.size() == 5
+        && value.cardOrder.hasAll(['ranges', 'mean', 'glucose', 'insulin', 'coverage']);
+    }
+
     function validLayoutPersonalization(value, layout) {
       return value is map
         && value.keys().hasOnly([
           'schemaVersion', 'layout', 'showCurrentSnapshot', 'showRecents',
-          'showGri', 'shell', 'dayGraph'
+          'showGri', 'shell', 'dayGraph', 'dailyOverview'
         ])
         && value.schemaVersion == 1
         && value.layout == layout
@@ -538,7 +548,9 @@ service cloud.firestore {
         && value.showRecents is bool
         && value.showGri is bool
         && validShell(value.shell)
-        && (!('dayGraph' in value) || validDayGraphPreferences(value.dayGraph));
+        && (!('dayGraph' in value) || validDayGraphPreferences(value.dayGraph))
+        && (!('dailyOverview' in value)
+          || validDailyOverviewPreferences(value.dailyOverview));
     }
 
     function validAccountPersonalizationDocument(document, uid) {

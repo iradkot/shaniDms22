@@ -5,7 +5,7 @@ import {ThemeProvider} from 'styled-components/native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {getThemeById, APP_THEME_OPTIONS} from '../src/style/theme';
 import type {AppThemeId} from '../src/style/theme';
-import type {DayGraphDataSource, DayGraphSnapshot} from '../src/modules/dayGraph';
+import {moveLocalDays, type DayGraphDataSource, type DayGraphSnapshot} from '../src/modules/dayGraph';
 import {IndexedDbKeyValueStore} from '../src/platform/web/storage';
 import {
   KeyValueProductPersonalizationStore,
@@ -78,15 +78,37 @@ const configuration = resolveProductShellConfiguration(
   },
   runtime,
 );
+// The calendar and historical graph share the same synthetic facts.
+const calendarFixtureGlucose = (period: {dayStartMs: number; dayEndMs: number}) => {
+    const glucoseSamples: DayGraphSnapshot['glucoseSamples'][number][] = [];
+    for (let day = period.dayStartMs; day < period.dayEndMs; day = moveLocalDays(day, 1)) {
+      if (day === DAY_START_MS) { glucoseSamples.push(...previewModel.glucoseSamples); continue; }
+      const date = new Date(day).getDate();
+      if (date % 7 === 0) { continue; }
+      const count = date % 5 === 0 ? 40 : 288;
+      for (let i = 0; i < count; i++) {
+        glucoseSamples.push({
+          identity: {sourceId: 'calendar-fixture', recordId: `${day}:${i}`},
+          timestampMs: day + i * 5 * MINUTE_MS,
+          valueMgDl: i % 10 < date % 9 + 1 ? 120 : 220,
+        });
+      }
+    }
+    return glucoseSamples;
+};
 const dataSource: DayGraphDataSource = {
-  loadDayGraph: async () => ({
+  loadCalendarGlucose: async period => {
+    if (query.get('calendar') === 'offline') { throw new Error('Synthetic offline month'); }
+    return {glucoseSamples: calendarFixtureGlucose(period), complete: true, freshness: {kind: 'fresh', fetchedAtMs: DAY_END_MS - MINUTE_MS}};
+  },
+  loadDayGraph: async period => period.dayStartMs === DAY_START_MS ? ({
     freshness: {kind: 'fresh', fetchedAtMs: DAY_END_MS - MINUTE_MS},
     glucoseSamples: previewModel.glucoseSamples,
     activeLoadSamples: previewModel.activeLoadSamples,
     timelineItems: [...previewModel.timelineItems, ...extraMeals],
     insulinEvents: previewModel.insulinEvents,
     basalSchedule: previewModel.basalSchedule,
-  }),
+  }) : ({glucoseSamples: calendarFixtureGlucose(period), timelineItems: [], freshness: {kind: 'fresh', fetchedAtMs: DAY_END_MS - MINUTE_MS}}),
 };
 const now = () => DAY_END_MS - MINUTE_MS;
 

@@ -58,8 +58,49 @@ describe('AuthenticatedWebApiClient', () => {
       ),
     });
     await expect(client.requestJson('/v1/llm/chat')).rejects.toEqual(
-      new WebApiError(409, 'credential_missing', 'Configure a key first'),
+      new WebApiError(
+        409,
+        'credential_missing',
+        'The request could not be completed.',
+      ),
     );
+  });
+
+  it('never exposes raw server messages or malformed error codes', async () => {
+    const client = new AuthenticatedWebApiClient({
+      baseUrl: 'https://api.example.test',
+      auth: {getIdToken: async () => 'firebase-test-token'},
+      fetch: jest.fn().mockResolvedValue(
+        jsonResponse(502, {
+          code: 'provider sk-secret-test',
+          message: 'provider echoed sk-secret-test',
+        }),
+      ),
+    });
+    await expect(client.requestJson('/v1/llm/chat')).rejects.toEqual(
+      new WebApiError(
+        502,
+        'upstream_unavailable',
+        'The request could not be completed.',
+      ),
+    );
+  });
+
+  it('retains the HTTP status of an HTML deployment error', async () => {
+    const client = new AuthenticatedWebApiClient({
+      baseUrl: 'https://api.example.test',
+      auth: {getIdToken: async () => 'firebase-test-token'},
+      fetch: jest.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => {
+          throw new SyntaxError('HTML response');
+        },
+      }),
+    });
+    await expect(
+      client.requestJson('/v1/vault/llm/provision'),
+    ).rejects.toMatchObject({status: 404, code: 'not_found'});
   });
 
   it('does not resolve auth or send a request for a pre-aborted signal', async () => {

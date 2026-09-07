@@ -106,6 +106,7 @@ describe('Nightscout date-range cache isolation', () => {
       fetchBgDataForDateRangeWithMetadata(START, END),
     ).resolves.toEqual({
       records: [expect.objectContaining({sgv: 101})],
+      complete: false,
       freshness: {
         kind: 'stale',
         fetchedAtMs: Date.parse('2026-08-02T00:00:00.000Z'),

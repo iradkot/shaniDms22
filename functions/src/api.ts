@@ -1,6 +1,7 @@
 import {
   ApiContractError,
   decodeChatRequest,
+  decodeConnectionTestRequest,
   decodeCredentialRequest,
   decodeMealImageRequest,
   decodeNightscoutCredentialRequest,
@@ -95,6 +96,7 @@ const KNOWN_API_PATHS = new Set([
   '/v1/vault/llm/validate',
   '/v1/vault/llm/provision',
   '/v1/vault/llm/status',
+  '/v1/vault/llm/test',
   '/v1/vault/llm/remove',
   '/v1/vault/nightscout/provision',
   '/v1/vault/nightscout/status',
@@ -208,7 +210,13 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
       if (jsonBytes(request.body) > MAX_BODY_BYTES) {
         throw new ApiContractError(413, 'request_too_large', 'Request is too large');
       }
-      const identity = await dependencies.auth.verify(bearerToken(request));
+      const token = bearerToken(request);
+      let identity: {readonly uid: string};
+      try {
+        identity = await dependencies.auth.verify(token);
+      } catch {
+        throw new ApiContractError(401, 'unauthenticated', 'Authentication required');
+      }
       if (!/^[A-Za-z0-9_-]{1,128}$/.test(identity.uid)) {
         throw new ApiContractError(401, 'unauthenticated', 'Invalid identity');
       }
@@ -269,6 +277,27 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
         const input = decodeProviderRequest(request.body);
         await dependencies.vault.remove(identity.uid, input.provider);
         response.status(200).json({version: 1, configured: false});
+        return;
+      }
+
+      if (path === '/v1/vault/llm/test') {
+        requireMethod(request, 'POST');
+        const input = decodeConnectionTestRequest(request.body, dependencies.allowedModels);
+        const credential = await dependencies.vault.get(identity.uid, input.provider);
+        if (credential === null) {
+          throw new ApiContractError(
+            409,
+            'credential_missing',
+            'Configure an AI credential first',
+          );
+        }
+        await dependencies.upstream.testConnection(credential, input.model);
+        response.status(200).json({
+          version: 1,
+          provider: input.provider,
+          model: input.model,
+          connected: true,
+        });
         return;
       }
 

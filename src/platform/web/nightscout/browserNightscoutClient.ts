@@ -7,6 +7,8 @@ const MAX_CACHE_BYTES = 25 * 1_024 * 1_024;
 const STATUS_RECHECK_INTERVAL_MS = 5 * 60 * 1_000;
 const DEVICE_STATUS_CHUNK_MS = 2 * 60 * 60 * 1_000;
 const MAX_DEVICE_STATUS_SERIES_MS = 27 * 60 * 60 * 1_000;
+// Matches the existing upstream entries route; saturation is not a complete range.
+const ENTRIES_RANGE_LIMIT = 15_000;
 
 export type BrowserNightscoutResource =
   | 'entries'
@@ -23,6 +25,8 @@ export interface BrowserNightscoutStatus {
 
 export interface BrowserNightscoutRange<T> {
   readonly records: readonly T[];
+  /** Glucose-only raw response completeness, evaluated before invalid rows are removed. */
+  readonly complete?: boolean;
   readonly freshness:
     | {readonly kind: 'fresh'; readonly fetchedAtMs: number}
     | {readonly kind: 'stale'; readonly fetchedAtMs: number};
@@ -583,6 +587,13 @@ export class BrowserNightscoutClient {
     this.now = options.now ?? Date.now;
   }
 
+  /** Calendar chunks must not combine successes with a source-identity rejection. */
+  assertCurrentSource(): void {
+    if (this.rebootstrapRequested) {
+      throw new Error('Nightscout source changed while loading records.');
+    }
+  }
+
   static async status(
     api: Pick<AuthenticatedWebApiClient, 'requestJson'>,
   ): Promise<BrowserNightscoutStatus> {
@@ -800,18 +811,28 @@ export class BrowserNightscoutClient {
       }
       const records = value.map(decode).filter((row): row is T => row !== null);
       const fetchedAtMs = this.now();
-      await this.storeCache(key, {
-        schemaVersion: 2,
-        sourceId: this.options.sourceId,
-        workspaceId: this.options.workspaceId,
-        resource,
-        startMs,
-        endMs,
-        fetchedAtMs,
-        lastAccessedAtMs: fetchedAtMs,
-        data: records,
-      });
-      return {records, freshness: {kind: 'fresh', fetchedAtMs}};
+      const complete =
+        resource === 'entries'
+          ? value.length < ENTRIES_RANGE_LIMIT
+          : undefined;
+      if (complete !== false) {
+        await this.storeCache(key, {
+          schemaVersion: 2,
+          sourceId: this.options.sourceId,
+          workspaceId: this.options.workspaceId,
+          resource,
+          startMs,
+          endMs,
+          fetchedAtMs,
+          lastAccessedAtMs: fetchedAtMs,
+          data: records,
+        });
+      }
+      return {
+        records,
+        freshness: {kind: 'fresh', fetchedAtMs},
+        ...(complete === undefined ? {} : {complete}),
+      };
     } catch (error) {
       if (signal?.aborted) {
         const aborted = new Error('The Nightscout request was cancelled.');
@@ -850,6 +871,7 @@ export class BrowserNightscoutClient {
       return {
         records,
         freshness: {kind: 'stale', fetchedAtMs: cached.fetchedAtMs},
+        ...(resource === 'entries' ? {complete: false} : {}),
       };
     }
   }

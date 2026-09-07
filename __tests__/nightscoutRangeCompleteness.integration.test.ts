@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {AxiosAdapter} from 'axios';
-import {fetchTreatmentsForDateRangeWithMetadata} from 'app/api/apiRequests';
+import {fetchBgDataForDateRangeWithMetadata, fetchTreatmentsForDateRangeWithMetadata} from 'app/api/apiRequests';
 import {
   requestCompleteNightscoutRange,
   NightscoutIncompleteRangeError,
@@ -33,6 +33,37 @@ describe('Nightscout range completeness', () => {
   afterEach(() => {
     clearNightscoutInstance();
     nightscoutInstance.defaults.adapter = previousAdapter;
+  });
+
+  it('enumerates one-minute daily glucose beyond the initial count, including invalid raw rows', async () => {
+    const dayStart = new Date('2026-09-01T00:00:00Z');
+    const dayEnd = new Date('2026-09-02T00:00:00Z');
+    const glucose = Array.from({length: 1440}, (_, index) => ({
+      _id: `g-${index}`, date: +dayStart + index * 60_000, sgv: 100,
+    }));
+    const raw = [...glucose, ...Array(60).fill(null)];
+    const counts: number[] = [];
+    nightscoutInstance.defaults.adapter = async config => {
+      const count = Number(config.url?.match(/[?&]count=(\d+)/)?.[1]);
+      counts.push(count);
+      return {config, data: raw.slice(0, count), status: 200, statusText: 'OK', headers: {}};
+    };
+    const result = await fetchBgDataForDateRangeWithMetadata(dayStart, dayEnd);
+    expect(counts).toEqual([1000, 2000]);
+    expect(result.records).toHaveLength(1440);
+    expect(result.complete).toBe(true);
+  });
+
+  it('rejects saturated glucose without caching it as a fully read day', async () => {
+    const dayStart = new Date();
+    const dayEnd = new Date(+dayStart + 24 * 60 * 60 * 1000);
+    nightscoutInstance.defaults.adapter = async config => {
+      const count = Number(config.url?.match(/[?&]count=(\d+)/)?.[1]);
+      return {config, data: Array(count).fill({date: +dayStart, sgv: 120}), status: 200, statusText: 'OK', headers: {}};
+    };
+    await expect(fetchBgDataForDateRangeWithMetadata(dayStart, dayEnd)).rejects.toBeInstanceOf(NightscoutIncompleteRangeError);
+    nightscoutInstance.defaults.adapter = async () => {throw new Error('offline-after-saturation');};
+    await expect(fetchBgDataForDateRangeWithMetadata(dayStart, dayEnd)).rejects.toThrow('offline-after-saturation');
   });
 
   it('loads every five-minute basal event in a seven-day analysis plus its carry-in day', async () => {

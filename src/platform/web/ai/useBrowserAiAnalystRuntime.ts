@@ -12,6 +12,10 @@ import type {
   AiAnalystSurface,
 } from '../../../product/ai';
 import {guardAssistantOutput} from '../../../services/aiAnalyst/assistantOutputGuard';
+import {
+  aiConnectionErrorMessage,
+  getAiConnectionErrorCode,
+} from '../../../product/settings/aiConnectionFeedback';
 import type {IndexedDbKeyValueStore} from '../storage';
 import {createOpaqueBrowserId} from '../identity';
 import {BrowserAiService, browserAiMessages} from './browserAiService';
@@ -310,7 +314,10 @@ export const useBrowserAiAnalystRuntime = (input: {
         setDraft(current => (current.trim() ? current : question));
         if (!controller.signal.aborted) {
           setError(
-            caught instanceof Error ? caught.message : 'AI request failed.',
+            aiConnectionErrorMessage(
+              input.locale,
+              getAiConnectionErrorCode(caught),
+            ),
           );
         }
       }
@@ -402,7 +409,10 @@ export const useBrowserAiAnalystRuntime = (input: {
         previousScope.current === requestScope
       ) {
         setError(
-          caught instanceof Error ? caught.message : 'AI image request failed.',
+          aiConnectionErrorMessage(
+            input.locale,
+            getAiConnectionErrorCode(caught),
+          ),
         );
       }
     } finally {

@@ -24,6 +24,10 @@ export interface ProviderRequest {
   readonly provider: SupportedProvider;
 }
 
+export interface ConnectionTestRequest extends ProviderRequest {
+  readonly model: string;
+}
+
 export interface MealImageRequest {
   readonly version: 1;
   readonly provider: SupportedProvider;
@@ -152,6 +156,19 @@ export const decodeProviderRequest = (value: unknown): ProviderRequest => {
   return {
     version: version(input.version),
     provider: provider(input.provider),
+  };
+};
+
+export const decodeConnectionTestRequest = (
+  value: unknown,
+  allowedModels: ReadonlySet<string>,
+): ConnectionTestRequest => {
+  const input = record(value);
+  exactKeys(input, ['version', 'provider', 'model']);
+  return {
+    version: version(input.version),
+    provider: provider(input.provider),
+    model: model(input.model, allowedModels),
   };
 };
 

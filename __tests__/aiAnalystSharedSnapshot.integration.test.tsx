@@ -17,7 +17,8 @@ jest.mock('app/api/apiRequests', () => ({
 }));
 jest.mock('app/contexts/AiSettingsContext', () => ({
   useAiSettings: () => ({
-    settings: {enabled: true, apiKey: 'fixture-key', openAiModel: 'fixture'},
+    settings: {enabled: true, apiKey: '__shani_server_vault__', openAiModel: 'fixture'},
+    credentialSyncStatus: {state: 'configured', pending: false},
   }),
 }));
 jest.mock('app/contexts/GlucoseSettingsContext', () => ({
@@ -27,7 +28,7 @@ jest.mock('app/contexts/AppLanguageContext', () => ({
   useAppLanguage: () => ({language: 'en'}),
 }));
 jest.mock('app/services/aiMemory/useActiveAiWorkspaceScope', () => ({
-  useActiveAiWorkspaceScope: () => null,
+  useActiveAiWorkspaceScope: () => ({productUserId: 'snapshot-user', workspaceId: 'snapshot-workspace'}),
 }));
 jest.mock('app/services/llm/llmClient', () => ({
   createLlmProvider: () => ({sendChat: jest.fn()}),

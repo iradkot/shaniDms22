@@ -169,6 +169,42 @@ test('chart preferences accept only presentation fields and supported modes and 
   }
 });
 
+test('Daily Overview preferences allow every presentation and require all cards exactly once', async () => {
+  const database = environment.authenticatedContext('owner-1').firestore();
+  const reference = doc(
+    database,
+    'users/owner-1/productPersonalization/layout_phone',
+  );
+  const cardOrder = ['mean', 'ranges', 'coverage', 'glucose', 'insulin'];
+  let revision = 1;
+  for (const rangeStyle of ['ring', 'bar', 'list']) {
+    const valid = layout({revision, savedAt: revision});
+    valid.value.dailyOverview = {schemaVersion: 1, rangeStyle, cardOrder};
+    await assertSucceeds(setDoc(reference, valid));
+    revision += 1;
+  }
+  const valid = {schemaVersion: 1, rangeStyle: 'ring', cardOrder};
+  for (const dailyOverview of [
+    null,
+    [],
+    {...valid, schemaVersion: 2},
+    {...valid, rangeStyle: 'unknown'},
+    {...valid, cardOrder: []},
+    {...valid, cardOrder: cardOrder.slice(1)},
+    {...valid, cardOrder: ['mean', 'ranges', 'coverage', 'glucose', 'glucose']},
+    {...valid, cardOrder: ['mean', 'ranges', 'coverage', 'glucose', 'unknown']},
+    {...valid, cardOrder: [...cardOrder, 'coverage']},
+    {...valid, dayStartMs: 123},
+    {...valid, glucose: 120},
+    {...valid, apiKey: 'not-allowed'},
+    {schemaVersion: 1, rangeStyle: 'ring'},
+  ]) {
+    const invalid = layout({revision, savedAt: revision});
+    invalid.value.dailyOverview = dailyOverview;
+    await assertFails(setDoc(reference, invalid));
+  }
+});
+
 test('revisions advance monotonically and preference documents cannot be deleted', async () => {
   const database = environment.authenticatedContext('owner-1').firestore();
   const path = 'users/owner-1/productPersonalization/account';

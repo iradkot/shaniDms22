@@ -17,203 +17,145 @@ import {
   localDayStart,
   moveLocalDay,
 } from '../../modules/dailyOverview';
-import type {
-  TrendsRangeDistribution,
-  TrendsRangeThresholds,
-} from '../../modules/trends';
+import type {TrendsRangeThresholds} from '../../modules/trends';
 import type {DestinationLocale} from '../destinations';
 import type {DestinationFocus} from '../shell';
+import {ProductPage} from '../ui';
 import {
-  ProductPage,
-  ProductSection,
-  ResponsiveGrid,
-  productUiTokens,
-} from '../ui';
+  DEFAULT_DAILY_OVERVIEW_PREFERENCES,
+  type StoredDailyOverviewPreferences,
+} from '../personalization/types';
+import type {DailyOverviewPreferencesRuntime} from './runtime';
+import {DAILY_OVERVIEW_COPY} from './copy';
+import {
+  DailyOverviewCard,
+  dailyCardLabel,
+  RangeGraphic,
+} from './DailyOverviewCards';
+import {DailyOverviewReorderList} from './DailyOverviewReorderList';
 
 const DEFAULT_SAMPLE_INTERVAL_MS = 5 * 60 * 1000;
-
-const COPY = {
-  en: {
-    title: 'Daily overview',
-    subtitle: 'A compact factual view of one local day.',
-    previous: 'Previous',
-    next: 'Next',
-    today: 'Today',
-    loading: 'Loading this day…',
-    failed: 'This day could not be loaded.',
-    retry: 'Try again',
-    coverage: 'Data coverage',
-    readings: 'readings',
-    excluded: 'excluded',
-    duplicates: 'duplicates removed',
-    coverageAdequate: 'Coverage is at least 70% for this day.',
-    coverageLow: 'Coverage is below 70% for this day.',
-    noGlucose: 'No valid glucose readings are available for this day.',
-    ranges: 'Glucose ranges',
-    veryLow: 'Very low',
-    low: 'Low',
-    target: 'In range',
-    high: 'High',
-    veryHigh: 'Very high',
-    metrics: 'Daily glucose',
-    mean: 'Mean',
-    minimum: 'Minimum',
-    maximum: 'Maximum',
-    cv: 'CV',
-    insulin: 'Insulin',
-    total: 'Total',
-    basal: 'Basal',
-    bolus: 'Bolus',
-    insulinUnavailable: 'Insulin data is unavailable for this day.',
-  },
-  he: {
-    title: 'מבט יומי',
-    subtitle: 'תצוגה עובדתית ותמציתית של יום מקומי אחד.',
-    previous: 'הקודם',
-    next: 'הבא',
-    today: 'היום',
-    loading: 'טוען את היום…',
-    failed: 'לא הצלחנו לטעון את היום הזה.',
-    retry: 'ניסיון נוסף',
-    coverage: 'כיסוי נתונים',
-    readings: 'קריאות',
-    excluded: 'הוחרגו',
-    duplicates: 'כפילויות הוסרו',
-    coverageAdequate: 'הכיסוי ביום הזה הוא לפחות 70%.',
-    coverageLow: 'הכיסוי ביום הזה נמוך מ־70%.',
-    noGlucose: 'אין קריאות סוכר תקינות זמינות ליום הזה.',
-    ranges: 'טווחי סוכר',
-    veryLow: 'נמוך מאוד',
-    low: 'נמוך',
-    target: 'בטווח',
-    high: 'גבוה',
-    veryHigh: 'גבוה מאוד',
-    metrics: 'סוכר יומי',
-    mean: 'ממוצע',
-    minimum: 'מינימום',
-    maximum: 'מקסימום',
-    cv: 'CV',
-    insulin: 'אינסולין',
-    total: 'סה״כ',
-    basal: 'בזאל',
-    bolus: 'בולוס',
-    insulinUnavailable: 'נתוני אינסולין אינם זמינים ליום זה.',
-  },
-} as const;
-
+const systemNow = (): number => Date.now();
 type LoadState =
   | {readonly kind: 'loading'}
   | {readonly kind: 'error'}
   | {readonly kind: 'ready'; readonly overview: DailyOverview};
-
 export interface DailyOverviewModuleViewProps {
   readonly locale: DestinationLocale;
   readonly dataSource: DailyOverviewDataSource;
   readonly thresholds: TrendsRangeThresholds;
-  /** A transient Shell focus. Non-day focus kinds are safely ignored. */
   readonly focus?: DestinationFocus;
   readonly expectedSampleIntervalMs?: number;
   readonly now?: () => number;
+  readonly layoutPreferences?: DailyOverviewPreferencesRuntime;
 }
 
-const systemNow = (): number => Date.now();
+// A scope change unmounts the presentation session, including any pending draft.
+export const DailyOverviewModuleView = (
+  props: DailyOverviewModuleViewProps,
+) => {
+  const focusedDayStartMs =
+    props.focus?.kind === 'day'
+      ? localDayStart(props.focus.dayStartMs)
+      : undefined;
+  const [selectedDayStartMs, setSelectedDayStartMs] = useState(() =>
+    localDayStart(focusedDayStartMs ?? (props.now ?? systemNow)()),
+  );
+  useEffect(() => {
+    if (focusedDayStartMs !== undefined) {
+      setSelectedDayStartMs(focusedDayStartMs);
+    }
+  }, [focusedDayStartMs]);
+  return (
+    <DailyOverviewSession
+      key={`${props.layoutPreferences?.scopeKey ?? 'preview'}:${
+        props.layoutPreferences?.layout ?? 'phone'
+      }`}
+      {...props}
+      selectedDayStartMs={selectedDayStartMs}
+      setSelectedDayStartMs={setSelectedDayStartMs}
+    />
+  );
+};
 
-const RANGE_PRESENTATION: readonly {
-  readonly key: keyof TrendsRangeDistribution;
-  readonly copyKey: 'veryLow' | 'low' | 'target' | 'high' | 'veryHigh';
-  readonly color: string;
-}[] = [
-  {key: 'veryLowPercent', copyKey: 'veryLow', color: '#B42318'},
-  {key: 'lowPercent', copyKey: 'low', color: '#F97316'},
-  {key: 'targetPercent', copyKey: 'target', color: '#159A67'},
-  {key: 'highPercent', copyKey: 'high', color: '#D59A00'},
-  {key: 'veryHighPercent', copyKey: 'veryHigh', color: '#7C3AED'},
-];
+interface DailyOverviewSessionProps extends DailyOverviewModuleViewProps {
+  readonly selectedDayStartMs: number;
+  readonly setSelectedDayStartMs: (dayStartMs: number) => void;
+}
 
-const formatUnits = (value: number): string => `${value} U`;
-
-const MetricCard = ({
-  accent,
-  label,
-  testID,
-  value,
-}: {
-  readonly accent: string;
-  readonly label: string;
-  readonly testID: string;
-  readonly value: string;
-}) => (
-  <View style={[styles.metricCard, {borderTopColor: accent}]}>
-    <Text style={styles.metricLabel}>{label}</Text>
-    <Text style={styles.metricValue} testID={testID}>
-      {value}
-    </Text>
-  </View>
-);
-
-const initialDay = (
-  focus: DestinationFocus | undefined,
-  now: () => number,
-): number =>
-  localDayStart(focus?.kind === 'day' ? focus.dayStartMs : now());
-
-export const DailyOverviewModuleView = ({
+const DailyOverviewSession = ({
   locale,
   dataSource,
   thresholds,
-  focus,
   expectedSampleIntervalMs = DEFAULT_SAMPLE_INTERVAL_MS,
   now = systemNow,
-}: DailyOverviewModuleViewProps) => {
-  const copy = COPY[locale];
+  layoutPreferences,
+  selectedDayStartMs,
+  setSelectedDayStartMs,
+}: DailyOverviewSessionProps) => {
+  const copy = DAILY_OVERVIEW_COPY[locale];
   const rtl = locale === 'he';
-  const focusedDayStartMs =
-    focus?.kind === 'day' ? localDayStart(focus.dayStartMs) : undefined;
-  const [selectedDayStartMs, setSelectedDayStartMs] = useState(() =>
-    initialDay(focus, now),
-  );
   const [reloadSequence, setReloadSequence] = useState(0);
   const [state, setState] = useState<LoadState>({kind: 'loading'});
   const requestSequence = useRef(0);
+  const mounted = useRef(true);
+  const savingRef = useRef(false);
+  const [saved, setSaved] = useState(
+    layoutPreferences?.value ?? DEFAULT_DAILY_OVERVIEW_PREFERENCES,
+  );
+  const [draft, setDraft] = useState<StoredDailyOverviewPreferences | null>(
+    null,
+  );
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>(
+    'idle',
+  );
+  const preferences = draft ?? saved;
+  const canEdit = layoutPreferences?.hydrated !== false;
   const todayStartMs = localDayStart(now());
   const selectedPeriod = useMemo<DailyOverviewPeriod>(
     () => getLocalDayPeriod(selectedDayStartMs),
     [selectedDayStartMs],
   );
   const isToday = selectedDayStartMs >= todayStartMs;
-
   useEffect(() => {
-    if (focusedDayStartMs !== undefined) {
-      setSelectedDayStartMs(focusedDayStartMs);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    // A native host can publish an optimistic value before its disk write.
+    // Only a successful save may replace the baseline of an open editor.
+    if (layoutPreferences?.value && draftRef.current === null) {
+      setSaved(layoutPreferences.value);
     }
-  }, [focusedDayStartMs]);
-
+  }, [layoutPreferences?.value]);
   useEffect(() => {
-    const request = requestSequence.current + 1;
-    requestSequence.current = request;
+    const request = ++requestSequence.current;
     let active = true;
     setState({kind: 'loading'});
     dataSource
       .loadDailyOverview(selectedPeriod)
       .then(source => {
-        if (!active || requestSequence.current !== request) {
-          return;
+        if (active && requestSequence.current === request) {
+          setState({
+            kind: 'ready',
+            overview: buildDailyOverview({
+              period: selectedPeriod,
+              expectedSampleIntervalMs,
+              thresholds,
+              source,
+            }),
+          });
         }
-        setState({
-          kind: 'ready',
-          overview: buildDailyOverview({
-            period: selectedPeriod,
-            expectedSampleIntervalMs,
-            thresholds,
-            source,
-          }),
-        });
       })
       .catch(() => {
-        if (!active || requestSequence.current !== request) {
-          return;
+        if (active && requestSequence.current === request) {
+          setState({kind: 'error'});
         }
-        setState({kind: 'error'});
       });
     return () => {
       active = false;
@@ -225,238 +167,369 @@ export const DailyOverviewModuleView = ({
     selectedPeriod,
     thresholds,
   ]);
-
   const moveSelection = (delta: -1 | 1): void => {
     if (delta === 1 && isToday) {
       return;
     }
-    const moved = moveLocalDay(selectedDayStartMs, delta);
-    setSelectedDayStartMs(Math.min(moved, todayStartMs));
+    setSelectedDayStartMs(
+      Math.min(moveLocalDay(selectedDayStartMs, delta), todayStartMs),
+    );
   };
-
+  const saveDesign = async (): Promise<void> => {
+    if (!draft || savingRef.current || !canEdit) {
+      return;
+    }
+    savingRef.current = true;
+    setSaving(true);
+    setSaveStatus('idle');
+    try {
+      await layoutPreferences?.onSave?.(draft);
+      if (mounted.current) {
+        setSaved(draft);
+        setDraft(null);
+        setSaveStatus('saved');
+      }
+    } catch {
+      if (mounted.current) {
+        setSaveStatus('error');
+      }
+    } finally {
+      savingRef.current = false;
+      if (mounted.current) {
+        setSaving(false);
+      }
+    }
+  };
   const formattedDay = new Date(selectedDayStartMs).toLocaleDateString(
     locale === 'he' ? 'he-IL' : 'en-US',
     {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'},
   );
-
+  const direction = rtl && styles.rowReverse;
+  const textDirection = rtl && styles.rtlText;
+  const heading = (
+    <View style={[styles.pageHeader, direction]}>
+      <View style={styles.headingText}>
+        <Text
+          accessibilityRole="header"
+          style={[styles.pageTitle, textDirection]}>
+          {copy.title}
+        </Text>
+        <Text style={[styles.subtitle, textDirection]}>{copy.subtitle}</Text>
+      </View>
+      {!draft ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{disabled: !canEdit}}
+          disabled={!canEdit}
+          testID="daily-overview-customize"
+          onPress={() => {
+            setDraft(saved);
+            setSaveStatus('idle');
+          }}
+          style={({pressed}) => [
+            styles.customizeButton,
+            !canEdit && styles.disabled,
+            pressed && styles.pressed,
+          ]}>
+          <Text style={styles.customizeIcon}>✧</Text>
+          <Text style={styles.customizeText}>{copy.customize}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
   return (
     <ProductPage
       locale={locale}
+      title={copy.title}
       subtitle={copy.subtitle}
       testID="daily-overview-view"
-      title={copy.title}>
-      <View
-        style={[styles.dayControls, rtl && styles.rowReverse]}
-        testID="daily-overview-day-controls">
-        <Pressable
-          accessibilityLabel={copy.previous}
-          accessibilityRole="button"
-          onPress={() => moveSelection(-1)}
-          style={({pressed}) => [
-            styles.dayButton,
-            pressed && styles.pressed,
-          ]}
-          testID="daily-overview-previous">
-          <Text style={styles.dayButtonText}>{copy.previous}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{selected: isToday}}
-          onPress={() => setSelectedDayStartMs(todayStartMs)}
-          style={({pressed}) => [
-            styles.todayButton,
-            isToday && styles.todayButtonSelected,
-            pressed && styles.pressed,
-          ]}
-          testID="daily-overview-today">
-          <Text
-            style={[
-              styles.todayButtonText,
-              isToday && styles.todayButtonTextSelected,
-            ]}>
-            {copy.today}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel={copy.next}
-          accessibilityRole="button"
-          accessibilityState={{disabled: isToday}}
-          disabled={isToday}
-          onPress={() => moveSelection(1)}
-          style={({pressed}) => [
-            styles.dayButton,
-            isToday && styles.disabled,
-            pressed && styles.pressed,
-          ]}
-          testID="daily-overview-next">
-          <Text style={styles.dayButtonText}>{copy.next}</Text>
-        </Pressable>
-      </View>
-      <Text
-        accessibilityRole="header"
-        style={[styles.dayTitle, rtl && styles.rtlText]}
-        testID="daily-overview-selected-day">
-        {formattedDay}
-      </Text>
-
-      {state.kind === 'loading' ? (
-        <View style={styles.stateCard} testID="daily-overview-loading">
-          <ActivityIndicator color={productUiTokens.colors.action} />
-          <Text style={[styles.stateText, rtl && styles.rtlText]}>
-            {copy.loading}
-          </Text>
-        </View>
-      ) : state.kind === 'error' ? (
-        <View style={styles.stateCard} testID="daily-overview-error">
-          <Text style={[styles.errorText, rtl && styles.rtlText]}>
-            {copy.failed}
-          </Text>
+      header={heading}>
+      <View style={styles.pageBody}>
+        <View
+          style={[styles.dayControls, direction]}
+          testID="daily-overview-day-controls">
           <Pressable
             accessibilityRole="button"
-            onPress={() => setReloadSequence(value => value + 1)}
+            accessibilityLabel={copy.previous}
+            onPress={() => moveSelection(-1)}
+            style={({pressed}) => [styles.dayButton, pressed && styles.pressed]}
+            testID="daily-overview-previous">
+            <Text style={styles.dayButtonText}>{copy.previous}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{selected: isToday}}
+            onPress={() => setSelectedDayStartMs(todayStartMs)}
             style={({pressed}) => [
-              styles.retryButton,
+              styles.todayButton,
+              isToday && styles.todaySelected,
               pressed && styles.pressed,
             ]}
-            testID="daily-overview-retry">
-            <Text style={styles.retryText}>{copy.retry}</Text>
+            testID="daily-overview-today">
+            <Text style={[styles.dayButtonText, isToday && styles.white]}>
+              {copy.today}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={copy.next}
+            accessibilityState={{disabled: isToday}}
+            disabled={isToday}
+            onPress={() => moveSelection(1)}
+            style={({pressed}) => [
+              styles.dayButton,
+              isToday && styles.disabled,
+              pressed && styles.pressed,
+            ]}
+            testID="daily-overview-next">
+            <Text style={styles.dayButtonText}>{copy.next}</Text>
           </Pressable>
         </View>
-      ) : (
-        <View testID="daily-overview-content">
-          <ProductSection locale={locale} title={copy.coverage}>
-            <View style={styles.coverageCard}>
-              <Text
-                style={styles.coverageValue}
-                testID="daily-overview-coverage">
-                {`${state.overview.coveragePercent}%`}
-              </Text>
-              <Text style={[styles.detailText, rtl && styles.rtlText]}>
-                {state.overview.validSampleCount} /{' '}
-                {state.overview.expectedSampleCount} {copy.readings}
-              </Text>
-              {state.overview.excludedSampleCount > 0 ||
-              state.overview.duplicateSampleCount > 0 ? (
-                <Text style={[styles.detailText, rtl && styles.rtlText]}>
-                  {state.overview.excludedSampleCount} {copy.excluded}
-                  {' · '}
-                  {state.overview.duplicateSampleCount} {copy.duplicates}
-                </Text>
-              ) : null}
-              <Text
-                style={[
-                  styles.coverageMessage,
-                  state.overview.coverageQuality !== 'adequate' &&
-                    styles.coverageWarning,
-                  rtl && styles.rtlText,
+        <Text
+          accessibilityRole="header"
+          style={[styles.dayTitle, textDirection]}
+          testID="daily-overview-selected-day">
+          {formattedDay}
+        </Text>
+        {draft ? (
+          <View style={styles.editor} testID="daily-overview-editor">
+            <Text
+              accessibilityRole="header"
+              style={[styles.editorTitle, textDirection]}>
+              {copy.editorTitle}
+            </Text>
+            <Text style={[styles.hint, textDirection]}>
+              {copy.editorDescription}
+            </Text>
+            <View style={[styles.editorActions, direction]}>
+              <Pressable
+                disabled={saving || !canEdit}
+                accessibilityRole="button"
+                accessibilityState={{
+                  disabled: saving || !canEdit,
+                  busy: saving,
+                }}
+                testID="daily-overview-save"
+                onPress={saveDesign}
+                style={({pressed}) => [
+                  styles.saveButton,
+                  saving && styles.disabled,
+                  pressed && styles.pressed,
                 ]}>
-                {state.overview.coverageQuality === 'no-data'
-                  ? copy.noGlucose
-                  : state.overview.coverageQuality === 'adequate'
-                  ? copy.coverageAdequate
-                  : copy.coverageLow}
-              </Text>
-            </View>
-          </ProductSection>
-
-          {state.overview.ranges ? (
-            <ProductSection locale={locale} title={copy.ranges}>
-              <View style={styles.rangeCard} testID="daily-overview-ranges">
-                {RANGE_PRESENTATION.map(item => (
-                  <View
-                    key={item.key}
-                    style={[styles.rangeRow, rtl && styles.rowReverse]}>
-                    <View
-                      style={[styles.rangeDot, {backgroundColor: item.color}]}
-                    />
-                    <Text style={[styles.rangeLabel, rtl && styles.rtlText]}>
-                      {copy[item.copyKey]}
-                    </Text>
-                    <Text style={styles.rangeValue}>
-                      {`${state.overview.ranges?.[item.key]}%`}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </ProductSection>
-          ) : null}
-
-          {state.overview.meanGlucoseMgDl !== undefined &&
-          state.overview.minimumGlucoseMgDl !== undefined &&
-          state.overview.maximumGlucoseMgDl !== undefined &&
-          state.overview.coefficientOfVariationPercent !== undefined ? (
-            <ProductSection locale={locale} title={copy.metrics}>
-              <ResponsiveGrid
-                locale={locale}
-                testID="daily-overview-glucose-metrics">
-                <MetricCard
-                  accent="#1769AA"
-                  label={copy.mean}
-                  testID="daily-overview-mean"
-                  value={`${state.overview.meanGlucoseMgDl} mg/dL`}
-                />
-                <MetricCard
-                  accent="#159A67"
-                  label={copy.minimum}
-                  testID="daily-overview-minimum"
-                  value={`${state.overview.minimumGlucoseMgDl} mg/dL`}
-                />
-                <MetricCard
-                  accent="#D97706"
-                  label={copy.maximum}
-                  testID="daily-overview-maximum"
-                  value={`${state.overview.maximumGlucoseMgDl} mg/dL`}
-                />
-                <MetricCard
-                  accent="#7C3AED"
-                  label={copy.cv}
-                  testID="daily-overview-cv"
-                  value={`${state.overview.coefficientOfVariationPercent}%`}
-                />
-              </ResponsiveGrid>
-            </ProductSection>
-          ) : null}
-
-          <ProductSection locale={locale} title={copy.insulin}>
-            {state.overview.insulinSummary.quality === 'available' ? (
-              <ResponsiveGrid
-                locale={locale}
-                testID="daily-overview-insulin-metrics">
-                <MetricCard
-                  accent="#0F766E"
-                  label={copy.total}
-                  testID="daily-overview-insulin-total"
-                  value={formatUnits(
-                    state.overview.insulinSummary.totalUnits,
-                  )}
-                />
-                <MetricCard
-                  accent="#2563EB"
-                  label={copy.basal}
-                  testID="daily-overview-insulin-basal"
-                  value={formatUnits(
-                    state.overview.insulinSummary.basalUnits,
-                  )}
-                />
-                <MetricCard
-                  accent="#C2410C"
-                  label={copy.bolus}
-                  testID="daily-overview-insulin-bolus"
-                  value={formatUnits(
-                    state.overview.insulinSummary.bolusUnits,
-                  )}
-                />
-              </ResponsiveGrid>
-            ) : (
-              <View style={styles.unavailableCard}>
-                <Text style={[styles.stateText, rtl && styles.rtlText]}>
-                  {copy.insulinUnavailable}
+                <Text style={styles.saveText}>
+                  {saving ? copy.saving : copy.save}
                 </Text>
+              </Pressable>
+              <Pressable
+                disabled={saving}
+                accessibilityRole="button"
+                testID="daily-overview-cancel"
+                onPress={() => {
+                  setDraft(null);
+                  setSaveStatus('idle');
+                }}
+                style={styles.textButton}>
+                <Text style={styles.buttonText}>{copy.cancel}</Text>
+              </Pressable>
+              <Pressable
+                disabled={saving}
+                accessibilityRole="button"
+                testID="daily-overview-reset"
+                onPress={() => setDraft(DEFAULT_DAILY_OVERVIEW_PREFERENCES)}
+                style={styles.textButton}>
+                <Text style={styles.resetText}>{copy.reset}</Text>
+              </Pressable>
+            </View>
+            {saveStatus === 'error' ? (
+              <Text
+                accessibilityRole="alert"
+                style={[styles.errorText, textDirection]}>
+                {copy.saveFailed}
+              </Text>
+            ) : null}
+            {!layoutPreferences?.onSave ? (
+              <Text style={[styles.hint, textDirection]}>
+                {copy.sessionOnly}
+              </Text>
+            ) : null}
+            <Text style={[styles.controlTitle, textDirection]}>
+              {copy.rangeStyle}
+            </Text>
+            <View style={[styles.styleOptions, direction]}>
+              {(['ring', 'bar', 'list'] as const).map(variant => (
+                <Pressable
+                  key={variant}
+                  disabled={saving}
+                  accessibilityRole="button"
+                  accessibilityLabel={copy[variant]}
+                  accessibilityState={{
+                    selected: draft.rangeStyle === variant,
+                    disabled: saving,
+                  }}
+                  testID={`daily-overview-style-${variant}`}
+                  onPress={() => setDraft({...draft, rangeStyle: variant})}
+                  style={({pressed}) => [
+                    styles.styleOption,
+                    draft.rangeStyle === variant && styles.styleSelected,
+                    pressed && styles.pressed,
+                  ]}>
+                  <View style={styles.styleIcon}>
+                    <RangeGraphic
+                      ranges={
+                        state.kind === 'ready' && state.overview.ranges
+                          ? state.overview.ranges
+                          : {
+                              veryLowPercent: 5,
+                              lowPercent: 5,
+                              targetPercent: 75,
+                              highPercent: 10,
+                              veryHighPercent: 5,
+                            }
+                      }
+                      variant={variant}
+                      miniature
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.optionText,
+                      draft.rangeStyle === variant && styles.optionSelected,
+                    ]}>
+                    {copy[variant]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {state.kind === 'ready' ? (
+              <>
+                <View style={[styles.liveHeading, direction]}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveText}>{copy.live}</Text>
+                </View>
+                <DailyOverviewCard
+                  id="ranges"
+                  overview={state.overview}
+                  locale={locale}
+                  thresholds={thresholds}
+                  rangeStyle={draft.rangeStyle}
+                />
+                <Text style={[styles.controlTitle, textDirection]}>
+                  {copy.reorder}
+                </Text>
+                <Text style={[styles.hint, textDirection]}>
+                  {copy.reorderHint}
+                </Text>
+                <DailyOverviewReorderList
+                  locale={locale}
+                  disabled={saving}
+                  items={draft.cardOrder.map(id => ({
+                    id,
+                    label: dailyCardLabel(id, locale),
+                    preview: (
+                      <DailyOverviewCard
+                        id={id}
+                        overview={state.overview}
+                        locale={locale}
+                        thresholds={thresholds}
+                        rangeStyle={draft.rangeStyle}
+                        compact
+                      />
+                    ),
+                  }))}
+                  onReorder={ids => {
+                    const cardOrder = ids.flatMap(id =>
+                      draft.cardOrder.filter(card => card === id),
+                    );
+                    if (
+                      cardOrder.length === draft.cardOrder.length &&
+                      new Set(cardOrder).size === cardOrder.length
+                    ) {
+                      setDraft({...draft, cardOrder});
+                    }
+                  }}
+                />
+                <View style={[styles.editorActions, direction]}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      disabled: saving || !canEdit,
+                      busy: saving,
+                    }}
+                    disabled={saving || !canEdit}
+                    onPress={saveDesign}
+                    style={styles.saveButton}
+                    testID="daily-overview-save-bottom">
+                    <Text style={styles.saveText}>
+                      {saving ? copy.saving : copy.save}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={saving}
+                    onPress={() => {
+                      setDraft(null);
+                      setSaveStatus('idle');
+                    }}
+                    style={styles.textButton}
+                    testID="daily-overview-cancel-bottom">
+                    <Text style={styles.buttonText}>{copy.cancel}</Text>
+                  </Pressable>
+                </View>
+                {saveStatus === 'error' ? (
+                  <Text
+                    accessibilityRole="alert"
+                    style={[styles.errorText, textDirection]}>
+                    {copy.saveFailed}
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+          </View>
+        ) : saveStatus === 'saved' ? (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={[styles.savedText, textDirection]}>
+            {layoutPreferences?.onSave ? copy.saved : copy.sessionOnly}
+          </Text>
+        ) : null}
+        {state.kind === 'loading' ? (
+          <View style={styles.stateCard} testID="daily-overview-loading">
+            <ActivityIndicator color="#256D9D" />
+            <Text style={styles.hint}>{copy.loading}</Text>
+          </View>
+        ) : state.kind === 'error' ? (
+          <View style={styles.stateCard} testID="daily-overview-error">
+            <Text style={[styles.errorText, textDirection]}>{copy.failed}</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setReloadSequence(value => value + 1)}
+              style={styles.saveButton}
+              testID="daily-overview-retry">
+              <Text style={styles.saveText}>{copy.retry}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View testID="daily-overview-content" style={styles.cards}>
+            {draft ? (
+              <View style={[styles.liveHeading, direction]}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveText}>{copy.live}</Text>
               </View>
-            )}
-          </ProductSection>
-        </View>
-      )}
+            ) : null}
+            {preferences.cardOrder.map(id => (
+              <View key={id} testID={`daily-overview-card-${id}`}>
+                <DailyOverviewCard
+                  id={id}
+                  overview={state.overview}
+                  locale={locale}
+                  thresholds={thresholds}
+                  rangeStyle={preferences.rangeStyle}
+                />
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
     </ProductPage>
   );
 };
@@ -464,117 +537,144 @@ export const DailyOverviewModuleView = ({
 const styles = StyleSheet.create({
   rtlText: {textAlign: 'right', writingDirection: 'rtl'},
   rowReverse: {flexDirection: 'row-reverse'},
-  pressed: {opacity: productUiTokens.opacity.pressed},
-  disabled: {opacity: productUiTokens.opacity.disabled},
-  dayControls: {
-    alignItems: 'center',
+  pressed: {opacity: 0.72},
+  disabled: {opacity: 0.45},
+  white: {color: '#FFFFFF'},
+  pageHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    maxWidth: 620,
+    alignSelf: 'center',
+  },
+  pageBody: {width: '100%', maxWidth: 620, alignSelf: 'center'},
+  headingText: {flex: 1},
+  pageTitle: {fontSize: 28, fontWeight: '800', color: '#233D49'},
+  subtitle: {fontSize: 13, color: '#647785', marginTop: 4},
+  customizeButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#D9E7F1',
+    padding: 10,
+    backgroundColor: '#EAF2F9',
+    minHeight: 48,
+    gap: 2,
+  },
+  customizeIcon: {fontSize: 19, color: '#256D9D'},
+  customizeText: {fontSize: 11, color: '#256D9D', fontWeight: '700'},
+  dayControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: productUiTokens.spacing.lg,
+    backgroundColor: '#EAF0F4',
+    borderRadius: 16,
+    padding: 5,
+    marginTop: 22,
   },
   dayButton: {
-    alignItems: 'center',
-    backgroundColor: productUiTokens.colors.surface,
-    borderColor: productUiTokens.colors.border,
-    borderRadius: productUiTokens.radii.pill,
-    borderWidth: 1,
+    minWidth: 72,
+    minHeight: 44,
     justifyContent: 'center',
-    minHeight: 42,
-    minWidth: 82,
-    paddingHorizontal: productUiTokens.spacing.md,
+    alignItems: 'center',
   },
-  dayButtonText: {color: productUiTokens.colors.text, fontWeight: '700'},
+  dayButtonText: {fontSize: 13, fontWeight: '700', color: '#456176'},
   todayButton: {
-    alignItems: 'center',
-    borderRadius: productUiTokens.radii.pill,
+    minWidth: 92,
+    minHeight: 44,
     justifyContent: 'center',
-    minHeight: 42,
-    paddingHorizontal: productUiTokens.spacing.lg,
+    alignItems: 'center',
+    borderRadius: 12,
   },
-  todayButtonSelected: {backgroundColor: productUiTokens.colors.action},
-  todayButtonText: {color: productUiTokens.colors.action},
-  todayButtonTextSelected: {
-    color: productUiTokens.colors.actionText,
-    fontWeight: '800',
-  },
+  todaySelected: {backgroundColor: '#286F9E'},
   dayTitle: {
-    color: productUiTokens.colors.text,
-    fontSize: 18,
-    fontWeight: '800',
-    marginTop: productUiTokens.spacing.md,
-    textAlign: 'center',
-  },
-  stateCard: {
-    alignItems: 'center',
-    backgroundColor: productUiTokens.colors.surface,
-    borderColor: productUiTokens.colors.border,
-    borderRadius: productUiTokens.radii.card,
-    borderWidth: 1,
-    marginTop: productUiTokens.spacing.xl,
-    padding: productUiTokens.spacing.xl,
-  },
-  stateText: {
-    color: productUiTokens.colors.textMuted,
     fontSize: 14,
-    lineHeight: 20,
-    marginTop: productUiTokens.spacing.sm,
+    fontWeight: '600',
+    color: '#526C7C',
+    textAlign: 'center',
+    marginVertical: 18,
   },
-  errorText: {color: productUiTokens.colors.danger, fontWeight: '700'},
-  retryButton: {
-    backgroundColor: productUiTokens.colors.action,
-    borderRadius: productUiTokens.radii.pill,
-    marginTop: productUiTokens.spacing.md,
-    paddingHorizontal: productUiTokens.spacing.lg,
-    paddingVertical: productUiTokens.spacing.md,
-  },
-  retryText: {color: productUiTokens.colors.actionText, fontWeight: '700'},
-  coverageCard: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#A7F3D0',
-    borderRadius: productUiTokens.radii.card,
-    borderWidth: 1,
-    padding: productUiTokens.spacing.lg,
-  },
-  coverageValue: {color: '#047857', fontSize: 30, fontWeight: '800'},
-  detailText: {color: productUiTokens.colors.textMuted, marginTop: 3},
-  coverageMessage: {color: '#047857', fontWeight: '700', marginTop: 8},
-  coverageWarning: {color: '#9A3412'},
-  rangeCard: {
-    backgroundColor: productUiTokens.colors.surface,
-    borderColor: productUiTokens.colors.border,
-    borderRadius: productUiTokens.radii.card,
-    borderWidth: 1,
-    padding: productUiTokens.spacing.md,
-  },
-  rangeRow: {
+  cards: {gap: 14},
+  stateCard: {
+    padding: 24,
+    gap: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     alignItems: 'center',
-    flexDirection: 'row',
-    minHeight: 36,
-    paddingVertical: productUiTokens.spacing.xs,
   },
-  rangeDot: {borderRadius: 6, height: 12, marginHorizontal: 8, width: 12},
-  rangeLabel: {color: productUiTokens.colors.text, flex: 1, fontSize: 14},
-  rangeValue: {color: productUiTokens.colors.text, fontWeight: '800'},
-  metricCard: {
-    backgroundColor: productUiTokens.colors.surface,
-    borderColor: productUiTokens.colors.border,
-    borderRadius: productUiTokens.radii.card,
-    borderTopWidth: 4,
+  editor: {
+    padding: 12,
+    backgroundColor: '#EAF1F8',
+    borderRadius: 22,
     borderWidth: 1,
-    minHeight: 88,
-    padding: productUiTokens.spacing.md,
-    width: '100%',
+    borderColor: '#CBDDEC',
+    marginBottom: 20,
   },
-  metricLabel: {color: productUiTokens.colors.textMuted, fontSize: 13},
-  metricValue: {
-    color: productUiTokens.colors.text,
-    fontSize: 19,
-    fontWeight: '800',
-    marginTop: productUiTokens.spacing.sm,
+  editorTitle: {fontSize: 20, color: '#254F6D', fontWeight: '800'},
+  hint: {color: '#627A8C', fontSize: 12, lineHeight: 19, marginTop: 6},
+  editorActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 12,
+    alignItems: 'center',
   },
-  unavailableCard: {
-    backgroundColor: productUiTokens.colors.surfaceInfo,
-    borderRadius: productUiTokens.radii.card,
-    padding: productUiTokens.spacing.lg,
+  saveButton: {
+    paddingHorizontal: 16,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#286F9E',
+    borderRadius: 12,
+  },
+  saveText: {color: '#FFFFFF', fontWeight: '700', fontSize: 13},
+  textButton: {
+    minHeight: 44,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: {color: '#345B78', fontWeight: '600', fontSize: 13},
+  resetText: {color: '#627A8C', fontSize: 12},
+  controlTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#345B78',
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  styleOptions: {flexDirection: 'row', gap: 8},
+  styleOption: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    backgroundColor: '#F7FAFC',
+    minHeight: 86,
+    gap: 5,
+  },
+  styleSelected: {borderColor: '#286F9E', backgroundColor: '#FFFFFF'},
+  styleIcon: {height: 38, justifyContent: 'center'},
+  optionText: {fontSize: 12, color: '#627A8C'},
+  optionSelected: {color: '#286F9E', fontWeight: '800'},
+  liveHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginVertical: 14,
+  },
+  liveDot: {height: 6, width: 6, borderRadius: 3, backgroundColor: '#169C79'},
+  liveText: {fontSize: 12, fontWeight: '700', color: '#39806D'},
+  savedText: {fontSize: 13, color: '#187F65', marginBottom: 14},
+  errorText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#A23438',
+    marginVertical: 8,
   },
 });

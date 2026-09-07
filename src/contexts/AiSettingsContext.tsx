@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {sha1} from 'js-sha1';
+import {AppState} from 'react-native';
 
 import {nativeNightscoutVaultAuthSession} from 'app/services/backend/nativeNightscoutVaultSync';
 import type {NightscoutVaultAuthSession} from 'app/services/backend/nightscoutVaultSynchronizer';
@@ -20,6 +21,8 @@ import {
   serverVaultCredentialMarker,
 } from 'app/services/llm/shaniLlmProxy';
 import {isE2E} from 'app/utils/e2e';
+import {getAiConnectionErrorCode} from 'app/product/settings/aiConnectionFeedback';
+import {isConfiguredAiCredential} from 'app/services/llm/credentialReadiness';
 
 export type LlmProviderKind = 'openai';
 export type AiAgentPersonality = 'tachles' | 'nice' | 'buddha';
@@ -39,13 +42,14 @@ export type AiCredentialSyncStatus =
   | {
       readonly state: 'error';
       readonly pending: boolean;
+      readonly code: string;
       readonly message: string;
     };
 
 export interface AiCredentialRemote {
-  readonly status: () => Promise<boolean>;
-  readonly provision: (credential: string) => Promise<void>;
-  readonly remove: () => Promise<void>;
+  readonly status: (expectedUserId?: string) => Promise<boolean>;
+  readonly provision: (credential: string, expectedUserId?: string) => Promise<void>;
+  readonly remove: (expectedUserId?: string) => Promise<void>;
 }
 
 type AiSettingsContextValue = {
@@ -64,7 +68,6 @@ const LEGACY_STORAGE_KEY = 'ai.settings.v1';
 const LEGACY_CREDENTIAL_SERVICE = 'shani.ai.openai';
 const LEGACY_QUARANTINE_SERVICE = 'shani.ai.openai.quarantine.v1';
 const LEGACY_QUARANTINE_KEY = 'ai.settings.legacyQuarantine.v1';
-const PENDING_VAULT_MARKER = '__shani_server_vault_pending__';
 const LATEST_OPENAI_MODEL = 'gpt-5.5';
 
 const DEFAULT_SETTINGS: AiSettings = {
@@ -76,9 +79,9 @@ const DEFAULT_SETTINGS: AiSettings = {
 };
 
 const defaultCredentialRemote: AiCredentialRemote = {
-  status: () => getLlmCredentialStatus('openai'),
-  provision: credential => provisionLlmCredential('openai', credential),
-  remove: () => removeLlmCredential('openai'),
+  status: owner => getLlmCredentialStatus('openai', owner),
+  provision: (credential, owner) => provisionLlmCredential('openai', credential, owner),
+  remove: owner => removeLlmCredential('openai', owner),
 };
 
 const AiSettingsContext = createContext<AiSettingsContextValue>({
@@ -142,6 +145,23 @@ const normalizeOwner = (ownerUserId: string | null): string | null =>
 
 const decodeCredentialIntent = (raw: string | null): CredentialIntent | null =>
   raw === 'provision' || raw === 'remove' ? raw : null;
+
+const connectionError = (error: unknown, pending: boolean): AiCredentialSyncStatus => ({
+  state: 'error',
+  pending,
+  code: getAiConnectionErrorCode(error),
+  message: 'The AI connection could not be completed.',
+});
+
+const accountChangedError = (): Error => Object.assign(
+  new Error('The signed-in account changed before saving.'),
+  {code: 'account_changed'},
+);
+
+const canRetryAutomatically = (status: AiCredentialSyncStatus): boolean =>
+  status.state === 'pending' ||
+  (status.state === 'error' &&
+    ['network', 'timeout', 'upstream', 'rate_limited', 'upstream_timeout', 'upstream_unavailable'].includes(status.code));
 
 let legacyMigrationTail: Promise<void> = Promise.resolve();
 
@@ -240,6 +260,16 @@ export const AiSettingsProvider = ({
   const settingsRef = useRef(settings);
   const ownerUserIdRef = useRef(ownerUserId);
   const mutationTail = useRef<Promise<void>>(Promise.resolve());
+  const syncStatusRef = useRef(credentialSyncStatus);
+  syncStatusRef.current = credentialSyncStatus;
+
+  // Initialization, writes and retries share one queue. A slow status read
+  // cannot overwrite a completed save or remove another queued credential.
+  const enqueue = useCallback((operation: () => Promise<void>): Promise<void> => {
+    const result = mutationTail.current.then(operation);
+    mutationTail.current = result.catch(() => undefined);
+    return result;
+  }, []);
 
   const setCurrentSettings = useCallback((next: AiSettings) => {
     settingsRef.current = next;
@@ -258,17 +288,27 @@ export const AiSettingsProvider = ({
 
   const reconcileCredential = useCallback(
     async (expectedOwner: string): Promise<void> => {
+      if (ownerUserIdRef.current !== expectedOwner ||
+          normalizeOwner(authSession.getCurrentUserId()) !== expectedOwner) {
+        throw accountChangedError();
+      }
       const intent = decodeCredentialIntent(
         await AsyncStorage.getItem(accountIntentKey(expectedOwner)),
       );
       if (intent === null) {
         if (ownerUserIdRef.current !== expectedOwner) {
-          return;
+          throw accountChangedError();
         }
         try {
-          const configured = await credentialRemote.status();
+          const configured = await credentialRemote.status(expectedOwner);
           if (ownerUserIdRef.current !== expectedOwner) {
-            return;
+            throw accountChangedError();
+          }
+          // A process interruption after clearing a confirmed intent can
+          // leave its secure staging copy behind. It is no longer pending.
+          await nativeSecureCredentialStore.remove(accountCredentialService(expectedOwner));
+          if (ownerUserIdRef.current !== expectedOwner) {
+            throw accountChangedError();
           }
           const next = {
             ...settingsRef.current,
@@ -282,15 +322,9 @@ export const AiSettingsProvider = ({
           );
         } catch (error) {
           if (ownerUserIdRef.current === expectedOwner) {
-            setCredentialSyncStatus({
-              state: 'error',
-              pending: false,
-              message:
-                error instanceof Error
-                  ? error.message
-                  : 'Could not read AI credential status',
-            });
+            setCredentialSyncStatus(connectionError(error, false));
           }
+          throw error;
         }
         return;
       }
@@ -299,6 +333,7 @@ export const AiSettingsProvider = ({
         setCredentialSyncStatus({state: 'syncing', pending: true});
       }
       let provisionedMarker = serverVaultCredentialMarker;
+      let pendingIntent = true;
       try {
         if (intent === 'provision') {
           const credential = await nativeSecureCredentialStore.read(
@@ -312,27 +347,33 @@ export const AiSettingsProvider = ({
               ? credential
               : serverVaultCredentialMarker;
           if (authSession.getCurrentUserId()?.trim() !== expectedOwner) {
-            return;
+            throw accountChangedError();
           }
-          await credentialRemote.provision(credential);
-          await nativeSecureCredentialStore.remove(
-            accountCredentialService(expectedOwner),
-          );
+          await credentialRemote.provision(credential, expectedOwner);
         } else {
           if (authSession.getCurrentUserId()?.trim() !== expectedOwner) {
-            return;
+            throw accountChangedError();
           }
-          await credentialRemote.remove();
+          await credentialRemote.remove(expectedOwner);
         }
+        // Clear the acknowledged intent before deleting its secure staging
+        // copy, so a crash cannot leave an unsendable pending upload.
         await AsyncStorage.removeItem(accountIntentKey(expectedOwner));
+        pendingIntent = false;
+        if (intent === 'provision') {
+          await nativeSecureCredentialStore.remove(accountCredentialService(expectedOwner));
+        }
         if (ownerUserIdRef.current !== expectedOwner) {
-          return;
+          throw accountChangedError();
         }
         const next = {
           ...settingsRef.current,
           apiKey: intent === 'provision' ? provisionedMarker : '',
         };
         await persist(next, expectedOwner);
+        if (ownerUserIdRef.current !== expectedOwner) {
+          throw accountChangedError();
+        }
         setCurrentSettings(next);
         setCredentialSyncStatus(
           intent === 'provision'
@@ -341,14 +382,7 @@ export const AiSettingsProvider = ({
         );
       } catch (error) {
         if (ownerUserIdRef.current === expectedOwner) {
-          setCredentialSyncStatus({
-            state: 'error',
-            pending: true,
-            message:
-              error instanceof Error
-                ? error.message
-                : 'AI credential sync failed',
-          });
+          setCredentialSyncStatus(connectionError(error, pendingIntent));
         }
         throw error;
       }
@@ -376,6 +410,9 @@ export const AiSettingsProvider = ({
     let mounted = true;
     const load = async () => {
       try {
+        if (!mounted || ownerUserIdRef.current !== ownerUserId) {
+          return;
+        }
         await prepareLegacySettings(ownerUserId);
         const raw = await AsyncStorage.getItem(accountStorageKey(ownerUserId));
         const parsed = raw
@@ -410,26 +447,31 @@ export const AiSettingsProvider = ({
         const intent = decodeCredentialIntent(
           await AsyncStorage.getItem(accountIntentKey(ownerUserId)),
         );
-        if (intent === 'provision') {
-          next = {...next, apiKey: PENDING_VAULT_MARKER};
-        }
         if (mounted && ownerUserIdRef.current === ownerUserId) {
           setCurrentSettings(next);
           if (intent !== null) {
             setCredentialSyncStatus({state: 'pending', pending: true});
           }
+          // Preferences are usable while the independent remote connection
+          // check continues. AI stays unavailable until that check confirms it.
+          setIsLoaded(true);
         }
-        reconcileCredential(ownerUserId).catch(() => undefined);
+        if (intent === 'provision') {
+          try {
+            const configured = await credentialRemote.status(ownerUserId);
+            if (configured && mounted && ownerUserIdRef.current === ownerUserId) {
+              setCurrentSettings({...settingsRef.current, apiKey: serverVaultCredentialMarker});
+            }
+          } catch {
+            // Status lookup must not discard or prevent retrying a staged key.
+          }
+        }
+        await reconcileCredential(ownerUserId);
       } catch (error) {
         if (mounted && ownerUserIdRef.current === ownerUserId) {
-          setCredentialSyncStatus({
-            state: 'error',
-            pending: false,
-            message:
-              error instanceof Error
-                ? error.message
-                : 'Could not load AI settings',
-          });
+          setCredentialSyncStatus(current =>
+            current.state === 'error' ? current : connectionError(error, false),
+          );
         }
       } finally {
         if (mounted && ownerUserIdRef.current === ownerUserId) {
@@ -437,18 +479,18 @@ export const AiSettingsProvider = ({
         }
       }
     };
-    load();
+    enqueue(load).catch(() => undefined);
     return () => {
       mounted = false;
     };
-  }, [ownerUserId, reconcileCredential, setCurrentSettings]);
+  }, [credentialRemote, enqueue, ownerUserId, reconcileCredential, setCurrentSettings]);
 
   const setSetting = useCallback(
     <K extends keyof AiSettings>(key: K, value: AiSettings[K]) => {
       const mutationOwner = ownerUserId;
-      const run = mutationTail.current.then(async () => {
+      return enqueue(async () => {
         if (ownerUserIdRef.current !== mutationOwner) {
-          throw new Error('The signed-in account changed before saving.');
+          throw accountChangedError();
         }
         const prev = settingsRef.current;
         const next = {
@@ -500,10 +542,9 @@ export const AiSettingsProvider = ({
             accountIntentKey(mutationOwner),
             'provision',
           );
-          next.apiKey =
-            isE2E && credential.startsWith('e2e-openai-')
-              ? credential
-              : PENDING_VAULT_MARKER;
+          // First-time setup stays unavailable until confirmed. An existing
+          // server key remains usable while its replacement is being checked.
+          next.apiKey = isConfiguredAiCredential(prev.apiKey) ? prev.apiKey : '';
         } else {
           await nativeSecureCredentialStore.remove(
             accountCredentialService(mutationOwner),
@@ -518,9 +559,7 @@ export const AiSettingsProvider = ({
         }
         await reconcileCredential(mutationOwner);
       });
-      mutationTail.current = run.catch(() => undefined);
-      return run;
-    }, [ownerUserId, persist, reconcileCredential, setCurrentSettings],
+    }, [enqueue, ownerUserId, persist, reconcileCredential, setCurrentSettings],
   );
 
   const retryCredentialSync = useCallback(() => {
@@ -528,18 +567,33 @@ export const AiSettingsProvider = ({
     if (owner === null) {
       return Promise.resolve();
     }
-    return reconcileCredential(owner);
-  }, [reconcileCredential]);
+    return enqueue(() => reconcileCredential(owner));
+  }, [enqueue, reconcileCredential]);
+
+  useEffect(() => {
+    let previousState = AppState.currentState;
+    const subscription = AppState.addEventListener('change', state => {
+      const becameActive = state === 'active' && previousState !== 'active';
+      previousState = state;
+      if (becameActive && canRetryAutomatically(syncStatusRef.current)) {
+        retryCredentialSync().catch(() => undefined);
+      }
+    });
+    return () => subscription.remove();
+  }, [retryCredentialSync]);
 
   const resetToDefaults = useCallback(() => {
     const mutationOwner = ownerUserId;
-    const run = mutationTail.current.then(async () => {
+    return enqueue(async () => {
       if (ownerUserIdRef.current !== mutationOwner) {
-        throw new Error('The signed-in account changed before resetting.');
+        throw accountChangedError();
       }
       await persist(DEFAULT_SETTINGS, mutationOwner);
       if (mutationOwner === null) {
         await nativeSecureCredentialStore.remove(accountCredentialService(null));
+        if (ownerUserIdRef.current !== mutationOwner) {
+          return;
+        }
         setCurrentSettings(DEFAULT_SETTINGS);
         setCredentialSyncStatus({state: 'idle', pending: false});
         return;
@@ -548,13 +602,14 @@ export const AiSettingsProvider = ({
         accountCredentialService(mutationOwner),
       );
       await AsyncStorage.setItem(accountIntentKey(mutationOwner), 'remove');
+      if (ownerUserIdRef.current !== mutationOwner) {
+        return;
+      }
       setCurrentSettings(DEFAULT_SETTINGS);
       setCredentialSyncStatus({state: 'pending', pending: true});
       await reconcileCredential(mutationOwner);
     });
-    mutationTail.current = run.catch(() => undefined);
-    return run;
-  }, [ownerUserId, persist, reconcileCredential, setCurrentSettings]);
+  }, [enqueue, ownerUserId, persist, reconcileCredential, setCurrentSettings]);
 
   const value = useMemo<AiSettingsContextValue>(
     () => ({

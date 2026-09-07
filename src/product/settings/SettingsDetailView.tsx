@@ -1,6 +1,7 @@
-import React, {useState} from 'react';
+import React, {useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +11,12 @@ import {
 } from 'react-native';
 import type {DestinationLocale} from '../destinations';
 import {productUiTokens} from '../ui';
+import {
+  aiConnectionErrorMessage,
+  getAiConnectionErrorCode,
+  OPENAI_API_KEYS_URL,
+  OPENAI_BILLING_URL,
+} from './aiConnectionFeedback';
 
 export type SettingsDetailSection =
   | 'account'
@@ -25,12 +32,24 @@ export interface SettingsDetailViewProps {
   readonly section: SettingsDetailSection;
   readonly locale: DestinationLocale;
   readonly accountLabel?: string;
-  readonly status: {readonly credentialConfigured: boolean};
+  readonly status: {
+    readonly credentialConfigured: boolean;
+    readonly credentialSyncState?:
+      | 'idle'
+      | 'configured'
+      | 'pending'
+      | 'syncing'
+      | 'error';
+    readonly credentialSyncPending?: boolean;
+    readonly credentialErrorCode?: string;
+  };
   readonly diagnostics?: readonly SettingsDiagnosticLine[];
   readonly onClose: () => void;
   readonly onSignOut?: () => Promise<void>;
   readonly onSaveAiCredential?: (credential: string) => Promise<void>;
   readonly onClearAiCredential?: () => Promise<void>;
+  readonly onRetryAiCredential?: () => Promise<void>;
+  readonly onTestAiConnection?: () => Promise<void>;
 }
 
 const COPY = {
@@ -46,7 +65,23 @@ const COPY = {
     aiTitle: 'AI credential',
     aiDescription:
       'Advisory only. The AI cannot change therapy or Nightscout data.',
-    configured: 'A credential is configured. Its value is never shown.',
+    configured:
+      'An OpenAI key is saved securely. Test the connection to check that AI is available.',
+    pending:
+      'The key change is waiting to sync. It has not been completed yet.',
+    existingConnection:
+      'Your previously saved key remains available until the replacement succeeds.',
+    syncing: 'Syncing the key change securely…',
+    retry: 'Retry',
+    test: 'Test AI connection',
+    connected: 'OpenAI responded successfully. The AI connection works.',
+    testNote:
+      'The test sends a short message with no health data. OpenAI may charge a small API usage fee.',
+    createKey: 'Open OpenAI key page',
+    billing: 'OpenAI API billing',
+    setup:
+      'Open the OpenAI key page, create or copy a key, then paste it here. A ChatGPT subscription does not include API credit.',
+    saving: 'Checking and saving…',
     missing: 'No AI credential is configured for this account.',
     localOnly:
       'The key is sent to the encrypted account vault and is never shown again. If you save while offline, it stays protected on this device until upload succeeds.',
@@ -54,7 +89,7 @@ const COPY = {
     save: 'Save new key',
     clear: 'Remove key',
     confirmClear: 'Remove the key from the encrypted account vault?',
-    saved: 'The new key was saved.',
+    saved: 'The key was saved securely. You can now test the AI connection.',
     cleared: 'The key was removed.',
     failed: 'The change could not be completed. Try again.',
     diagnosticsTitle: 'Diagnostics',
@@ -74,7 +109,20 @@ const COPY = {
     cancel: 'ביטול',
     aiTitle: 'מפתח AI',
     aiDescription: 'לייעוץ בלבד. ה־AI לא משנה טיפול או מידע ב־Nightscout.',
-    configured: 'מפתח מוגדר. הערך שלו לעולם אינו מוצג.',
+    configured: 'מפתח OpenAI שמור באופן מאובטח. בדיקת חיבור תוודא שה־AI זמין.',
+    pending: 'השינוי במפתח ממתין לסנכרון. הפעולה עדיין לא הושלמה.',
+    existingConnection: 'המפתח הקודם נשאר זמין עד שהחלפתו תצליח.',
+    syncing: 'השינוי במפתח מסונכרן באופן מאובטח…',
+    retry: 'ניסיון נוסף',
+    test: 'בדיקת חיבור AI',
+    connected: 'OpenAI ענתה בהצלחה. חיבור ה־AI עובד.',
+    testNote:
+      'הבדיקה שולחת הודעה קצרה ללא מידע רפואי. ייתכן חיוב API קטן מצד OpenAI.',
+    createKey: 'פתיחת עמוד המפתחות של OpenAI',
+    billing: 'חיוב OpenAI API',
+    setup:
+      'פותחים את עמוד המפתחות ב־OpenAI, יוצרים או מעתיקים מפתח ומדביקים כאן. מנוי ChatGPT אינו כולל יתרת API.',
+    saving: 'בודק ושומר…',
     missing: 'לא מוגדר מפתח AI לחשבון הזה.',
     localOnly:
       'המפתח נשלח לכספת החשבון המוצפנת ולא יוצג שוב. בשמירה ללא חיבור הוא נשאר מוגן במכשיר עד שההעלאה מצליחה.',
@@ -82,7 +130,7 @@ const COPY = {
     save: 'שמירת מפתח חדש',
     clear: 'מחיקת המפתח',
     confirmClear: 'למחוק את המפתח מכספת החשבון המוצפנת?',
-    saved: 'המפתח החדש נשמר.',
+    saved: 'המפתח נשמר באופן מאובטח. אפשר כעת לבדוק את חיבור ה־AI.',
     cleared: 'המפתח נמחק.',
     failed: 'לא הצלחנו להשלים את הפעולה. אפשר לנסות שוב.',
     diagnosticsTitle: 'אבחון טכני',
@@ -138,6 +186,8 @@ export const SettingsDetailView = ({
   onSignOut,
   onSaveAiCredential,
   onClearAiCredential,
+  onRetryAiCredential,
+  onTestAiConnection,
 }: SettingsDetailViewProps) => {
   const copy = COPY[locale];
   const rtl = locale === 'he';
@@ -146,22 +196,40 @@ export const SettingsDetailView = ({
     null,
   );
   const [working, setWorking] = useState(false);
+  const workingRef = useRef(false);
   const [message, setMessage] = useState<string | undefined>();
+  const [failed, setFailed] = useState(false);
+  const syncing = status.credentialSyncState === 'syncing';
+  const busy = working || syncing;
 
-  const run = async (action: () => Promise<void>, success: string) => {
-    if (working) {
+  const run = async (
+    action: () => Promise<void>,
+    success: string,
+    clearInput = false,
+  ) => {
+    if (workingRef.current || syncing) {
       return;
     }
     setWorking(true);
+    workingRef.current = true;
     setMessage(undefined);
+    setFailed(false);
     try {
       await action();
-      setCredential('');
+      if (clearInput) {
+        setCredential('');
+      }
       setConfirming(null);
       setMessage(success);
-    } catch {
-      setMessage(copy.failed);
+    } catch (error) {
+      setFailed(true);
+      setMessage(
+        section === 'ai-credentials'
+          ? aiConnectionErrorMessage(locale, getAiConnectionErrorCode(error))
+          : copy.failed,
+      );
     } finally {
+      workingRef.current = false;
       setWorking(false);
     }
   };
@@ -182,6 +250,7 @@ export const SettingsDetailView = ({
         <Button
           label={copy.close}
           onPress={onClose}
+          disabled={busy}
           testID="settings-detail-close"
         />
       </View>
@@ -236,32 +305,112 @@ export const SettingsDetailView = ({
               {copy.aiDescription}
             </Text>
             <Text style={[styles.value, rtl && styles.rtlText]}>
-              {status.credentialConfigured ? copy.configured : copy.missing}
+              {syncing
+                ? copy.syncing
+                : status.credentialSyncPending
+                ? copy.pending
+                : status.credentialConfigured
+                ? copy.configured
+                : copy.missing}
             </Text>
+            {status.credentialSyncState === 'error' && !message ? (
+              <Text
+                accessibilityRole="alert"
+                style={[styles.error, rtl && styles.rtlText]}>
+                {aiConnectionErrorMessage(
+                  locale,
+                  status.credentialErrorCode ?? 'unknown',
+                )}
+              </Text>
+            ) : null}
+            {status.credentialSyncPending && status.credentialConfigured ? (
+              <Text style={[styles.note, rtl && styles.rtlText]}>
+                {copy.existingConnection}
+              </Text>
+            ) : null}
+            {onRetryAiCredential &&
+            (status.credentialSyncPending ||
+              status.credentialSyncState === 'error') ? (
+              <Button
+                disabled={busy}
+                label={copy.retry}
+                testID="settings-detail-retry-ai"
+                onPress={() => run(onRetryAiCredential, '')}
+              />
+            ) : null}
+            <Text style={[styles.note, rtl && styles.rtlText]}>
+              {copy.setup}
+            </Text>
+            <Button
+              disabled={busy}
+              label={copy.createKey}
+              testID="settings-detail-open-ai-keys"
+              onPress={() =>
+                run(async () => {
+                  await Linking.openURL(OPENAI_API_KEYS_URL);
+                }, '')
+              }
+            />
             <Text style={[styles.note, rtl && styles.rtlText]}>
               {copy.localOnly}
             </Text>
             <TextInput
               autoCapitalize="none"
               autoCorrect={false}
-              editable={!working}
-              onChangeText={setCredential}
+              editable={!busy}
+              onChangeText={value => {
+                setCredential(value);
+                setMessage(undefined);
+              }}
               placeholder={copy.newCredential}
+              accessibilityLabel={copy.newCredential}
+              textContentType="none"
+              autoComplete="off"
               secureTextEntry
-              style={[styles.input, rtl && styles.rtlInput]}
+              style={styles.input}
               value={credential}
             />
             <Button
-              disabled={working || credential.trim().length === 0}
-              label={copy.save}
+              disabled={
+                busy || !onSaveAiCredential || credential.trim().length === 0
+              }
+              label={working ? copy.saving : copy.save}
               onPress={() =>
                 onSaveAiCredential
-                  ? run(() => onSaveAiCredential(credential.trim()), copy.saved)
+                  ? run(
+                      () => onSaveAiCredential(credential.trim()),
+                      copy.saved,
+                      true,
+                    )
                   : undefined
               }
               testID="settings-detail-save-ai"
             />
-            {status.credentialConfigured && onClearAiCredential ? (
+            {status.credentialConfigured && onTestAiConnection ? (
+              <>
+                <Button
+                  disabled={busy}
+                  label={copy.test}
+                  testID="settings-detail-test-ai"
+                  onPress={() => run(onTestAiConnection, copy.connected)}
+                />
+                <Text style={[styles.note, rtl && styles.rtlText]}>
+                  {copy.testNote}
+                </Text>
+              </>
+            ) : null}
+            <Button
+              disabled={busy}
+              label={copy.billing}
+              testID="settings-detail-open-ai-billing"
+              onPress={() =>
+                run(async () => {
+                  await Linking.openURL(OPENAI_BILLING_URL);
+                }, '')
+              }
+            />
+            {(status.credentialConfigured || status.credentialSyncPending) &&
+            onClearAiCredential ? (
               confirming === 'clear' ? (
                 <View style={styles.confirmation}>
                   <Text style={[styles.warning, rtl && styles.rtlText]}>
@@ -322,13 +471,17 @@ export const SettingsDetailView = ({
           </View>
         ) : null}
 
-        {working ? (
+        {busy ? (
           <ActivityIndicator color={productUiTokens.colors.action} />
         ) : null}
         {message ? (
           <Text
             accessibilityRole="alert"
-            style={[styles.message, rtl && styles.rtlText]}>
+            style={[
+              styles.message,
+              failed && styles.error,
+              rtl && styles.rtlText,
+            ]}>
             {message}
           </Text>
         ) : null}
@@ -381,6 +534,8 @@ const styles = StyleSheet.create({
   value: {color: '#29425C', fontSize: 16, fontWeight: '700'},
   note: {color: productUiTokens.colors.textMuted, fontSize: 13, lineHeight: 19},
   input: {
+    writingDirection: 'ltr',
+    textAlign: 'left',
     backgroundColor: '#F8FAFC',
     borderColor: productUiTokens.colors.border,
     borderRadius: productUiTokens.radii.card,
@@ -415,6 +570,7 @@ const styles = StyleSheet.create({
   warning: {color: '#744A00', fontSize: 15, fontWeight: '700'},
   actions: {flexDirection: 'row', gap: productUiTokens.spacing.sm},
   message: {color: '#255B35', fontSize: 14, fontWeight: '700'},
+  error: {color: '#A22B2B', fontSize: 14, fontWeight: '700'},
   diagnosticRow: {
     borderBottomColor: productUiTokens.colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,

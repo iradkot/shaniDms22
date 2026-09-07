@@ -261,6 +261,9 @@ const initialPresentation = (
     showGri: profile.showGri,
     shell: profile.shell,
     ...(profile.dayGraph === undefined ? {} : {dayGraph: profile.dayGraph}),
+    ...(profile.dailyOverview === undefined
+      ? {}
+      : {dailyOverview: profile.dailyOverview}),
   };
 };
 
@@ -381,6 +384,9 @@ export const PersonalizationQuestionnaireView = ({
       setPresentation(current => ({
         ...preset.presentation,
         ...(current.dayGraph === undefined ? {} : {dayGraph: current.dayGraph}),
+        ...(current.dailyOverview === undefined
+          ? {}
+          : {dailyOverview: current.dailyOverview}),
       }));
     }
   };

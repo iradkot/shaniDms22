@@ -8,6 +8,7 @@ import type {
   RelationshipToDataSubject,
   StoredLayoutProfile,
   StoredDayGraphPreferences,
+  StoredDailyOverviewPreferences,
   StoredProductPersonalization,
 } from './types';
 import {MAX_PERSISTED_RECENT_MODULES} from './types';
@@ -205,6 +206,17 @@ export const updateDayGraphPreferences = (
   updateLayoutProfile(current, {
     ...selectLayoutProfile(current, layout),
     dayGraph,
+  });
+
+/** Apply to the latest snapshot so editing the page preserves unrelated preferences. */
+export const updateDailyOverviewPreferences = (
+  current: StoredProductPersonalization,
+  layout: PersonalizationLayout,
+  dailyOverview: StoredDailyOverviewPreferences,
+): StoredProductPersonalization =>
+  updateLayoutProfile(current, {
+    ...selectLayoutProfile(current, layout),
+    dailyOverview,
   });
 
 export const recordRecentModule = (

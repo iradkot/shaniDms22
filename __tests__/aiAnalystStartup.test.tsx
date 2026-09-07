@@ -9,9 +9,11 @@ import {
 } from 'app/containers/MainTabsNavigator/Containers/AiAnalyst/helpers/markdownConfig';
 
 let mockApiKey = '';
+let mockCredentialState = 'idle';
 jest.mock('app/contexts/AiSettingsContext', () => ({
   useAiSettings: () => ({
     settings: {enabled: true, apiKey: mockApiKey, openAiModel: 'fixture'},
+    credentialSyncStatus: {state: mockCredentialState, pending: false},
   }),
 }));
 jest.mock('app/contexts/GlucoseSettingsContext', () => ({
@@ -21,7 +23,7 @@ jest.mock('app/contexts/AppLanguageContext', () => ({
   useAppLanguage: () => ({language: 'en'}),
 }));
 jest.mock('app/services/aiMemory/useActiveAiWorkspaceScope', () => ({
-  useActiveAiWorkspaceScope: () => null,
+  useActiveAiWorkspaceScope: () => ({productUserId: 'test-user', workspaceId: 'test-workspace'}),
 }));
 jest.mock('app/services/llm/llmClient', () => ({
   createLlmProvider: () => ({sendChat: jest.fn()}),
@@ -46,6 +48,7 @@ describe('AI engine startup work', () => {
   let tree: renderer.ReactTestRenderer;
   beforeEach(() => {
     mockApiKey = '';
+    mockCredentialState = 'idle';
     jest.useFakeTimers();
     jest.clearAllMocks();
   });
@@ -68,7 +71,8 @@ describe('AI engine startup work', () => {
       tree = renderer.create(<Harness />);
     });
     expect(engine.state.mode).toBe('locked');
-    mockApiKey = 'fixture-key';
+    mockApiKey = '__shani_server_vault__';
+    mockCredentialState = 'configured';
     act(() => tree.update(<Harness />));
     expect(jest.getTimerCount()).toBe(0);
     expect(engine.state.mode).toBe('dashboard');
@@ -76,8 +80,32 @@ describe('AI engine startup work', () => {
     act(() => tree.update(<Harness />));
     expect(engine.state.mode).toBe('mission');
     mockApiKey = '';
+    mockCredentialState = 'idle';
     act(() => tree.update(<Harness />));
     expect(jest.getTimerCount()).toBe(0);
     expect(engine.state.mode).toBe('locked');
+  });
+
+  it('does not unlock AI for a pending or failed credential upload', () => {
+    mockApiKey = '__shani_server_vault_pending__';
+    mockCredentialState = 'pending';
+    act(() => { tree = renderer.create(<Harness />); });
+    expect(engine.hasKey).toBe(false);
+    expect(engine.state.mode).toBe('locked');
+    mockCredentialState = 'error';
+    act(() => tree.update(<Harness />));
+    expect(engine.hasKey).toBe(false);
+  });
+
+  it('keeps the confirmed key available while its replacement is pending or rejected', () => {
+    mockApiKey = '__shani_server_vault__';
+    mockCredentialState = 'pending';
+    act(() => { tree = renderer.create(<Harness />); });
+    expect(engine.hasKey).toBe(true);
+    expect(engine.state.mode).toBe('dashboard');
+    mockCredentialState = 'error';
+    act(() => tree.update(<Harness />));
+    expect(engine.hasKey).toBe(true);
+    expect(engine.state.mode).toBe('dashboard');
   });
 });

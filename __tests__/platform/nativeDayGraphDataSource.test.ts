@@ -1,4 +1,5 @@
 import {createNativeDayGraphDataSource} from 'app/platform/native/product/nativeDayGraphDataSource';
+import {clearNightscoutInstance, configureNightscoutInstance} from 'app/api/shaniNightscoutInstances';
 
 const period = {dayStartMs: 1_000, dayEndMs: 10_000};
 
@@ -32,6 +33,55 @@ const journal = {
 };
 
 describe('createNativeDayGraphDataSource', () => {
+  it('loads calendar glucose only, with bounded chunks and a known complete empty response', async () => {
+    const fetchGlucoseRecords = jest.fn(async () => []);
+    const loadInsulinContext = jest.fn();
+    const loadTimelineItems = jest.fn();
+    const source = createNativeDayGraphDataSource({
+      fetchGlucoseRecords, loadInsulinContext, loadTimelineItems, journal,
+      now: () => 123, useE2EFixtures: false,
+    });
+    jest.clearAllMocks();
+    const result = await source.loadCalendarGlucose!({dayStartMs: 0, dayEndMs: 31 * 24 * 60 * 60 * 1000});
+    expect(fetchGlucoseRecords).toHaveBeenCalledTimes(5);
+    expect(loadInsulinContext).not.toHaveBeenCalled();
+    expect(loadTimelineItems).not.toHaveBeenCalled();
+    expect(journal.meals.getListSnapshot).not.toHaveBeenCalled();
+    expect(journal.activities.getListSnapshot).not.toHaveBeenCalled();
+    expect(result).toEqual({glucoseSamples: [], freshness: {kind: 'fresh', fetchedAtMs: 123}, complete: true});
+  });
+
+  it('marks stale or unverified calendar reads incomplete while keeping available glucose', async () => {
+    const source = createNativeDayGraphDataSource({
+      fetchGlucoseRange: async () => ({
+        records: [{_id: 'bg_1', date: 2_000, sgv: 110}],
+        freshness: {kind: 'stale', fetchedAtMs: 123, reason: 'network-unavailable'},
+        complete: true,
+      }),
+      useE2EFixtures: false,
+    });
+    const result = await source.loadCalendarGlucose!(period);
+    expect(result.glucoseSamples).toHaveLength(1);
+    expect(result.complete).toBe(false);
+    expect(result.freshness.kind).toBe('stale');
+  });
+
+  it('rejects a Nightscout source change during calendar chunk loading', async () => {
+    configureNightscoutInstance({baseUrl: 'https://first.example'});
+    try {
+      const source = createNativeDayGraphDataSource({
+        fetchGlucoseRecords: async () => {
+          configureNightscoutInstance({baseUrl: 'https://second.example'});
+          return [];
+        },
+        useE2EFixtures: false,
+      });
+      await expect(source.loadCalendarGlucose!(period)).rejects.toThrow('source changed');
+    } finally {
+      clearNightscoutInstance();
+    }
+  });
+
   it('combines Nightscout and local Journal records without proximity merging', async () => {
     const source = createNativeDayGraphDataSource({
       nightscoutSourceId: 'ns_opaque',

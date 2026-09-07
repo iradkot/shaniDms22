@@ -57,9 +57,31 @@ jest.mock('react-native-keychain', () => {
   };
 });
 
-jest.mock('react-native-reanimated', () =>
-  require('react-native-reanimated/mock'),
-);
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const reanimated = require('react-native-reanimated/mock');
+  return {
+    ...reanimated,
+    // Reanimated 3 omits the frame hook and returns a non-callable animated
+    // ref. Keep refs compatible with React 19 callback refs used by scrolling.
+    useFrameCallback: jest.fn(() => ({
+      setActive: jest.fn(),
+      isActive: false,
+      callbackId: 0,
+    })),
+    useAnimatedRef: () => {
+      const ref = React.useRef(null);
+      if (ref.current === null) {
+        const animatedRef = node => {
+          animatedRef.current = node;
+        };
+        animatedRef.current = null;
+        ref.current = animatedRef;
+      }
+      return ref.current;
+    },
+  };
+});
 global.__reanimatedWorkletInit = () => {};
 
 jest.mock('react-native-vector-icons/Ionicons', () => 'Ionicons');

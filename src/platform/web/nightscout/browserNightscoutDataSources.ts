@@ -28,6 +28,7 @@ import {
 import {projectNightscoutTherapyContext} from '../../nightscout/therapyContextProjection';
 import {mapNightscoutTreatmentsToInsulinDataEntries} from '../../../utils/nightscoutTreatments.utils';
 import {buildBrowserInsulinSummary} from './browserInsulinSummary';
+import {loadCalendarGlucoseRange} from '../../nightscout/loadCalendarGlucoseRange';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
@@ -207,6 +208,31 @@ export const createBrowserNightscoutDataSources = (input: {
     },
   };
   const dayGraph: DayGraphDataSource = {
+    async loadCalendarGlucose(period) {
+      return loadCalendarGlucoseRange({
+        period,
+        assertCurrent: () => input.client.assertCurrentSource?.(),
+        loadChunk: async chunk => {
+          const entries = await input.client.readEntries(
+            chunk.dayStartMs,
+            chunk.dayEndMs,
+          );
+          return {
+            glucoseSamples: entries.records.map((entry, index) => ({
+              identity: {
+                sourceId: input.sourceId,
+                recordId: entry._id ?? `unidentified:${entry.date}:${index}`,
+              },
+              timestampMs: entry.date,
+              valueMgDl: entry.sgv,
+            })),
+            freshness: entries.freshness,
+            complete:
+              entries.complete === true && entries.freshness.kind === 'fresh',
+          };
+        },
+      });
+    },
     async loadDayGraph(period) {
       const [entries, treatments, deviceStatuses, profile] = await Promise.all([
         input.client.readEntries(period.dayStartMs, period.dayEndMs),

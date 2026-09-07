@@ -3,6 +3,7 @@ import {getAuth} from '@react-native-firebase/auth';
 
 import {NATIVE_RUNTIME_CONFIG} from 'app/platform/native/runtimeConfig';
 import {isE2E} from 'app/utils/e2e';
+import {utf8ByteLength} from 'app/utils/utf8ByteLength';
 import {
   RequestAbortError,
   createRequestAbortScope,
@@ -20,6 +21,7 @@ type FetchLike = (
 export interface ShaniLlmProxyRuntime {
   readonly baseUrl: string;
   readonly getFirebaseIdToken: () => Promise<string | null>;
+  readonly getCurrentUserId?: () => string | null;
   readonly fetch: FetchLike;
 }
 
@@ -41,8 +43,19 @@ let runtimeOverride: ShaniLlmProxyRuntime | null = null;
 export class ShaniLlmProxyError extends Error {
   readonly code:
     | 'backend_unconfigured'
+    | 'account_changed'
+    | 'invalid_credential'
+    | 'provider_permission_denied'
+    | 'provider_model_unavailable'
+    | 'provider_quota_exceeded'
+    | 'unsupported_model'
+    | 'internal_error'
+    | 'upstream_timeout'
+    | 'upstream_unavailable'
+    | 'upstream_rejected'
     | 'unauthenticated'
     | 'invalid_request'
+    | 'request_too_large'
     | 'credential_missing'
     | 'unauthorized'
     | 'rate_limited'
@@ -137,6 +150,9 @@ const defaultIdToken = async (): Promise<string | null> => {
 const currentRuntime = (): ShaniLlmProxyRuntime => ({
   baseUrl: configuredBaseUrl(),
   getFirebaseIdToken: runtimeOverride?.getFirebaseIdToken ?? defaultIdToken,
+  getCurrentUserId:
+    runtimeOverride?.getCurrentUserId ??
+    (() => getAuth(getApp()).currentUser?.uid ?? null),
   fetch: runtimeOverride?.fetch ?? (globalThis.fetch as FetchLike),
 });
 
@@ -154,7 +170,9 @@ const decodeJsonObject = (text: string): Record<string, unknown> => {
     }
     return value as Record<string, unknown>;
   } catch (error) {
-    if (error instanceof ShaniLlmProxyError) throw error;
+    if (error instanceof ShaniLlmProxyError) {
+      throw error;
+    }
     throw new ShaniLlmProxyError(
       'invalid_response',
       'AI backend returned an invalid response',
@@ -166,27 +184,62 @@ const errorCodeForStatus = (
   status: number,
   serverCode: unknown,
 ): ShaniLlmProxyError['code'] => {
-  if (serverCode === 'credential_missing') return 'credential_missing';
-  if (status === 401 || status === 403) return 'unauthorized';
-  if (status === 408 || status === 504) return 'timeout';
-  if (status === 429) return 'rate_limited';
-  if (status >= 500) return 'upstream';
+  const providerCodes = [
+    'invalid_credential',
+    'provider_permission_denied',
+    'provider_model_unavailable',
+    'provider_quota_exceeded',
+    'unsupported_model',
+    'unauthenticated',
+    'internal_error',
+    'upstream_timeout',
+    'upstream_unavailable',
+    'upstream_rejected',
+  ] as const;
+  if (providerCodes.some(code => code === serverCode)) {
+    return serverCode as ShaniLlmProxyError['code'];
+  }
+  if (serverCode === 'credential_missing') {
+    return 'credential_missing';
+  }
+  if (status === 404) {
+    return 'backend_unconfigured';
+  }
+  if (status === 413) return 'request_too_large';
+  if (status === 401 || status === 403) {
+    return 'unauthorized';
+  }
+  if (status === 408 || status === 504) {
+    return 'timeout';
+  }
+  if (status === 429) {
+    return 'rate_limited';
+  }
+  if (status >= 500) {
+    return 'upstream';
+  }
   return 'invalid_request';
 };
 
 const proxyRequest = async (
   path: string,
   body: Record<string, unknown> | undefined,
-  options: {readonly signal?: AbortSignal; readonly timeoutMs?: number} = {},
+  options: {
+    readonly signal?: AbortSignal;
+    readonly timeoutMs?: number;
+    readonly expectedUserId?: string | undefined;
+    readonly maxRequestBytes?: number;
+  } = {},
 ): Promise<Record<string, unknown>> => {
   const runtime = currentRuntime();
   const serialized = body === undefined ? undefined : JSON.stringify(body);
   if (
     serialized &&
-    new TextEncoder().encode(serialized).byteLength > MAX_CHAT_REQUEST_BYTES
+    utf8ByteLength(serialized) >
+      (options.maxRequestBytes ?? MAX_CHAT_REQUEST_BYTES)
   ) {
     throw new ShaniLlmProxyError(
-      'invalid_request',
+      'request_too_large',
       'AI request exceeded the allowed size',
       413,
     );
@@ -199,7 +252,19 @@ const proxyRequest = async (
 
   try {
     abortScope.throwIfAborted();
+    const expectedOwner =
+      options.expectedUserId ?? runtime.getCurrentUserId?.();
+    const assertOwner = () => {
+      if (expectedOwner && runtime.getCurrentUserId?.() !== expectedOwner) {
+        throw new ShaniLlmProxyError(
+          'account_changed',
+          'The signed-in account changed',
+        );
+      }
+    };
+    assertOwner();
     const token = await runtime.getFirebaseIdToken();
+    assertOwner();
     abortScope.throwIfAborted();
     if (!token || token.length > 16_384) {
       throw new ShaniLlmProxyError(
@@ -223,7 +288,19 @@ const proxyRequest = async (
     abortScope.throwIfAborted();
     const responseText = await response.text();
     abortScope.throwIfAborted();
-    const decoded = decodeJsonObject(responseText);
+    let decoded: Record<string, unknown>;
+    try {
+      decoded = decodeJsonObject(responseText);
+    } catch (error) {
+      if (!response.ok) {
+        throw new ShaniLlmProxyError(
+          errorCodeForStatus(response.status, undefined),
+          'AI service request failed',
+          response.status,
+        );
+      }
+      throw error;
+    }
     if (!response.ok) {
       const message =
         typeof decoded.message === 'string'
@@ -245,7 +322,9 @@ const proxyRequest = async (
     if (abortScope.kind === 'timeout') {
       throw new ShaniLlmProxyError('timeout', 'AI request timed out');
     }
-    if (error instanceof ShaniLlmProxyError) throw error;
+    if (error instanceof ShaniLlmProxyError) {
+      throw error;
+    }
     const message =
       error instanceof Error && error.message
         ? error.message
@@ -468,18 +547,25 @@ export const validateLlmCredential = async (
 export const provisionLlmCredential = async (
   providerInput: SupportedLlmProvider,
   credentialInput: string,
+  expectedUserId?: string,
 ): Promise<void> => {
   const provider = assertProvider(providerInput);
   const credential = credentialInput.trim();
   if (!credential || credential.length > MAX_CREDENTIAL_CHARS) {
-    throw new ShaniLlmProxyError('invalid_request', 'Invalid API key');
+    throw new ShaniLlmProxyError('invalid_credential', 'Invalid API key');
   }
-  if (isE2E && credential.startsWith('e2e-openai-')) return;
-  const response = await proxyRequest('/v1/vault/llm/provision', {
-    version: 1,
-    provider,
-    credential,
-  });
+  if (isE2E && credential.startsWith('e2e-openai-')) {
+    return;
+  }
+  const response = await proxyRequest(
+    '/v1/vault/llm/provision',
+    {
+      version: 1,
+      provider,
+      credential,
+    },
+    {expectedUserId},
+  );
   if (response.version !== 1 || response.configured !== true) {
     throw new ShaniLlmProxyError(
       'invalid_response',
@@ -490,12 +576,16 @@ export const provisionLlmCredential = async (
 
 export const getLlmCredentialStatus = async (
   providerInput: SupportedLlmProvider,
+  expectedUserId?: string,
 ): Promise<boolean> => {
   const provider = assertProvider(providerInput);
-  if (isE2E) return false;
+  if (isE2E) {
+    return false;
+  }
   const response = await proxyRequest(
     `/v1/vault/llm/status?provider=${encodeURIComponent(provider)}`,
     undefined,
+    {expectedUserId},
   );
   if (response.version !== 1 || typeof response.configured !== 'boolean') {
     throw new ShaniLlmProxyError(
@@ -508,17 +598,53 @@ export const getLlmCredentialStatus = async (
 
 export const removeLlmCredential = async (
   providerInput: SupportedLlmProvider,
+  expectedUserId?: string,
 ): Promise<void> => {
   const provider = assertProvider(providerInput);
-  if (isE2E) return;
-  const response = await proxyRequest('/v1/vault/llm/remove', {
-    version: 1,
-    provider,
-  });
+  if (isE2E) {
+    return;
+  }
+  const response = await proxyRequest(
+    '/v1/vault/llm/remove',
+    {
+      version: 1,
+      provider,
+    },
+    {expectedUserId},
+  );
   if (response.version !== 1 || response.configured !== false) {
     throw new ShaniLlmProxyError(
       'invalid_response',
       'AI backend did not confirm credential removal',
+    );
+  }
+};
+
+export const testLlmConnection = async (
+  provider: SupportedLlmProvider,
+  model: string,
+): Promise<void> => {
+  if (isE2E) {
+    return;
+  }
+  const response = await proxyRequest(
+    '/v1/vault/llm/test',
+    {
+      version: 1,
+      provider: assertProvider(provider),
+      model,
+    },
+    {timeoutMs: 85_000},
+  );
+  if (
+    response.version !== 1 ||
+    response.provider !== provider ||
+    response.connected !== true ||
+    response.model !== model
+  ) {
+    throw new ShaniLlmProxyError(
+      'invalid_response',
+      'AI backend did not confirm the connection',
     );
   }
 };
@@ -559,6 +685,7 @@ export const analyzeMealImageViaProxy = async (input: {
     },
     {
       timeoutMs: 70_000,
+      maxRequestBytes: 8_500_000,
       ...(input.abortSignal === undefined ? {} : {signal: input.abortSignal}),
     },
   );

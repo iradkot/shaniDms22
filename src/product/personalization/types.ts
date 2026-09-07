@@ -31,6 +31,31 @@ export const DEFAULT_DAY_GRAPH_PREFERENCES: StoredDayGraphPreferences = {
   windowHours: 'full-day',
 };
 
+export const DAILY_OVERVIEW_CARD_IDS = [
+  'ranges',
+  'mean',
+  'glucose',
+  'insulin',
+  'coverage',
+] as const;
+
+export type DailyOverviewCardId = (typeof DAILY_OVERVIEW_CARD_IDS)[number];
+
+/** Presentation only. Medical values and selected dates never enter this snapshot. */
+export interface StoredDailyOverviewPreferences {
+  readonly schemaVersion: 1;
+  readonly rangeStyle: 'ring' | 'bar' | 'list';
+  /** Every card appears exactly once; editing cannot hide medical context. */
+  readonly cardOrder: readonly DailyOverviewCardId[];
+}
+
+export const DEFAULT_DAILY_OVERVIEW_PREFERENCES: StoredDailyOverviewPreferences =
+  {
+    schemaVersion: 1,
+    rangeStyle: 'ring',
+    cardOrder: DAILY_OVERVIEW_CARD_IDS,
+  };
+
 export const PERSONALIZATION_QUESTIONNAIRE_STAGES = [
   'relationship',
   'quick-access',
@@ -72,6 +97,7 @@ export interface QuestionnairePresentationStage {
   /** An omitted startDestination means Hub. */
   readonly shell: StoredProductShellPreferences;
   readonly dayGraph?: StoredDayGraphPreferences;
+  readonly dailyOverview?: StoredDailyOverviewPreferences;
 }
 
 /**
@@ -114,6 +140,7 @@ export interface StoredLayoutProfile {
   readonly shell: StoredProductShellPreferences;
   /** Optional for backwards-compatible local and remote snapshots. */
   readonly dayGraph?: StoredDayGraphPreferences;
+  readonly dailyOverview?: StoredDailyOverviewPreferences;
 }
 
 export interface StoredLayoutPersonalization {
@@ -152,5 +179,10 @@ export interface StoredProductPersonalization {
 export type ProductPersonalizationChange =
   | StoredProductPersonalization
   | ((current: StoredProductPersonalization) => StoredProductPersonalization);
+
+export interface ProductPersonalizationSaveOptions {
+  /** Editors with their own draft can publish only after local persistence. */
+  readonly optimistic?: boolean;
+}
 
 export const MAX_PERSISTED_RECENT_MODULES = 20;

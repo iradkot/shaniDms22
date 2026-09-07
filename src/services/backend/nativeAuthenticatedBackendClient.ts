@@ -1,5 +1,6 @@
 import {getApp} from '@react-native-firebase/app';
 import {getAuth} from '@react-native-firebase/auth';
+import {utf8ByteLength} from '../../utils/utf8ByteLength';
 
 import {NATIVE_RUNTIME_CONFIG} from 'app/platform/native/runtimeConfig';
 import {
@@ -179,7 +180,7 @@ export const createNativeAuthenticatedBackendClient = (
       request.body === undefined ? undefined : JSON.stringify(request.body);
     if (
       serialized !== undefined &&
-      new TextEncoder().encode(serialized).byteLength > MAX_REQUEST_BYTES
+      utf8ByteLength(serialized) > MAX_REQUEST_BYTES
     ) {
       throw new NativeAuthenticatedBackendError(
         'invalid_request',

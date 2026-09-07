@@ -120,8 +120,29 @@ export interface DayGraphSnapshot {
   readonly freshness: DayGraphFreshness;
 }
 
+/** Glucose-only read. Never load insulin, profiles or the Journal for a calendar. */
+export interface DayGraphCalendarSnapshot {
+  readonly glucoseSamples: readonly DayGraphGlucoseSample[];
+  readonly freshness: DayGraphFreshness;
+  /** True only when the source proved the entire requested range was enumerated. */
+  readonly complete: boolean;
+}
+
+export interface DayGraphCalendarDay {
+  readonly dayStartMs: number;
+  readonly status: 'data' | 'empty' | 'unknown';
+  /** Percentage of valid recorded readings within the user's displayed target range. */
+  readonly timeInRangePct: number | null;
+  /** Approximate observed coverage, not an estimate of glucose during gaps. */
+  readonly coveragePct: number;
+  readonly partial: boolean;
+}
+
 /** Read-only host boundary. Implementations may combine Nightscout and Journal data. */
 export interface DayGraphDataSource {
+  readonly loadCalendarGlucose?: (
+    period: DayGraphPeriod,
+  ) => Promise<DayGraphCalendarSnapshot>;
   readonly loadDayGraph: (
     period: DayGraphPeriod,
     options?: {readonly forceRefresh?: boolean},

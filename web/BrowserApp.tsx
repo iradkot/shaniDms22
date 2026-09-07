@@ -59,6 +59,12 @@ import type {
 } from '../src/platform/web';
 import {ConnectionPanel} from './ConnectionPanel';
 import {
+  emptyMarker,
+  markerKey,
+  resolveConnections,
+  type ConnectionMarker,
+} from './connectionStatus';
+import {
   disableGoogleAutoSelect,
   GoogleSignInButton,
 } from './GoogleSignInButton';
@@ -70,7 +76,7 @@ const ProductExperience = React.lazy(() =>
 );
 
 const LANGUAGE_STORAGE_KEY = 'shani.web.language.v1';
-const CONNECTION_MARKER_PREFIX = 'shani.web.connection-marker.v1:';
+
 const DEFAULT_THRESHOLDS = {
   veryLowMaxMgDl: 54,
   targetMinMgDl: 70,
@@ -145,13 +151,6 @@ const COPY = {
   },
 } as const;
 
-interface ConnectionMarker {
-  readonly schemaVersion: 1;
-  readonly nightscout: BrowserNightscoutStatus;
-  readonly aiConfigured: boolean;
-  readonly aiEnabled: boolean;
-}
-
 interface BrowserResources {
   readonly keyValueStore: IndexedDbKeyValueStore;
   readonly personalizationRepository: ReturnType<
@@ -212,78 +211,6 @@ const writeLocale = (locale: DestinationLocale): void => {
     globalThis.localStorage?.setItem(LANGUAGE_STORAGE_KEY, locale);
   } catch {
     // The language still works for this session.
-  }
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const decodeMarker = (raw: string | null): ConnectionMarker | undefined => {
-  if (raw === null) {
-    return undefined;
-  }
-  try {
-    const value: unknown = JSON.parse(raw);
-    if (
-      !isRecord(value) ||
-      value.schemaVersion !== 1 ||
-      !isRecord(value.nightscout) ||
-      typeof value.nightscout.configured !== 'boolean' ||
-      (value.nightscout.sourceId !== undefined &&
-        (typeof value.nightscout.sourceId !== 'string' ||
-          !/^[A-Za-z0-9._-]{1,160}$/.test(value.nightscout.sourceId))) ||
-      (value.nightscout.workspaceId !== undefined &&
-        (typeof value.nightscout.workspaceId !== 'string' ||
-          !/^[A-Za-z0-9._-]{1,160}$/.test(value.nightscout.workspaceId))) ||
-      (value.nightscout.configured &&
-        (value.nightscout.sourceId === undefined ||
-          value.nightscout.workspaceId === undefined)) ||
-      (value.nightscout.displayLabel !== undefined &&
-        (typeof value.nightscout.displayLabel !== 'string' ||
-          value.nightscout.displayLabel.length > 160)) ||
-      typeof value.aiConfigured !== 'boolean' ||
-      typeof value.aiEnabled !== 'boolean'
-    ) {
-      return undefined;
-    }
-    return value as unknown as ConnectionMarker;
-  } catch {
-    return undefined;
-  }
-};
-
-const emptyMarker = (): ConnectionMarker => ({
-  schemaVersion: 1,
-  nightscout: {configured: false},
-  aiConfigured: false,
-  aiEnabled: true,
-});
-
-const markerKey = (uid: string): string => `${CONNECTION_MARKER_PREFIX}${uid}`;
-
-const resolveConnections = async (input: {
-  readonly uid: string;
-  readonly api: AuthenticatedWebApiClient;
-  readonly storage: IndexedDbKeyValueStore;
-}): Promise<ConnectionMarker> => {
-  const cached = decodeMarker(
-    await input.storage.getItem(markerKey(input.uid)),
-  );
-  try {
-    const [nightscout, aiConfigured] = await Promise.all([
-      BrowserNightscoutClient.status(input.api),
-      new BrowserAiService(input.api).status(),
-    ]);
-    const marker: ConnectionMarker = {
-      schemaVersion: 1,
-      nightscout,
-      aiConfigured,
-      aiEnabled: cached?.aiEnabled ?? true,
-    };
-    await input.storage.setItem(markerKey(input.uid), JSON.stringify(marker));
-    return marker;
-  } catch {
-    return cached ?? emptyMarker();
   }
 };
 
@@ -521,6 +448,7 @@ export const BrowserApp = () => {
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [connectionRevision, setConnectionRevision] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
+  const connectionsChanged = useRef(false);
   const [authError, setAuthError] = useState<string | undefined>(undefined);
   const [state, setState] = useState<BootstrapState>({status: 'loading'});
   const [storage] = useState(() => {
@@ -1150,10 +1078,15 @@ export const BrowserApp = () => {
           locale={locale}
           nightscout={readyResources.nightscout}
           onChanged={() => {
-            setPanelOpen(false);
-            setConnectionRevision(revision => revision + 1);
+            connectionsChanged.current = true;
           }}
-          onClose={() => setPanelOpen(false)}
+          onClose={() => {
+            setPanelOpen(false);
+            if (connectionsChanged.current) {
+              connectionsChanged.current = false;
+              setConnectionRevision(revision => revision + 1);
+            }
+          }}
         />
       ) : null}
     </div>

@@ -16,7 +16,14 @@ import type {
   DayGraphPeriod,
   DayGraphTimelineItem,
 } from '../../modules/dayGraph';
-import {buildDayGraph} from '../../modules/dayGraph';
+import {
+  buildDayGraph,
+  DEFAULT_DAY_GRAPH_RANGE_THRESHOLDS,
+  moveLocalDays,
+  startOfLocalDay,
+  startOfLocalMonth,
+} from '../../modules/dayGraph';
+import type {TrendsRangeThresholds} from '../../modules/trends';
 import type {DestinationLocale} from '../destinations';
 import type {DestinationFocus} from '../shell';
 import {ProductPage, ProductSection, productUiTokens} from '../ui';
@@ -29,6 +36,8 @@ import type {
 } from './runtime';
 import {useDayGraphSnapshot} from './useDayGraphSnapshot';
 import {useRefreshingNow} from '../time';
+import {DayGraphCalendarModal} from './DayGraphCalendarModal';
+import {useDayGraphCalendar} from './useDayGraphCalendar';
 
 const MINUTE_MS = 60 * 1000;
 const DEFAULT_SAMPLE_INTERVAL_MS = 5 * MINUTE_MS;
@@ -44,6 +53,7 @@ export interface DayGraphModuleViewProps {
   readonly dataSource: DayGraphDataSource;
   readonly initialFocus?: DayGraphInitialFocus;
   readonly expectedSampleIntervalMs?: number;
+  readonly rangeThresholds?: TrendsRangeThresholds;
   readonly now?: () => number;
   readonly preMealAssistance?: PreMealAssistanceRuntime;
   readonly chartPreferences?: DayGraphChartPreferencesRuntime;
@@ -57,7 +67,7 @@ const COPY = {
     previous: 'Previous day',
     next: 'Next day',
     today: 'Today',
-    showToday: 'Show today',
+    chooseDate: 'Choose a date',
     loading: 'Loading this day…',
     error: 'This day could not be loaded.',
     retry: 'Try again',
@@ -99,7 +109,7 @@ const COPY = {
     previous: 'היום הקודם',
     next: 'היום הבא',
     today: 'היום',
-    showToday: 'הצגת היום',
+    chooseDate: 'בחירת תאריך',
     loading: 'טוען את היום…',
     error: 'לא הצלחנו לטעון את היום הזה.',
     retry: 'ניסיון נוסף',
@@ -138,19 +148,6 @@ const COPY = {
 } as const;
 
 const systemNow = (): number => Date.now();
-
-const startOfLocalDay = (timestampMs: number): number => {
-  const value = new Date(timestampMs);
-  value.setHours(0, 0, 0, 0);
-  return value.getTime();
-};
-
-const moveLocalDays = (dayStartMs: number, amount: number): number => {
-  const value = new Date(dayStartMs);
-  value.setDate(value.getDate() + amount);
-  value.setHours(0, 0, 0, 0);
-  return value.getTime();
-};
 
 const periodForLocalDay = (dayStartMs: number): DayGraphPeriod => ({
   dayStartMs,
@@ -326,6 +323,7 @@ export const DayGraphModuleView = ({
   dataSource,
   initialFocus,
   expectedSampleIntervalMs = DEFAULT_SAMPLE_INTERVAL_MS,
+  rangeThresholds = DEFAULT_DAY_GRAPH_RANGE_THRESHOLDS,
   now = systemNow,
   preMealAssistance,
   chartPreferences,
@@ -341,6 +339,20 @@ export const DayGraphModuleView = ({
   const initialDayStartMs = validInitialDay(initialFocus, now);
   const [selectedDayStartMs, setSelectedDayStartMs] =
     useState(initialDayStartMs);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarMonthMs, setCalendarMonthMs] = useState(() =>
+    startOfLocalMonth(initialDayStartMs),
+  );
+  const openCalendar = () => {
+    setCalendarMonthMs(startOfLocalMonth(selectedDayStartMs));
+    setCalendarOpen(true);
+  };
+  const selectCalendarDay = (dayStartMs: number) => {
+    if (Number.isFinite(dayStartMs) && dayStartMs <= todayStartMs) {
+      setSelectedDayStartMs(startOfLocalDay(dayStartMs));
+      setCalendarOpen(false);
+    }
+  };
   const [selectedTimestampMs, setSelectedTimestampMs] = useState<
     number | undefined
   >(initialFocus?.atMs);
@@ -396,6 +408,15 @@ export const DayGraphModuleView = ({
     selectedDayStartMs === todayStartMs,
   );
   const snapshot = loadState.kind === 'ready' ? loadState.snapshot : undefined;
+  const calendar = useDayGraphCalendar({
+    source: dataSource,
+    open: calendarOpen,
+    monthStartMs: calendarMonthMs,
+    nowMs: currentTimeMs,
+    thresholds: rangeThresholds,
+    expectedSampleIntervalMs,
+    selectedDaySnapshot: snapshot,
+  });
   const model = useMemo(
     () =>
       snapshot
@@ -556,12 +577,42 @@ export const DayGraphModuleView = ({
       subtitle={copy.subtitle}
       testID="day-graph-module-view"
       title={copy.title}>
+      {calendarOpen ? (
+        <DayGraphCalendarModal
+          locale={locale}
+          selectedDayStartMs={selectedDayStartMs}
+          todayStartMs={todayStartMs}
+          monthStartMs={calendarMonthMs}
+          days={calendar.days}
+          loading={calendar.loading}
+          failed={calendar.failed}
+          stale={calendar.stale}
+          targetMinMgDl={rangeThresholds.targetMinMgDl}
+          targetMaxMgDl={rangeThresholds.targetMaxMgDl}
+          onChangeMonth={value => {
+            if (
+              Number.isFinite(value) &&
+              startOfLocalMonth(value) <= startOfLocalMonth(todayStartMs)
+            ) {
+              setCalendarMonthMs(startOfLocalMonth(value));
+            }
+          }}
+          onSelectDay={selectCalendarDay}
+          onClose={() => setCalendarOpen(false)}
+          onRetry={calendar.retry}
+        />
+      ) : null}
       {!phone ? (
-        <Text
-          style={[styles.selectedDate, rtl && styles.rtlText]}
-          testID="day-graph-selected-date">
-          {formatDay(selectedDayStartMs, locale)}
-        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={copy.chooseDate}
+          onPress={openCalendar}>
+          <Text
+            style={[styles.selectedDate, rtl && styles.rtlText]}
+            testID="day-graph-selected-date">
+            {formatDay(selectedDayStartMs, locale)}
+          </Text>
+        </Pressable>
       ) : null}
       <View
         style={[
@@ -586,21 +637,17 @@ export const DayGraphModuleView = ({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          {...(phone
-            ? {
-                accessibilityLabel: `${copy.title}: ${formatDay(
-                  selectedDayStartMs,
-                  locale,
-                )}`,
-                accessibilityHint: copy.showToday,
-              }
-            : {})}
-          onPress={() => setSelectedDayStartMs(todayStartMs)}
+          accessibilityLabel={`${copy.chooseDate}: ${formatDay(
+            selectedDayStartMs,
+            locale,
+          )}`}
+          accessibilityHint={copy.chooseDate}
+          onPress={openCalendar}
           style={({pressed}) => [
             phone ? phoneStyles.todayControl : styles.todayControl,
             pressed && styles.pressed,
           ]}
-          testID="day-graph-today">
+          testID="day-graph-pick-date">
           {phone ? (
             <>
               <View
@@ -612,8 +659,7 @@ export const DayGraphModuleView = ({
                   style={phoneStyles.todayTitle}>
                   {copy.title}
                 </Text>
-                <Text
-                  style={phoneStyles.todayAction}>{` · ${copy.today}`}</Text>
+                <Text style={phoneStyles.todayAction}> ▾</Text>
               </View>
               <Text
                 accessibilityLabel={formatDay(selectedDayStartMs, locale)}
@@ -624,7 +670,9 @@ export const DayGraphModuleView = ({
               </Text>
             </>
           ) : (
-            <Text style={styles.todayControlText}>{copy.today}</Text>
+            <Text style={styles.todayControlText}>
+              {formatCompactDay(selectedDayStartMs, locale)} ▾
+            </Text>
           )}
         </Pressable>
         <Pressable

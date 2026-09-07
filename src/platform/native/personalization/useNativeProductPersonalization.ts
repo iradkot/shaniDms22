@@ -3,6 +3,7 @@ import {
   resolveProductPersonalizationChange,
   type PersonalizationLayout,
   type ProductPersonalizationChange,
+  type ProductPersonalizationSaveOptions,
   type ProductPersonalizationSyncScope,
   type StoredProductPersonalization,
 } from '../../../product/personalization';
@@ -25,7 +26,10 @@ export type NativeProductPersonalizationState =
       readonly remoteSyncEnabled: boolean;
       readonly saveError?: string;
       readonly syncError?: string;
-      readonly save: (change: ProductPersonalizationChange) => Promise<boolean>;
+      readonly save: (
+        change: ProductPersonalizationChange,
+        options?: ProductPersonalizationSaveOptions,
+      ) => Promise<boolean>;
     };
 
 type ReadyState = Extract<
@@ -81,14 +85,20 @@ export const useNativeProductPersonalization = (input: {
   const latestPreferences = useRef<StoredProductPersonalization | undefined>(
     undefined,
   );
+  const confirmedPreferences = useRef<StoredProductPersonalization | undefined>(
+    undefined,
+  );
+  const scopeGeneration = useRef(0);
 
   useEffect(() => {
+    scopeGeneration.current += 1;
     let active = true;
     let synchronizing = false;
     let synchronizeAgain = false;
     let retryTimer: ReturnType<typeof setInterval> | undefined;
     latestSave.current += 1;
     latestPreferences.current = undefined;
+    confirmedPreferences.current = undefined;
     operationTail.current = Promise.resolve();
     requestSynchronization.current = undefined;
     if (scope === undefined) {
@@ -129,6 +139,7 @@ export const useNativeProductPersonalization = (input: {
               await nativeProductPersonalizationRepository.synchronize(scope);
             if (active && latestSave.current === sequence) {
               latestPreferences.current = result.preferences;
+              confirmedPreferences.current = result.preferences;
               setLoaded({
                 status: 'ready',
                 preferences: result.preferences,
@@ -182,6 +193,7 @@ export const useNativeProductPersonalization = (input: {
           return;
         }
         latestPreferences.current = preferences;
+        confirmedPreferences.current = preferences;
         setLoaded({
           status: 'ready',
           preferences,
@@ -213,7 +225,10 @@ export const useNativeProductPersonalization = (input: {
   }, [scope, scopeKey]);
 
   const save = useCallback(
-    async (change: ProductPersonalizationChange): Promise<boolean> => {
+    async (
+      change: ProductPersonalizationChange,
+      options?: ProductPersonalizationSaveOptions,
+    ): Promise<boolean> => {
       if (
         scope === undefined ||
         renderedScopeKey.current !== scopeKey ||
@@ -222,13 +237,16 @@ export const useNativeProductPersonalization = (input: {
         return false;
       }
       const before = latestPreferences.current;
-      const optimistic = resolveProductPersonalizationChange(before, change);
-      latestPreferences.current = optimistic;
+      const generation = scopeGeneration.current;
+      const desired = resolveProductPersonalizationChange(before, change);
+      const publishOptimistically = options?.optimistic !== false;
+      const published = publishOptimistically ? desired : before;
+      latestPreferences.current = published;
       const sequence = latestSave.current + 1;
       latestSave.current = sequence;
       setLoaded(current => ({
         status: 'ready',
-        preferences: optimistic,
+        preferences: published,
         saving: true,
         syncing: current.status === 'ready' ? current.syncing : false,
         pendingSyncCount:
@@ -257,6 +275,14 @@ export const useNativeProductPersonalization = (input: {
         const durable = await write;
         if (
           renderedScopeKey.current === scopeKey &&
+          scopeGeneration.current === generation
+        ) {
+          // A later queued operation may still fail. Keep the last successful
+          // write as its confirmed baseline without replacing newer UI edits.
+          confirmedPreferences.current = durable;
+        }
+        if (
+          renderedScopeKey.current === scopeKey &&
           latestSave.current === sequence
         ) {
           latestPreferences.current = durable;
@@ -280,9 +306,15 @@ export const useNativeProductPersonalization = (input: {
           renderedScopeKey.current === scopeKey &&
           latestSave.current === sequence
         ) {
+          const retained = publishOptimistically
+            ? published
+            : confirmedPreferences.current ?? before;
+          if (!publishOptimistically) {
+            latestPreferences.current = retained;
+          }
           setLoaded({
             status: 'ready',
-            preferences: optimistic,
+            preferences: retained,
             saving: false,
             syncing: false,
             pendingSyncCount: 1,

@@ -212,8 +212,10 @@ IOB/COB patterns:
 
 ### 7.1 Frontend vs backend
 
-- For MVP: call provider directly from the app using user-provided key.
-- Later: optionally add a proxy backend if needed.
+- Native and web clients call the authenticated ShaniDms backend. Only the backend calls OpenAI.
+- User-provided keys live in the encrypted account vault. Native saves may stage a key in the device secure store until synchronization succeeds; ordinary preferences never contain keys.
+- Saving a key and testing model access are separate actions. See [backend deployment and AI connection diagnostics](BACKEND_DEPLOYMENT.md).
+- The setup screen opens the official OpenAI key page. No general third-party ChatGPT inference login is documented in the [OpenAI authentication guide](https://developers.openai.com/api/reference/overview). Anthropic explicitly disallows third-party Claude.ai subscription login in its [credential rules](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use). The app currently supports OpenAI API keys.
 
 ### 7.2 Testing
 
@@ -224,7 +226,7 @@ IOB/COB patterns:
 
 ## 8) Implementation plan (concrete)
 
-1. Add `AiSettingsContext` (AsyncStorage) to store provider + apiKey.
+1. Use `AiSettingsContext` for non-secret preferences and account-scoped credential synchronization. Store pending keys only in Keychain/Keystore and confirmed keys only in the server vault.
 2. Add Settings UI section for entering API key + disclosure text.
 3. Add AI Analyst tab with:
    - Locked screen (no key)
