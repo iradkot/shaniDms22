@@ -16,6 +16,9 @@ import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import BgGraph from 'app/components/charts/CgmGraph/CgmGraph';
 import BasalMiniGraph from 'app/components/charts/BasalMiniGraph/BasalMiniGraph';
 import BolusMiniGraph from 'app/components/charts/BolusMiniGraph/BolusMiniGraph';
+import CarbEventsMiniGraph from 'app/components/charts/CarbEventsMiniGraph/CarbEventsMiniGraph';
+import {ChartTimeAxis} from 'app/components/charts/ChartTimeAxis';
+import {COMPACT_CHART_LAYOUT} from 'app/components/charts/chartLayout';
 import ActiveInsulinMiniGraph from 'app/components/charts/ActiveInsulinMiniGraph/ActiveInsulinMiniGraph';
 import CobMiniGraph from 'app/components/charts/CobMiniGraph/CobMiniGraph';
 import MixedMiniChart from 'app/components/charts/MixedMiniChart/MixedMiniChart';
@@ -240,51 +243,53 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
           </TooltipDock>
         ) : null}
 
-        <View
-          style={[
-            styles.chartHeader,
-            compact && styles.compactHeader,
-            compact && resolvedLocale === 'he' && styles.rtlHeader,
-            showFullScreenButton && styles.headerWithButton,
-          ]}>
-          <Text
+        {!compact ? (
+          <View
             style={[
-              styles.glucoseTitle,
-              {color: theme.textColor},
-              resolvedLocale === 'he' ? styles.rtl : styles.ltr,
+              styles.chartHeader,
+              compact && styles.compactHeader,
+              compact && resolvedLocale === 'he' && styles.rtlHeader,
+              showFullScreenButton && styles.headerWithButton,
             ]}>
-            {resolvedLocale === 'he' ? 'סוכר' : 'Glucose'} · mg/dL
-          </Text>
-          {!!foodItems?.length && (
             <Text
               style={[
-                styles.carbKey,
-                {color: theme.colors.carbs},
+                styles.glucoseTitle,
+                {color: theme.textColor},
                 resolvedLocale === 'he' ? styles.rtl : styles.ltr,
               ]}>
-              {compact
-                ? resolvedLocale === 'he'
-                  ? '● פחמימות · g'
-                  : '● Carbs · g'
-                : resolvedLocale === 'he'
-                ? '● פחמימות שנרשמו'
-                : '● Recorded carbs'}
+              {resolvedLocale === 'he' ? 'סוכר' : 'Glucose'} · mg/dL
             </Text>
-          )}
-          {showFullScreenButton && onPressFullScreen ? (
-            <FullScreenButtonOverlay>
-              <FullScreenButton
-                testID={E2E_TEST_IDS.charts.cgmGraphFullScreenButton}
-                onPress={onPressFullScreen}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  resolvedLocale === 'he' ? 'מסך מלא' : 'Full screen'
-                }>
-                <Icon name="fullscreen" size={22} color={theme.textColor} />
-              </FullScreenButton>
-            </FullScreenButtonOverlay>
-          ) : null}
-        </View>
+            {!!foodItems?.length && (
+              <Text
+                style={[
+                  styles.carbKey,
+                  {color: theme.colors.carbs},
+                  resolvedLocale === 'he' ? styles.rtl : styles.ltr,
+                ]}>
+                {compact
+                  ? resolvedLocale === 'he'
+                    ? '● פחמימות · g'
+                    : '● Carbs · g'
+                  : resolvedLocale === 'he'
+                  ? '● פחמימות שנרשמו'
+                  : '● Recorded carbs'}
+              </Text>
+            )}
+            {showFullScreenButton && onPressFullScreen ? (
+              <FullScreenButtonOverlay>
+                <FullScreenButton
+                  testID={E2E_TEST_IDS.charts.cgmGraphFullScreenButton}
+                  onPress={onPressFullScreen}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    resolvedLocale === 'he' ? 'מסך מלא' : 'Full screen'
+                  }>
+                  <Icon name="fullscreen" size={22} color={theme.textColor} />
+                </FullScreenButton>
+              </FullScreenButtonOverlay>
+            ) : null}
+          </View>
+        ) : null}
       </View>
       <ChartStack
         testID={cgmTouchAreaTestID}
@@ -314,13 +319,14 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
               bgSamples={bgSamples}
               width={width}
               height={cgmHeight}
-              foodItems={foodItems}
+              foodItems={compact ? null : foodItems}
               insulinData={insulinData}
               xDomain={xDomain}
               margin={stackedChartsMargin}
               testID={testID ? `${testID}.glucose` : undefined}
               showFullScreenButton={false}
               showDateLabels={false}
+              showTimeLabels={!compact}
               showBolusMarkers={false}
               highlightedCarbIds={tooltipCarbEvents.map(event => event.id)}
               tooltipMode="external"
@@ -361,12 +367,31 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
             insulinData={insulinData}
             dataStatus={dataAvailability?.treatments}
             width={width}
-            height={compact ? miniChartHeight : Math.max(100, miniChartHeight)}
+            height={
+              compact
+                ? COMPACT_CHART_LAYOUT.eventLaneHeight
+                : Math.max(100, miniChartHeight)
+            }
             xDomain={xDomain}
             margin={stackedChartsMargin}
             cursorTimeMs={inspectionTimeMs}
             testID={testID ? `${testID}.bolus` : undefined}
           />
+          {compact ? (
+            <CarbEventsMiniGraph
+              compact
+              locale={resolvedLocale}
+              bgSamples={bgSamples}
+              foodItems={foodItems}
+              dataStatus={dataAvailability?.treatments}
+              width={width}
+              height={COMPACT_CHART_LAYOUT.eventLaneHeight}
+              xDomain={xDomain}
+              margin={stackedChartsMargin}
+              cursorTimeMs={inspectionTimeMs}
+              testID={testID ? `${testID}.carbs` : undefined}
+            />
+          ) : null}
           {chartMode === 'mixed' ? (
             <MixedMiniChart
               compact={compact}
@@ -377,7 +402,12 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
               insulinData={insulinData}
               basalProfileData={basalProfileData}
               width={width}
-              height={compact ? 144 : Math.max(170, miniChartHeight * 2)}
+              height={
+                compact
+                  ? COMPACT_CHART_LAYOUT.mixedHeight
+                  : Math.max(170, miniChartHeight * 2)
+              }
+              showTimeLabels={!compact}
               xDomain={xDomain}
               margin={{
                 top: 16,
@@ -449,6 +479,15 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
               />
             </>
           )}
+          {compact ? (
+            <ChartTimeAxis
+              width={width}
+              domain={basalDomain}
+              left={stackedChartsMargin.left}
+              right={stackedChartsMargin.right}
+              testID={testID ? `${testID}.timeAxis` : undefined}
+            />
+          ) : null}
         </View>
       </ChartTouchSurface>
     </View>

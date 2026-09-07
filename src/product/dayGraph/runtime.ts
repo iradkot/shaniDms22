@@ -23,6 +23,8 @@ export interface DayGraphChartPreferencesRuntime {
   readonly scopeKey: string;
   readonly layout: PersonalizationLayout;
   readonly value: StoredDayGraphPreferences;
+  /** False while account/layout defaults are loading; fallback values must not be saved. */
+  readonly hydrated?: boolean;
   /** Resolves after local persistence, without waiting for a cloud connection. */
   readonly onSave?: (value: StoredDayGraphPreferences) => Promise<void>;
 }

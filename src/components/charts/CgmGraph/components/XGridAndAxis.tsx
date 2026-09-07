@@ -3,6 +3,7 @@ import XTick from 'app/components/charts/CgmGraph/components/XTick';
 import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
 
 const XGridAndAxis = (props: {
+  showTimeLabels?: boolean;
   xTickLabelFormatter?: ((d: Date) => string) | null | undefined;
 }) => {
   const [{xScale, graphWidth}] = useContext(GraphStyleContext);
@@ -37,7 +38,7 @@ const XGridAndAxis = (props: {
           <XTick
             key={tick.getTime()}
             x={xScale(tick)}
-            withDate
+            withDate={props.showTimeLabels !== false}
             {...(props.xTickLabelFormatter
               ? {labelFormatter: props.xTickLabelFormatter}
               : {})}

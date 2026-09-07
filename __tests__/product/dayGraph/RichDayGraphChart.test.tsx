@@ -312,7 +312,7 @@ describe('Rich Day Graph presentation', () => {
     expect(domain(tree)).toEqual(before);
   });
 
-  it('opens remembered preferences and requires explicit saving after exploration', async () => {
+  it('automatically remembers mode and requires explicit saving for exploratory zoom', async () => {
     const runtime = {
       ...preferences(),
       value: {schemaVersion: 1, mode: 'mixed', windowHours: 6} as const,
@@ -327,8 +327,14 @@ describe('Rich Day Graph presentation', () => {
     expect(chart(tree).chartMode).toBe('mixed');
     expect(domain(tree)).toEqual([5 * HOUR, 11 * HOUR]);
     press(tree, 'day-graph-chart-mode-detailed');
+    await act(async () => undefined);
+    expect(runtime.onSave).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      mode: 'separate',
+      windowHours: 6,
+    });
     press(tree, 'day-graph-range-12');
-    expect(runtime.onSave).not.toHaveBeenCalled();
+    expect(runtime.onSave).toHaveBeenCalledTimes(1);
     await act(async () => {
       await control(tree, 'day-graph-remember-view').props.onPress();
     });
@@ -337,6 +343,7 @@ describe('Rich Day Graph presentation', () => {
       mode: 'separate',
       windowHours: 12,
     });
+    expect(runtime.onSave).toHaveBeenCalledTimes(2);
     expect(control(tree, 'day-graph-remember-view').props.disabled).toBe(true);
   });
 
@@ -465,7 +472,14 @@ describe('Rich Day Graph presentation', () => {
           complete = resolve;
         }),
     );
-    const runtime = preferences(onSave);
+    const runtime = {
+      ...preferences(onSave),
+      value: {
+        schemaVersion: 1,
+        mode: 'mixed',
+        windowHours: 'full-day',
+      } as const,
+    };
     act(() => {
       tree = renderer.create(
         withTheme(

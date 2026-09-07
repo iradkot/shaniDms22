@@ -65,6 +65,8 @@ export interface CgmGraphProps {
 
   /** Whether to show the date labels row at the top of the plot. Defaults to true. */
   showDateLabels?: boolean;
+  /** A stacked chart can provide one shared time axis below all lanes. */
+  showTimeLabels?: boolean;
 
   /** Whether to show Y-axis numeric labels. Defaults to true. */
   showYLabels?: boolean;

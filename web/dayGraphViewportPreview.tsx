@@ -1,11 +1,17 @@
-import React, {useReducer, useState} from 'react';
+import React, {useEffect, useReducer, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {StyleSheet, Text, View, useWindowDimensions} from 'react-native';
 import {ThemeProvider} from 'styled-components/native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {getThemeById, APP_THEME_OPTIONS} from '../src/style/theme';
 import type {AppThemeId} from '../src/style/theme';
-import type {DayGraphDataSource} from '../src/modules/dayGraph';
+import type {DayGraphDataSource, DayGraphSnapshot} from '../src/modules/dayGraph';
+import {IndexedDbKeyValueStore} from '../src/platform/web/storage';
+import {
+  KeyValueProductPersonalizationStore,
+  selectLayoutProfile,
+  updateDayGraphPreferences,
+} from '../src/product/personalization';
 import {
   CORE_DESTINATION_IDS,
   coreDestinationRegistry,
@@ -35,6 +41,30 @@ const themeId: AppThemeId = APP_THEME_OPTIONS.some(item => item.id === requested
   ? requestedTheme as AppThemeId
   : 'calmBlue';
 const theme = getThemeById(themeId);
+const mealCase = query.get('mealCase') === 'cluster-boundary' ? 'cluster-boundary' : 'ordinary';
+const extraMeals: DayGraphSnapshot['timelineItems'] = mealCase === 'cluster-boundary'
+  ? [
+      {id: 'start', timestampMs: DAY_START_MS, grams: 11},
+      {id: 'same-time', timestampMs: DAY_START_MS + 13.25 * 3600000, grams: 12},
+      {id: 'near-time', timestampMs: DAY_START_MS + 13.25 * 3600000 + MINUTE_MS, grams: 7},
+      {id: 'end', timestampMs: DAY_END_MS - 1, grams: 17},
+    ].map(item => ({
+      kind: 'journal-meal',
+      identity: {sourceId: 'preview', recordId: `boundary-${item.id}`},
+      sourceLabel: 'Journal',
+      timestampMs: item.timestampMs,
+      title: `Synthetic meal ${item.id}`,
+      carbohydratesGrams: item.grams,
+    }))
+  : [];
+const preferenceScope = {
+  productUserId: `viewport-fixture-${(query.get('persistKey') ?? 'default').slice(0, 64)}`,
+  workspaceId: 'synthetic-fixture',
+  layout: 'phone',
+} as const;
+const preferenceStore = new KeyValueProductPersonalizationStore(
+  new IndexedDbKeyValueStore(window.indexedDB, 'shani-chart-viewport-fixture'),
+);
 const runtime = {platform: 'web' as const};
 const configuration = resolveProductShellConfiguration(
   coreDestinationRegistry,
@@ -53,7 +83,7 @@ const dataSource: DayGraphDataSource = {
     freshness: {kind: 'fresh', fetchedAtMs: DAY_END_MS - MINUTE_MS},
     glucoseSamples: previewModel.glucoseSamples,
     activeLoadSamples: previewModel.activeLoadSamples,
-    timelineItems: previewModel.timelineItems,
+    timelineItems: [...previewModel.timelineItems, ...extraMeals],
     insulinEvents: previewModel.insulinEvents,
     basalSchedule: previewModel.basalSchedule,
   }),
@@ -70,10 +100,24 @@ const ViewportPreview = () => {
   const [preferences, setPreferences] = useState<StoredDayGraphPreferences>(
     DEFAULT_DAY_GRAPH_PREFERENCES,
   );
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [saveCount, setSaveCount] = useState(0);
+  useEffect(() => {
+    let active = true;
+    preferenceStore.read(preferenceScope).then(value => {
+      if (active) {
+        setPreferences(selectLayoutProfile(value, 'phone').dayGraph ?? DEFAULT_DAY_GRAPH_PREFERENCES);
+        setPreferencesReady(true);
+      }
+    });
+    return () => { active = false; };
+  }, []);
   return (
     <ThemeProvider theme={theme}>
       <SafeAreaProvider style={[styles.safeArea, {height}]}>
         <View style={[styles.device, {backgroundColor: theme.backgroundColor}]} testID="viewport-device-frame">
+          <div hidden data-testid="viewport-fixture-state" data-save-count={saveCount}
+            data-saved-mode={preferences.mode} data-saved-range={preferences.windowHours} data-meal-case={mealCase} />
           <View style={[styles.systemInset, {backgroundColor: theme.backgroundColor}]} testID="viewport-status-inset">
             <Text style={[styles.statusText, {color: theme.textColor}]}>
               {locale === 'he' ? '9:41 · נתוני הדגמה' : '9:41 · Synthetic data'}
@@ -97,7 +141,7 @@ const ViewportPreview = () => {
               accent: theme.primaryColor,
             }}
             renderHub={() => <Text>{locale === 'he' ? 'מרכז' : 'Hub'}</Text>}
-            renderDestination={() => (
+            renderDestination={() => preferencesReady ? (
               <DayGraphModuleView
                 locale={locale}
                 dataSource={dataSource}
@@ -105,13 +149,18 @@ const ViewportPreview = () => {
                 now={now}
                 expectedSampleIntervalMs={5 * MINUTE_MS}
                 chartPreferences={{
-                  scopeKey: 'viewport-fixture:phone',
+                  scopeKey: `${preferenceScope.productUserId}:phone`,
                   layout: 'phone',
                   value: preferences,
-                  onSave: async value => setPreferences(value),
+                  onSave: async value => {
+                    const current = await preferenceStore.read(preferenceScope);
+                    await preferenceStore.write(preferenceScope, updateDayGraphPreferences(current, 'phone', value));
+                    setPreferences(value);
+                    setSaveCount(count => count + 1);
+                  },
                 }}
               />
-            )}
+            ) : <Text>Loading synthetic preferences…</Text>}
           />
           <View style={[styles.systemInset, {backgroundColor: theme.backgroundColor}]} testID="viewport-system-inset" />
         </View>

@@ -71,6 +71,7 @@ describe('Product Experience personalization behavior', () => {
     const preferences =
       tree!.root.findByType(DayGraphModuleView).props.chartPreferences;
     expect(preferences.layout).toBe('tablet');
+    expect(preferences.hydrated).toBe(true);
     expect(preferences.value).toEqual(value);
     const nextValue = {...value, windowHours: 12} as const;
     await preferences.onSave(nextValue);
@@ -88,6 +89,60 @@ describe('Product Experience personalization behavior', () => {
     expect(selectLayoutProfile(result, 'tablet').dayGraph).toEqual(nextValue);
     expect(selectLayoutProfile(result, 'phone').dayGraph).toBeUndefined();
     expect(result.device).toEqual(latest.device);
+    act(() => tree!.unmount());
+  });
+
+  it('marks chart defaults unhydrated until the account personalization arrives', async () => {
+    const content = (personalization?: StoredProductPersonalization) =>
+      withTheme(
+        <ProductExperience
+          locale="en"
+          runtime={{platform: 'ios'}}
+          personalizationLayout="phone"
+          {...(personalization === undefined ? {} : {personalization})}
+          shellPreferences={{
+            schemaVersion: 1,
+            shortcuts: [],
+            startDestination: createStoredDestinationTarget(
+              CORE_DESTINATION_IDS.dayGraph,
+            ),
+          }}
+          dayGraphRuntime={{
+            dataSource: {
+              loadDayGraph: async () => ({
+                freshness: {kind: 'fresh', fetchedAtMs: 1},
+                glucoseSamples: [],
+                timelineItems: [],
+              }),
+            },
+          }}
+          onPersonalizationChange={async () => undefined}
+        />,
+      );
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(content());
+    });
+    expect(
+      tree!.root.findByType(DayGraphModuleView).props.chartPreferences.hydrated,
+    ).toBe(false);
+    const saved = {schemaVersion: 1, mode: 'mixed', windowHours: 12} as const;
+    await act(async () =>
+      tree!.update(
+        content(
+          skipPersonalizationQuestionnaire(
+            updateDayGraphPreferences(
+              createDefaultProductPersonalization(),
+              'phone',
+              saved,
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(
+      tree!.root.findByType(DayGraphModuleView).props.chartPreferences,
+    ).toMatchObject({hydrated: true, value: saved});
     act(() => tree!.unmount());
   });
 

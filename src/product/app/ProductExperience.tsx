@@ -236,6 +236,7 @@ export const ProductExperience = ({
             ]),
             layout: personalizationLayout,
             value: layoutProfile.dayGraph ?? DEFAULT_DAY_GRAPH_PREFERENCES,
+            hydrated: personalization !== undefined,
             ...(onPersonalizationChange === undefined
               ? {}
               : {

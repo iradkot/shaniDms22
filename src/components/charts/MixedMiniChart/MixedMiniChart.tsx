@@ -22,6 +22,7 @@ import {
 import {BasalOverlayMarks, LoadOverlayMarks} from './OverlayMarks';
 
 type Props = MiniChartProps & {
+  showTimeLabels?: boolean;
   insulinData?: InsulinDataEntry[] | undefined;
   basalProfileData?: BasalProfile | undefined;
   dataAvailability?: ChartDataAvailability | undefined;
@@ -80,6 +81,7 @@ const MixedMiniChart: React.FC<Props> = props => {
     locale = 'en',
     xDomain,
     compact = false,
+    showTimeLabels = true,
   } = props;
   const theme = useTheme();
   const palette = getChartPalette(theme);
@@ -129,14 +131,14 @@ const MixedMiniChart: React.FC<Props> = props => {
     {
       key: 'iob',
       title: copy.iob,
-      shortTitle: 'IOB · U',
+      shortTitle: '━ IOB · U',
       symbol: '━',
       hasData: iob.length > 0,
     },
     {
       key: 'cob',
       title: copy.cob,
-      shortTitle: locale === 'he' ? 'פחמימות · g' : 'Carbs · g',
+      shortTitle: '┄ COB · g',
       symbol: '┄┄',
       hasData: cob.length > 0,
     },
@@ -168,7 +170,7 @@ const MixedMiniChart: React.FC<Props> = props => {
   const svgHeight = compact
     ? compactHeight - legendHeight
     : Math.max(150, Math.min(240, height));
-  const plotHeight = svgHeight - 34;
+  const plotHeight = svgHeight - (showTimeLabels ? 34 : 12);
   const x = useCallback(
     (time: number) =>
       ((time - +domain[0]) / (+domain[1] - +domain[0])) * plotWidth,
@@ -387,22 +389,28 @@ const MixedMiniChart: React.FC<Props> = props => {
                   strokeDasharray="4 3"
                 />
               ) : null}
-              {[0, 0.5, 1].map(fraction => (
-                <SvgText
-                  key={fraction}
-                  x={fraction * plotWidth}
-                  y={plotHeight + 18}
-                  textAnchor={
-                    fraction === 0 ? 'start' : fraction === 1 ? 'end' : 'middle'
-                  }
-                  fill={palette.mutedText}
-                  fontSize={theme.typography.size.xs}
-                  fontFamily={theme.fontFamily}>
-                  {formatMiniTime(
-                    +domain[0] + fraction * (+domain[1] - +domain[0]),
-                  )}
-                </SvgText>
-              ))}
+              {showTimeLabels
+                ? [0, 0.5, 1].map(fraction => (
+                    <SvgText
+                      key={fraction}
+                      x={fraction * plotWidth}
+                      y={plotHeight + 18}
+                      textAnchor={
+                        fraction === 0
+                          ? 'start'
+                          : fraction === 1
+                          ? 'end'
+                          : 'middle'
+                      }
+                      fill={palette.mutedText}
+                      fontSize={theme.typography.size.xs}
+                      fontFamily={theme.fontFamily}>
+                      {formatMiniTime(
+                        +domain[0] + fraction * (+domain[1] - +domain[0]),
+                      )}
+                    </SvgText>
+                  ))
+                : null}
             </G>
           </Svg>
           {basal.length > 0 && !compact ? (
@@ -425,6 +433,8 @@ const createStyles = (theme: ThemeType) =>
     shell: {backgroundColor: theme.white, paddingVertical: theme.spacing.sm},
     compactShell: {paddingVertical: 0},
     compactLegend: {
+      borderTopWidth: 1,
+      borderTopColor: theme.borderColor,
       flexWrap: 'nowrap',
       gap: 0,
       paddingHorizontal: theme.spacing.xs,
@@ -440,7 +450,7 @@ const createStyles = (theme: ThemeType) =>
     },
     compactValue: {
       fontFamily: theme.fontFamily,
-      fontSize: theme.typography.size.xs,
+      fontSize: theme.typography.size.sm,
       lineHeight: Math.ceil(
         theme.typography.size.xs * theme.typography.lineHeight.normal,
       ),

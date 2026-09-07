@@ -104,6 +104,192 @@ const createRepository = (
 };
 
 describe('offline-first Product Personalization synchronization', () => {
+  it('keeps newer local chart preferences and their pending mutation when an older cloud commit finishes', async () => {
+    const storage = new MemoryStrings();
+    const remote = new MemoryRemote();
+    let release = () => {};
+    let started = () => {};
+    const committed = new Promise<void>(resolve => {
+      started = resolve;
+    });
+    const cloud = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const commit = remote.commit.bind(remote);
+    const commits: PersonalizationSyncMutation[] = [];
+    remote.commit = async (activeScope, mutation) => {
+      commits.push(mutation);
+      if (commits.length === 1) {
+        started();
+        await cloud;
+      }
+      return commit(activeScope, mutation);
+    };
+    const repository = createRepository(storage, remote, {
+      now: 10,
+      prefix: 'phone',
+    });
+    const initial = await repository.open(scope());
+    const first = await repository.save(
+      scope(),
+      initial,
+      updateDayGraphPreferences(initial, 'phone', {
+        schemaVersion: 1,
+        mode: 'mixed',
+        windowHours: 6,
+      }),
+    );
+    const sync = repository.synchronize(scope());
+    await committed;
+    const duplicateSync = repository.synchronize(scope());
+    const nextValue = {
+      schemaVersion: 1,
+      mode: 'separate',
+      windowHours: 12,
+    } as const;
+    let durable = false;
+    const save = repository
+      .save(
+        scope(),
+        first,
+        updateDayGraphPreferences(first, 'phone', nextValue),
+      )
+      .then(() => {
+        durable = true;
+      });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(durable).toBe(true);
+    expect(commits).toHaveLength(1);
+    await save;
+    release();
+    const result = await sync;
+    expect(await duplicateSync).toEqual(result);
+    expect(result.pendingCount).toBe(1);
+    expect(selectLayoutProfile(result.preferences, 'phone').dayGraph).toEqual(
+      nextValue,
+    );
+    const reopened = createRepository(storage, remote, {
+      now: 20,
+      prefix: 'reopen',
+    });
+    expect(
+      selectLayoutProfile(await reopened.open(scope()), 'phone').dayGraph,
+    ).toEqual(nextValue);
+    const retried = await repository.synchronize(scope());
+    expect(retried.pendingCount).toBe(0);
+    expect(commits).toHaveLength(2);
+    expect(selectLayoutProfile(retried.preferences, 'phone').dayGraph).toEqual(
+      nextValue,
+    );
+  });
+
+  it('applies a fetched account section onto the latest local chart preferences instead of an old full snapshot', async () => {
+    const storage = new MemoryStrings();
+    const remote = new MemoryRemote();
+    const repository = createRepository(storage, remote, {
+      now: 10,
+      prefix: 'phone',
+    });
+    const initial = await repository.open(scope());
+    let release = () => {};
+    let started = () => {};
+    const fetched = new Promise<void>(resolve => {
+      started = resolve;
+    });
+    const cloud = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const fetch = remote.fetch.bind(remote);
+    remote.fetch = async (activeScope, section) => {
+      if (section === 'account') {
+        started();
+        await cloud;
+      }
+      return fetch(activeScope, section);
+    };
+    const favorite = createStoredDestinationTarget(
+      CORE_DESTINATION_IDS.dayGraph,
+    );
+    remote.documents.set(remoteKey(scope(), 'account'), {
+      schemaVersion: 1,
+      section: 'account',
+      ownerProductUserId: scope().productUserId,
+      mutationId: 'remote_1',
+      savedAt: 1,
+      revision: 1,
+      value: {...initial.account, favorites: [favorite]},
+    });
+    const sync = repository.synchronize(scope());
+    await fetched;
+    const value = {schemaVersion: 1, mode: 'mixed', windowHours: 12} as const;
+    await repository.save(
+      scope(),
+      initial,
+      updateDayGraphPreferences(initial, 'phone', value),
+    );
+    release();
+    const result = await sync;
+    expect(result.preferences.account.favorites).toEqual([favorite]);
+    expect(selectLayoutProfile(result.preferences, 'phone').dayGraph).toEqual(
+      value,
+    );
+  });
+
+  it('returns each layout own device recents when phone and desktop synchronize concurrently', async () => {
+    const storage = new MemoryStrings();
+    const remote = new MemoryRemote();
+    let release = () => {};
+    let started = () => {};
+    const fetched = new Promise<void>(resolve => {
+      started = resolve;
+    });
+    const cloud = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const fetch = remote.fetch.bind(remote);
+    remote.fetch = async (activeScope, section) => {
+      started();
+      await cloud;
+      return fetch(activeScope, section);
+    };
+    const repository = createRepository(storage, remote, {
+      now: 10,
+      prefix: 'phone',
+    });
+    const phone = await repository.open(scope('phone'));
+    const desktop = await repository.open(scope('desktop'));
+    const phoneTarget = createStoredDestinationTarget(
+      CORE_DESTINATION_IDS.dayGraph,
+    );
+    const desktopTarget = createStoredDestinationTarget(
+      CORE_DESTINATION_IDS.trends,
+    );
+    await repository.save(
+      scope('phone'),
+      phone,
+      recordRecentModule(phone, phoneTarget, 10),
+    );
+    await repository.save(
+      scope('desktop'),
+      desktop,
+      recordRecentModule(desktop, desktopTarget, 20),
+    );
+    const phoneSync = repository.synchronize(scope('phone'));
+    await fetched;
+    const desktopSync = repository.synchronize(scope('desktop'));
+    release();
+    const [phoneResult, desktopResult] = await Promise.all([
+      phoneSync,
+      desktopSync,
+    ]);
+    expect(phoneResult.preferences.device.recentModules[0]?.target).toEqual(
+      phoneTarget,
+    );
+    expect(desktopResult.preferences.device.recentModules[0]?.target).toEqual(
+      desktopTarget,
+    );
+  });
+
   it('queues chart preferences offline and syncs each form factor independently after reconnecting', async () => {
     const remote = new MemoryRemote();
     remote.offline = true;

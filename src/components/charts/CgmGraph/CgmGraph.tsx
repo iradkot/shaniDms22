@@ -76,6 +76,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   xTickLabelFormatter,
   variant = 'default',
   showDateLabels = true,
+  showTimeLabels = true,
   showYLabels = true,
   showBolusMarkers = true,
   highlightedCarbIds,
@@ -316,6 +317,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
             x={graphStyleContextValue.margin?.left}
             y={graphStyleContextValue.margin?.top}>
             <XGridAndAxis
+              showTimeLabels={showTimeLabels}
               {...(xTickLabelFormatter ? {xTickLabelFormatter} : {})}
             />
             <YGridAndAxis

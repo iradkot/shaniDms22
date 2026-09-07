@@ -7,6 +7,7 @@ import {MAX_LOAD_CURSOR_DISTANCE_MS} from 'app/utils/chartLoadSeries.utils';
 
 import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
 import {BOLUS_DETECTION_WINDOW_MS} from 'app/components/charts/CgmGraph/constants/bolusHoverConfig';
+import {buildCarbEvents} from 'app/components/charts/CgmGraph/utils/carbsUtils';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
@@ -203,43 +204,40 @@ export function useStackedChartsTooltipModel(
           type: 'bolus';
           amount: number;
           timestamp: string;
-        } =>
-          entry.type === 'bolus' &&
-          typeof entry.amount === 'number' &&
-          Number.isFinite(entry.amount) &&
-          entry.amount > 0 &&
-          typeof entry.timestamp === 'string' &&
-          Math.abs(Date.parse(entry.timestamp) - eventsAnchorTimeMs) <=
-            BOLUS_DETECTION_WINDOW_MS,
+        } => {
+          if (
+            entry.type !== 'bolus' ||
+            typeof entry.amount !== 'number' ||
+            !Number.isFinite(entry.amount) ||
+            entry.amount <= 0 ||
+            typeof entry.timestamp !== 'string'
+          ) {
+            return false;
+          }
+          const timeMs = Date.parse(entry.timestamp);
+          return (
+            (!xDomain || (timeMs >= +xDomain[0] && timeMs <= +xDomain[1])) &&
+            Math.abs(timeMs - eventsAnchorTimeMs) <= BOLUS_DETECTION_WINDOW_MS
+          );
+        },
       )
       .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
-  }, [eventsAnchorTimeMs, insulinData, shouldShowTooltip]);
+  }, [eventsAnchorTimeMs, insulinData, shouldShowTooltip, xDomain]);
 
+  const carbEvents = useMemo(
+    () => buildCarbEvents(foodItems, xDomain),
+    [foodItems, xDomain],
+  );
   const tooltipCarbEvents = useMemo(() => {
     if (!shouldShowTooltip) {
       return [];
     }
-    if (!foodItems?.length) {
-      return [];
-    }
-    return foodItems
-      .filter(
-        (
-          entry,
-        ): entry is (FoodItemDTO | formattedFoodItemDTO) & {
-          id: string;
-          timestamp: number;
-          carbs: number;
-        } =>
-          typeof entry.timestamp === 'number' &&
-          Math.abs(entry.timestamp - eventsAnchorTimeMs) <=
-            BOLUS_DETECTION_WINDOW_MS &&
-          typeof entry.carbs === 'number' &&
-          Number.isFinite(entry.carbs) &&
-          entry.carbs > 0,
-      )
-      .sort((a, b) => a.timestamp - b.timestamp);
-  }, [eventsAnchorTimeMs, foodItems, shouldShowTooltip]);
+    return carbEvents.filter(
+      entry =>
+        Math.abs(entry.timestamp - eventsAnchorTimeMs) <=
+        BOLUS_DETECTION_WINDOW_MS,
+    );
+  }, [eventsAnchorTimeMs, carbEvents, shouldShowTooltip]);
 
   return {
     shouldShowTooltip,

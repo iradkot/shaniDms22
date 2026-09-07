@@ -1,8 +1,9 @@
 import {fileURLToPath} from 'node:url';
 import appConfig from './vite.config.mjs';
 
-// Build the existing synthetic fixture with the application's production
-// transforms and aliases. Keep profiling outputs separate from release files.
+// Build both synthetic fixtures with the application's production transforms
+// and aliases. The real-shell fixture also gives viewport QA a stable build
+// without development hot reloads interrupting touch or modal assertions.
 export default {
   ...appConfig,
   build: {
@@ -13,9 +14,14 @@ export default {
     ),
     rollupOptions: {
       ...appConfig.build?.rollupOptions,
-      input: fileURLToPath(
-        new URL('./web/day-graph-preview.html', import.meta.url),
-      ),
+      input: {
+        chart: fileURLToPath(
+          new URL('./web/day-graph-preview.html', import.meta.url),
+        ),
+        viewport: fileURLToPath(
+          new URL('./web/day-graph-viewport-preview.html', import.meta.url),
+        ),
+      },
     },
   },
 };

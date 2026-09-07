@@ -1,9 +1,10 @@
 import React, {useContext, useMemo} from 'react';
-import {Circle, G} from 'react-native-svg';
+import {Circle, G, Text} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
-import {ThemeType} from 'app/types/theme';
 import {GraphStyleContext} from '../../contextStores/GraphStyleContext';
+import {buildCarbEvents, type ValidCarbEvent} from '../../utils/carbsUtils';
+import {getChartPalette} from '../../../chartPalette';
 
 interface Props {
   foodItems: FoodItemDTO[] | formattedFoodItemDTO[] | null;
@@ -12,81 +13,94 @@ interface Props {
   focusedFoodItemIds?: string[];
 }
 
-const FOOD_MARKER_BG_Y_VALUE = 20;
-const FOOD_MARKER_RADIUS = 6;
-const MIN_X_GAP_PX = 14;
-const LANE_SPACING_PX = 12;
+const MARKER_RADIUS = 6;
+const FOCUS_RADIUS = 8;
+const MIN_X_GAP = FOCUS_RADIUS * 2 + 4;
+type Marker = {
+  events: ValidCarbEvent[];
+  firstX: number;
+  lastX: number;
+  x: number;
+};
 
-const FoodItemsRenderer: React.FC<Props> = ({foodItems, focusedFoodItemIds}) => {
-  const theme = useTheme() as ThemeType;
-  const [{xScale, yScale}] = useContext(GraphStyleContext);
+const FoodItemsRenderer: React.FC<Props> = ({
+  foodItems,
+  focusedFoodItemIds,
+}) => {
+  const theme = useTheme();
+  const palette = getChartPalette(theme);
+  const [{xScale, graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
   const focusedSet = useMemo(
     () => new Set((focusedFoodItemIds ?? []).filter(Boolean)),
     [focusedFoodItemIds],
   );
 
+  const radius = Math.min(FOCUS_RADIUS, graphWidth / 2, graphHeight / 2);
   const positioned = useMemo(() => {
-    if (!foodItems?.length) {
-      return [];
-    }
-
-    const normalized = foodItems
-      .map(item => {
-        const ts = (item as any)?.timestamp;
-        const id = (item as any)?.id;
-        if (typeof ts !== 'number' || !Number.isFinite(ts)) {
-          return null;
-        }
-        return {
-          id: typeof id === 'string' ? id : String(ts),
-          ts,
-          x: xScale(new Date(ts)),
-        };
-      })
-      .filter(Boolean)
-      .sort((a: any, b: any) => a.ts - b.ts) as Array<{id: string; ts: number; x: number}>;
-
-    const laneLastX: number[] = [];
-
-    return normalized.map(item => {
-      let lane = laneLastX.findIndex(lastX => item.x - lastX >= MIN_X_GAP_PX);
-      if (lane === -1) {
-        lane = laneLastX.length;
-        laneLastX.push(item.x);
+    const domain = xScale.domain();
+    const events = buildCarbEvents(foodItems, [
+      domain[0]!,
+      domain[domain.length - 1]!,
+    ]);
+    const markers: Marker[] = [];
+    for (const event of events) {
+      const x = Math.max(
+        radius,
+        Math.min(graphWidth - radius, xScale(event.timestamp)),
+      );
+      const previous = markers[markers.length - 1];
+      if (previous && x - previous.lastX < MIN_X_GAP) {
+        previous.events.push(event);
+        previous.lastX = x;
+        previous.x = (previous.firstX + x) / 2;
       } else {
-        laneLastX[lane] = item.x;
+        markers.push({events: [event], firstX: x, lastX: x, x});
       }
+    }
+    return markers;
+  }, [foodItems, xScale, graphWidth, radius]);
 
-      return {
-        ...item,
-        lane,
-      };
-    });
-  }, [foodItems, xScale]);
-
-  if (!positioned.length) {
+  if (!positioned.length || radius <= 0) {
     return null;
   }
 
+  // Dense events get a visible count in a bounded row. Selection still uses
+  // every original record, and marker height never implies a glucose value.
+  const y = graphHeight - radius;
   return (
     <G>
-      {positioned.map(item => {
-        const yBase = yScale(FOOD_MARKER_BG_Y_VALUE);
-        const y = yBase - item.lane * LANE_SPACING_PX;
-        const isFocused = focusedSet.has(item.id);
+      {positioned.map(marker => {
+        const focused = marker.events.some(event => focusedSet.has(event.id));
+        const count = marker.events.length;
 
         return (
-          <Circle
-            key={item.id}
-            cx={item.x}
-            cy={y}
-            r={isFocused ? FOOD_MARKER_RADIUS + 2 : FOOD_MARKER_RADIUS}
-            fill={theme.colors.carbs}
-            stroke={theme.white}
-            strokeWidth={1}
-            opacity={isFocused ? 0.95 : 0.8}
-          />
+          <G key={marker.events[0]!.id} testID="carb-marker-cluster">
+            <Circle
+              cx={marker.x}
+              cy={y}
+              r={Math.min(
+                radius,
+                focused || count > 1 ? FOCUS_RADIUS : MARKER_RADIUS,
+              )}
+              fill={theme.colors.carbs}
+              stroke={palette.surface}
+              strokeWidth={1}
+              opacity={focused ? 1 : 0.85}
+            />
+            {count > 1 ? (
+              <Text
+                testID="carb-marker-count"
+                x={marker.x}
+                y={y + 3}
+                fontSize={9}
+                fontWeight="700"
+                textAnchor="middle"
+                fill={palette.surface}>
+                {count}
+              </Text>
+            ) : null}
+          </G>
         );
       })}
     </G>

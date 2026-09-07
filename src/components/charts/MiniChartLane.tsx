@@ -4,6 +4,7 @@ import Svg, {G, Line, Text as SvgText} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import type {ThemeType} from 'app/types/theme';
 import {getChartPalette} from './chartPalette';
+import {COMPACT_CHART_LAYOUT} from './chartLayout';
 import {
   formatMiniValue,
   emptyMiniChartText,
@@ -80,7 +81,7 @@ export default function MiniChartLane(props: Props) {
       theme.spacing.sm;
   const headerHeight = Math.ceil(baseHeaderHeight * fontScale);
   const baseLaneHeight = compact
-    ? Math.max(64, height)
+    ? Math.max(COMPACT_CHART_LAYOUT.eventLaneHeight, height)
     : Math.max(hint ? 124 : 110, height);
   const laneHeight = hasData
     ? baseLaneHeight + headerHeight - baseHeaderHeight
@@ -143,7 +144,7 @@ export default function MiniChartLane(props: Props) {
             {title}
           </Text>
           {hasData ? (
-            <View style={styles.readout}>
+            <View style={[styles.readout, compact && styles.compactReadout]}>
               <Text
                 style={[
                   styles.value,
@@ -262,6 +263,11 @@ const createStyles = (theme: ThemeType) =>
       flexShrink: 1,
     },
     readout: {alignItems: 'flex-end', flexShrink: 0},
+    compactReadout: {
+      paddingHorizontal: theme.spacing.xs,
+      borderRadius: theme.borderRadius / 2,
+      backgroundColor: theme.backgroundColor,
+    },
     value: {
       fontFamily: theme.fontFamily,
       fontSize: theme.typography.size.sm,

@@ -84,9 +84,12 @@ async function assertOverlay(page, {hasBasal = true} = {}) {
     'Overlay must expose three separate scales',
   );
   for (const [index, unit] of ['U/hr', ' U', ' g'].entries()) {
+    const scale = await scales.nth(index).innerText();
     assert(
-      (await scales.nth(index).innerText()).includes(unit),
-      'Each overlay scale must identify its own unit',
+      index === 0 && !hasBasal
+        ? scale.includes('—') || /No data|אין נתונים/i.test(scale)
+        : scale.includes('0') && /\d/.test(scale),
+      `Each overlay column must expose scale limits or explicitly unavailable data for ${unit.trim()}`,
     );
   }
   return overlay;
@@ -122,14 +125,16 @@ async function tapPlot(page, cdp, plot, fraction, expectedMinutes) {
   if (expandDetails) {
     await detailsToggle.click();
   }
+  const details = page.getByTestId('chart-inspector-details');
+  const valueScope = await details.count() ? details : page;
   for (const key of ['iob', 'cob']) {
-    values[key] = await page
+    values[key] = await valueScope
       .getByTestId(`chart-inspector-value-${key}`)
       .innerText();
     assert(/\d/.test(values[key]), `Selected ${key} must show an actual value`);
   }
   if (expandDetails) {
-    await detailsToggle.click();
+    await page.getByTestId('chart-inspector-close-details').click();
   }
   return values;
 }
@@ -249,7 +254,7 @@ async function run() {
       await page.goto(
         `${
           process.env.CHART_PREVIEW_URL || 'http://127.0.0.1:5173'
-        }/day-graph-preview.html`,
+        }/day-graph-preview.html?qa=1`,
       );
       await page.getByRole('button', {name: 'עברית', exact: true}).click();
       const area = page.getByTestId('day-graph-rich-chart.cgmTouchArea');
@@ -342,6 +347,13 @@ async function run() {
       }
       assert(await page.getByTestId('day-graph-rich-chart.bolus').isVisible());
       assert(await page.getByTestId('day-graph-rich-chart.basal').isVisible());
+      if (width < 768) {
+        assert(await page.getByTestId('day-graph-rich-chart.carbs').isVisible());
+        assert.equal(await page.getByTestId('day-graph-rich-chart.glucose').getByTestId('carb-marker-cluster').count(), 0,
+          'Phone recorded meals must have their own lane without overlapping glucose');
+        assert.equal(await page.getByTestId('day-graph-rich-chart.timeAxis').count(), 1,
+          'The phone chart must expose one shared bottom time axis');
+      }
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth > window.innerWidth,
       );
@@ -399,6 +411,11 @@ async function run() {
         1,
         'Fullscreen must mount one chart',
       );
+      assert(await page.getByTestId('day-graph-rich-chart.carbs').isVisible());
+      assert.equal(await page.getByTestId('day-graph-rich-chart.glucose').getByTestId('carb-marker-cluster').count(), 0,
+        'Fullscreen recorded meals must have their own lane without overlapping glucose');
+      assert.equal(await page.getByTestId('day-graph-rich-chart.timeAxis').count(), 1,
+        'Fullscreen must expose one shared bottom time axis');
       assert.equal(
         await page
           .getByTestId('day-graph-range-3')

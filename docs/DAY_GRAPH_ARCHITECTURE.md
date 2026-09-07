@@ -19,6 +19,11 @@ chart-specific theme or read the mutable theme singleton from chart renderers.
 - `MiniChartLane` owns lane layout, units, axes, selected-time cursor and empty
   state. `miniChartData` supplies domain calculations and data segmentation.
   Individual series components only draw their own data.
+- `chartLayout` owns compact size floors shared by host budgeting and renderers.
+  `ChartTimeAxis` supplies one bottom time axis for all compact lanes.
+- `CompactChartInspector` keeps the live glucose/time header small. Details open
+  in a scrollable modal with a snapshot of the selected data, so touch expiry
+  cannot change the values being read. Theme changes still update its colors.
 - `useStackedChartsTouchTooltip` owns pointer intent and selection lifetime.
   Keep the gesture origin stable. Vertical scrolling and horizontal inspection
   continue together for the same finger contact, including direction changes.
@@ -42,14 +47,15 @@ navigation and safe areas through measurement rather than fixed deductions.
 The chart measures its controls, selection header and insulin block to allocate
 the glucose plot. Fullscreen uses its own measured scroll viewport.
 
-Phone layouts show one compact date bar, a collapsible selection inspector and
-aligned glucose, bolus, basal, IOB and COB lanes. Compact lane height includes
+Phone layouts show one compact date bar, a selection inspector and
+aligned glucose, bolus, recorded carbs, basal, IOB and COB lanes. Compact lane height includes
 the native label row and plot; compact overlay height includes all three
 independently labelled scales. All readouts use the inspector's selected time,
 including its initial anchor, and retain the shared missing-data rules.
 
 Summary and meal context follow the overview. Source failures and stale-data
-notices remain visible above it. Expanded details, larger system fonts and very
+notices remain visible above it. Details do not resize or displace the plots.
+Larger system fonts and very
 short screens may require normal scrolling; never clip data or disable font
 scaling to force a fit. Theme typography and measured lane heights determine
 layout. All series keep their existing data and palette.
@@ -57,10 +63,11 @@ layout. All series keep their existing data and palette.
 `yarn verify:chart-viewport` runs the real product shell and Day Graph module
 with synthetic data. Start `yarn web --host 127.0.0.1 --port 5174` first and use
 the Playwright environment variables described below. The check asserts actual
-initial viewport bounds of all five plots, including visible system insets and
+initial viewport bounds of all six plots, including visible system insets and
 navigation, at 390×844 and 360×740 in both languages and all four themes. It
 also checks small-screen scrolling, fullscreen, scale alignment, text clipping
-and selected values. Screenshots and measurements are saved under ignored
+and selected values, dense/boundary carb records, and real IndexedDB preference
+restoration after reload. Screenshots and measurements are saved under ignored
 `artifacts/chart-viewport`. DOM visibility alone is insufficient: an element
 can be visible while lying below the screen.
 
@@ -134,14 +141,36 @@ Bolus is an event dose (`U`), drawn as bars. Simultaneous doses remain separate
 records and stack visibly. The selected event window is five minutes on either
 side of the cursor in both the lane and inspector.
 
+Recorded carbs (`g`) have a dedicated compact event lane using `buildCarbEvents`
+from the existing carb utilities. It validates, ranges and sorts records once;
+both the lane and inspector use that same list contract. Exact-time records
+stack in grams but retain every identity. Never proximity-deduplicate a journal
+entry and a Nightscout treatment. External carbs need not represent a meal.
+Legacy embedded markers use bounded visual clusters with counts; they no
+longer stack upward through the glucose values or show off-range records.
+
 Active insulin (`U`) and active carbohydrates (`g`) use separate scales. Missing
 fields and long sampling gaps split the line. Negative active insulin is kept.
 Glucose readouts do not carry a reading across gaps longer than ten minutes.
 
 Separate mode has one lane per series. Overlay mode shares one plot for basal,
-IOB and COB, with independently labelled scales and units. Its bolus dose lane
-remains separate. Both modes use the same selection, palette and factual
+IOB and COB, with independently labelled scales and units. Its bolus dose and
+recorded-carb lanes remain separate. Both modes use the same selection, palette and factual
 series. Stored `separate`/`mixed` preferences retain their existing values.
+
+## Remembered view
+
+`useDayGraphView` automatically saves mode changes through the existing
+`DayGraphChartPreferencesRuntime.onSave` owner. Preferences remain scoped to
+the signed-in product user and phone/tablet/desktop profile. No chart-specific
+storage key or medical-data cache is introduced. Delayed preference hydration
+must not write fallback defaults over saved choices or undo local interaction.
+
+Exploratory zoom, date changes and event focus do not replace the saved time
+range. The explicit remember-range action saves the current range. Mode changes
+preserve that remembered range. Local durable storage acknowledges a save;
+remote synchronization is asynchronous. Late completions cannot reset a newer
+choice, another account or another layout profile.
 
 ## Verification
 

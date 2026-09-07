@@ -50,6 +50,62 @@ const press = (tree: renderer.ReactTestRenderer, testID: string): void => {
 };
 
 describe('DayGraphModuleView', () => {
+  it.each(['external-carb', 'journal-meal'] as const)(
+    'shows real %s records when glucose and insulin data are empty',
+    async kind => {
+      const start = new Date(2026, 7, 20).getTime();
+      const snapshot: DayGraphSnapshot = {
+        freshness: {kind: 'fresh', fetchedAtMs: start},
+        glucoseSamples: [],
+        activeLoadSamples: [],
+        insulinEvents: [],
+        basalSchedule: [],
+        dataAvailability: {
+          treatments: 'available',
+          deviceStatus: 'available',
+          profile: 'available',
+        },
+        timelineItems: [
+          {
+            kind,
+            identity: {sourceId: 'fixture', recordId: 'carbs-only'},
+            sourceLabel: 'Fixture',
+            title: 'Recorded carbs',
+            timestampMs: start + HOUR,
+            carbohydratesGrams: 35,
+          },
+        ],
+      };
+      let tree: renderer.ReactTestRenderer;
+      await act(async () => {
+        tree = renderer.create(
+          withTheme(
+            <DayGraphModuleView
+              dataSource={source(async () => snapshot)}
+              locale="he"
+              now={() => start + 2 * HOUR}
+            />,
+          ),
+        );
+      });
+      try {
+        expect(
+          tree!.root.findByType(StackedHomeCharts).props.foodItems,
+        ).toEqual([
+          expect.objectContaining({carbs: 35, timestamp: start + HOUR}),
+        ]);
+        expect(
+          tree!.root.findAllByProps({testID: 'carb-event-bar'}).length,
+        ).toBeGreaterThan(0);
+        expect(
+          tree!.root.findAllByProps({testID: 'day-graph-no-glucose'}).length,
+        ).toBeGreaterThan(0);
+      } finally {
+        act(() => tree!.unmount());
+      }
+    },
+  );
+
   it.each(['independent-loads', 'failed-load'] as const)(
     'keeps %s visible instead of declaring a successful empty day',
     async scenario => {

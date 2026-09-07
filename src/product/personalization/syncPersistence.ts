@@ -1,6 +1,4 @@
-import type {
-  ProductPersonalizationKeyValueStore,
-} from './persistence';
+import type {ProductPersonalizationKeyValueStore} from './persistence';
 import {
   KeyValueProductPersonalizationStore,
   serializePersonalizationStorageAccess,
@@ -56,10 +54,7 @@ export const productPersonalizationSyncStorageKey = (
 ): string => {
   const user = safeKeyPart(scope.productUserId, 'Product User ID');
   const workspace = safeKeyPart(scope.workspaceId, 'Workspace ID');
-  const source = safeKeyPart(
-    scope.nightscoutSourceId,
-    'Nightscout Source ID',
-  );
+  const source = safeKeyPart(scope.nightscoutSourceId, 'Nightscout Source ID');
   const prefix = 'shani.product-personalization-sync.v1';
   if (section === 'account') {
     return `${prefix}.account:${user}`;
@@ -117,11 +112,7 @@ const parseSyncState = (
   const pending =
     untrusted.pending === undefined
       ? undefined
-      : validatePersonalizationSyncMutation(
-          untrusted.pending,
-          scope,
-          section,
-        );
+      : validatePersonalizationSyncMutation(untrusted.pending, scope, section);
   return {
     schemaVersion: 1,
     section,
@@ -208,7 +199,10 @@ const parsePendingSyncTransaction = (
       candidate.section as PersonalizationSyncSectionId,
     );
   });
-  if (new Set(mutations.map(mutation => mutation.section)).size !== mutations.length) {
+  if (
+    new Set(mutations.map(mutation => mutation.section)).size !==
+    mutations.length
+  ) {
     throw new Error('Personalization sync transaction has duplicate sections.');
   }
   return {schemaVersion: 1, status: 'pending', scope, mutations};
@@ -322,12 +316,10 @@ export class KeyValueProductPersonalizationSyncStore {
           scope,
           mutations: normalized,
         };
-        const transactionKey =
-          productPersonalizationSyncTransactionStorageKey(scope.productUserId);
-        await this.storage.setItem(
-          transactionKey,
-          JSON.stringify(transaction),
+        const transactionKey = productPersonalizationSyncTransactionStorageKey(
+          scope.productUserId,
         );
+        await this.storage.setItem(transactionKey, JSON.stringify(transaction));
         for (const mutation of normalized) {
           await this.stageDirect(scope, mutation);
         }
@@ -403,6 +395,11 @@ export interface OfflineFirstProductPersonalizationRepositoryOptions {
  */
 export class OfflineFirstProductPersonalizationRepository {
   private readonly operationTails = new Map<string, Promise<unknown>>();
+  private readonly synchronizationTails = new Map<string, Promise<unknown>>();
+  private readonly synchronizationRuns = new Map<
+    string,
+    Promise<PersonalizationSynchronizationResult>
+  >();
 
   constructor(
     private readonly options: OfflineFirstProductPersonalizationRepositoryOptions,
@@ -485,27 +482,56 @@ export class OfflineFirstProductPersonalizationRepository {
     });
   }
 
-  async synchronize(
+  synchronize(
     scope: ProductPersonalizationSyncScope,
   ): Promise<PersonalizationSynchronizationResult> {
-    return this.runForProductUser(scope, async () => {
-      let preferences = await this.openUnlocked(scope);
-      if (this.options.remote === undefined) {
-        return {
-          preferences,
-          pendingCount: await this.options.syncStore.countPending(scope),
-          failedSections: [],
-          remoteEnabled: false,
-        };
+    // Network work has its own per-account ordering. It must never hold the
+    // local persistence lock, otherwise an offline connection blocks saves.
+    const userKey = safeKeyPart(scope.productUserId, 'Product User ID');
+    const syncKey = JSON.stringify([
+      userKey,
+      scope.workspaceId,
+      scope.nightscoutSourceId,
+      scope.layout,
+    ]);
+    const existing = this.synchronizationRuns.get(syncKey);
+    if (existing) {
+      return existing;
+    }
+    const previous =
+      this.synchronizationTails.get(userKey) ?? Promise.resolve();
+    const run = previous
+      .catch(() => undefined)
+      .then(() => this.synchronizeSections(scope));
+    this.synchronizationRuns.set(syncKey, run);
+    this.synchronizationTails.set(userKey, run);
+    const cleanup = () => {
+      if (this.synchronizationRuns.get(syncKey) === run) {
+        this.synchronizationRuns.delete(syncKey);
       }
-      const failedSections: PersonalizationSyncSectionId[] = [];
+      if (this.synchronizationTails.get(userKey) === run) {
+        this.synchronizationTails.delete(userKey);
+      }
+    };
+    run.then(cleanup, cleanup);
+    return run;
+  }
+
+  private async synchronizeSections(
+    scope: ProductPersonalizationSyncScope,
+  ): Promise<PersonalizationSynchronizationResult> {
+    const remote = this.options.remote;
+    const failedSections: PersonalizationSyncSectionId[] = [];
+    if (remote) {
       for (const section of personalizationSyncSections()) {
         try {
-          const state = await this.options.syncStore.read(scope, section);
+          const state = await this.runForProductUser(scope, () =>
+            this.options.syncStore.read(scope, section),
+          );
           const untrustedWinner =
             state.pending === undefined
-              ? await this.options.remote.fetch(scope, section)
-              : await this.options.remote.commit(scope, state.pending);
+              ? await remote.fetch(scope, section)
+              : await remote.commit(scope, state.pending);
           if (untrustedWinner === undefined) {
             continue;
           }
@@ -514,25 +540,40 @@ export class OfflineFirstProductPersonalizationRepository {
             scope,
             section,
           );
-          if (
-            state.pending === undefined &&
-            winner.revision <= state.appliedRevision
-          ) {
-            continue;
-          }
-          preferences = applyPersonalizationSyncMutation(preferences, winner);
-          await this.options.localStore.write(scope, preferences);
-          await this.options.syncStore.markApplied(scope, winner);
+          await this.runForProductUser(scope, async () => {
+            const latest = await this.options.syncStore.read(scope, section);
+            // A local save may have replaced the pending mutation while the
+            // network was working. Its value and outbox entry remain authoritative
+            // until a later sync sends that exact mutation.
+            if (
+              latest.pending?.mutationId !== state.pending?.mutationId ||
+              latest.appliedRevision !== state.appliedRevision
+            ) {
+              return;
+            }
+            if (
+              state.pending === undefined &&
+              winner.revision <= latest.appliedRevision
+            ) {
+              return;
+            }
+            const preferences = applyPersonalizationSyncMutation(
+              await this.openUnlocked(scope),
+              winner,
+            );
+            await this.options.localStore.write(scope, preferences);
+            await this.options.syncStore.markApplied(scope, winner);
+          });
         } catch {
           failedSections.push(section);
         }
       }
-      return {
-        preferences,
-        pendingCount: await this.options.syncStore.countPending(scope),
-        failedSections,
-        remoteEnabled: true,
-      };
-    });
+    }
+    return this.runForProductUser(scope, async () => ({
+      preferences: await this.openUnlocked(scope),
+      pendingCount: await this.options.syncStore.countPending(scope),
+      failedSections,
+      remoteEnabled: remote !== undefined,
+    }));
   }
 }

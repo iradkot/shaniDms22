@@ -76,6 +76,7 @@ export const useNativeProductPersonalization = (input: {
   const renderedScopeKey = useRef(scopeKey);
   renderedScopeKey.current = scopeKey;
   const operationTail = useRef<Promise<void>>(Promise.resolve());
+  const requestSynchronization = useRef<(() => void) | undefined>(undefined);
   const latestSave = useRef(0);
   const latestPreferences = useRef<StoredProductPersonalization | undefined>(
     undefined,
@@ -83,10 +84,13 @@ export const useNativeProductPersonalization = (input: {
 
   useEffect(() => {
     let active = true;
+    let synchronizing = false;
+    let synchronizeAgain = false;
     let retryTimer: ReturnType<typeof setInterval> | undefined;
     latestSave.current += 1;
     latestPreferences.current = undefined;
     operationTail.current = Promise.resolve();
+    requestSynchronization.current = undefined;
     if (scope === undefined) {
       setLoadedScopeKey(scopeKey);
       setLoaded({status: 'unavailable'});
@@ -96,50 +100,78 @@ export const useNativeProductPersonalization = (input: {
     }
 
     const enqueueSynchronization = () => {
-      const sequence = latestSave.current;
-      const run = operationTail.current.then(async () => {
-        if (active) {
-          setLoaded(current => {
-            if (current.status !== 'ready') {
-              return current;
-            }
-            const withoutSyncError = {...current};
-            delete withoutSyncError.syncError;
-            return {...withoutSyncError, syncing: true};
-          });
-        }
-        try {
-          const result =
-            await nativeProductPersonalizationRepository.synchronize(scope);
-          if (active && latestSave.current === sequence) {
-            latestPreferences.current = result.preferences;
-            setLoaded({
-              status: 'ready',
-              preferences: result.preferences,
-              saving: false,
-              syncing: false,
-              pendingSyncCount: result.pendingCount,
-              remoteSyncEnabled: result.remoteEnabled,
-              ...(result.failedSections.length === 0
-                ? {}
-                : {syncError: syncErrorMessage}),
+      if (!active) {
+        return;
+      }
+      if (synchronizing) {
+        synchronizeAgain = true;
+        return;
+      }
+      synchronizing = true;
+      operationTail.current
+        .then(async () => {
+          if (!active) {
+            return;
+          }
+          const sequence = latestSave.current;
+          if (active) {
+            setLoaded(current => {
+              if (current.status !== 'ready') {
+                return current;
+              }
+              const withoutSyncError = {...current};
+              delete withoutSyncError.syncError;
+              return {...withoutSyncError, syncing: true};
             });
           }
-        } catch {
-          if (active && latestSave.current === sequence) {
-            setLoaded(current =>
-              current.status === 'ready'
-                ? {...current, syncing: false, syncError: syncErrorMessage}
-                : current,
-            );
+          try {
+            const result =
+              await nativeProductPersonalizationRepository.synchronize(scope);
+            if (active && latestSave.current === sequence) {
+              latestPreferences.current = result.preferences;
+              setLoaded({
+                status: 'ready',
+                preferences: result.preferences,
+                saving: false,
+                syncing: false,
+                pendingSyncCount: result.pendingCount,
+                remoteSyncEnabled: result.remoteEnabled,
+                ...(result.failedSections.length === 0
+                  ? {}
+                  : {syncError: syncErrorMessage}),
+              });
+            } else if (active) {
+              setLoaded(current =>
+                current.status === 'ready'
+                  ? {...current, syncing: false}
+                  : current,
+              );
+            }
+          } catch {
+            if (active) {
+              setLoaded(current =>
+                current.status === 'ready'
+                  ? {
+                      ...current,
+                      syncing: false,
+                      ...(latestSave.current === sequence
+                        ? {syncError: syncErrorMessage}
+                        : {}),
+                    }
+                  : current,
+              );
+            }
           }
-        }
-      });
-      operationTail.current = run.then(
-        () => undefined,
-        () => undefined,
-      );
+        })
+        .finally(() => {
+          synchronizing = false;
+          if (active && synchronizeAgain) {
+            synchronizeAgain = false;
+            enqueueSynchronization();
+          }
+        });
     };
+    requestSynchronization.current = enqueueSynchronization;
 
     setLoadedScopeKey(scopeKey);
     setLoaded({status: 'loading'});
@@ -205,48 +237,44 @@ export const useNativeProductPersonalization = (input: {
           current.status === 'ready' ? current.remoteSyncEnabled : false,
       }));
 
-      let locallySaved = false;
-      let durable = optimistic;
       const write = operationTail.current.then(async () => {
-        durable = await nativeProductPersonalizationRepository.save(
+        // Re-resolve against durable data inside the existing write queue. A
+        // failed optimistic update is not a saved baseline for a later retry.
+        const durableBefore = await nativeProductPersonalizationRepository.open(
           scope,
-          before,
-          optimistic,
         );
-        locallySaved = true;
-        try {
-          return await nativeProductPersonalizationRepository.synchronize(
-            scope,
-          );
-        } catch {
-          return undefined;
-        }
+        return nativeProductPersonalizationRepository.save(
+          scope,
+          durableBefore,
+          resolveProductPersonalizationChange(durableBefore, change),
+        );
       });
       operationTail.current = write.then(
         () => undefined,
         () => undefined,
       );
       try {
-        const synchronized = await write;
+        const durable = await write;
         if (
           renderedScopeKey.current === scopeKey &&
           latestSave.current === sequence
         ) {
-          const preferences = synchronized?.preferences ?? durable;
-          latestPreferences.current = preferences;
-          setLoaded({
-            status: 'ready',
-            preferences,
-            saving: false,
-            syncing: false,
-            pendingSyncCount: synchronized?.pendingCount ?? 1,
-            remoteSyncEnabled: synchronized?.remoteEnabled ?? false,
-            ...(synchronized === undefined ||
-            synchronized.failedSections.length > 0
-              ? {syncError: syncErrorMessage}
-              : {}),
-          });
+          latestPreferences.current = durable;
+          setLoaded(current =>
+            current.status === 'ready'
+              ? {
+                  ...current,
+                  preferences: durable,
+                  saving: false,
+                  pendingSyncCount: Math.max(1, current.pendingSyncCount),
+                }
+              : current,
+          );
         }
+        if (renderedScopeKey.current === scopeKey) {
+          requestSynchronization.current?.();
+        }
+        return true;
       } catch (error) {
         if (
           renderedScopeKey.current === scopeKey &&
@@ -266,7 +294,7 @@ export const useNativeProductPersonalization = (input: {
           });
         }
       }
-      return locallySaved;
+      return false;
     },
     [scope, scopeKey],
   );

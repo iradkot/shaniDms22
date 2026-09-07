@@ -22,6 +22,7 @@ import type {DestinationFocus} from '../shell';
 import {ProductPage, ProductSection, productUiTokens} from '../ui';
 import {PreMealAssistanceCard} from './PreMealAssistanceCard';
 import {RichDayGraphChart} from './RichDayGraphChart';
+import {buildDayGraphChartPresentation} from './DayGraphChartAdapter';
 import type {
   DayGraphChartPreferencesRuntime,
   PreMealAssistanceRuntime,
@@ -409,12 +410,17 @@ export const DayGraphModuleView = ({
   const state = loadState;
 
   const nextDisabled = selectedDayStartMs >= todayStartMs;
-  const hasChartData =
-    !!model &&
-    (model.glucoseSamples.length > 0 ||
-      model.activeLoadSamples.length > 0 ||
-      model.insulinEvents.length > 0 ||
-      model.basalSchedule.length > 0);
+  const hasChartData = useMemo(
+    () =>
+      !!model &&
+      (model.glucoseSamples.length > 0 ||
+        model.activeLoadSamples.length > 0 ||
+        model.insulinEvents.length > 0 ||
+        model.basalSchedule.length > 0 ||
+        // Reuse the chart adapter's event rules when this is a carbs-only day.
+        buildDayGraphChartPresentation(model).foodItems.length > 0),
+    [model],
+  );
   const hasUnavailableChartData =
     !!model &&
     Object.values(model.dataAvailability).some(

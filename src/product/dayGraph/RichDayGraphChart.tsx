@@ -16,6 +16,7 @@ import type {DayGraphModel} from '../../modules/dayGraph';
 import type {ThemeType} from '../../types/theme';
 import {addOpacity} from '../../style/styling.utils';
 import {getChartPalette} from '../../components/charts/chartPalette';
+import {COMPACT_CHART_LAYOUT} from '../../components/charts/chartLayout';
 import type {DestinationLocale} from '../destinations';
 import {productUiTokens} from '../ui';
 import {buildDayGraphChartPresentation} from './DayGraphChartAdapter';
@@ -46,7 +47,7 @@ const COPY = {
     fullScreenTitle: 'Day graph',
     fullScreen: 'Full screen',
     close: 'Back to day',
-    save: 'Remember this view',
+    save: 'Remember this time range',
     saving: 'Saving on this device…',
     remembered: 'Default view',
     saveFailed:
@@ -72,7 +73,7 @@ const COPY = {
     fullScreenTitle: 'גרף יומי',
     fullScreen: 'מסך מלא',
     close: 'חזרה ליום',
-    save: 'שמירת התצוגה כברירת מחדל',
+    save: 'שמירת טווח השעות כברירת מחדל',
     saving: 'שומר במכשיר…',
     remembered: 'תצוגת ברירת המחדל',
     saveFailed: 'לא הצלחנו לשמור במכשיר. אפשר לנסות שוב. הגרף עדיין זמין.',
@@ -123,7 +124,7 @@ export const RichDayGraphChart = ({
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenHeight, setFullscreenHeight] = useState(viewport.height);
   const [controlsHeight, setControlsHeight] = useState(96);
-  const [stackHeaderHeight, setStackHeaderHeight] = useState(74);
+  const [stackHeaderHeight, setStackHeaderHeight] = useState(50);
   const [insulinLayout, setInsulinLayout] = useState<{
     mode: string;
     height: number;
@@ -172,13 +173,16 @@ export const RichDayGraphChart = ({
   const heightBudget = fullscreen
     ? fullscreenHeight
     : availableHeight ?? viewport.height - 160;
-  const miniHeight = 64;
+  const miniHeight = COMPACT_CHART_LAYOUT.loadLaneHeight;
+  const eventLanesHeight = 2 * COMPACT_CHART_LAYOUT.eventLaneHeight;
   const insulinHeight =
     insulinLayout?.mode === mode
       ? insulinLayout.height
       : mode === 'separate'
-      ? 4 * miniHeight
-      : miniHeight + 144;
+      ? eventLanesHeight + 3 * miniHeight + COMPACT_CHART_LAYOUT.timeAxisHeight
+      : eventLanesHeight +
+        COMPACT_CHART_LAYOUT.mixedHeight +
+        COMPACT_CHART_LAYOUT.timeAxisHeight;
   const measureHeader = useCallback((event: LayoutChangeEvent) => {
     const height = Math.ceil(event.nativeEvent.layout.height);
     if (Number.isFinite(height) && height > 0) {
@@ -202,9 +206,9 @@ export const RichDayGraphChart = ({
   // system fonts. The measured host already excludes navigation and safe areas.
   const compactCgmHeight = Math.round(
     Math.max(
-      120,
+      COMPACT_CHART_LAYOUT.glucoseMinHeight,
       Math.min(
-        210,
+        COMPACT_CHART_LAYOUT.glucoseMaxHeight,
         heightBudget -
           controlsHeight -
           stackHeaderHeight -
@@ -454,7 +458,7 @@ export const RichDayGraphChart = ({
           locale={locale}
           miniChartHeight={compact ? miniHeight : 112}
           {...(compact
-            ? {margin: {top: 8, right: 15, bottom: 24, left: 50}}
+            ? {margin: {top: 8, right: 15, bottom: 8, left: 50}}
             : {})}
           showFullScreenButton={!fullscreen && !compact}
           onPressFullScreen={() => setFullscreen(true)}
@@ -467,13 +471,29 @@ export const RichDayGraphChart = ({
         />
       </TouchProvider>
 
-      {compact ? (
-        <Text style={[styles.hint, rtl && styles.rtlText]}>{copy.hint}</Text>
-      ) : null}
-      {preferenceControls}
-      <Text style={[styles.factual, rtl && styles.rtlText]}>
-        {copy.factual}
-      </Text>
+      <View
+        style={
+          compact
+            ? {
+                paddingTop: Math.max(
+                  theme.spacing.md,
+                  heightBudget -
+                    controlsHeight -
+                    stackHeaderHeight -
+                    insulinHeight -
+                    compactCgmHeight,
+                ),
+              }
+            : undefined
+        }>
+        {compact ? (
+          <Text style={[styles.hint, rtl && styles.rtlText]}>{copy.hint}</Text>
+        ) : null}
+        {preferenceControls}
+        <Text style={[styles.factual, rtl && styles.rtlText]}>
+          {copy.factual}
+        </Text>
+      </View>
     </View>
   );
 

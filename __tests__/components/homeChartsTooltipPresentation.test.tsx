@@ -1,5 +1,5 @@
 import React from 'react';
-import {StyleSheet, Text} from 'react-native';
+import {Modal, StyleSheet, Text} from 'react-native';
 import {glucoseChartColor} from 'app/components/charts/chartPalette';
 import renderer, {act} from 'react-test-renderer';
 import {ThemeProvider} from 'styled-components/native';
@@ -7,6 +7,55 @@ import HomeChartsTooltip from 'app/containers/MainTabsNavigator/Containers/Home/
 import {theme} from 'app/style/theme';
 
 describe('Shared chart inspector presentation', () => {
+  it('opens stable selection details outside the chart layout and keeps all recorded carbs', () => {
+    const props = {
+      compact: true,
+      collapsible: true,
+      locale: 'he' as const,
+      anchorTimeMs: 0,
+      bgSample: {date: 0, sgv: 142} as any,
+      activeInsulinU: 3.38,
+      cobG: 58,
+      basalRateUhr: 0.78,
+      bolusSummary: {count: 0, totalU: 0},
+      carbsSummary: {count: 2, totalG: 58},
+      carbEvents: [
+        {id: 'meal-a', timestamp: 0, carbs: 40},
+        {id: 'meal-b', timestamp: 0, carbs: 18},
+      ] as any,
+    };
+    const render = (next = props) => (
+      <ThemeProvider theme={theme}>
+        <HomeChartsTooltip {...next} />
+      </ThemeProvider>
+    );
+    let tree: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(render());
+    });
+    act(() =>
+      tree!.root
+        .findByProps({testID: 'chart-inspector-toggle-details'})
+        .props.onPress(),
+    );
+    const modal = tree!.root.findByType(Modal);
+    expect(modal.props.visible).toBe(true);
+    const selectedValue = (key: string) =>
+      modal.findByProps({testID: `chart-inspector-value-${key}`}).props
+        .children;
+    expect(selectedValue('carbs')).toBe('58 g (2)');
+    expect(selectedValue('iob')).toBe('3.38 U');
+    act(() =>
+      tree!.update(
+        render({...props, activeInsulinU: 0.5, cobG: 0, anchorTimeMs: 3600000}),
+      ),
+    );
+    expect(selectedValue('iob')).toBe('3.38 U');
+    expect(selectedValue('cob')).toBe('58 g');
+    act(() => modal.props.onRequestClose());
+    expect(tree!.root.findAllByType(Modal)).toHaveLength(0);
+    act(() => tree!.unmount());
+  });
   it('uses the glucose marker color in the compact panel', () => {
     let tree: renderer.ReactTestRenderer;
     act(() => {

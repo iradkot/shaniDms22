@@ -18,6 +18,11 @@ import './styles.css';
 
 import {MINUTE_MS, previewModel} from './dayGraphPreviewFixture';
 
+// Explicitly expose synthetic scenario/theme controls for static browser QA.
+// The normal production performance fixture keeps the same minimal chrome.
+const fixtureControlsEnabled = import.meta.env.DEV ||
+  new URLSearchParams(window.location.search).get('qa') === '1';
+
 const PreviewApp = () => {
   const [locale, setLocale] = useState<DestinationLocale>('en');
   const [themeId, setThemeId] = useState<AppThemeId>('calmBlue');
@@ -91,7 +96,7 @@ const PreviewApp = () => {
             ))}
           </View>
         </View>
-        {import.meta.env.DEV && (
+        {fixtureControlsEnabled && (
           <>
             <div
               hidden

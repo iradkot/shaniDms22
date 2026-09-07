@@ -1,9 +1,6 @@
-import React, {useMemo, useState} from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {
-  getChartPalette,
-  glucoseChartColor,
-} from 'app/components/charts/chartPalette';
+import React, {useMemo} from 'react';
+import {CompactChartInspector} from './CompactChartInspector';
+import {getChartPalette} from 'app/components/charts/chartPalette';
 import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -80,11 +77,9 @@ const HomeChartsTooltip: React.FC<Props> = ({
   maxWidthPx,
 }) => {
   const theme = useTheme() as ThemeType;
-  const compactStyles = useMemo(() => createCompactStyles(theme), [theme]);
+
   const {language: contextLanguage} = useAppLanguage();
   const language = locale ?? contextLanguage;
-  const [expanded, setExpanded] = useState(false);
-  const collapsed = collapsible && !expanded;
 
   const timeText = useMemo(
     () => formatDateToLocaleTimeString(anchorTimeMs),
@@ -97,12 +92,11 @@ const HomeChartsTooltip: React.FC<Props> = ({
     return `${Math.round(bgSample.sgv)} mg/dL`;
   }, [bgSample]);
   const bgColor = useMemo(() => {
-    if (!bgSample) {
+    if (compact || !bgSample) {
       return theme.textColor;
     }
-    return compact
-      ? glucoseChartColor(bgSample.sgv, theme)
-      : determineBgColorByGlucoseValue(bgSample.sgv, theme);
+    // CompactChartInspector also colors frozen details from the active theme.
+    return determineBgColorByGlucoseValue(bgSample.sgv, theme);
   }, [bgSample, compact, theme]);
 
   const bgTrendIcon = useMemo(() => {
@@ -210,113 +204,49 @@ const HomeChartsTooltip: React.FC<Props> = ({
         value: cobText === '—' ? unknown : cobText,
       },
     ];
+    cells.push({
+      key: 'carbs',
+      label: he ? 'פחמימות שנרשמו' : 'Recorded carbs',
+      color: palette.cob,
+      symbol: '▰',
+      value: carbsText === '—' ? noRecord : carbsText,
+    });
     return (
-      <View
-        pointerEvents={collapsible ? 'auto' : 'none'}
-        style={[
-          compactStyles.panel,
-          collapsible && compactStyles.summaryPanel,
-          {backgroundColor: palette.surface, borderColor: palette.grid},
-        ]}>
-        <View
-          style={[
-            compactStyles.header,
-            collapsible && compactStyles.summaryHeader,
-            he && compactStyles.reverse,
-          ]}>
-          <Text style={[compactStyles.time, {color: palette.text}]}>
-            {timeText}
-          </Text>
-          <View style={compactStyles.glucose}>
-            <Text style={[compactStyles.glucoseValue, {color: bgColor}]}>
-              {bgText === '—' ? unknown : bgText}
-            </Text>
-            {bgTrendIcon ? (
-              <Icon name={bgTrendIcon} size={18} color={bgColor} />
-            ) : null}
-          </View>
-          {collapsible ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{expanded}}
-              aria-expanded={expanded}
-              accessibilityLabel={
-                he ? 'פרטי הנקודה שנבחרה' : 'Selected point details'
-              }
-              onPress={() => setExpanded(value => !value)}
-              style={compactStyles.detailsButton}
-              testID="chart-inspector-toggle-details">
-              <Text style={[compactStyles.label, {color: palette.text}]}>
-                {he ? 'פרטים' : 'Details'} {expanded ? '⌃' : '⌄'}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-        {!collapsed ? (
-          <>
-            <View style={[compactStyles.grid, he && compactStyles.reverse]}>
-              {cells.map(cell => (
-                <View key={cell.key} style={compactStyles.cell}>
-                  <Text
-                    style={[
-                      compactStyles.label,
-                      {color: palette.mutedText},
-                      he && compactStyles.rtl,
-                    ]}
-                    numberOfLines={1}>
-                    <Text style={{color: cell.color}}>{cell.symbol} </Text>
-                    {cell.label}
-                  </Text>
-                  <Text
-                    style={[
-                      compactStyles.value,
-                      {color: palette.text},
-                      he ? compactStyles.alignRight : compactStyles.alignLeft,
-                      /\d/.test(cell.value) || !he
-                        ? compactStyles.ltrFlow
-                        : compactStyles.rtlFlow,
-                    ]}
-                    testID={`chart-inspector-value-${cell.key}`}
-                    numberOfLines={1}>
-                    {cell.value}
-                  </Text>
-                </View>
-              ))}
-            </View>
-            <Text
-              style={[
-                compactStyles.context,
-                {color: palette.mutedText},
-                he && compactStyles.rtl,
-              ]}
-              numberOfLines={1}>
-              {tr(language, 'home.tooltipCarbs')}:{' '}
-              {carbsText === '—' ? noRecord : carbsText}
-            </Text>
-            <Text
-              style={[
-                compactStyles.context,
-                {color: palette.mutedText},
-                he && compactStyles.rtl,
-              ]}
-              numberOfLines={1}>
-              {bolusDetailsText
-                ? `${he ? 'בולוס' : 'Bolus'}: ${bolusDetailsText}`
-                : activeDetailsText ??
-                  (bgSample
-                    ? `${
-                        he ? 'מדידת סוכר' : 'Glucose reading'
-                      }: ${formatDateToLocaleTimeString(bgSample.date)}`
-                    : he
-                    ? 'אין מדידת סוכר סמוכה לשעה זו'
-                    : 'No glucose reading near this time')}
-            </Text>
-          </>
-        ) : null}
-      </View>
+      <CompactChartInspector
+        locale={language}
+        collapsible={collapsible}
+        timeText={timeText}
+        anchorTimeMs={anchorTimeMs}
+        bgText={bgText === '—' ? unknown : bgText}
+        bgValue={bgSample?.sgv ?? null}
+        bgTrendIcon={bgTrendIcon}
+        cells={cells}
+        context={[
+          he
+            ? 'רישומי בולוס ופחמימות בטווח של 5 דקות מכל צד של השעה שנבחרה.'
+            : 'Bolus and carb records within 5 minutes either side of the selected time.',
+          ...(bolusDetailsText
+            ? [`${he ? 'בולוס' : 'Bolus'}: ${bolusDetailsText}`]
+            : []),
+          ...(carbDetailsText
+            ? [
+                `${
+                  he ? 'פחמימות שנרשמו' : 'Recorded carbs'
+                }: ${carbDetailsText}`,
+              ]
+            : []),
+          ...(activeDetailsText ? [`IOB: ${activeDetailsText}`] : []),
+          bgSample
+            ? `${
+                he ? 'מדידת סוכר' : 'Glucose reading'
+              }: ${formatDateToLocaleTimeString(bgSample.date)}`
+            : he
+            ? 'אין מדידת סוכר סמוכה לשעה זו'
+            : 'No glucose reading near this time',
+        ]}
+      />
     );
   }
-
   return (
     <Container
       $fullWidth={fullWidth}
@@ -427,79 +357,6 @@ const HomeChartsTooltip: React.FC<Props> = ({
 const Container = styled.View<{$fullWidth: boolean}>`
   ${({$fullWidth}: {$fullWidth: boolean}) => ($fullWidth ? 'width: 100%;' : '')}
 `;
-
-const createCompactStyles = (theme: ThemeType) =>
-  StyleSheet.create({
-    panel: {
-      margin: theme.spacing.sm,
-      marginBottom: 0,
-      padding: theme.spacing.md,
-      borderWidth: 1,
-      borderRadius: theme.borderRadius,
-    },
-    summaryPanel: {
-      margin: theme.spacing.xs,
-      marginBottom: 0,
-      paddingHorizontal: theme.spacing.sm,
-      paddingVertical: 0,
-    },
-    summaryHeader: {
-      marginBottom: 0,
-      minHeight: 44,
-      flexWrap: 'wrap',
-      columnGap: theme.spacing.xs,
-    },
-    detailsButton: {
-      minHeight: 44,
-      minWidth: 44,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 8,
-    },
-    time: {
-      fontFamily: theme.fontFamily,
-      fontSize: theme.typography.size.md,
-      fontWeight: '700',
-      writingDirection: 'ltr',
-    },
-    glucose: {flexDirection: 'row', alignItems: 'center', gap: 4},
-    glucoseValue: {
-      fontFamily: theme.fontFamily,
-      fontSize: theme.typography.size.lg,
-      fontWeight: '800',
-      writingDirection: 'ltr',
-    },
-    grid: {flexDirection: 'row', flexWrap: 'wrap', columnGap: '4%'},
-    cell: {width: '48%', paddingVertical: 4, minHeight: 46},
-    label: {
-      fontFamily: theme.fontFamily,
-      fontSize: theme.typography.size.xs,
-      lineHeight: 18,
-    },
-    value: {
-      fontFamily: theme.fontFamily,
-      fontSize: theme.typography.size.sm,
-      lineHeight: 20,
-      fontWeight: '700',
-    },
-    context: {
-      fontFamily: theme.fontFamily,
-      fontSize: theme.typography.size.xs,
-      lineHeight: 18,
-      minHeight: 18,
-    },
-    reverse: {flexDirection: 'row-reverse'},
-    rtl: {textAlign: 'right', writingDirection: 'rtl'},
-    alignRight: {textAlign: 'right'},
-    alignLeft: {textAlign: 'left'},
-    ltrFlow: {writingDirection: 'ltr'},
-    rtlFlow: {writingDirection: 'rtl'},
-  });
 
 const Inner = styled.View`
   ${({theme}: {theme: ThemeType}) => theme.shadow.small}

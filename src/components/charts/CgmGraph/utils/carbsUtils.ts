@@ -6,20 +6,34 @@ import {
 } from 'app/components/charts/CgmGraph/constants/bolusHoverConfig';
 
 export type CarbEvent = FoodItemDTO | formattedFoodItemDTO;
-
-function isValidCarbEvent(item: CarbEvent): item is CarbEvent & {
+export type ValidCarbEvent = CarbEvent & {
   timestamp: number;
   carbs: number;
   id: string;
-} {
+};
+
+function isValidCarbEvent(item: CarbEvent): item is ValidCarbEvent {
   return (
-    typeof (item as any)?.id === 'string' &&
-    typeof (item as any)?.timestamp === 'number' &&
-    Number.isFinite((item as any).timestamp) &&
-    typeof (item as any)?.carbs === 'number' &&
-    Number.isFinite((item as any).carbs) &&
-    (item as any).carbs > 0
+    typeof item?.id === 'string' &&
+    typeof item?.timestamp === 'number' &&
+    Number.isFinite(item.timestamp) &&
+    typeof item?.carbs === 'number' &&
+    Number.isFinite(item.carbs) &&
+    item.carbs > 0
   );
+}
+
+/** One factual event list for markers, lanes and selection; never proximity-merge records. */
+export function buildCarbEvents(
+  foodItems: readonly CarbEvent[] | null | undefined,
+  domain?: readonly [Date, Date] | null,
+): ValidCarbEvent[] {
+  const start = domain ? +domain[0] : Number.NEGATIVE_INFINITY;
+  const end = domain ? +domain[1] : Number.POSITIVE_INFINITY;
+  return (foodItems ?? [])
+    .filter(isValidCarbEvent)
+    .filter(item => item.timestamp >= start && item.timestamp <= end)
+    .sort((left, right) => left.timestamp - right.timestamp);
 }
 
 export function findClosestCarbEvent(
@@ -30,7 +44,7 @@ export function findClosestCarbEvent(
     return null;
   }
 
-  const carbs = foodItems.filter(isValidCarbEvent);
+  const carbs = buildCarbEvents(foodItems);
   if (!carbs.length) {
     return null;
   }
@@ -59,7 +73,7 @@ export function findCarbEventsInTooltipWindow(params: {
     return [];
   }
 
-  const carbs = foodItems.filter(isValidCarbEvent);
+  const carbs = buildCarbEvents(foodItems);
   if (!carbs.length) {
     return [];
   }
