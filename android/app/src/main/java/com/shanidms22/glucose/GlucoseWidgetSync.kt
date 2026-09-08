@@ -28,29 +28,40 @@ internal object GlucoseWidgetSync {
     val insulinStats = fetchLatestWidgetInsulinStats(baseUrl, secret)
     val (low, high) = GlucoseWidgetUpdater.getRangeThresholds(context)
 
-    GlucoseWidgetUpdater.save(
-      context,
-      latest.sgv,
-      latest.trend,
-      latest.date,
-      load?.iob,
-      load?.cob,
-      insulinStats?.totalBasal,
-      insulinStats?.totalBolus,
-      insulinStats?.basalBolusRatio,
-      insulinStats?.totalInsulin,
-      calculateWidgetTir(entries, sparklineHours, low, high),
-      load?.projected1,
-      load?.projected2,
-      load?.projected3,
-      null,
-      null,
-      widgetEntriesToSparkline(entries, sparklineHours),
-      preserveInsulinStats = true,
-    )
-    GlucoseWidgetUpdater.updateWidgets(context)
-    GlucoseWidgetUpdater.updateNotification(context)
-    return true
+    return GlucoseWidgetCredentialStore.withConfigurationLock {
+      // Network requests may finish after an account switch or credential rotation.
+      if (GlucoseWidgetCredentialStore.readSyncConfiguration(context) != configuration) return@withConfigurationLock false
+      val history = parseValidWidgetEntries(entries)
+      val nowMs = System.currentTimeMillis()
+      GlucoseWidgetUpdater.save(
+        context,
+        latest.sgv,
+        latest.trend,
+        latest.date,
+        load?.iob,
+        load?.cob,
+        insulinStats?.totalBasal,
+        insulinStats?.totalBolus,
+        insulinStats?.basalBolusRatio,
+        insulinStats?.totalInsulin,
+        calculateWidgetTir(entries, sparklineHours, low, high),
+        null,
+        null,
+        null,
+        null,
+        null,
+        widgetEntriesToSparkline(entries, sparklineHours),
+        preserveInsulinStats = true,
+        historyPoints = history,
+        iobTimestampMs = load?.iobTimestampMs,
+        cobTimestampMs = load?.cobTimestampMs,
+      )
+      val snapshot = WidgetForecastSnapshot(nowMs, latest.date, history, listOfNotNull(load?.loopForecast, nightscoutWidgetForecast(history, nowMs)))
+      GlucoseWidgetUpdater.saveForecast(context, baseUrl, widgetForecastSnapshotJson(snapshot), native = true)
+      GlucoseWidgetUpdater.updateWidgets(context)
+      GlucoseWidgetUpdater.updateNotification(context)
+      true
+    }
   }
 
   fun syncAsync(context: Context) {

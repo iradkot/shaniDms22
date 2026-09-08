@@ -5,6 +5,7 @@ import type {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import type {ChartLoadSample} from 'app/utils/chartLoadSeries.utils';
 import type {ChartDataAvailability} from 'app/components/charts/miniChartData';
+import type {GlucoseForecastSnapshot} from 'app/modules/glucoseForecast';
 
 /** Tooltip state exposed to parent when `tooltipPlacement="none"`. */
 export type StackedChartsTooltipModel = {
@@ -34,6 +35,7 @@ export type StackedHomeChartsProps = {
   /** Language used by the reusable chart labels and tooltip. */
   locale?: 'en' | 'he' | undefined;
   bgSamples: BgSample[];
+  forecast?: GlucoseForecastSnapshot | undefined;
   loadSamples?: readonly ChartLoadSample[] | undefined;
   dataAvailability?: ChartDataAvailability | undefined;
   foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;

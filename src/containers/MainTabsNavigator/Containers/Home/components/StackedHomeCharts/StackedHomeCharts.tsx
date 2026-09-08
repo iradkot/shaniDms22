@@ -49,6 +49,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
   const {
     locale,
     bgSamples,
+    forecast,
     loadSamples,
     dataAvailability,
     foodItems,
@@ -317,6 +318,7 @@ const StackedHomeCharts: React.FC<StackedHomeChartsProps> = props => {
           {hasVisibleGlucose ? (
             <BgGraph
               bgSamples={bgSamples}
+              forecast={forecast}
               width={width}
               height={cgmHeight}
               foodItems={compact ? null : foodItems}

@@ -28,12 +28,18 @@ object GlucoseSyncScheduler {
 
   fun configure(context: Context, baseUrl: String?, apiSecretSha1: String?, enabled: Boolean) {
     GlucoseWidgetCredentialStore.withConfigurationLock {
+      val previous = GlucoseWidgetCredentialStore.readSyncConfiguration(context)
       val result = GlucoseWidgetCredentialStore.writeSyncConfiguration(
         context = context,
         baseUrl = baseUrl,
         apiSecretSha1 = apiSecretSha1,
         enabled = enabled,
       )
+      val next = GlucoseWidgetCredentialStore.readSyncConfiguration(context)
+      if (previous != next || !result.effectiveEnabled) {
+        // Clearing also invalidates model snapshots when credentials change on the same URL.
+        GlucoseWidgetUpdater.clear(context)
+      }
       applyModeFromPrefs(context)
       if (result.effectiveEnabled && !result.baseUrl.isNullOrBlank()) {
         requestImmediateRefresh(context)

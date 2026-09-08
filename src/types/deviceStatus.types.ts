@@ -4,6 +4,7 @@ export type DeviceStatusEntry = {
 
   // Loop uploader payload (common)
   loop?: {
+    timestamp?: string;
     iob?: {
       iob?: number;
       timestamp?: string;
@@ -20,6 +21,7 @@ export type DeviceStatusEntry = {
      * Shape varies by uploader/version; this is a best-effort typed subset.
      */
     predicted?: {
+      startDate?: string;
       values?: number[];
       timestamps?: Array<string | number>;
     };

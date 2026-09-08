@@ -17,11 +17,14 @@ import {getPersonalizationLayout} from '../src/product/personalization/layout';
 import './styles.css';
 
 import {MINUTE_MS, previewModel} from './dayGraphPreviewFixture';
+import {previewForecast} from './dayGraphForecastPreviewFixture';
 
 // Explicitly expose synthetic scenario/theme controls for static browser QA.
 // The normal production performance fixture keeps the same minimal chrome.
 const fixtureControlsEnabled = import.meta.env.DEV ||
   new URLSearchParams(window.location.search).get('qa') === '1';
+const forecastPreviewEnabled = fixtureControlsEnabled &&
+  new URLSearchParams(window.location.search).get('forecast') === '1';
 
 const PreviewApp = () => {
   const [locale, setLocale] = useState<DestinationLocale>('en');
@@ -148,6 +151,8 @@ const PreviewApp = () => {
           key={visit}
           locale={locale}
           model={model}
+          forecast={forecastPreviewEnabled ? previewForecast : undefined}
+          forecastStatus={forecastPreviewEnabled ? 'ready' : undefined}
           preferences={{
             scopeKey: `preview:${layout}`,
             layout,

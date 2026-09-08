@@ -27,6 +27,8 @@ import {ChartScrollView} from '../../components/charts/interaction/ChartScrollVi
 import {ChartGestureRoot} from '../../components/charts/interaction/ChartGestureRoot';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {E2E_TEST_IDS} from '../../constants/E2E_TEST_IDS';
+import type {GlucoseForecastSnapshot} from '../../modules/glucoseForecast';
+import {GlucoseForecastCard} from './GlucoseForecastCard';
 
 const COPY = {
   en: {
@@ -42,6 +44,7 @@ const COPY = {
     cob: 'Active carbs',
     fullDay: 'Full day',
     hours: 'h',
+    forecastView: 'Next 30 min',
     earlier: 'Earlier hours',
     later: 'Later hours',
     fullScreenTitle: 'Day graph',
@@ -68,6 +71,7 @@ const COPY = {
     cob: 'פחמימות פעילות',
     fullDay: 'יום מלא',
     hours: 'ש׳',
+    forecastView: '30 הדקות הבאות',
     earlier: 'שעות קודמות',
     later: 'שעות הבאות',
     fullScreenTitle: 'גרף יומי',
@@ -86,6 +90,8 @@ const COPY = {
 export interface RichDayGraphChartProps {
   readonly locale: DestinationLocale;
   readonly model: DayGraphModel;
+  readonly forecast?: GlucoseForecastSnapshot | undefined;
+  readonly forecastStatus?: 'loading' | 'error' | 'stale' | 'ready' | undefined;
   readonly selectedTimestampMs?: number | undefined;
   readonly preferences?: DayGraphChartPreferencesRuntime;
   /** Actual space left in the host scroll viewport, excluding its chrome. */
@@ -95,6 +101,8 @@ export interface RichDayGraphChartProps {
 export const RichDayGraphChart = ({
   locale,
   model,
+  forecast,
+  forecastStatus,
   selectedTimestampMs,
   preferences,
   availableHeight,
@@ -132,6 +140,8 @@ export const RichDayGraphChart = ({
   const chart = useMemo(() => buildDayGraphChartPresentation(model), [model]);
   const dayStartMs = model.period.dayStartMs;
   const dayEndMs = model.period.dayEndMs;
+  const displayEndMs = Math.max(dayEndMs, ...forecast?.series.flatMap(series =>
+    series.points.map(point => point.ts)) ?? []);
   const focusedMs =
     selectedTimestampMs !== undefined &&
     selectedTimestampMs >= dayStartMs &&
@@ -151,13 +161,13 @@ export const RichDayGraphChart = ({
   } = useDayGraphView(dayStartMs, focusedMs, preferences);
   const windowMs =
     windowHours === 'full-day'
-      ? dayEndMs - dayStartMs
+      ? displayEndMs - dayStartMs
       : Math.min(windowHours * 3600000, dayEndMs - dayStartMs);
   const anchor =
     windowAnchor ?? focusedMs ?? chart.fallbackAnchorTimeMs ?? dayStartMs;
   const startMs = Math.max(
     dayStartMs,
-    Math.min(anchor - windowMs / 2, dayEndMs - windowMs),
+    Math.min(anchor - windowMs / 2, displayEndMs - windowMs),
   );
   const endMs = startMs + windowMs;
   const xDomain = useMemo<[Date, Date]>(
@@ -382,6 +392,18 @@ export const RichDayGraphChart = ({
               </Text>
             </Pressable>
           ))}
+          {forecast?.series.length ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setWindowHours(3);
+                setWindowAnchor(forecast.glucoseTimestampMs - 60 * 60_000);
+              }}
+              style={styles.rangeButton}
+              testID="day-graph-show-forecast">
+              <Text style={styles.legendLabel}>{copy.forecastView}</Text>
+            </Pressable>
+          ) : null}
           {windowHours !== 'full-day' ? (
             <>
               <Pressable
@@ -399,11 +421,11 @@ export const RichDayGraphChart = ({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={copy.later}
-                disabled={endMs >= dayEndMs}
+                disabled={endMs >= displayEndMs}
                 onPress={() => setWindowAnchor(endMs + windowMs / 2)}
                 style={[
                   styles.rangeButton,
-                  endMs >= dayEndMs && styles.disabled,
+                  endMs >= displayEndMs && styles.disabled,
                 ]}
                 testID="day-graph-window-later">
                 <Text style={styles.legendLabel}>{rtl ? '‹' : '›'}</Text>
@@ -442,6 +464,7 @@ export const RichDayGraphChart = ({
           onInsulinLayout={measureInsulin}
           basalProfileData={chart.basalProfileData}
           bgSamples={chart.bgSamples}
+          forecast={forecast}
           loadSamples={chart.loadSamples}
           dataAvailability={chart.dataAvailability}
           cgmHeight={compact ? compactCgmHeight : 290}
@@ -471,11 +494,15 @@ export const RichDayGraphChart = ({
         />
       </TouchProvider>
 
+      {forecastStatus ? (
+        <GlucoseForecastCard locale={locale} snapshot={forecast} status={forecastStatus} />
+      ) : null}
+
       <View
         style={
           compact
             ? {
-                paddingTop: Math.max(
+                paddingTop: forecastStatus ? theme.spacing.md : Math.max(
                   theme.spacing.md,
                   heightBudget -
                     controlsHeight -

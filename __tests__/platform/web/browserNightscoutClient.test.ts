@@ -414,6 +414,10 @@ describe('BrowserNightscoutClient', () => {
           createdAtMs: Date.parse('2027-01-15T08:00:00.000Z'),
           iobUnits: 1.25,
           cobGrams: 24,
+          forecastStatus: {
+            ts: Date.parse('2027-01-15T08:00:00.000Z'),
+            cobGrams: 24,
+          },
         },
       ],
       freshness: {kind: 'fresh', fetchedAtMs: nowMs},
@@ -462,7 +466,77 @@ describe('BrowserNightscoutClient', () => {
       bolusIobUnits: 0.1,
       basalIobUnits: -0.3,
       cobGrams: 18,
+      forecastStatus: {
+        ts: Date.parse('2027-01-15T08:00:00.000Z'),
+        iobUnits: -0.2,
+        cobGrams: 18,
+      },
     });
+  });
+
+  it('preserves original Loop forecast and load times across minimized cache round trips', async () => {
+    const nowMs = Date.parse('2026-09-07T08:01:00Z');
+    const startMs = nowMs - 2 * 60 * 60 * 1_000;
+    const storage = new MemoryStorage();
+    const requestJson = jest.fn().mockResolvedValueOnce({
+      version: 1,
+      data: [{
+        _id: 'forecast-1',
+        created_at: '2026-09-07T08:00:30Z',
+        loop: {
+          timestamp: '2026-09-07T08:00:15Z',
+          predicted: {
+            startDate: '2026-09-07T08:00:00Z',
+            values: [120, 117, 114, 110, 106, 102, 100],
+            IOB: [900, 900],
+            COB: [800, 800],
+          },
+          iob: {timestamp: '2026-09-07T07:59:00Z', iob: -0.25},
+          cob: {timestamp: '2026-09-07T07:58:00Z', cob: 12},
+          failureReason: 'private failure detail',
+        },
+        pump: {serial: 'private pump detail'},
+      }],
+    }).mockRejectedValueOnce(new Error('offline'));
+    const client = new BrowserNightscoutClient({
+      api: {requestJson}, storage, sourceId: 'source-1',
+      workspaceId: 'workspace-1', now: () => nowMs,
+    });
+    const live = await client.readDeviceStatuses(startMs, nowMs);
+    expect(live.records[0]?.forecastStatus).toEqual({
+      ts: Date.parse('2026-09-07T08:00:30Z'),
+      loopTimestampMs: Date.parse('2026-09-07T08:00:15Z'),
+      loopPrediction: {
+        startMs: Date.parse('2026-09-07T08:00:00Z'),
+        values: [120, 117, 114, 110, 106, 102, 100],
+      },
+      iobUnits: -0.25,
+      iobTimestampMs: Date.parse('2026-09-07T07:59:00Z'),
+      cobGrams: 12,
+      cobTimestampMs: Date.parse('2026-09-07T07:58:00Z'),
+    });
+    const cached = await client.readDeviceStatuses(startMs, nowMs);
+    expect(cached.records).toEqual(live.records);
+    expect(cached.freshness.kind).toBe('stale');
+    const serializedCache = [...storage.values.values()].join('');
+    expect(serializedCache).not.toContain('private');
+    expect(serializedCache).not.toContain('"IOB"');
+    expect(serializedCache).not.toContain('"COB"');
+  });
+
+  it('keeps prediction-only records but rejects a forecast without its own start time', () => {
+    const created_at = '2026-09-07T08:00:00Z';
+    const withPrediction = decodeBrowserNightscoutDeviceStatus({
+      created_at,
+      loop: {predicted: {startDate: created_at, values: [120, 122]}},
+    });
+    expect(withPrediction?.forecastStatus?.loopPrediction).toEqual({
+      startMs: Date.parse(created_at), values: [120, 122],
+    });
+    expect(decodeBrowserNightscoutDeviceStatus({
+      created_at,
+      loop: {predicted: {values: [120, 122]}},
+    })).toBeNull();
   });
 
   it('loads a long device-status range in bounded compatible chunks', async () => {

@@ -19,6 +19,7 @@ import {
 } from 'app/api/shaniNightscoutInstances';
 import {BgSample} from 'app/types/day_bgs.types';
 import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
+import {futureLoopPoints} from '../modules/glucoseForecast';
 import {
   extractLoad,
   getDeviceStatusTimestampMs,
@@ -32,7 +33,6 @@ const POLL_INTERVAL_MS = 60 * 1000;
 const EMPTY_STATE_RETRY_MS = 15 * 1000;
 const STALE_WARNING_MS = 10 * 60 * 1000;
 const STALE_HIDE_PREDICTION_MS = 15 * 60 * 1000;
-const DEFAULT_PREDICTION_STEP_MS = 5 * 60 * 1000;
 
 export type SnapshotStaleLevel = 'fresh' | 'stale' | 'very-stale';
 
@@ -55,20 +55,6 @@ export type LatestNightscoutSnapshot = {
   staleLevel: SnapshotStaleLevel;
 };
 
-function clampFiniteNumber(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-  return value;
-}
-
-function coerceTimestampMs(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const ms = Date.parse(value);
-    return Number.isFinite(ms) ? ms : undefined;
-  }
-  return undefined;
-}
-
 function computeStaleLevel(bgTimestampMs: number, nowMs: number): SnapshotStaleLevel {
   const ageMs = nowMs - bgTimestampMs;
   if (ageMs >= STALE_HIDE_PREDICTION_MS) return 'very-stale';
@@ -81,33 +67,7 @@ function extractPredictionPoints(params: {
   nowMs: number;
 }): PredictedBgPoint[] {
   const {deviceStatus, nowMs} = params;
-  const predicted = deviceStatus?.loop?.predicted;
-  const values = Array.isArray(predicted?.values) ? predicted?.values : undefined;
-  if (!values?.length) return [];
-
-  const tsRaw = Array.isArray(predicted?.timestamps)
-    ? predicted?.timestamps
-    : undefined;
-  const deviceTs = deviceStatus ? getDeviceStatusTimestampMs(deviceStatus) : undefined;
-  const baseTs = deviceTs ?? nowMs;
-
-  const points: PredictedBgPoint[] = values
-    .map((v, idx) => {
-      const sgv = clampFiniteNumber(v);
-      if (sgv == null) return null;
-
-      const tsFromPayload = tsRaw?.[idx] != null ? coerceTimestampMs(tsRaw[idx]) : undefined;
-      const ts = tsFromPayload ?? baseTs + idx * DEFAULT_PREDICTION_STEP_MS;
-
-      return Number.isFinite(ts) ? {ts, sgv: Math.round(sgv)} : null;
-    })
-    .filter((x): x is PredictedBgPoint => Boolean(x));
-
-  // PRD: filter out predictions in the past (date > now)
-  const future = points.filter(p => p.ts > nowMs);
-
-  // PRD: show 3-step prediction (~15 minutes)
-  return future.slice(0, 3);
+  return futureLoopPoints(deviceStatus, nowMs).slice(0, 3);
 }
 
 /**

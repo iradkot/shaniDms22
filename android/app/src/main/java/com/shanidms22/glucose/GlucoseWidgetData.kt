@@ -12,9 +12,9 @@ internal data class WidgetLatestBg(val sgv: Int, val date: Long, val trend: Stri
 internal data class WidgetLoadData(
   val iob: Double?,
   val cob: Double?,
-  val projected1: Int?,
-  val projected2: Int?,
-  val projected3: Int?,
+  val iobTimestampMs: Long?,
+  val cobTimestampMs: Long?,
+  val loopForecast: WidgetForecastSeries?,
 )
 
 internal fun fetchWidgetJsonArray(url: String, secret: String?): JSONArray? {
@@ -81,31 +81,49 @@ internal fun calculateWidgetTir(arr: JSONArray?, hours: Int, low: Int, high: Int
 }
 
 internal fun fetchLatestWidgetLoad(baseUrl: String, secret: String?): WidgetLoadData? {
-  val url = "${baseUrl.trimEnd('/')}/api/v1/devicestatus.json?count=1"
+  val url = "${baseUrl.trimEnd('/')}/api/v1/devicestatus.json?count=12"
   val arr = fetchWidgetJsonArray(url, secret) ?: return null
-  val row = arr.optJSONObject(0) ?: return null
+  return parseWidgetLoad(arr, System.currentTimeMillis())
+}
 
-  val loop = row.optJSONObject("loop")
-  val openaps = row.optJSONObject("openaps")
-  val iob = loop?.optJSONObject("iob")?.optDouble("iob", Double.NaN)?.takeIf { it.isFinite() }
-    ?: openaps?.optJSONObject("iob")?.optDouble("iob", Double.NaN)?.takeIf { it.isFinite() }
-  val cob = loop?.optJSONObject("cob")?.optDouble("cob", Double.NaN)?.takeIf { it.isFinite() }
-    ?: openaps?.optJSONObject("meal")?.optDouble("cob", Double.NaN)?.takeIf { it.isFinite() }
-  val predictedValues = loop?.optJSONObject("predicted")?.optJSONArray("values")
-
-  fun projectedAt(idx: Int): Int? {
-    if (predictedValues == null || predictedValues.length() <= idx) return null
-    val v = predictedValues.optDouble(idx, Double.NaN)
-    return if (v.isFinite()) v.toInt() else null
+internal fun parseWidgetLoad(arr: JSONArray, nowMs: Long): WidgetLoadData {
+  var iob: Pair<Long, Double>? = null
+  var cob: Pair<Long, Double>? = null
+  var forecast: WidgetForecastSeries? = null
+  var forecastLoopTimestamp = 0L
+  for (index in 0 until arr.length()) {
+    val row = arr.optJSONObject(index) ?: continue
+    val loop = row.optJSONObject("loop")
+    val openaps = row.optJSONObject("openaps")
+    fun readLoad(kind: String): Pair<Long, Double>? {
+      val payload = loop?.optJSONObject(kind) ?: openaps?.optJSONObject(if (kind == "cob") "meal" else kind) ?: return null
+      val ts = widgetForecastTimestamp(payload.opt("timestamp")) ?: return null
+      val value = payload.optDouble(kind, Double.NaN)
+      if (!widgetTimestampIsFresh(ts, nowMs) || !value.isFinite() || (kind == "cob" && value < 0)) return null
+      return Pair(ts, value)
+    }
+    readLoad("iob")?.let { if (it.first > (iob?.first ?: 0L)) iob = it }
+    readLoad("cob")?.let { if (it.first > (cob?.first ?: 0L)) cob = it }
+    val loopTs = widgetForecastTimestamp(loop?.opt("timestamp")) ?: continue
+    val predicted = loop?.optJSONObject("predicted") ?: continue
+    val startMs = widgetForecastTimestamp(predicted.opt("startDate")) ?: continue
+    if (!widgetTimestampIsFresh(loopTs, nowMs) || !widgetTimestampIsFresh(startMs, nowMs)) continue
+    val values = predicted.optJSONArray("values") ?: continue
+    val rawValues = (0 until minOf(values.length(), 73)).map { values.optDouble(it, Double.NaN) }
+    if (rawValues.any { !it.isFinite() || it < -1000 || it > 1000 }) continue
+    // A distant, nonphysical Loop tail must not discard useful near-term predictions.
+    // Stop before that tail; never bridge an impossible glucose value with interpolation.
+    val points = rawValues.takeWhile { it >= 10 }.mapIndexed { pointIndex, value ->
+      WidgetForecastPoint(startMs + pointIndex * WIDGET_FORECAST_STEP_MS, value.roundToInt())
+    }
+    if (points.size < 2 || points.none { it.ts > nowMs }) continue
+    if (loopTs > forecastLoopTimestamp) {
+      // Loop uploads mg/dL values; values[0] belongs to startDate (not the next reading).
+      forecast = WidgetForecastSeries("loop", "Loop", minOf(loopTs, startMs), points)
+      forecastLoopTimestamp = loopTs
+    }
   }
-
-  return WidgetLoadData(
-    iob = iob,
-    cob = cob,
-    projected1 = projectedAt(0),
-    projected2 = projectedAt(1),
-    projected3 = projectedAt(2),
-  )
+  return WidgetLoadData(iob?.second, cob?.second, iob?.first, cob?.first, forecast)
 }
 
 private fun widgetWindowStartMs(entries: List<WidgetEntryPoint>, hours: Int): Long {

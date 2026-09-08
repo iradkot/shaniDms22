@@ -69,6 +69,46 @@ const sources = (client: ReturnType<typeof clientFixture>) =>
   });
 
 describe('createBrowserNightscoutDataSources Day Graph', () => {
+  it('forecasts with cached minimal Loop facts without loading the factual day graph', async () => {
+    const nowMs = Date.parse('2026-09-07T08:01:00Z');
+    const latestMs = nowMs - 60_000;
+    const glucose = Array.from({length: 7}, (_, index) => ({
+      date: latestMs - (6 - index) * 300_000, sgv: 118 + index * 2,
+    }));
+    const client = {
+      ...clientFixture(),
+      readEntries: jest.fn(async (startMs: number, endMs: number) => range(
+        glucose.filter(value => value.date >= startMs && value.date < endMs),
+      )),
+      readDeviceStatuses: jest.fn(async (startMs: number, endMs: number) => range(
+        startMs <= nowMs - 10_000 && endMs > nowMs - 10_000 ? [{
+          createdAtMs: nowMs - 10_000,
+          forecastStatus: {
+            ts: nowMs - 10_000,
+            loopTimestampMs: nowMs - 30_000,
+            loopPrediction: {startMs: latestMs, values: [130, 128, 126, 124, 122, 120, 118]},
+            iobUnits: -0.25, iobTimestampMs: latestMs,
+            cobGrams: 12, cobTimestampMs: latestMs,
+          },
+        }] : [],
+      )),
+    };
+    const source = createBrowserNightscoutDataSources({
+      client: client as unknown as BrowserNightscoutClient,
+      sourceId: 'source-1', locale: 'en', journal, now: () => nowMs,
+    });
+    const snapshot = await source.dayGraph.loadGlucoseForecast!();
+    expect(snapshot.series.find(series => series.id === 'loop')?.points)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ts: latestMs + 300_000, sgv: 128})]));
+    expect(snapshot.context).toMatchObject({iobUnits: -0.25, cobGrams: 12});
+    expect(client.readTreatments).not.toHaveBeenCalled();
+    expect(client.readBasalProfile).not.toHaveBeenCalled();
+    expect(client.readDeviceStatusesForRange).not.toHaveBeenCalled();
+    expect(client.readDeviceStatuses.mock.calls.every(([start, end]) =>
+      end - start <= 2 * HOUR,
+    )).toBe(true);
+  });
+
   it('forwards the calendar signal to browser glucose reads and stops queued chunks on abort', async () => {
     const controller = new AbortController();
     const client = clientFixture();

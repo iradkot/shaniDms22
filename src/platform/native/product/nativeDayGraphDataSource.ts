@@ -19,7 +19,15 @@ import type {
   InsulinDataEntry,
   ProfileDataType,
 } from '../../../types/insulin.types';
-import {getNightscoutConfigurationRevision} from '../../../api/shaniNightscoutInstances';
+import {
+  getNightscoutBaseUrl,
+  getNightscoutConfigurationRevision,
+} from '../../../api/shaniNightscoutInstances';
+import {
+  createGlucoseForecastLoader,
+  type ForecastContextEvent,
+} from '../../../modules/glucoseForecast';
+import {publishAndroidGlucoseForecast} from '../../../services/androidGlucoseLiveSurface';
 import {
   createInsulinContextLoader,
   loadInsulinContext,
@@ -60,6 +68,8 @@ interface NativeDayGraphMealSnapshot {
   readonly mealStart: number;
   readonly name?: string;
   readonly mealCarbohydrates?: {readonly grams: number};
+  readonly createdAt?: number;
+  readonly updatedAt?: number;
 }
 
 interface NativeDayGraphActivitySnapshot {
@@ -69,6 +79,8 @@ interface NativeDayGraphActivitySnapshot {
   readonly startedAt: number;
   readonly endedAt?: number;
   readonly intensity?: string;
+  readonly createdAt?: number;
+  readonly updatedAt?: number;
 }
 
 interface NativeDayGraphJournalReader {
@@ -136,6 +148,11 @@ export type NativeDayGraphTimelineLoader = (
 ) => Promise<readonly DayGraphTimelineItem[]>;
 
 const DEFAULT_SOURCE_ID = 'nightscout-active';
+
+const forecastRecordedAt = (
+  timestampMs: number | undefined,
+): {readonly recordedAtMs?: number} =>
+  timestampMs === undefined ? {} : {recordedAtMs: timestampMs};
 
 const assertOpaqueSourceId = (sourceId: string): void => {
   if (!/^[A-Za-z0-9._-]{1,160}$/.test(sourceId)) {
@@ -492,7 +509,63 @@ export const createNativeDayGraphDataSource = (
       {return fresh(await dependencies.fetchGlucoseRecords(start, end));}
     return fetchBgDataForDateRangeWithMetadata(start, end);
   };
+  const loadGlucoseForecast = createGlucoseForecastLoader({
+    getScopeKey: () =>
+      `${sourceId}:${getNightscoutConfigurationRevision()}`,
+    now,
+    readGlucose: async (startMs, endMs) => {
+      const range = await loadGlucoseRange(new Date(startMs), new Date(endMs));
+      if (range.freshness.kind === 'stale') {
+        throw new Error('Forecast glucose data is unavailable.');
+      }
+      return range.records.map(sample => ({ts: sample.date, sgv: sample.sgv}));
+    },
+    readDeviceStatus: async (startMs, endMs) => {
+      if (useE2EFixtures) {return [];}
+      const start = new Date(startMs);
+      const end = new Date(endMs);
+      if (dependencies.fetchDeviceStatusRecords && !dependencies.fetchDeviceStatusRange) {
+        return dependencies.fetchDeviceStatusRecords(start, end);
+      }
+      const range = await (
+        dependencies.fetchDeviceStatusRange ??
+        fetchDeviceStatusForDateRangeWithMetadata
+      )(start, end);
+      if (range.freshness.kind === 'stale') {
+        throw new Error('Forecast device-status data is unavailable.');
+      }
+      return range.records;
+    },
+    readContextEvents: (startMs, endMs): readonly ForecastContextEvent[] => {
+      if (!dependencies.journal) {return [];}
+      const query = {
+        timeRange: {fromInclusive: startMs, toExclusive: endMs},
+      };
+      return [
+        ...dependencies.journal.meals.getListSnapshot(query).items.map(meal => ({
+          kind: 'meal' as const,
+          ts: meal.mealStart,
+          ...forecastRecordedAt(meal.updatedAt ?? meal.createdAt),
+          ...(meal.mealCarbohydrates === undefined
+            ? {}
+            : {carbsGrams: meal.mealCarbohydrates.grams}),
+        })),
+        ...dependencies.journal.activities.getListSnapshot(query).items.map(activity => ({
+          kind: 'activity' as const,
+          ts: activity.startedAt,
+          ...forecastRecordedAt(activity.updatedAt ?? activity.createdAt),
+          ...(activity.endedAt === undefined ? {} : {endMs: activity.endedAt}),
+        })),
+      ];
+    },
+    onSnapshot: snapshot => {
+      if (useE2EFixtures) {return;}
+      const baseUrl = getNightscoutBaseUrl();
+      if (baseUrl) {publishAndroidGlucoseForecast(baseUrl, snapshot);}
+    },
+  });
   return {
+    loadGlucoseForecast,
     async loadCalendarGlucose(period, options) {
       const revision = getNightscoutConfigurationRevision();
       return loadCalendarGlucoseRange({

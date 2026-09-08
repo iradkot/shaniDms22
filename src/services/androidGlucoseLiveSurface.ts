@@ -1,8 +1,10 @@
 import {NativeModules, Platform} from 'react-native';
 
 import {BgSample} from 'app/types/day_bgs.types';
+import type {GlucoseForecastSnapshot} from '../modules/glucoseForecast';
 
 type GlucoseNativeModule = {
+  updateForecastSnapshot?: (accountBaseUrl: string, snapshotJson: string) => void;
   updateLiveSurface: (
     value: number,
     trend: string,
@@ -65,6 +67,16 @@ type AndroidGlucoseWidgetUpdateArgs = [
 
 const nativeModule: GlucoseNativeModule | undefined =
   Platform.OS === 'android' ? (NativeModules.GlucoseLiveModule as GlucoseNativeModule | undefined) : undefined;
+
+/** Native independently checks account identity, source timestamps and freshness. */
+export function publishAndroidGlucoseForecast(baseUrl: string, snapshot: GlucoseForecastSnapshot): void {
+  if (!nativeModule?.updateForecastSnapshot) {return;}
+  try {
+    nativeModule.updateForecastSnapshot(baseUrl, JSON.stringify(snapshot));
+  } catch {
+    // Optional home-screen surfaces must never prevent the app forecast from loading.
+  }
+}
 
 function finiteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;

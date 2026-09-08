@@ -1,5 +1,9 @@
 import {WebApiError, type AuthenticatedWebApiClient} from '../api';
 import type {IndexedDbKeyValueStore} from '../storage';
+import {
+  decodeForecastDeviceStatus,
+  type ForecastDeviceStatus,
+} from '../../../modules/glucoseForecast';
 
 const CACHE_PREFIX = 'shani.web.nightscout-cache.v2:';
 const RETENTION_MS = 14 * 24 * 60 * 60 * 1_000;
@@ -248,6 +252,8 @@ export interface BrowserNightscoutDeviceStatus {
   readonly bolusIobUnits?: number;
   readonly basalIobUnits?: number;
   readonly cobGrams?: number;
+  /** Minimal forecast facts, including their original observation times. */
+  readonly forecastStatus?: ForecastDeviceStatus;
 }
 
 export interface BrowserNightscoutBasalProfile {
@@ -416,11 +422,20 @@ export const decodeBrowserNightscoutDeviceStatus = (
     0,
     1_000,
   );
+  const decodedForecast = decodeForecastDeviceStatus(
+    value.forecastStatus ?? value,
+  );
+  const forecastStatus = decodedForecast && (
+    decodedForecast.loopPrediction !== undefined ||
+    decodedForecast.iobUnits !== undefined ||
+    decodedForecast.cobGrams !== undefined
+  ) ? decodedForecast : undefined;
   if (
     iobUnits === undefined &&
     bolusIobUnits === undefined &&
     basalIobUnits === undefined &&
-    cobGrams === undefined
+    cobGrams === undefined &&
+    forecastStatus === undefined
   ) {
     return null;
   }
@@ -432,6 +447,7 @@ export const decodeBrowserNightscoutDeviceStatus = (
     ...(bolusIobUnits === undefined ? {} : {bolusIobUnits}),
     ...(basalIobUnits === undefined ? {} : {basalIobUnits}),
     ...(cobGrams === undefined ? {} : {cobGrams}),
+    ...(forecastStatus === undefined ? {} : {forecastStatus}),
   };
 };
 

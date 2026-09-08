@@ -78,13 +78,33 @@
     </LinearLayout>
   </LinearLayout>
 
+  <TextView
+    android:id="@+id/glucose_graph_forecast"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="5dp"
+    android:text="Forecast unavailable · fresh data needed"
+    android:textSize="10sp"
+    android:textStyle="bold"
+    android:maxLines="2"
+    android:textColor="#ECF1FA" />
+
   <ImageView
     android:id="@+id/glucose_graph_sparkline"
     android:layout_width="match_parent"
     android:layout_height="0dp"
     android:layout_weight="1"
-    android:layout_marginTop="8dp"
-    android:contentDescription="glucose graph"
+    android:layout_marginTop="3dp"
+    android:contentDescription="Glucose history and dashed forecasts. Shaded areas show estimated ranges."
     android:scaleType="fitCenter" />
+
+  <TextView
+    android:id="@+id/glucose_graph_legend"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:textSize="9sp"
+    android:maxLines="1"
+    android:textColor="#CDD5E4" />
 
 </LinearLayout>

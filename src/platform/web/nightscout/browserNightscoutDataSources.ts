@@ -29,6 +29,10 @@ import {projectNightscoutTherapyContext} from '../../nightscout/therapyContextPr
 import {mapNightscoutTreatmentsToInsulinDataEntries} from '../../../utils/nightscoutTreatments.utils';
 import {buildBrowserInsulinSummary} from './browserInsulinSummary';
 import {loadCalendarGlucoseRange} from '../../nightscout/loadCalendarGlucoseRange';
+import {
+  createGlucoseForecastLoader,
+  type ForecastContextEvent,
+} from '../../../modules/glucoseForecast';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
@@ -194,6 +198,7 @@ export const createBrowserNightscoutDataSources = (input: {
   readonly sourceId: string;
   readonly locale: DestinationLocale;
   readonly journal: JournalWorkspace;
+  readonly now?: () => number;
 }): BrowserNightscoutDataSources => {
   const trends: TrendsDataSource = {
     async loadGlucoseSamples(period) {
@@ -207,7 +212,52 @@ export const createBrowserNightscoutDataSources = (input: {
       }));
     },
   };
+  const loadGlucoseForecast = createGlucoseForecastLoader({
+    getScopeKey: () => {
+      input.client.assertCurrentSource?.();
+      return input.sourceId;
+    },
+    ...(input.now === undefined ? {} : {now: input.now}),
+    readGlucose: async (startMs, endMs) => {
+      const range = await input.client.readEntries(startMs, endMs);
+      if (range.freshness.kind === 'stale') {
+        throw new Error('Forecast glucose data is unavailable.');
+      }
+      return range.records.map(sample => ({ts: sample.date, sgv: sample.sgv}));
+    },
+    readDeviceStatus: async (startMs, endMs) => {
+      const range = await input.client.readDeviceStatuses(startMs, endMs);
+      if (range.freshness.kind === 'stale') {
+        throw new Error('Forecast device-status data is unavailable.');
+      }
+      return range.records.flatMap(value =>
+        value.forecastStatus === undefined ? [] : [value.forecastStatus],
+      );
+    },
+    readContextEvents: (startMs, endMs): readonly ForecastContextEvent[] => {
+      const query = {
+        timeRange: {fromInclusive: startMs, toExclusive: endMs},
+      };
+      return [
+        ...input.journal.meals.getListSnapshot(query).items.map(meal => ({
+          kind: 'meal' as const,
+          ts: meal.mealStart,
+          recordedAtMs: meal.updatedAt,
+          ...(meal.mealCarbohydrates === undefined
+            ? {}
+            : {carbsGrams: meal.mealCarbohydrates.grams}),
+        })),
+        ...input.journal.activities.getListSnapshot(query).items.map(activity => ({
+          kind: 'activity' as const,
+          ts: activity.startedAt,
+          recordedAtMs: activity.updatedAt,
+          ...(activity.endedAt === undefined ? {} : {endMs: activity.endedAt}),
+        })),
+      ];
+    },
+  });
   const dayGraph: DayGraphDataSource = {
+    loadGlucoseForecast,
     async loadCalendarGlucose(period, options) {
       return loadCalendarGlucoseRange({
         period,

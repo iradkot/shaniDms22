@@ -38,6 +38,7 @@ import {useDayGraphSnapshot} from './useDayGraphSnapshot';
 import {useRefreshingNow} from '../time';
 import {DayGraphCalendarModal} from './DayGraphCalendarModal';
 import {useDayGraphCalendar} from './useDayGraphCalendar';
+import {useGlucoseForecast} from './useGlucoseForecast';
 
 const MINUTE_MS = 60 * 1000;
 const DEFAULT_SAMPLE_INTERVAL_MS = 5 * MINUTE_MS;
@@ -434,6 +435,18 @@ export const DayGraphModuleView = ({
     [snapshot, period, expectedSampleIntervalMs],
   );
   const state = loadState;
+  const forecast = useGlucoseForecast({
+    source: dataSource,
+    live: selectedDayStartMs === todayStartMs,
+    nowMs: currentTimeMs,
+    glucoseTimestampMs: model?.glucoseSummary?.last.timestampMs,
+  });
+  const refreshAll = () => {
+    refresh();
+    if (forecast.supported) {
+      forecast.refresh();
+    }
+  };
 
   const nextDisabled = selectedDayStartMs >= todayStartMs;
   const hasChartData = useMemo(
@@ -536,6 +549,8 @@ export const DayGraphModuleView = ({
             <RichDayGraphChart
               locale={locale}
               model={model}
+              forecast={forecast.snapshot}
+              forecastStatus={forecast.supported ? forecast.status : undefined}
               selectedTimestampMs={selectedTimestampMs}
               {...(availableChartHeight === undefined
                 ? {}
@@ -715,7 +730,7 @@ export const DayGraphModuleView = ({
             state.kind === 'loading' ||
             (state.kind === 'ready' && state.refreshing)
           }
-          onPress={refresh}
+          onPress={refreshAll}
           style={phone ? phoneStyles.iconControl : styles.dayControl}
           testID="day-graph-refresh">
           {phone && state.kind === 'ready' && state.refreshing ? (
@@ -756,7 +771,7 @@ export const DayGraphModuleView = ({
           </Text>
           <Pressable
             accessibilityRole="button"
-            onPress={refresh}
+            onPress={refreshAll}
             style={({pressed}) => [
               styles.retryButton,
               pressed && styles.pressed,

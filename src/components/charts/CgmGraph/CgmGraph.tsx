@@ -5,6 +5,7 @@ import styled from 'styled-components/native';
 import XGridAndAxis from './components/XGridAndAxis';
 import YGridAndAxis from './components/YGridAndAxis';
 import CGMSamplesRenderer from './components/CGMSamplesRenderer';
+import {GlucoseForecastRenderer} from './components/GlucoseForecastRenderer';
 import GraphDateDisplay from './components/GraphDateDisplay';
 import FoodItemsRenderer from './components/Food/FoodItemsRenderer';
 import {
@@ -67,6 +68,7 @@ const NavigationFullScreenButton = ({
 
 const CGMGraph: React.FC<CgmGraphProps> = ({
   bgSamples,
+  forecast,
   width,
   height,
   foodItems,
@@ -106,7 +108,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   const shouldHandleTouchEvents = resolvedInteractive && handleTouchEvents;
 
   const [graphStyleContextValue, setGraphStyleContextValue] =
-    useGraphStyleContext(width, height, bgSamples, xDomain, margin);
+    useGraphStyleContext(width, height, bgSamples, xDomain, margin, forecast);
   const touchContext = useTouchContext();
   const theme = useTheme() as ThemeType;
 
@@ -330,6 +332,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
             {showDateLabels ? <GraphDateDisplay /> : null}
 
             <G clipPath="url(#cgmPlotClip)">
+              {forecast?.series.length ? <GlucoseForecastRenderer forecast={forecast} /> : null}
               <CGMSamplesRenderer
                 focusedSampleDateString={
                   closestBgSample &&

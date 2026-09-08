@@ -1,6 +1,7 @@
 import {BgSample} from 'app/types/day_bgs.types';
 import {FoodItemDTO, formattedFoodItemDTO} from 'app/types/food.types';
 import {InsulinDataEntry} from 'app/types/insulin.types';
+import type {GlucoseForecastSnapshot} from 'app/modules/glucoseForecast';
 
 export type ChartMargin = {
   top: number;
@@ -38,6 +39,7 @@ export type CgmGraphVariant =
 
 export interface CgmGraphProps {
   bgSamples: BgSample[];
+  forecast?: GlucoseForecastSnapshot | undefined;
   foodItems: Array<FoodItemDTO | formattedFoodItemDTO> | null;
   insulinData?: InsulinDataEntry[] | undefined;
   width: number;

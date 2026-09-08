@@ -10,8 +10,7 @@
   <LinearLayout
     android:id="@+id/glucose_widget_header"
     android:layout_width="match_parent"
-    android:layout_height="0dp"
-    android:layout_weight="0.9"
+    android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:paddingStart="10dp"
@@ -83,18 +82,21 @@
 
     <TextView
       android:id="@+id/glucose_projected"
-      android:layout_width="wrap_content"
+      android:layout_width="0dp"
       android:layout_height="wrap_content"
+      android:layout_weight="1.15"
       android:layout_marginStart="8dp"
       android:gravity="end|center_vertical"
-      android:text="Next\n--  --  --"
-      android:textSize="12sp"
+      android:text="Forecast&#10;Awaiting fresh data"
+      android:textSize="10sp"
       android:textStyle="bold"
-      android:maxLines="2"
+      android:maxLines="3"
+      android:maxWidth="155dp"
       android:textColor="#111827" />
   </LinearLayout>
 
   <LinearLayout
+    android:id="@+id/glucose_widget_metrics"
     android:layout_width="match_parent"
     android:layout_height="0dp"
     android:layout_weight="1.4"

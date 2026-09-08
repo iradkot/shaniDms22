@@ -73,6 +73,14 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
+  fun updateForecastSnapshot(accountBaseUrl: String, snapshotJson: String) {
+    runCatching {
+      GlucoseWidgetUpdater.saveForecast(reactApplicationContext, accountBaseUrl, snapshotJson)
+      GlucoseWidgetUpdater.updateWidgets(reactApplicationContext)
+    }
+  }
+
+  @ReactMethod
   fun setWidgetThresholds(low: Double, high: Double) {
     val lowInt = low.takeIf { it.isFinite() && it > 0 }?.toInt()
     val highInt = high.takeIf { it.isFinite() && it > 0 }?.toInt()

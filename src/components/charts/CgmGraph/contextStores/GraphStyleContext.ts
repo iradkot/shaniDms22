@@ -2,6 +2,7 @@ import * as d3 from 'd3';
 import {createContext, useCallback, useMemo} from 'react';
 import {BgSample} from 'app/types/day_bgs.types';
 import {xAccessor} from 'app/components/charts/CgmGraph/utils';
+import type {GlucoseForecastSnapshot} from 'app/modules/glucoseForecast';
 
 export type ChartMargin = {
   top: number;
@@ -82,6 +83,7 @@ export const useGraphStyleContext = (
   bgSamples: BgSample[],
   xDomainOverride?: [Date, Date] | null,
   marginOverride?: ChartMargin,
+  forecast?: GlucoseForecastSnapshot,
 ): [
   GraphStyleContextInterface,
   (values: GraphStyleContextInterface) => void,
@@ -117,8 +119,13 @@ export const useGraphStyleContext = (
           : current,
       0,
     );
-    return Math.max(300, Math.ceil((max + 20) / 50) * 50);
-  }, [bgSamples, xDomain]);
+    const forecastMaximum = forecast?.series.reduce((highest, series) =>
+      series.points.reduce((current, point) =>
+        point.ts >= start && point.ts <= end && Number.isFinite(point.sgv)
+          ? Math.max(current, point.sgv, Number.isFinite(point.upper) ? point.upper! : 0)
+          : current, highest), max) ?? max;
+    return Math.max(300, Math.ceil((forecastMaximum + 20) / 50) * 50);
+  }, [bgSamples, xDomain, forecast]);
 
   const yScale = useMemo(() => {
     return d3

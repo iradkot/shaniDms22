@@ -33,6 +33,69 @@ const journal = {
 };
 
 describe('createNativeDayGraphDataSource', () => {
+  it('loads an independent forecast from glucose and original Loop device-status records', async () => {
+    const nowMs = Date.parse('2026-09-07T08:01:00Z');
+    const latestMs = nowMs - 60_000;
+    const records = Array.from({length: 7}, (_, index) => ({
+      date: latestMs - (6 - index) * 300_000, sgv: 118 + index * 2,
+    }));
+    const status = {
+      created_at: new Date(nowMs - 10_000).toISOString(),
+      loop: {
+        timestamp: new Date(nowMs - 30_000).toISOString(),
+        predicted: {
+          startDate: new Date(latestMs).toISOString(),
+          values: [130, 128, 126, 124, 122, 120, 118],
+        },
+        iob: {iob: -0.25, timestamp: new Date(latestMs).toISOString()},
+        cob: {cob: 12, timestamp: new Date(latestMs).toISOString()},
+      },
+    };
+    const fetchDeviceStatusRecords = jest.fn(async (start: Date, end: Date) =>
+      start.getTime() <= nowMs - 10_000 && end.getTime() > nowMs - 10_000
+        ? [status] : [],
+    );
+    const loadInsulinContext = jest.fn();
+    const source = createNativeDayGraphDataSource({
+      now: () => nowMs,
+      useE2EFixtures: false,
+      loadInsulinContext,
+      fetchGlucoseRecords: async (start, end) => records.filter(value =>
+        value.date >= start.getTime() && value.date < end.getTime(),
+      ),
+      fetchDeviceStatusRecords,
+    });
+    const snapshot = await source.loadGlucoseForecast!();
+    expect(snapshot.series.map(series => series.id)).toEqual(
+      expect.arrayContaining(['nightscout', 'loop']),
+    );
+    expect(snapshot.series.find(series => series.id === 'loop')?.points)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ts: latestMs + 300_000, sgv: 128})]));
+    expect(snapshot.context).toMatchObject({iobUnits: -0.25, cobGrams: 12});
+    expect(loadInsulinContext).not.toHaveBeenCalled();
+    expect(fetchDeviceStatusRecords.mock.calls.every(([start, end]) =>
+      end.getTime() - start.getTime() <= 2 * 60 * 60 * 1000,
+    )).toBe(true);
+  });
+
+  it('never fetches remote device status for fixture forecasts', async () => {
+    const nowMs = Date.parse('2026-09-07T08:01:00Z');
+    const fetchDeviceStatusRecords = jest.fn(async () => []);
+    const source = createNativeDayGraphDataSource({
+      now: () => nowMs,
+      useE2EFixtures: true,
+      fixtureGlucoseRecords: (start, end) => [
+        {date: nowMs - 360_000, sgv: 118},
+        {date: nowMs - 60_000, sgv: 120},
+      ].filter(value => value.date >= start.getTime() && value.date < end.getTime()),
+      fetchDeviceStatusRecords,
+    });
+    const snapshot = await source.loadGlucoseForecast!();
+    expect(snapshot.series.some(series => series.id === 'nightscout')).toBe(true);
+    expect(snapshot.series.some(series => series.id === 'loop')).toBe(false);
+    expect(fetchDeviceStatusRecords).not.toHaveBeenCalled();
+  });
+
   it('stops queued calendar chunks after abort even while native glucose requests are still settling', async () => {
     const controller = new AbortController();
     let finish!: () => void;

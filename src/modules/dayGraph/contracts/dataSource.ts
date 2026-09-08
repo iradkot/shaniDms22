@@ -140,6 +140,9 @@ export interface DayGraphCalendarDay {
 
 /** Read-only host boundary. Implementations may combine Nightscout and Journal data. */
 export interface DayGraphDataSource {
+  readonly loadGlucoseForecast?: (options?: {
+    readonly forceRefresh?: boolean;
+  }) => Promise<import('../../glucoseForecast').GlucoseForecastSnapshot>;
   readonly loadCalendarGlucose?: (
     period: DayGraphPeriod,
     options?: {
