@@ -95,6 +95,32 @@ References: [gcloud functions deploy](https://docs.cloud.google.com/sdk/gcloud/r
 [Node.js buildpacks](https://docs.cloud.google.com/docs/buildpacks/nodejs), and
 [Firestore server IAM](https://docs.cloud.google.com/firestore/docs/security/iam).
 
+## Existing production vault access rules
+
+The production Firestore release inspected on 2026-09-07 still used a legacy
+blanket authenticated read/write grant. The narrow AI rollout guard changes that
+grant to capture the first collection and require
+`collection != 'privateCredentialVault'`. Adding a separate deny rule under a
+blanket allow would not protect the vault, because any matching allow wins.
+Other legacy production access remains unchanged. The repository's complete
+`firestore.rules` migration is a separate deployment.
+
+`scripts/harden-vault-rules.mjs` reads the current deployed source, accepts only
+the exact reviewed legacy source or its already hardened counterpart, and
+refuses unknown rules. Provide `SHANI_RULES_PROJECT` and a transient
+`SHANI_RULES_OAUTH_TOKEN` through the process environment. It reviews by default;
+`--apply` creates a new ruleset and switches only `cloud.firestore`, after
+checking that the active release did not change during the operation. Tokens
+and raw error responses are not printed. Do not put tokens in command arguments,
+source files or logs.
+
+The focused transformation tests run with
+`node --test scripts/__tests__/harden-vault-rules.test.mjs`. The corresponding
+`harden-vault-rules.emulator.test.mjs` runs inside the Firestore emulator and
+checks own/cross-user vault denials plus preserved legacy document access.
+Before storing a real AI key, verify that a signed-in client receives
+`PERMISSION_DENIED` for direct reads and writes to the disposable test vault.
+
 ## AI connection diagnostics
 
 `POST /v1/vault/llm/test` requires the normal Firebase bearer token and an exact
