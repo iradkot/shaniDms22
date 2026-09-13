@@ -748,6 +748,9 @@ describe('Product Experience personalization behavior', () => {
         ),
       );
     });
+    act(() =>
+      findPressableByTestId(tree!, 'hub-quick-access-toggle').props.onPress(),
+    );
     expect(
       tree!.root
         .findAllByProps({

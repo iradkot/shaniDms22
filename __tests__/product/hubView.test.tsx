@@ -18,7 +18,9 @@ import {productUiTokens} from 'app/product/ui';
 
 const setViewportWidth = (width: number) => {
   const dimensions = {fontScale: 1, height: 800, scale: 1, width};
-  Dimensions.set({window: dimensions, screen: dimensions});
+  act(() => {
+    Dimensions.set({window: dimensions, screen: dimensions});
+  });
 };
 
 const makeModel = (locale: 'en' | 'he' = 'en') =>
@@ -58,10 +60,20 @@ const gridItems = (tree: renderer.ReactTestRenderer, testID: string) =>
       node.props.testID.startsWith(`${testID}-item-`),
   );
 
-const pressableByTestId = (tree: renderer.ReactTestRenderer, testID: string) =>
-  tree.root
-    .findAllByProps({testID})
-    .find(node => node.type === Pressable || node.props.onPress !== undefined);
+const pressableByTestId = (tree: renderer.ReactTestRenderer, testID: string) => {
+  const matches = tree.root.findAllByProps({testID});
+  return (
+    matches.find(node => node.type === Pressable) ??
+    matches.find(node => node.props.onPress !== undefined)
+  );
+};
+
+const moduleCountLabel = (count: number, locale: 'en' | 'he') => {
+  if (locale === 'he') {
+    return count === 1 ? 'מודול אחד' : `${count} מודולים`;
+  }
+  return count === 1 ? '1 module' : `${count} modules`;
+};
 
 describe('HubView', () => {
   const originalWindow = Dimensions.get('window');
@@ -69,30 +81,117 @@ describe('HubView', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
-    Dimensions.set({window: originalWindow, screen: originalScreen});
+    act(() => {
+      Dimensions.set({window: originalWindow, screen: originalScreen});
+    });
   });
 
-  it('keeps quick access to one two-column phone row and expands favorites', () => {
+  it('orders All Modules before the snapshot and collapsed Quick Access', () => {
     setViewportWidth(390);
+    const model = makeModel();
+    const snapshotTarget = model.favorites[0]?.resolved;
+    if (!snapshotTarget) {
+      throw new Error('Expected a snapshot Destination.');
+    }
     let tree: renderer.ReactTestRenderer;
 
     act(() => {
       tree = renderer.create(
-        <HubView model={makeModel()} onOpenDestination={jest.fn()} />,
+        <HubView
+          currentSnapshot={{status: 'ready', target: snapshotTarget}}
+          model={model}
+          onOpenDestination={jest.fn()}
+        />,
       );
     });
 
+    const visibleSections = tree!.root
+      .findAll(
+        node =>
+          node.type === View &&
+          (node.props.testID === 'hub-section-all-modules' ||
+            node.props.testID === 'hub-section-snapshot' ||
+            node.props.testID === 'hub-section-quick-access'),
+      )
+      .map(node => node.props.testID);
+    expect(visibleSections).toEqual([
+      'hub-section-all-modules',
+      'hub-section-snapshot',
+      'hub-section-quick-access',
+    ]);
+
+    const quickAccessToggle = pressableByTestId(
+      tree!,
+      'hub-quick-access-toggle',
+    );
+    expect(quickAccessToggle?.props.accessibilityState).toEqual({
+      expanded: false,
+    });
+    expect(quickAccessToggle?.props['aria-expanded']).toBe(false);
+    expect(
+      tree!.root.findAllByProps({testID: 'hub-quick-access-content'}),
+    ).toHaveLength(0);
+    expect(gridItems(tree!, 'hub-grid-favorites')).toHaveLength(0);
+    expect(gridItems(tree!, 'hub-grid-recents')).toHaveLength(0);
+
+    act(() => quickAccessToggle?.props.onPress());
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-toggle')?.props
+        .accessibilityState,
+    ).toEqual({expanded: true});
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-toggle')?.props[
+        'aria-expanded'
+      ],
+    ).toBe(true);
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-favorites')?.props
+        .accessibilityState,
+    ).toEqual({selected: true});
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-favorites')?.props[
+        'aria-pressed'
+      ],
+    ).toBe(true);
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-favorites')?.props
+        .accessibilityRole,
+    ).toBe('button');
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-recents')?.props
+        .accessibilityState,
+    ).toEqual({selected: false});
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-recents')?.props[
+        'aria-pressed'
+      ],
+    ).toBe(false);
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-recents')?.props
+        .accessibilityRole,
+    ).toBe('button');
+    expect(
+      tree!.root
+        .findByProps({testID: 'hub-section-favorites'})
+        .findAllByProps({testID: 'hub-grid-favorites'}).length,
+    ).toBeGreaterThan(0);
     expect(gridItems(tree!, 'hub-grid-favorites')).toHaveLength(2);
-    expect(gridItems(tree!, 'hub-grid-recents')).toHaveLength(2);
     expect(
       StyleSheet.flatten(gridItems(tree!, 'hub-grid-favorites')[0]?.props.style)
         .width,
     ).toBe(productUiTokens.layout.twoColumnItemWidth);
 
-    const toggle = pressableByTestId(tree!, 'hub-favorites-toggle');
-    expect(toggle?.props.accessibilityState).toEqual({expanded: false});
+    const favoritesToggle = pressableByTestId(
+      tree!,
+      'hub-favorites-toggle',
+    );
+    expect(favoritesToggle?.props.accessibilityState).toEqual({expanded: false});
+    expect(favoritesToggle?.props['aria-expanded']).toBe(false);
 
-    act(() => toggle?.props.onPress());
+    act(() => favoritesToggle?.props.onPress());
+    expect(
+      pressableByTestId(tree!, 'hub-favorites-toggle')?.props['aria-expanded'],
+    ).toBe(true);
     expect(gridItems(tree!, 'hub-grid-favorites')).toHaveLength(5);
     expect(
       tree!.root
@@ -109,6 +208,16 @@ describe('HubView', () => {
     );
     expect(gridItems(tree!, 'hub-grid-favorites')).toHaveLength(2);
 
+    act(() =>
+      pressableByTestId(tree!, 'hub-quick-access-tab-recents')?.props.onPress(),
+    );
+    expect(gridItems(tree!, 'hub-grid-favorites')).toHaveLength(0);
+    expect(gridItems(tree!, 'hub-grid-recents')).toHaveLength(2);
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-recents')?.props
+        .accessibilityState,
+    ).toEqual({selected: true});
+
     act(() => tree!.unmount());
   });
 
@@ -122,17 +231,24 @@ describe('HubView', () => {
       );
     });
 
+    act(() =>
+      pressableByTestId(tree!, 'hub-quick-access-toggle')?.props.onPress(),
+    );
     expect(gridItems(tree!, 'hub-grid-favorites')).toHaveLength(3);
-    expect(gridItems(tree!, 'hub-grid-recents')).toHaveLength(3);
     expect(
       StyleSheet.flatten(gridItems(tree!, 'hub-grid-favorites')[0]?.props.style)
         .width,
     ).toBe(productUiTokens.layout.threeColumnItemWidth);
+    act(() =>
+      pressableByTestId(tree!, 'hub-quick-access-tab-recents')?.props.onPress(),
+    );
+    expect(gridItems(tree!, 'hub-grid-favorites')).toHaveLength(0);
+    expect(gridItems(tree!, 'hub-grid-recents')).toHaveLength(3);
 
     act(() => tree!.unmount());
   });
 
-  it('does not spend vertical space on an empty Recent section', () => {
+  it('shows an empty Recent state only inside the expanded quick access card', () => {
     setViewportWidth(390);
     const model = {...makeModel(), recents: []};
     let tree: renderer.ReactTestRenderer;
@@ -146,6 +262,181 @@ describe('HubView', () => {
     expect(
       tree!.root.findAllByProps({testID: 'hub-section-recents'}),
     ).toHaveLength(0);
+    act(() =>
+      pressableByTestId(tree!, 'hub-quick-access-toggle')?.props.onPress(),
+    );
+    act(() =>
+      pressableByTestId(tree!, 'hub-quick-access-tab-recents')?.props.onPress(),
+    );
+    expect(
+      tree!.root.findAllByProps({testID: 'hub-section-recents'}),
+    ).not.toHaveLength(0);
+    expect(
+      tree!.root.findAllByProps({testID: 'hub-quick-access-empty-recents'}),
+    ).not.toHaveLength(0);
+    expect(gridItems(tree!, 'hub-grid-recents')).toHaveLength(0);
+
+    act(() => tree!.unmount());
+  });
+
+  it('omits the Recent tab when recents are disabled', () => {
+    let tree: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <HubView
+          model={makeModel()}
+          onOpenDestination={jest.fn()}
+          showRecents={false}
+        />,
+      );
+    });
+
+    act(() =>
+      pressableByTestId(tree!, 'hub-quick-access-toggle')?.props.onPress(),
+    );
+    expect(
+      tree!.root.findAllByProps({testID: 'hub-quick-access-tabs'}),
+    ).toHaveLength(0);
+    expect(
+      tree!.root.findAllByProps({testID: 'hub-quick-access-tab-recents'}),
+    ).toHaveLength(0);
+    expect(
+      tree!.root.findAllByProps({testID: 'hub-section-favorites-title'}),
+    ).not.toHaveLength(0);
+    expect(gridItems(tree!, 'hub-grid-favorites')).toHaveLength(2);
+
+    act(() => tree!.unmount());
+  });
+
+  it('defaults to Recent when Favorites is empty', () => {
+    const model = {...makeModel(), favorites: []};
+    let tree: renderer.ReactTestRenderer;
+
+    act(() => {
+      tree = renderer.create(
+        <HubView model={model} onOpenDestination={jest.fn()} />,
+      );
+    });
+    act(() =>
+      pressableByTestId(tree!, 'hub-quick-access-toggle')?.props.onPress(),
+    );
+
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-favorites')?.props
+        .accessibilityState,
+    ).toEqual({selected: false});
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-recents')?.props
+        .accessibilityState,
+    ).toEqual({selected: true});
+    expect(gridItems(tree!, 'hub-grid-favorites')).toHaveLength(0);
+    expect(gridItems(tree!, 'hub-grid-recents').length).toBeGreaterThan(0);
+
+    act(() => tree!.unmount());
+  });
+
+  it('normalizes a hidden Recent choice and does not restore it later', () => {
+    const model = makeModel();
+    const onOpenDestination = jest.fn();
+    let tree: renderer.ReactTestRenderer;
+
+    act(() => {
+      tree = renderer.create(
+        <HubView model={model} onOpenDestination={onOpenDestination} />,
+      );
+    });
+    act(() =>
+      pressableByTestId(tree!, 'hub-quick-access-toggle')?.props.onPress(),
+    );
+    act(() =>
+      pressableByTestId(tree!, 'hub-quick-access-tab-recents')?.props.onPress(),
+    );
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-recents')?.props
+        .accessibilityState,
+    ).toEqual({selected: true});
+
+    act(() => {
+      tree!.update(
+        <HubView
+          model={model}
+          onOpenDestination={onOpenDestination}
+          showRecents={false}
+        />,
+      );
+    });
+    expect(
+      tree!.root.findAllByProps({testID: 'hub-quick-access-tab-recents'}),
+    ).toHaveLength(0);
+
+    act(() => {
+      tree!.update(
+        <HubView
+          model={model}
+          onOpenDestination={onOpenDestination}
+          showRecents
+        />,
+      );
+    });
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-favorites')?.props
+        .accessibilityState,
+    ).toEqual({selected: true});
+    expect(
+      pressableByTestId(tree!, 'hub-quick-access-tab-recents')?.props
+        .accessibilityState,
+    ).toEqual({selected: false});
+    expect(gridItems(tree!, 'hub-grid-favorites').length).toBeGreaterThan(0);
+    expect(gridItems(tree!, 'hub-grid-recents')).toHaveLength(0);
+
+    act(() => tree!.unmount());
+  });
+
+  it('does not resurrect a selected group after it is removed and re-added', () => {
+    const model = makeModel();
+    const modelWithoutAsk = {
+      ...model,
+      groups: model.groups.filter(group => group.id !== 'ask'),
+    };
+    const onOpenDestination = jest.fn();
+    let tree: renderer.ReactTestRenderer;
+
+    act(() => {
+      tree = renderer.create(
+        <HubView model={model} onOpenDestination={onOpenDestination} />,
+      );
+    });
+    act(() => pressableByTestId(tree!, 'hub-category-ask')?.props.onPress());
+    expect(
+      pressableByTestId(tree!, 'hub-category-ask')?.props.accessibilityState,
+    ).toEqual({selected: true});
+
+    act(() => {
+      tree!.update(
+        <HubView
+          model={modelWithoutAsk}
+          onOpenDestination={onOpenDestination}
+        />,
+      );
+    });
+    expect(
+      pressableByTestId(tree!, 'hub-category-today')?.props.accessibilityState,
+    ).toEqual({selected: true});
+    expect(gridItems(tree!, 'hub-grid-today').length).toBeGreaterThan(0);
+
+    act(() => {
+      tree!.update(
+        <HubView model={model} onOpenDestination={onOpenDestination} />,
+      );
+    });
+    expect(
+      pressableByTestId(tree!, 'hub-category-today')?.props.accessibilityState,
+    ).toEqual({selected: true});
+    expect(
+      pressableByTestId(tree!, 'hub-category-ask')?.props.accessibilityState,
+    ).toEqual({selected: false});
+    expect(gridItems(tree!, 'hub-grid-today').length).toBeGreaterThan(0);
+    expect(gridItems(tree!, 'hub-grid-ask')).toHaveLength(0);
 
     act(() => tree!.unmount());
   });
@@ -206,19 +497,21 @@ describe('HubView', () => {
     ).not.toHaveLength(0);
 
     model.groups.forEach(group => {
-      expect(
-        tree!.root.findAllByProps({testID: `hub-category-${group.id}`}),
-      ).not.toHaveLength(0);
+      const category = pressableByTestId(tree!, `hub-category-${group.id}`);
+      expect(category).toBeDefined();
+      expect(category?.props.accessibilityRole).toBe('button');
+      expect(category?.props.accessibilityLabel).toBe(
+        `${group.title}. ${moduleCountLabel(group.items.length, 'en')}`,
+      );
+      expect(category?.props.accessibilityState).toEqual({
+        selected: group.id === 'today',
+      });
+      expect(category?.props['aria-pressed']).toBe(group.id === 'today');
       const count = tree!.root.findByProps({
         testID: `hub-category-${group.id}-count`,
       });
       expect(count.props.accessible).toBe(false);
       expect(count.props.accessibilityElementsHidden).toBe(true);
-      expect(
-        tree!.root.findByProps({
-          accessibilityLabel: `${group.title}: ${group.items.length}`,
-        }).props.accessibilityRole,
-      ).toBe('tab');
     });
 
     const todayGroup = model.groups.find(group => group.id === 'today');
@@ -233,6 +526,12 @@ describe('HubView', () => {
     act(() =>
       pressableByTestId(tree!, 'hub-category-ask')?.props.onPress(),
     );
+    expect(
+      pressableByTestId(tree!, 'hub-category-today')?.props.accessibilityState,
+    ).toEqual({selected: false});
+    expect(
+      pressableByTestId(tree!, 'hub-category-ask')?.props.accessibilityState,
+    ).toEqual({selected: true});
     expect(
       tree!.root.findAllByProps({
         testID: `hub-grid-ask-tile-${CORE_DESTINATION_IDS.aiAnalyst}`,
@@ -265,6 +564,9 @@ describe('HubView', () => {
       );
     });
 
+    act(() =>
+      pressableByTestId(tree!, 'hub-quick-access-toggle')?.props.onPress(),
+    );
     const dayTile = pressableByTestId(
       tree!,
       `hub-grid-favorites-tile-${CORE_DESTINATION_IDS.dayGraph}`,
@@ -292,8 +594,12 @@ describe('HubView', () => {
         testID: `hub-grid-favorites-tile-${CORE_DESTINATION_IDS.dayGraph}`,
       })
       .find(node => node.type === View);
-    expect(StyleSheet.flatten(dayTileView?.props.style).minHeight).toBe(116);
+    expect(StyleSheet.flatten(dayTileView?.props.style).minHeight).toBe(140);
     expect(StyleSheet.flatten(dayTileView?.props.style).flexGrow).toBe(1);
+    const title = dayTile
+      ?.findAllByType(Text)
+      .find(text => text.props.children === 'גרף יומי');
+    expect(title?.props.numberOfLines).toBe(3);
     const description = dayTile
       ?.findAllByType(Text)
       .find(
@@ -309,6 +615,12 @@ describe('HubView', () => {
         .findAllByType(Text)
         .some(text => text.props.children === '3 new'),
     ).toBe(true);
+    expect(
+      pressableByTestId(
+        tree!,
+        `hub-grid-favorites-tile-${CORE_DESTINATION_IDS.updateCenter}`,
+      )?.props.accessibilityLabel,
+    ).toContain('3 new');
 
     const favoritesGrid = tree!.root
       .findAllByProps({testID: 'hub-grid-favorites'})
@@ -405,6 +717,9 @@ describe('HubView', () => {
       );
     });
 
+    act(() =>
+      pressableByTestId(tree!, 'hub-quick-access-toggle')?.props.onPress(),
+    );
     const tileTestID =
       `hub-grid-favorites-tile-${CORE_DESTINATION_IDS.trendsAgpDailyPatterns}` as const;
     const tile = tree!.root
@@ -424,15 +739,17 @@ describe('HubView', () => {
   });
 
   it('localizes the Hub chrome and card copy in English and Hebrew', () => {
+    const englishModel = makeModel('en');
+    const hebrewModel = makeModel('he');
     let english: renderer.ReactTestRenderer;
     let hebrew: renderer.ReactTestRenderer;
 
     act(() => {
       english = renderer.create(
-        <HubView model={makeModel('en')} onOpenDestination={jest.fn()} />,
+        <HubView model={englishModel} onOpenDestination={jest.fn()} />,
       );
       hebrew = renderer.create(
-        <HubView model={makeModel('he')} onOpenDestination={jest.fn()} />,
+        <HubView model={hebrewModel} onOpenDestination={jest.fn()} />,
       );
     });
 
@@ -440,11 +757,44 @@ describe('HubView', () => {
       tree.root.findAllByType(Text).some(node => node.props.children === value);
 
     expect(hasText(english!, 'Hub')).toBe(true);
-    expect(hasText(english!, 'Favorites')).toBe(true);
+    expect(hasText(english!, 'Quick access')).toBe(true);
     expect(hasText(english!, 'Day graph')).toBe(true);
     expect(hasText(hebrew!, 'המרכז שלי')).toBe(true);
-    expect(hasText(hebrew!, 'מועדפים')).toBe(true);
+    expect(hasText(hebrew!, 'גישה מהירה')).toBe(true);
     expect(hasText(hebrew!, 'גרף יומי')).toBe(true);
+
+    const englishToday = englishModel.groups.find(group => group.id === 'today');
+    const hebrewToday = hebrewModel.groups.find(group => group.id === 'today');
+    if (!englishToday || !hebrewToday) {
+      throw new Error('Expected localized Today Module groups.');
+    }
+    expect(
+      pressableByTestId(english!, 'hub-category-today')?.props
+        .accessibilityLabel,
+    ).toBe(
+      `${englishToday.title}. ${moduleCountLabel(
+        englishToday.items.length,
+        'en',
+      )}`,
+    );
+    expect(
+      pressableByTestId(hebrew!, 'hub-category-today')?.props
+        .accessibilityLabel,
+    ).toBe(
+      `${hebrewToday.title}. ${moduleCountLabel(
+        hebrewToday.items.length,
+        'he',
+      )}`,
+    );
+
+    act(() => {
+      pressableByTestId(english!, 'hub-quick-access-toggle')?.props.onPress();
+      pressableByTestId(hebrew!, 'hub-quick-access-toggle')?.props.onPress();
+    });
+    expect(hasText(english!, 'Favorites')).toBe(true);
+    expect(hasText(english!, 'Recent')).toBe(true);
+    expect(hasText(hebrew!, 'מועדפים')).toBe(true);
+    expect(hasText(hebrew!, 'אחרונים')).toBe(true);
 
     const englishDayIcon = english!.root.findByProps({
       testID: `hub-grid-today-tile-${CORE_DESTINATION_IDS.dayGraph}-icon-glyph`,
