@@ -80,6 +80,13 @@ export interface TrendsRangeSummary {
   readonly ranges: TrendsRangeDistribution | undefined;
 }
 
+export interface TrendsDescriptiveSummary extends TrendsRangeSummary {
+  readonly meanGlucoseMgDl: number | undefined;
+  readonly minimumGlucoseMgDl: number | undefined;
+  readonly maximumGlucoseMgDl: number | undefined;
+  readonly coefficientOfVariationPercent: number | undefined;
+}
+
 export interface BuildTrendsOverviewInput extends BuildTrendsRangeSummaryInput {
   /** Fixed offset used to disclose and count local calendar days. */
   readonly timeZoneOffsetMinutes?: number;
@@ -227,6 +234,92 @@ export const buildTrendsRangeSummary = (
   };
 };
 
+const describeRangeSummary = (
+  rangeSummary: TrendsRangeSummary,
+): {
+  readonly summary: TrendsDescriptiveSummary;
+  readonly rawMean: number | undefined;
+} => {
+  const values = rangeSummary.sampleSet.valuesMgDl;
+  if (values.length === 0) {
+    return {
+      rawMean: undefined,
+      summary: {
+        ...rangeSummary,
+        meanGlucoseMgDl: undefined,
+        minimumGlucoseMgDl: undefined,
+        maximumGlucoseMgDl: undefined,
+        coefficientOfVariationPercent: undefined,
+      },
+    };
+  }
+
+  let sum = 0;
+  let minimum = Infinity;
+  let maximum = -Infinity;
+  for (const value of values) {
+    sum += value;
+    minimum = Math.min(minimum, value);
+    maximum = Math.max(maximum, value);
+  }
+  const mean = sum / values.length;
+  // Preserve the existing two-pass population variance and its rounding.
+  const variance =
+    values.reduce((total, value) => total + (value - mean) ** 2, 0) /
+    values.length;
+  const standardDeviation = Math.sqrt(variance);
+  return {
+    // Only the full overview uses this private value for the published GMI
+    // equation. Rounded display metrics must never feed another formula.
+    rawMean: mean,
+    summary: {
+      ...rangeSummary,
+      meanGlucoseMgDl: roundTo(mean),
+      minimumGlucoseMgDl: minimum,
+      maximumGlucoseMgDl: maximum,
+      coefficientOfVariationPercent: roundTo(
+        mean === 0 ? 0 : (standardDeviation / mean) * 100,
+      ),
+    },
+  };
+};
+
+/**
+ * Shared descriptive metrics for daily and retrospective summaries. Integrity,
+ * range weighting and statistics use one prepared sample set; representative
+ * GMI/GRI and calendar-day calculations remain exclusive to the full overview.
+ */
+export const buildTrendsDescriptiveSummary = (
+  input: BuildTrendsRangeSummaryInput,
+): TrendsDescriptiveSummary =>
+  describeRangeSummary(buildTrendsRangeSummary(input)).summary;
+
+const buildGlycemiaRiskIndex = (
+  values: readonly number[],
+): GlycemiaRiskIndex => {
+  const canonicalCounts = emptyRangeCounts();
+  values.forEach(value => {
+    canonicalCounts[classify(value, CANONICAL_GRI_THRESHOLDS)] += 1;
+  });
+  const rawPercent = (count: number): number =>
+    (count / values.length) * 100;
+  const veryLow = rawPercent(canonicalCounts.veryLowPercent);
+  const low = rawPercent(canonicalCounts.lowPercent);
+  const high = rawPercent(canonicalCounts.highPercent);
+  const veryHigh = rawPercent(canonicalCounts.veryHighPercent);
+  const hypoglycemiaComponent = veryLow + 0.8 * low;
+  const hyperglycemiaComponent = veryHigh + 0.5 * high;
+  const griRaw =
+    3 * veryLow + 2.4 * low + 1.6 * veryHigh + 0.8 * high;
+  return {
+    formulaVersion: 'gri-2022',
+    hypoglycemiaComponent: roundTo(hypoglycemiaComponent),
+    hyperglycemiaComponent: roundTo(hyperglycemiaComponent),
+    rawScore: roundTo(griRaw),
+    score: roundTo(Math.min(100, griRaw)),
+  };
+};
+
 export const buildTrendsOverview = (
   input: BuildTrendsOverviewInput,
 ): TrendsOverview => {
@@ -242,7 +335,8 @@ export const buildTrendsOverview = (
       'The Trends time-zone offset must be a whole number of minutes between -840 and 840.',
     );
   }
-  const {sampleSet: prepared, ranges} = buildTrendsRangeSummary(input);
+  const {summary, rawMean} = describeRangeSummary(buildTrendsRangeSummary(input));
+  const {sampleSet: prepared, ranges} = summary;
   const values = prepared.valuesMgDl;
   const localDays = new Set(
     prepared.validSamples.map(sample =>
@@ -277,25 +371,6 @@ export const buildTrendsOverview = (
     };
   }
 
-  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
-  const variance =
-    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
-    values.length;
-  const standardDeviation = Math.sqrt(variance);
-  const canonicalCounts = emptyRangeCounts();
-  values.forEach(value => {
-    canonicalCounts[classify(value, CANONICAL_GRI_THRESHOLDS)] += 1;
-  });
-  const rawPercent = (count: number): number =>
-    (count / values.length) * 100;
-  const veryLow = rawPercent(canonicalCounts.veryLowPercent);
-  const low = rawPercent(canonicalCounts.lowPercent);
-  const high = rawPercent(canonicalCounts.highPercent);
-  const veryHigh = rawPercent(canonicalCounts.veryHighPercent);
-  const hypoglycemiaComponent = veryLow + 0.8 * low;
-  const hyperglycemiaComponent = veryHigh + 0.5 * high;
-  const griRaw =
-    3 * veryLow + 2.4 * low + 1.6 * veryHigh + 0.8 * high;
   const representative =
     prepared.interpretationQuality === 'representative';
 
@@ -315,23 +390,13 @@ export const buildTrendsOverview = (
     largestGapMs: prepared.largestGapMs,
     lastReadingTimestampMs: prepared.lastReadingTimestampMs,
     ranges,
-    meanGlucoseMgDl: roundTo(mean),
+    meanGlucoseMgDl: summary.meanGlucoseMgDl,
     // Published GMI equation for mean glucose expressed in mg/dL. It is only
     // presented as representative after the separate duration/coverage gate.
-    gmiPercent: representative ? roundTo(3.31 + 0.02392 * mean, 1) : undefined,
+    gmiPercent: representative ? roundTo(3.31 + 0.02392 * rawMean!, 1) : undefined,
     gmiFormulaVersion: representative ? 'gmi-2018' : undefined,
-    gri: representative
-      ? {
-          formulaVersion: 'gri-2022',
-          hypoglycemiaComponent: roundTo(hypoglycemiaComponent),
-          hyperglycemiaComponent: roundTo(hyperglycemiaComponent),
-          rawScore: roundTo(griRaw),
-          score: roundTo(Math.min(100, griRaw)),
-        }
-      : undefined,
-    coefficientOfVariationPercent: roundTo(
-      mean === 0 ? 0 : (standardDeviation / mean) * 100,
-    ),
+    gri: representative ? buildGlycemiaRiskIndex(values) : undefined,
+    coefficientOfVariationPercent: summary.coefficientOfVariationPercent,
   };
 };
 

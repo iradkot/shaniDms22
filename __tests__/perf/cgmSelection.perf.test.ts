@@ -1,12 +1,17 @@
-import {performance} from 'perf_hooks';
-
 import type {BgSample} from 'app/types/day_bgs.types';
 import type {InsulinDataEntry} from 'app/types/insulin.types';
 import type {FoodItemDTO} from 'app/types/food.types';
 
 import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
-import {findBolusEventsInTooltipWindow, findClosestBolus} from 'app/components/charts/CgmGraph/utils/bolusUtils';
-import {findCarbEventsInTooltipWindow, findClosestCarbEvent} from 'app/components/charts/CgmGraph/utils/carbsUtils';
+import {
+  createBolusTooltipIndex,
+  createCarbTooltipIndex,
+} from 'app/components/charts/CgmGraph/utils/tooltipEventIndex';
+import {
+  BOLUS_HOVER_CONFIG,
+  BOLUS_MAX_FOCUS_PROXIMITY_MS,
+  BOLUS_TOOLTIP_WINDOW_MS,
+} from 'app/components/charts/CgmGraph/constants/bolusHoverConfig';
 
 function makeBgSamples(params: {
   startTimeMs: number;
@@ -24,7 +29,7 @@ function makeBgSamples(params: {
       date,
       dateString: new Date(date).toISOString(),
       trend: 0,
-      direction: 'Flat' as any,
+      direction: 'Flat',
       device: 'sim',
       type: 'sgv',
     });
@@ -45,10 +50,10 @@ function makeBoluses(params: {
   for (let i = 0; i < count; i++) {
     const t = startTimeMs + Math.floor((span * i) / count);
     boluses.push({
-      type: 'bolus' as any,
+      type: 'bolus',
       timestamp: new Date(t).toISOString(),
-      amount: 0.5 + ((i % 20) * 0.1),
-    } as any);
+      amount: 0.5 + (i % 20) * 0.1,
+    });
   }
 
   return boluses;
@@ -70,18 +75,21 @@ function makeCarbs(params: {
       name: 'sim',
       carbs: 10 + (i % 50),
       timestamp: t,
-    } as any);
+      image: '',
+      notes: '',
+      score: 0,
+    });
   }
 
   return items;
 }
 
-function bench(label: string, fn: () => void) {
+function bench<T>(label: string, fn: () => T): T {
   const t0 = performance.now();
-  fn();
+  const result = fn();
   const t1 = performance.now();
-  // eslint-disable-next-line no-console
   console.log(`${label}: ${(t1 - t0).toFixed(2)}ms`);
+  return result;
 }
 
 /**
@@ -90,7 +98,7 @@ function bench(label: string, fn: () => void) {
  */
 describe('perf: CGM selection + tooltip windowing', () => {
   it('benchmarks selection helpers on realistic-ish inputs', () => {
-    const now = Date.now();
+    const now = Date.parse('2026-09-13T00:00:00Z');
     const startTimeMs = now - 24 * 60 * 60_000;
 
     const bgSamples = makeBgSamples({
@@ -99,7 +107,7 @@ describe('perf: CGM selection + tooltip windowing', () => {
       count: 288,
     });
 
-    const endTimeMs = bgSamples[bgSamples.length - 1].date;
+    const endTimeMs = bgSamples[bgSamples.length - 1]!.date;
 
     const insulinData = makeBoluses({
       startTimeMs,
@@ -113,49 +121,84 @@ describe('perf: CGM selection + tooltip windowing', () => {
       count: 120,
     });
 
+    // Match production: prepare immutable sources once, query them on moves.
+    // Timings for preparation stay separate from the touch-sweep measurements.
+    const bolusIndex = bench('prepare bolus tooltip index', () =>
+      createBolusTooltipIndex(insulinData),
+    );
+    const carbIndex = bench('prepare carb tooltip index', () =>
+      createCarbTooltipIndex(foodItems),
+    );
+
     // Sweep touch across the domain.
     const touches = 750;
-    const touchTimes = Array.from({length: touches}, (_, i) =>
-      startTimeMs + Math.floor(((endTimeMs - startTimeMs) * i) / touches),
+    const touchTimes = Array.from(
+      {length: touches},
+      (_, i) =>
+        startTimeMs + Math.floor(((endTimeMs - startTimeMs) * i) / touches),
     );
 
     let bgHits = 0;
     bench('findClosestBgSample (touch sweep)', () => {
       for (const t of touchTimes) {
         const found = findClosestBgSample(t, bgSamples);
-        if (found) bgHits++;
+        if (found) {
+          bgHits++;
+        }
       }
     });
     expect(bgHits).toBe(touches);
 
     let bolusHits = 0;
-    bench('findClosestBolus (touch sweep)', () => {
+    bench('bolus index closestTime (touch sweep)', () => {
       for (const t of touchTimes) {
-        const found = findClosestBolus(t, insulinData);
-        if (found) bolusHits++;
+        const found = bolusIndex.closestTime(t, BOLUS_MAX_FOCUS_PROXIMITY_MS);
+        if (found != null) {
+          bolusHits++;
+        }
       }
     });
     expect(bolusHits).toBeGreaterThan(0);
 
     let carbHits = 0;
-    bench('findClosestCarbEvent (touch sweep)', () => {
+    bench('carb index closestTime (touch sweep)', () => {
       for (const t of touchTimes) {
-        const found = findClosestCarbEvent(t, foodItems);
-        if (found) carbHits++;
+        const found = carbIndex.closestTime(t, BOLUS_MAX_FOCUS_PROXIMITY_MS);
+        if (found != null) {
+          carbHits++;
+        }
       }
     });
     expect(carbHits).toBeGreaterThan(0);
 
-    bench('findBolusEventsInTooltipWindow (anchored)', () => {
+    let bolusMatches = 0;
+    bench('bolus index within (anchored)', () => {
       for (const t of touchTimes) {
-        findBolusEventsInTooltipWindow({anchorTimeMs: t, insulinData});
+        bolusMatches += bolusIndex.within(
+          t,
+          BOLUS_TOOLTIP_WINDOW_MS,
+          BOLUS_HOVER_CONFIG.maxBolusEventsInTooltip,
+        ).length;
       }
     });
+    expect(bolusMatches).toBeGreaterThan(0);
+    expect(bolusMatches).toBeLessThanOrEqual(
+      touchTimes.length * BOLUS_HOVER_CONFIG.maxBolusEventsInTooltip,
+    );
 
-    bench('findCarbEventsInTooltipWindow (anchored)', () => {
+    let carbMatches = 0;
+    bench('carb index within (anchored)', () => {
       for (const t of touchTimes) {
-        findCarbEventsInTooltipWindow({anchorTimeMs: t, foodItems});
+        carbMatches += carbIndex.within(
+          t,
+          BOLUS_TOOLTIP_WINDOW_MS,
+          BOLUS_HOVER_CONFIG.maxBolusEventsInTooltip,
+        ).length;
       }
     });
+    expect(carbMatches).toBeGreaterThan(0);
+    expect(carbMatches).toBeLessThanOrEqual(
+      touchTimes.length * BOLUS_HOVER_CONFIG.maxBolusEventsInTooltip,
+    );
   });
 });

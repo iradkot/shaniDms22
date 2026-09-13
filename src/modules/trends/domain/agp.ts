@@ -1,7 +1,4 @@
-import {
-  TrendsOverviewInputError,
-  prepareTrendsSampleSet,
-} from './sampleSet';
+import {TrendsOverviewInputError, prepareTrendsSampleSet} from './sampleSet';
 import type {
   TrendsCoverageQuality,
   TrendsDurationQuality,
@@ -114,9 +111,10 @@ const dailyProfiles = (
 ): readonly AgpDailyProfile[] => {
   const offsetMs = input.timeZoneOffsetMinutes * MINUTE_MS;
   const firstDayIndex = Math.floor((input.period.startMs + offsetMs) / DAY_MS);
-  const lastDayIndex = Math.floor(
-    (input.period.endMs - 1 + offsetMs) / DAY_MS,
-  );
+  const lastDayIndex = Math.floor((input.period.endMs - 1 + offsetMs) / DAY_MS);
+  // The shared preparation already sorted and clipped these readings. Consume
+  // each once as days advance; empty/clipped days still get their own row.
+  let sampleIndex = 0;
 
   return Array.from(
     {length: Math.max(0, lastDayIndex - firstDayIndex + 1)},
@@ -125,57 +123,54 @@ const dailyProfiles = (
       const dayEndMs = dayStartMs + DAY_MS;
       const visibleStartMs = Math.max(dayStartMs, input.period.startMs);
       const visibleEndMs = Math.min(dayEndMs, input.period.endMs);
-      const samples = validSamples
-        .filter(
-          sample =>
-            sample.timestampMs >= visibleStartMs &&
-            sample.timestampMs < visibleEndMs,
-        )
-        .sort((left, right) => left.timestampMs - right.timestampMs);
+      const points: AgpDailyPoint[] = [];
+      let previousTimestampMs = visibleStartMs;
+      let largestGapMs = 0;
+      while (sampleIndex < validSamples.length) {
+        const sample = validSamples[sampleIndex]!;
+        const timestampMs = sample.timestampMs;
+        if (timestampMs >= visibleEndMs) {
+          break;
+        }
+        largestGapMs = Math.max(
+          largestGapMs,
+          timestampMs - previousTimestampMs,
+        );
+        previousTimestampMs = timestampMs;
+        points.push({
+          timestampMs,
+          minuteOfDay: Math.floor(
+            ((((timestampMs + offsetMs) % DAY_MS) + DAY_MS) % DAY_MS) /
+              MINUTE_MS,
+          ),
+          valueMgDl: sample.valueMgDl,
+        });
+        sampleIndex++;
+      }
+      largestGapMs = Math.max(largestGapMs, visibleEndMs - previousTimestampMs);
       const expectedSampleCount = Math.max(
         1,
         Math.ceil(
           (visibleEndMs - visibleStartMs) / input.expectedSampleIntervalMs,
         ),
       );
-      const rawCoveragePercent =
-        (samples.length / expectedSampleCount) * 100;
+      const rawCoveragePercent = (points.length / expectedSampleCount) * 100;
       const coveragePercent = roundTo(Math.min(100, rawCoveragePercent));
       const coverageQuality: TrendsCoverageQuality =
-        samples.length === 0
+        points.length === 0
           ? 'no-data'
           : rawCoveragePercent >= 70
           ? 'adequate'
           : 'low';
-      const timestamps = [
-        visibleStartMs,
-        ...samples.map(sample => sample.timestampMs),
-        visibleEndMs,
-      ];
-      const largestGapMs = timestamps
-        .slice(1)
-        .reduce(
-          (largest, timestampMs, timestampIndex) =>
-            Math.max(largest, timestampMs - timestamps[timestampIndex]!),
-          0,
-        );
-
       return {
         dayStartMs,
         dayEndMs,
-        sampleCount: samples.length,
+        sampleCount: points.length,
         expectedSampleCount,
         coveragePercent,
         coverageQuality,
         largestGapMs,
-        points: samples.map(sample => ({
-          timestampMs: sample.timestampMs,
-          minuteOfDay: Math.floor(
-            (((sample.timestampMs + offsetMs) % DAY_MS) + DAY_MS) % DAY_MS /
-              MINUTE_MS,
-          ),
-          valueMgDl: sample.valueMgDl,
-        })),
+        points,
       };
     },
   );

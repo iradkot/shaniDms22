@@ -23,6 +23,23 @@ const samples = (startMs: number, values: readonly number[]) =>
   }));
 
 describe('Trends Overview domain', () => {
+  it('calculates GMI from the raw mean instead of its rounded display value', () => {
+    const overview = buildTrendsOverview({
+      period: {startMs: 0, endMs: 14 * DAY},
+      expectedSampleIntervalMs: DAY,
+      thresholds,
+      samples: Array.from({length: 14}, (_, index) => ({
+        timestampMs: index * DAY,
+        valueMgDl: 156.3548,
+      })),
+    });
+
+    expect(overview.meanGlucoseMgDl).toBe(156.35);
+    // The rounded mean would produce 7.0, crossing a published-equation
+    // display boundary even though the raw-mean result is 7.1.
+    expect(overview.gmiPercent).toBe(7.1);
+  });
+
   it('keeps short-period descriptive metrics but withholds representative GMI and GRI', () => {
     const overview = buildTrendsOverview({
       period: {startMs: 1_000_000, endMs: 1_000_000 + HOUR},

@@ -5,10 +5,8 @@ import {Rect} from 'react-native-svg';
 import {ThemeProvider} from 'styled-components/native';
 import CarbEventsMiniGraph from 'app/components/charts/CarbEventsMiniGraph/CarbEventsMiniGraph';
 import MiniChartLane from 'app/components/charts/MiniChartLane';
-import {
-  buildCarbEvents,
-  findClosestCarbEvent,
-} from 'app/components/charts/CgmGraph/utils/carbsUtils';
+import {buildCarbEvents} from 'app/components/charts/CgmGraph/utils/carbsUtils';
+import {createCarbTooltipIndex} from 'app/components/charts/CgmGraph/utils/tooltipEventIndex';
 import {getThemeById} from 'app/style/theme';
 import type {FoodItemDTO} from 'app/types/food.types';
 
@@ -79,8 +77,8 @@ describe('Recorded carbohydrate event lane', () => {
       .findAllByType(Rect)
       .filter(node => node.props.testID === 'carb-event-bar');
     expect(bars).toHaveLength(3);
-    expect(bars[0].props.x).toBe(bars[1].props.x);
-    expect(bars[1].props.y + bars[1].props.height).toBeCloseTo(bars[0].props.y);
+    expect(bars[0]!.props.x).toBe(bars[1]!.props.x);
+    expect(bars[1]!.props.y + bars[1]!.props.height).toBeCloseTo(bars[0]!.props.y);
     bars.forEach(bar => expect(bar.props.fill).toBe(theme.chart.cob));
   });
 
@@ -116,7 +114,9 @@ describe('Recorded carbohydrate event lane', () => {
     ];
     expect(buildCarbEvents(original, domain)).toEqual(items);
     expect(original).toHaveLength(6);
-    expect(findClosestCarbEvent(10 * MINUTE, original)?.id).not.toBe('invalid');
+    expect(
+      createCarbTooltipIndex(original, domain).within(10 * MINUTE, 0),
+    ).toEqual([]);
     const lane = render({foodItems: original});
     expect(lane.yDomain).toEqual([0, 50]);
     expect(lane.valueText).toBe('50 g');

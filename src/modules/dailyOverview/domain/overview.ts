@@ -3,7 +3,10 @@ import type {
   TrendsRangeDistribution,
   TrendsRangeThresholds,
 } from '../../trends';
-import {buildTrendsOverview, prepareTrendsSampleSet} from '../../trends';
+import {
+  assertTrendsSampleInterval,
+  buildTrendsDescriptiveSummary,
+} from '../../trends';
 import type {
   DailyInsulinSourceSummary,
   DailyOverviewPeriod,
@@ -132,18 +135,15 @@ export const buildDailyOverview = (
   input: BuildDailyOverviewInput,
 ): DailyOverview => {
   assertOneLocalDay(input.period);
-  const prepared = prepareTrendsSampleSet({
-    period: input.period,
-    expectedSampleIntervalMs: input.expectedSampleIntervalMs,
-    samples: input.source.glucoseSamples,
-  });
-  const sharedOverview = buildTrendsOverview({
+  // Keep the daily module's established cadence-before-threshold validation.
+  assertTrendsSampleInterval(input.expectedSampleIntervalMs);
+  const sharedOverview = buildTrendsDescriptiveSummary({
     period: input.period,
     expectedSampleIntervalMs: input.expectedSampleIntervalMs,
     thresholds: input.thresholds,
     samples: input.source.glucoseSamples,
   });
-  const values = prepared.valuesMgDl;
+  const prepared = sharedOverview.sampleSet;
 
   return {
     period: input.period,
@@ -158,10 +158,8 @@ export const buildDailyOverview = (
     lastReadingTimestampMs: prepared.lastReadingTimestampMs,
     ranges: sharedOverview.ranges,
     meanGlucoseMgDl: sharedOverview.meanGlucoseMgDl,
-    minimumGlucoseMgDl:
-      values.length > 0 ? Math.min(...values) : undefined,
-    maximumGlucoseMgDl:
-      values.length > 0 ? Math.max(...values) : undefined,
+    minimumGlucoseMgDl: sharedOverview.minimumGlucoseMgDl,
+    maximumGlucoseMgDl: sharedOverview.maximumGlucoseMgDl,
     coefficientOfVariationPercent:
       sharedOverview.coefficientOfVariationPercent,
     insulinSummary: buildInsulinSummary(input.source.insulinSummary),

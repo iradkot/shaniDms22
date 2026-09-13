@@ -53,6 +53,14 @@ export const assertTrendsPeriod = (period: TrendsPeriod): void => {
   }
 };
 
+export const assertTrendsSampleInterval = (intervalMs: number): void => {
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+    throw new TrendsOverviewInputError(
+      'Expected sample interval must be positive.',
+    );
+  }
+};
+
 /**
  * One integrity boundary shared by every Trends calculation.
  *
@@ -63,14 +71,7 @@ export const prepareTrendsSampleSet = (
   input: PrepareTrendsSampleSetInput,
 ): PreparedTrendsSampleSet => {
   assertTrendsPeriod(input.period);
-  if (
-    !Number.isFinite(input.expectedSampleIntervalMs) ||
-    input.expectedSampleIntervalMs <= 0
-  ) {
-    throw new TrendsOverviewInputError(
-      'Expected sample interval must be positive.',
-    );
-  }
+  assertTrendsSampleInterval(input.expectedSampleIntervalMs);
 
   const samplesByTimestamp = new Map<number, TrendsGlucoseSample>();
   let excludedSampleCount = 0;
@@ -157,4 +158,3 @@ export const prepareTrendsSampleSet = (
         : undefined,
   };
 };
-

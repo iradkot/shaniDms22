@@ -5,6 +5,107 @@ const HOUR_MS = 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
 
 describe('AGP domain', () => {
+  it('distributes a month of sorted readings without rescanning them for each day', () => {
+    const days = 28;
+    const count = days * 288;
+    let timestampReads = 0;
+    const samples = Object.freeze(
+      Array.from({length: count}, (_, index) =>
+        Object.freeze({
+          get timestampMs() {
+            timestampReads++;
+            return index * 5 * MINUTE_MS;
+          },
+          valueMgDl: 120,
+        }),
+      ),
+    );
+    const profile = buildAgpProfile({
+      period: {startMs: 0, endMs: days * DAY_MS},
+      expectedSampleIntervalMs: 5 * MINUTE_MS,
+      timeZoneOffsetMinutes: 0,
+      samples,
+    });
+    // Budget includes the shared validation/sort and percentile preparation,
+    // not just daily grouping. It does not depend on wall-clock timing.
+    expect(timestampReads).toBeLessThanOrEqual(count * 20 + days * 2);
+    expect(profile.dailyProfiles).toHaveLength(days);
+    for (const day of profile.dailyProfiles) {
+      expect(day).toMatchObject({
+        sampleCount: 288,
+        coveragePercent: 100,
+        largestGapMs: 5 * MINUTE_MS,
+      });
+    }
+    expect(profile.quality.validSampleCount).toBe(count);
+  });
+
+  it.each([330, -210])(
+    'preserves clipped empty days and first-wins duplicates at offset %i',
+    timeZoneOffsetMinutes => {
+      const firstDay = -2 * DAY_MS - timeZoneOffsetMinutes * MINUTE_MS;
+      const secondDay = firstDay + DAY_MS;
+      const thirdDay = secondDay + DAY_MS;
+      const startMs = firstDay + 22 * HOUR_MS;
+      const endMs = thirdDay + 2 * HOUR_MS;
+      const samples = Object.freeze([
+        Object.freeze({timestampMs: secondDay + HOUR_MS, valueMgDl: 150}),
+        Object.freeze({timestampMs: secondDay, valueMgDl: 110}),
+        Object.freeze({timestampMs: startMs, valueMgDl: 90}),
+        Object.freeze({timestampMs: secondDay, valueMgDl: 250}),
+        Object.freeze({timestampMs: endMs, valueMgDl: 200}),
+        Object.freeze({timestampMs: startMs - 1, valueMgDl: 140}),
+        Object.freeze({timestampMs: thirdDay, valueMgDl: Number.NaN}),
+      ]);
+      const profile = buildAgpProfile({
+        period: {startMs, endMs},
+        expectedSampleIntervalMs: HOUR_MS,
+        timeZoneOffsetMinutes,
+        samples,
+      });
+      expect(profile.quality).toMatchObject({
+        validSampleCount: 3,
+        excludedSampleCount: 3,
+        duplicateSampleCount: 1,
+      });
+      expect(profile.dailyProfiles).toEqual([
+        {
+          dayStartMs: firstDay,
+          dayEndMs: secondDay,
+          sampleCount: 1,
+          expectedSampleCount: 2,
+          coveragePercent: 50,
+          coverageQuality: 'low',
+          largestGapMs: 2 * HOUR_MS,
+          points: [{timestampMs: startMs, minuteOfDay: 1320, valueMgDl: 90}],
+        },
+        {
+          dayStartMs: secondDay,
+          dayEndMs: thirdDay,
+          sampleCount: 2,
+          expectedSampleCount: 24,
+          coveragePercent: 8.33,
+          coverageQuality: 'low',
+          largestGapMs: 23 * HOUR_MS,
+          points: [
+            {timestampMs: secondDay, minuteOfDay: 0, valueMgDl: 110},
+            {timestampMs: secondDay + HOUR_MS, minuteOfDay: 60, valueMgDl: 150},
+          ],
+        },
+        {
+          dayStartMs: thirdDay,
+          dayEndMs: thirdDay + DAY_MS,
+          sampleCount: 0,
+          expectedSampleCount: 2,
+          coveragePercent: 0,
+          coverageQuality: 'no-data',
+          largestGapMs: 2 * HOUR_MS,
+          points: [],
+        },
+      ]);
+    },
+  );
+
   it('keeps individual local days visible with their own coverage and gaps', () => {
     const profile = buildAgpProfile({
       period: {startMs: 0, endMs: 3 * DAY_MS},

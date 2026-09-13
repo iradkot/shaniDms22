@@ -86,7 +86,12 @@ Risk:
 
 Primary file: `src/components/charts/CgmGraph/CgmGraph.tsx`
 
-### Render pipeline overview
+### Historical render pipeline overview (before indexed tooltips)
+
+This section records the original diagnosis. The old scan helpers named below
+have since been removed. Production now prepares `tooltipEventIndex` once per
+source/domain change and queries it as the cursor moves; CGM anchoring and the
+stacked chart's distinct five-minute window remain unchanged.
 
 On each render, the chart:
 - Computes touch-relative coordinates (`xTouchPosition`, `yTouchPosition`).
@@ -229,7 +234,11 @@ Harness:
 
 This benchmark prints timings to the Jest output. It is **not** a strict perf gate (no “must be under X ms” assertions) because those are flaky across machines.
 
-### Results
+### Historical results (old scan helpers)
+
+These measurements are retained as historical evidence, not current performance.
+The current `yarn perf:cgm-selection` harness measures the production tooltip
+indexes and reports one-time preparation separately from cursor queries.
 
 (Results will vary by machine and build type. The numbers below are from running `yarn perf:cgm-selection` in this repo with:
 

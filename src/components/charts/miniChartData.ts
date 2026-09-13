@@ -118,20 +118,22 @@ export function resolveMiniDomain(
   return [new Date(start), new Date(end > start ? end : start + 1)];
 }
 
-/** A gap means unknown, so it must never draw as zero or as a connecting line. */
-export function buildMiniLoadSegments(
+function prepareMiniLoadSegments(
   samples: readonly DatedChartLoadSample[],
   domain: [Date, Date],
-  kind: 'iob' | 'cob',
-): LoadPoint[][] {
+) {
   const series = buildChartLoadSeries(samples, domain);
-  const points = kind === 'iob' ? series.iobPoints : series.cobPoints;
-  const byTime = new Map(points.map(point => [point.x, point]));
+  const startMs = +domain[0];
+  const endMs = +domain[1];
   const times = [...new Set(samples.map(sample => sample.date))]
-    .filter(
-      time => Number.isFinite(time) && time >= +domain[0] && time <= +domain[1],
-    )
+    .filter(time => Number.isFinite(time) && time >= startMs && time <= endMs)
     .sort((a, b) => a - b);
+  return {series, times};
+}
+
+/** A gap means unknown, so it must never draw as zero or as a connecting line. */
+function segmentMiniLoadPoints(points: LoadPoint[], times: readonly number[]) {
+  const byTime = new Map(points.map(point => [point.x, point]));
   const segments: LoadPoint[][] = [];
   let current: LoadPoint[] = [];
   for (const time of times) {
@@ -148,6 +150,30 @@ export function buildMiniLoadSegments(
     current.push(point);
   }
   return segments;
+}
+
+/** Build paired overlays from one source pass and one shared gap timeline. */
+export function buildMiniLoadSegmentsByKind(
+  samples: readonly DatedChartLoadSample[],
+  domain: [Date, Date],
+): {iob: LoadPoint[][]; cob: LoadPoint[][]} {
+  const {series, times} = prepareMiniLoadSegments(samples, domain);
+  return {
+    iob: segmentMiniLoadPoints(series.iobPoints, times),
+    cob: segmentMiniLoadPoints(series.cobPoints, times),
+  };
+}
+
+export function buildMiniLoadSegments(
+  samples: readonly DatedChartLoadSample[],
+  domain: [Date, Date],
+  kind: 'iob' | 'cob',
+): LoadPoint[][] {
+  const {series, times} = prepareMiniLoadSegments(samples, domain);
+  return segmentMiniLoadPoints(
+    kind === 'iob' ? series.iobPoints : series.cobPoints,
+    times,
+  );
 }
 
 export function buildMiniBasalSegments(

@@ -4,6 +4,7 @@ import {
   getLocalDayPeriod,
   moveLocalDay,
 } from 'app/modules/dailyOverview';
+import {TrendsOverviewInputError} from 'app/modules/trends';
 
 const thresholds = {
   veryLowMaxMgDl: 54,
@@ -16,6 +17,34 @@ const localNoon = (year: number, month: number, day: number): number =>
   new Date(year, month, day, 12).getTime();
 
 describe('Daily Overview domain', () => {
+  it('prepares each source reading only once for all descriptive daily metrics', () => {
+    const period = getLocalDayPeriod(localNoon(2026, 0, 15));
+    const sampleCount = 288;
+    const interval = (period.endMs - period.startMs) / sampleCount;
+    let valueReads = 0;
+    const glucoseSamples = Array.from({length: sampleCount}, (_, index) => ({
+      timestampMs: period.startMs + index * interval,
+      get valueMgDl() {
+        valueReads += 1;
+        return 70 + (index % 200);
+      },
+    }));
+
+    const overview = buildDailyOverview({
+      period,
+      expectedSampleIntervalMs: interval,
+      thresholds,
+      source: {glucoseSamples, insulinSummary: {quality: 'unavailable'}},
+    });
+
+    expect(overview.validSampleCount).toBe(sampleCount);
+    expect(overview.minimumGlucoseMgDl).toBe(70);
+    expect(overview.maximumGlucoseMgDl).toBe(269);
+    // One integrity pass (finite + positive) and one extraction, regardless of
+    // how many descriptive metrics the caller requests. No clock-time budget.
+    expect(valueReads).toBeLessThanOrEqual(sampleCount * 3);
+  });
+
   it('normalizes a timestamp to one local calendar day and moves by local days', () => {
     const period = getLocalDayPeriod(localNoon(2026, 0, 15));
 
@@ -146,6 +175,35 @@ describe('Daily Overview domain', () => {
             bolusUnits: 2,
           },
         },
+      }),
+    ).toThrow(DailyOverviewInputError);
+  });
+
+  it('keeps cadence validation before threshold and insulin validation', () => {
+    const period = getLocalDayPeriod(localNoon(2026, 0, 15));
+    const input = {
+      period,
+      expectedSampleIntervalMs: 0,
+      thresholds: {...thresholds, targetMinMgDl: NaN},
+      source: {
+        glucoseSamples: [],
+        insulinSummary: {
+          quality: 'available' as const,
+          basalUnits: -1,
+          bolusUnits: 2,
+        },
+      },
+    };
+
+    expect(() => buildDailyOverview(input)).toThrow(TrendsOverviewInputError);
+    expect(() => buildDailyOverview(input)).toThrow('Expected sample interval');
+    expect(() =>
+      buildDailyOverview({...input, expectedSampleIntervalMs: 5 * 60_000}),
+    ).toThrow('Range threshold');
+    expect(() =>
+      buildDailyOverview({
+        ...input,
+        period: {...period, startMs: period.startMs + 1},
       }),
     ).toThrow(DailyOverviewInputError);
   });

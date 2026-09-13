@@ -68,6 +68,9 @@ development computer, not device guarantees.
 | Distant bolus timestamp reads during 60 cursor moves (stacked / external / internal tooltip) | 120 / 180 / 270 | 0 after source preparation |
 | Source-value reads for a synthetic 8,352-reading calendar month | 50,112 | 25,056 |
 | Visible calendar fallback rescans on timeline-only updates or monthly-load completion | 1 per update | 0 |
+| Daily summary source-value accesses for 288 readings | 1,728 | 864 |
+| AGP timestamp accesses for 8,064 readings across 28 days | 471,687 | 96,794 |
+| Mixed IOB/COB chart source-date accesses for 48 records on mount | 240 | 144 |
 
 Cold cache discovery still reads persisted entries once to establish the shared
 byte/retention budget. Warm writes use scalar metadata and only rewrite changed
@@ -107,6 +110,47 @@ These checks ran against the working tree, which also contains separate ongoing
 Home/Trends/Alerts work. This performance change does not publish those changes,
 deploy a website, or distribute a build. Existing Web chunk-size warnings remain;
 no warning threshold or data-fidelity check was relaxed to obtain a passing build.
+
+## Shared calculations and DX follow-up
+
+`buildTrendsDescriptiveSummary` now serves Daily Overview, Previous Day Summary
+and the full Trends overview. It shares validation, range weighting, mean,
+variation and observed extremes over one prepared sample set. Calendar keeps
+using the lighter range-only summary. Raw mean remains private and feeds GMI
+without display rounding; representative GRI is only computed when returned.
+Each retrospective window still owns its excluded/duplicate counts. It must not
+reuse one globally deduplicated window or change the meaning of missing data.
+
+Daily AGP profiles advance through the already sorted readings once. They retain
+every empty/clipped day and its leading/trailing gaps, fixed-offset semantics
+and coverage thresholds. A 500-fixture old/new comparison and a separate
+240-case edge review matched every returned field, including fractional and
+negative timestamps. The work budget exercises the public AGP builder.
+
+The mixed mini-chart prepares IOB and COB together via
+`buildMiniLoadSegmentsByKind`; the single-kind builder shares the private
+preparation and segmentation logic. Missing values, duplicate-time rules,
+signed IOB, COB clamping and gap splits are unchanged. One thousand seeded
+paired/single-kind comparisons against the previous implementation matched.
+
+Unused bolus/carb scanning helpers were removed after checking all callers.
+`yarn perf:cgm-selection` now measures the production event index: one-time
+preparation and cursor-query timings are reported separately. Historical numbers
+in `PerformanceAnalysis.HomeAndCharts.md` remain labeled as historical evidence.
+`yarn perf:app` includes the new daily-summary, AGP and paired-load work budgets.
+
+The descriptive-summary tests preserve pre-refactor outputs across 24 seeded
+fixtures for each of Trends, Daily Overview and Previous Day Summary. Tests run
+unchanged under UTC, Asia/Jerusalem and America/New_York; neighboring explicit
+expectations cover rounding, validation order, invalid/duplicate inputs and the
+raw-mean GMI precision boundary.
+
+Verification for this second September 13 pass: 1,594 application tests across
+275 suites (including the captured-output snapshot), 123 focused performance
+contracts, 118 calendar tests plus eight DST cases, both strict TypeScript
+checks and scoped lint passed. Web production build and Android/iOS JavaScript
+bundles passed. No new APK/IPA was built or distributed by this pass; the same
+working-tree and deployment caveats above apply.
 
 ## Rules for future changes
 

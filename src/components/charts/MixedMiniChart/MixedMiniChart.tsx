@@ -9,7 +9,7 @@ import {
   buildMiniBasalSegments,
   basalChartStatus,
   emptyMiniChartText,
-  buildMiniLoadSegments,
+  buildMiniLoadSegmentsByKind,
   formatMiniTime,
   formatMiniValue,
   findMiniLoadSample,
@@ -101,12 +101,8 @@ const MixedMiniChart: React.FC<Props> = props => {
     () => buildMiniBasalSegments(basalProfileData, insulinData, domain),
     [basalProfileData, insulinData, domain],
   );
-  const iob = useMemo(
-    () => buildMiniLoadSegments(samples, domain, 'iob'),
-    [samples, domain],
-  );
-  const cob = useMemo(
-    () => buildMiniLoadSegments(samples, domain, 'cob'),
+  const {iob, cob} = useMemo(
+    () => buildMiniLoadSegmentsByKind(samples, domain),
     [samples, domain],
   );
   const axes = useMemo(

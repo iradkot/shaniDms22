@@ -1,9 +1,10 @@
 import type {
   TrendsCoverageQuality,
   TrendsPeriod,
+  TrendsRangeDistribution,
   TrendsRangeThresholds,
 } from '../../trends';
-import {buildTrendsOverview, prepareTrendsSampleSet} from '../../trends';
+import {buildTrendsDescriptiveSummary, prepareTrendsSampleSet} from '../../trends';
 import type {
   PreviousDaySummaryEvent,
   PreviousDaySummaryInsulinSource,
@@ -454,16 +455,16 @@ export const getPreviousDaySummaryWindow = (
 };
 
 const compactRanges = (
-  overview: ReturnType<typeof buildTrendsOverview>,
+  ranges: TrendsRangeDistribution | undefined,
 ): PreviousDayCompactRanges | undefined =>
-  overview.ranges
+  ranges
     ? {
         lowPercent: roundTo(
-          overview.ranges.veryLowPercent + overview.ranges.lowPercent,
+          ranges.veryLowPercent + ranges.lowPercent,
         ),
-        targetPercent: overview.ranges.targetPercent,
+        targetPercent: ranges.targetPercent,
         highPercent: roundTo(
-          overview.ranges.highPercent + overview.ranges.veryHighPercent,
+          ranges.highPercent + ranges.veryHighPercent,
         ),
       }
     : undefined;
@@ -474,21 +475,22 @@ const buildGlucoseMetrics = (input: {
   readonly thresholds: TrendsRangeThresholds;
   readonly samples: PreviousDaySummarySourceSnapshot['glucoseSamples'];
 }): PreviousDayGlucoseMetrics => {
-  const overview = buildTrendsOverview({
+  const overview = buildTrendsDescriptiveSummary({
     period: input.period,
     expectedSampleIntervalMs: input.expectedSampleIntervalMs,
     thresholds: input.thresholds,
     samples: input.samples,
   });
+  const prepared = overview.sampleSet;
   return {
     period: input.period,
-    validSampleCount: overview.validSampleCount,
-    excludedSampleCount: overview.excludedSampleCount,
-    duplicateSampleCount: overview.duplicateSampleCount,
-    expectedSampleCount: overview.expectedSampleCount,
-    coveragePercent: overview.coveragePercent,
-    coverageQuality: overview.coverageQuality,
-    ranges: compactRanges(overview),
+    validSampleCount: prepared.validSampleCount,
+    excludedSampleCount: prepared.excludedSampleCount,
+    duplicateSampleCount: prepared.duplicateSampleCount,
+    expectedSampleCount: prepared.expectedSampleCount,
+    coveragePercent: prepared.coveragePercent,
+    coverageQuality: prepared.coverageQuality,
+    ranges: compactRanges(overview.ranges),
     meanGlucoseMgDl: overview.meanGlucoseMgDl,
   };
 };

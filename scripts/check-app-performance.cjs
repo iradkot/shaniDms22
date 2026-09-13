@@ -46,6 +46,9 @@ function checkContracts() {
       'event timestamps prepared once per immutable source array',
       'calendar range summaries prepare readings once',
       'visible calendar fallback reused across timeline-only updates',
+      'daily summaries share one descriptive glucose preparation',
+      'AGP daily profiles consume sorted readings once',
+      'paired mini-chart loads share one source preparation',
     ],
   };
   // Invalidate the previous success before any child process (or git) can fail.
@@ -91,6 +94,7 @@ function checkContracts() {
       '__tests__/components/stackedChartsMobile.test.tsx',
       '__tests__/components/stackedChartsMouse.test.tsx',
       '__tests__/components/chartTooltipPreparation.test.tsx',
+      '__tests__/components/miniLoadPreparation.test.tsx',
       '__tests__/product/charts/interaction',
       '__tests__/nightscoutRangeCache.test.ts',
       '__tests__/App.startup.test.js',
@@ -99,6 +103,8 @@ function checkContracts() {
       '__tests__/platform/nativeProductHostActivation.test.tsx',
       '__tests__/product/therapyContextActivation.test.tsx',
       '__tests__/modules/dayGraph/calendar.performance.test.ts',
+      '__tests__/modules/trends/agp.test.ts',
+      '__tests__/modules/dailyOverview/overview.test.ts',
       '__tests__/product/dayGraph/useDayGraphCalendar.test.tsx',
     ]);
     const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
