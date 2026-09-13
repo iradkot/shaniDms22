@@ -1,0 +1,53 @@
+appId: com.shanidms22
+---
+# Rebuilt Day Graph entry. Requires an E2E-enabled APK, which bypasses sign-in
+# and supplies synthetic glucose without a Firebase or Nightscout connection.
+# Run clearState only on a dedicated emulator/test installation.
+- launchApp:
+    clearState: true
+
+- extendedWaitUntil:
+    visible:
+      id: product-shell
+    timeout: 30000
+
+# Supports both the original Hub root and the newer personal Home root.
+- extendedWaitUntil:
+    visible:
+      id: "product-home|product-hub"
+    timeout: 30000
+- runFlow:
+    when:
+      visible:
+        id: home-tab-modules
+    commands:
+      - tapOn:
+          id: home-tab-modules
+
+- extendedWaitUntil:
+    visible:
+      id: product-hub
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: hub-category-today
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: hub-category-today
+- scrollUntilVisible:
+    element:
+      id: hub-grid-today-tile-core.day-graph
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: hub-grid-today-tile-core.day-graph
+
+- extendedWaitUntil:
+    visible:
+      id: day-graph-module-view
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: day-graph-glucose-chart
+    timeout: 15000

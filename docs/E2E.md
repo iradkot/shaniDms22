@@ -21,7 +21,7 @@ When E2E mode is enabled, the app:
 
 - Skips notification permission prompts (Notifee + FCM).
 - Skips device token register/sync/unregister logic.
-- Performs a deterministic auth path (anonymous Firebase auth) from the init screen.
+- Enters Product Experience directly without contacting Firebase auth.
 - Shows a test-only `E2E Login` button on the login screen.
 
 JS helper: `isE2E` from `src/utils/e2e.ts`.
@@ -53,6 +53,7 @@ Maestro flows live under `e2e/maestro/`.
 
 - Smoke flow: `e2e/maestro/login-and-tabs.yaml`
 - Charts smoke flow: `e2e/maestro/charts-smoke.yaml`
+- Rebuilt calendar flow: `e2e/maestro/day-graph-calendar.yaml`
 - Nightscout scan flow: `e2e/maestro/nightscout-scan.yaml`
 - Oracle events flow: `e2e/maestro/oracle-events.yaml`
 
@@ -91,6 +92,12 @@ Use Android Studio’s Device Manager to start an emulator, or use the SDK tools
 Verify ADB sees a device:
 
 `adb devices`
+
+Use a dedicated test emulator. Check `adb -s DEVICE_ID shell dumpsys user` for
+`RUNNING_UNLOCKED` before starting Maestro. `sys.boot_completed=1` is not enough
+when an existing emulator has a PIN: instrumentation can fail with “not
+encryption aware” while Android is still in Direct Boot. Use a fresh test AVD
+instead of wiping a personal emulator or changing its screen lock.
 
 ### 3) Build + install an E2E-enabled APK
 
@@ -137,8 +144,44 @@ It:
 - Installs the APK
 - Runs the Maestro flow(s)
 
+The Product Hub and rebuilt Day Graph calendar flows run explicitly before the
+legacy suite excludes the `product` tag. `__tests__/e2e/productFlowCoverage.test.ts`
+guards against adding a Product flow that CI silently skips.
+CI preserves the calendar JUnit report, screenshots and run output for 14 days,
+including failed runs, as a `day-graph-calendar` artifact.
+
+## Rebuilt Day Graph calendar
+
+Use an E2E-enabled APK on a dedicated emulator. The bootstrap uses the real
+Product Hub/Personal Home navigation and the synthetic glucose adapter. It does
+not use the legacy-screen bridge or require a Google/Nightscout login.
+
+```sh
+maestro --device emulator-5580 test e2e/maestro/day-graph-calendar.yaml --test-output-dir=e2e/results/calendar
+```
+
+Replace the device ID with the explicitly chosen test emulator. The flow clears
+the app's local state; never run it on a personal installation with real data.
+An E2E APK is a fixture-only test artifact, not a preview to distribute.
+
+The flow selects February 29, 2024, checks recorded-readings summaries, browses
+months without changing the selected day, reopens the calendar, tests Close and
+Android Back, and verifies Today disables forward navigation. It uses selection
+and enabled states, avoiding locale/host-timezone-dependent date comparisons.
+
 ## Troubleshooting
 
 - **Maestro can’t find an element**: add/adjust `testID` (prefer this over text selectors).
 - **App shows system dialogs**: confirm you built with `E2E=true`.
-- **Auth doesn’t advance to tabs**: check Firebase anonymous auth is enabled in your Firebase project.
+- **E2E lands on login**: confirm `BuildConfig.E2E` is true in the installed APK;
+  no Firebase anonymous-auth setup is required for the Product test entry.
+- **Maestro fails before any flow action**: keep tool installations isolated.
+  Extracting a new release over an old `lib/` can leave duplicate versioned CLI
+  JARs. Install into a new directory and invoke that exact binary before changing
+  app code. Keep the failed run log separate from the UI-test result.
+- **Windows `KeyValueStore.withFileLock` / `File.readLines` error**: the
+  [upstream Windows issue](https://github.com/mobile-dev-inc/maestro/issues/3414)
+  reports a self-conflicting file lock in newer versions and a working 2.5.1
+  baseline. This session also reproduced it with a clean 2.10.0 install. Use a
+  separate official 2.5.1 installation for the local Windows run; do not delete
+  the global session database or change app logic to address this tool failure.

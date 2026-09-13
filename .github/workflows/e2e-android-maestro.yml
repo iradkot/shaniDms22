@@ -95,5 +95,16 @@ jobs:
             adb install -r "${APK_PATH}"
             # Release gate: prove the rebuilt ProductExperience/Hub path first.
             maestro test e2e/maestro/product-hub-smoke.yaml
+            mkdir -p e2e/results/calendar
+            maestro test e2e/maestro/day-graph-calendar.yaml --test-output-dir=e2e/results/calendar --format JUNIT --output e2e/results/calendar/report.xml
             # Keep every detailed legacy regression while Product modules migrate.
             maestro test e2e/maestro --exclude-tags=product
+
+      - name: Preserve calendar test reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: day-graph-calendar-${{ github.run_number }}
+          path: e2e/results/calendar/
+          if-no-files-found: warn
+          retention-days: 14

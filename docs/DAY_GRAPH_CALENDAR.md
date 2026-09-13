@@ -71,3 +71,33 @@ selection, Today, Escape and offline states. Add `calendar=offline` to exercise
 an unavailable month. Web production build and service-worker checks pass.
 
 This change does not itself publish a website or produce/send a new Android APK.
+
+## Native regression follow-up — September 2026
+
+`e2e/maestro/day-graph-calendar.yaml` now exercises the actual rebuilt Android
+screen with synthetic E2E glucose. It covers the February 29, 2024 year/month
+jump, recorded-reading summaries, month browsing, selected-day preservation on
+reopen, Close, Android Back, and the explicit Today shortcut. It accepts both
+the original Hub entry and the newer Personal Home entry.
+
+The Android Maestro workflow runs this Product flow explicitly. A separate
+Jest contract discovers all Product-tagged flows and catches accidental omission
+before the legacy suite excludes that tag. Screenshot output stays under the
+ignored `e2e/results/calendar/` directory. See `docs/E2E.md` for the exact command
+and local Windows setup checks. CI uploads the calendar JUnit report and
+screenshots even on failure and retains them for 14 days.
+
+The native flow passed on a dedicated, unlocked Android 15 x86_64 emulator using
+Maestro 2.5.1. The first complete run took 79 seconds; the final repeat on
+September 13 passed in 77 seconds. JUnit reports are in
+`releases/calendar-native-qa-20260910/`, with the final screenshots under
+`e2e/results/calendar/`. An intervening run failed before launch while ADB
+reported the device offline; it is preserved separately from the passing runs.
+On September 10,
+1,540 application tests, both strict TypeScript checks, scoped lint, the Web
+build, and the fixture-only Android release-mode build also passed.
+
+The native build includes the current working tree, including separate ongoing
+Home/Trends/Alerts work; this follow-up commits only the calendar regression and
+its CI/documentation. The E2E APK contains synthetic data and is **not** an
+installable user preview. Nothing was deployed or emailed by this follow-up.

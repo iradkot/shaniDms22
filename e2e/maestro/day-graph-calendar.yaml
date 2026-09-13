@@ -1,0 +1,97 @@
+appId: com.shanidms22
+tags:
+  - product
+  - calendar
+---
+# Native calendar smoke using the real rebuilt screen and synthetic E2E data.
+# A fixed historical leap day avoids dependencies on the host/device timezone.
+- runFlow: subflows/enter-day-graph.yaml
+
+- tapOn:
+    id: day-graph-pick-date
+- extendedWaitUntil:
+    visible:
+      id: day-graph-calendar
+    timeout: 15000
+
+# Jump directly to February 2024 instead of stepping through a changing number
+# of months. The chosen month must not itself navigate the underlying graph.
+- tapOn:
+    id: day-graph-calendar-jump
+- tapOn:
+    id: day-graph-calendar-year
+- eraseText
+- inputText: "2024"
+- hideKeyboard
+- tapOn:
+    id: day-graph-calendar-jump-month-2
+- extendedWaitUntil:
+    visible:
+      id: day-graph-calendar-day-2024-02-29
+      text: ".*(recorded readings in range|מהקריאות שנרשמו בטווח).*"
+    timeout: 15000
+- takeScreenshot: day-graph-calendar-leap-month
+- tapOn:
+    id: day-graph-calendar-day-2024-02-29
+- assertNotVisible:
+    id: day-graph-calendar
+- assertVisible:
+    id: day-graph-next
+    enabled: true
+
+# Reopening the date control must keep the historical choice, never jump today.
+- tapOn:
+    id: day-graph-pick-date
+- assertVisible:
+    id: day-graph-calendar-day-2024-02-29
+    selected: true
+
+# Browsing adjacent months leaves that selection unchanged.
+- tapOn:
+    id: day-graph-calendar-previous-month
+- assertVisible:
+    id: day-graph-calendar-day-2024-01-29
+- tapOn:
+    id: day-graph-calendar-next-month
+- assertVisible:
+    id: day-graph-calendar-day-2024-02-29
+    selected: true
+
+# Close button and Android Back both dismiss without changing the chosen day.
+- tapOn:
+    id: day-graph-calendar-close
+- assertNotVisible:
+    id: day-graph-calendar
+- tapOn:
+    id: day-graph-pick-date
+- assertVisible:
+    id: day-graph-calendar-day-2024-02-29
+    selected: true
+- back
+- assertNotVisible:
+    id: day-graph-calendar
+- tapOn:
+    id: day-graph-pick-date
+- assertVisible:
+    id: day-graph-calendar-day-2024-02-29
+    selected: true
+
+# Today is explicit. Disabled forward navigation proves we reached device-local
+# today without hardcoding the runtime date or parsing translated date labels.
+- tapOn:
+    id: day-graph-calendar-today
+- assertNotVisible:
+    id: day-graph-calendar
+- assertVisible:
+    id: day-graph-next
+    enabled: false
+- tapOn:
+    id: day-graph-pick-date
+- assertVisible:
+    id: day-graph-calendar-next-month
+    enabled: false
+- takeScreenshot: day-graph-calendar-today
+- tapOn:
+    id: day-graph-calendar-close
+- assertNotVisible:
+    id: day-graph-calendar
