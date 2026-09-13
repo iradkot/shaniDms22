@@ -5,6 +5,8 @@ const path = require('node:path');
 const domainTest = '__tests__/modules/dayGraph/calendar.test.ts';
 const suites = [
   domainTest,
+  '__tests__/modules/dayGraph/calendar.performance.test.ts',
+  '__tests__/modules/trends/rangeSummary.test.ts',
   '__tests__/platform/calendarGlucoseRange.test.ts',
   '__tests__/platform/nativeDayGraphDataSource.test.ts',
   '__tests__/platform/web/browserNightscoutClient.test.ts',

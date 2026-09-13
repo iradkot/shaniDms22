@@ -1,6 +1,5 @@
 import {
-  buildTrendsOverview,
-  prepareTrendsSampleSet,
+  buildTrendsRangeSummary,
   MINIMUM_ADEQUATE_COVERAGE_PERCENT,
   type TrendsRangeThresholds,
 } from '../../trends';
@@ -81,24 +80,17 @@ export const buildDayGraphCalendar = ({
     const dayEndMs = moveLocalDays(day, 1);
     // Never count future readings or penalize today for hours not elapsed yet.
     const endMs = Math.min(dayEndMs, nowMs + 1);
-    const prepared =
+    const summary =
       endMs > day
-        ? prepareTrendsSampleSet({
+        ? buildTrendsRangeSummary({
             period: {startMs: day, endMs},
+            thresholds,
             expectedSampleIntervalMs,
             samples: samplesByDay.get(day) ?? [],
           })
         : undefined;
-    const overview =
-      endMs > day
-        ? buildTrendsOverview({
-            period: {startMs: day, endMs},
-            thresholds,
-            expectedSampleIntervalMs,
-            samples: prepared?.validSamples ?? [],
-          })
-        : undefined;
-    const hasData = (overview?.validSampleCount ?? 0) > 0;
+    const prepared = summary?.sampleSet;
+    const hasData = (prepared?.validSampleCount ?? 0) > 0;
     // Dense uploads cannot fill unrelated gaps. Count each observed interval once,
     // cap its duration at one expected sample, and never infer glucose across gaps.
     const observedMs =
@@ -122,7 +114,7 @@ export const buildDayGraphCalendar = ({
     days.push({
       dayStartMs: day,
       status: hasData ? 'data' : verified && day <= nowMs ? 'empty' : 'unknown',
-      timeInRangePct: overview?.ranges?.targetPercent ?? null,
+      timeInRangePct: summary?.ranges?.targetPercent ?? null,
       coveragePct,
       partial:
         hasData &&

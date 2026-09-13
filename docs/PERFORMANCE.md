@@ -6,6 +6,13 @@ bursts, cache writes, startup route evaluation, AI presentation and historical
 data activation. Reports include the source commit and working-tree status in
 `artifacts/performance/summary.json` and `contracts.json`.
 
+Every deterministic run invalidates the previous successful report before doing
+work. `summary.json` records `running`, `passed`, or `failed`, the current stage
+and source revision. An interrupted run cannot masquerade as an old success;
+a failing Jest report remains available alongside the failed summary.
+`yarn verify:performance-runner` checks this behavior in milliseconds without
+launching Jest or touching real report files, and is included in `verify:all`.
+
 These tests count unnecessary work instead of enforcing machine-specific timing
 thresholds. The full `yarn verify:all` includes the same Jest regressions and the
 compiled-worklet checks. No extra dependency or production telemetry is needed.
@@ -58,6 +65,9 @@ development computer, not device guarantees.
 | Unused Markdown parser/rules/style in shared AI engine            | 3                        | 0                                        |
 | Latest-reading request pairs when App and AI mount                | 2                        | 1 shared owner                           |
 | Background 14-day therapy requests while opening the product host | 2                        | 0                                        |
+| Distant bolus timestamp reads during 60 cursor moves (stacked / external / internal tooltip) | 120 / 180 / 270 | 0 after source preparation |
+| Source-value reads for a synthetic 8,352-reading calendar month | 50,112 | 25,056 |
+| Visible calendar fallback rescans on timeline-only updates or monthly-load completion | 1 per update | 0 |
 
 Cold cache discovery still reads persisted entries once to establish the shared
 byte/retention budget. Warm writes use scalar metadata and only rewrite changed
@@ -67,6 +77,36 @@ An additional production browser run at 4× CPU throttling completed all 120
 touch samples with the expected final cursor, a 30.2ms p95 frame gap and zero
 long tasks. This is observational evidence for that fixture, not a native-device
 FPS guarantee.
+
+The September 13 follow-up keeps original event records and duplicate times.
+The tooltip shares a private prepared event index, uses bounded binary searches,
+and preserves the stacked five-minute and legacy thirty-minute windows and tie
+policies. Source-array or display-domain replacement rebuilds the index; cursor
+movement does not. Source arrays retain the existing immutable-input contract.
+
+Calendar and Trends share `buildTrendsRangeSummary`: input validation, timestamp
+deduplication and target buckets live in one place. Calendar no longer computes
+unused mean/CV/GRI metrics or prepares the same samples twice. Calendar interval
+coverage remains separate, including local days and DST. A seeded differential
+check compared 500 fixtures with the previous full Trends overview and found
+identical outputs. On this computer, a synthetic month's median CPU time fell
+from 3.520ms to 2.016ms; this is not an Android frame-rate measurement.
+
+`yarn perf:app` includes the event-index and calendar work budgets.
+`yarn test:calendar` also runs the shared range-summary correctness tests.
+
+Verified September 13, 2026: 1,575 application tests across 272 suites,
+101 focused performance contracts, six report-lifecycle tests, both strict
+TypeScript checks, scoped lint, and Web production build passed. Calendar checks
+passed 118 tests plus the eight-test DST rerun. Android and iOS JavaScript
+production bundles also compiled; these are not APK/IPA release builds.
+A production browser run completed 120 touch samples at 4× CPU throttling,
+with the expected final cursor, 12.2ms p95 frame gaps and no long tasks.
+
+These checks ran against the working tree, which also contains separate ongoing
+Home/Trends/Alerts work. This performance change does not publish those changes,
+deploy a website, or distribute a build. Existing Web chunk-size warnings remain;
+no warning threshold or data-fidelity check was relaxed to obtain a passing build.
 
 ## Rules for future changes
 

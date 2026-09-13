@@ -7,7 +7,10 @@ import {MAX_LOAD_CURSOR_DISTANCE_MS} from 'app/utils/chartLoadSeries.utils';
 
 import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
 import {BOLUS_DETECTION_WINDOW_MS} from 'app/components/charts/CgmGraph/constants/bolusHoverConfig';
-import {buildCarbEvents} from 'app/components/charts/CgmGraph/utils/carbsUtils';
+import {
+  createBolusTooltipIndex,
+  createCarbTooltipIndex,
+} from 'app/components/charts/CgmGraph/utils/tooltipEventIndex';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
@@ -189,55 +192,27 @@ export function useStackedChartsTooltipModel(
       : null;
   }, [bgSamples, cgmAnchorTimeMs, shouldShowTooltip]);
 
+  const bolusIndex = useMemo(
+    () => createBolusTooltipIndex(insulinData, xDomain),
+    [insulinData, xDomain],
+  );
   const tooltipBolusEvents = useMemo(() => {
     if (!shouldShowTooltip) {
       return [];
     }
-    if (!insulinData?.length) {
-      return [];
-    }
-    return insulinData
-      .filter(
-        (
-          entry,
-        ): entry is InsulinDataEntry & {
-          type: 'bolus';
-          amount: number;
-          timestamp: string;
-        } => {
-          if (
-            entry.type !== 'bolus' ||
-            typeof entry.amount !== 'number' ||
-            !Number.isFinite(entry.amount) ||
-            entry.amount <= 0 ||
-            typeof entry.timestamp !== 'string'
-          ) {
-            return false;
-          }
-          const timeMs = Date.parse(entry.timestamp);
-          return (
-            (!xDomain || (timeMs >= +xDomain[0] && timeMs <= +xDomain[1])) &&
-            Math.abs(timeMs - eventsAnchorTimeMs) <= BOLUS_DETECTION_WINDOW_MS
-          );
-        },
-      )
-      .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
-  }, [eventsAnchorTimeMs, insulinData, shouldShowTooltip, xDomain]);
+    return bolusIndex.within(eventsAnchorTimeMs, BOLUS_DETECTION_WINDOW_MS);
+  }, [eventsAnchorTimeMs, bolusIndex, shouldShowTooltip]);
 
-  const carbEvents = useMemo(
-    () => buildCarbEvents(foodItems, xDomain),
+  const carbIndex = useMemo(
+    () => createCarbTooltipIndex(foodItems, xDomain),
     [foodItems, xDomain],
   );
   const tooltipCarbEvents = useMemo(() => {
     if (!shouldShowTooltip) {
       return [];
     }
-    return carbEvents.filter(
-      entry =>
-        Math.abs(entry.timestamp - eventsAnchorTimeMs) <=
-        BOLUS_DETECTION_WINDOW_MS,
-    );
-  }, [eventsAnchorTimeMs, carbEvents, shouldShowTooltip]);
+    return carbIndex.within(eventsAnchorTimeMs, BOLUS_DETECTION_WINDOW_MS);
+  }, [eventsAnchorTimeMs, carbIndex, shouldShowTooltip]);
 
   return {
     shouldShowTooltip,

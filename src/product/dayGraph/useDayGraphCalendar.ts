@@ -139,30 +139,46 @@ export const useDayGraphCalendar = ({
   const current =
     state?.cache === cache && state.key === key ? state : undefined;
   const summary = current?.summary ?? cache.get(key);
-  const days = useMemo(() => {
+  const selectedGlucoseSamples = selectedDaySnapshot?.glucoseSamples;
+  const selectedFreshness = selectedDaySnapshot?.freshness;
+  // Timeline edits and the monthly read's loading state do not change this
+  // fallback. Keep glucose preparation separate from merging month summaries.
+  const knownDays = useMemo(() => {
     if (!open) {
       return [];
     }
-    const known = buildDayGraphCalendar({
+    return buildDayGraphCalendar({
       monthStartMs: month.dayStartMs,
       ...request,
-      snapshot: selectedDaySnapshot
-        ? {
-            glucoseSamples: selectedDaySnapshot.glucoseSamples,
-            freshness: selectedDaySnapshot.freshness,
-            complete: false,
-          }
-        : undefined,
+      snapshot:
+        selectedGlucoseSamples && selectedFreshness
+          ? {
+              glucoseSamples: selectedGlucoseSamples,
+              freshness: selectedFreshness,
+              complete: false,
+            }
+          : undefined,
     });
+  }, [
+    open,
+    month.dayStartMs,
+    request,
+    selectedGlucoseSamples,
+    selectedFreshness,
+  ]);
+  const days = useMemo(() => {
+    if (!open) {
+      return knownDays;
+    }
     // Already-visible glucose remains discoverable even if a month cannot load offline.
     return summary
       ? summary.days.map((day, index) =>
-          day.status !== 'data' && known[index]?.status === 'data'
-            ? known[index]!
+          day.status !== 'data' && knownDays[index]?.status === 'data'
+            ? knownDays[index]!
             : day,
         )
-      : known;
-  }, [open, month.dayStartMs, request, selectedDaySnapshot, summary]);
+      : knownDays;
+  }, [open, knownDays, summary]);
   return {
     days,
     loading: open && !!source.loadCalendarGlucose && (current?.loading ?? true),

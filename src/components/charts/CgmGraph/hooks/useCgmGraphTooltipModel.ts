@@ -6,13 +6,14 @@ import {InsulinDataEntry} from 'app/types/insulin.types';
 
 import {findClosestBgSample} from 'app/components/charts/CgmGraph/utils';
 import {
-  findBolusEventsInTooltipWindow,
-  findClosestBolus,
-} from 'app/components/charts/CgmGraph/utils/bolusUtils';
+  BOLUS_HOVER_CONFIG,
+  BOLUS_MAX_FOCUS_PROXIMITY_MS,
+  BOLUS_TOOLTIP_WINDOW_MS,
+} from 'app/components/charts/CgmGraph/constants/bolusHoverConfig';
 import {
-  findCarbEventsInTooltipWindow,
-  findClosestCarbEvent,
-} from 'app/components/charts/CgmGraph/utils/carbsUtils';
+  createBolusTooltipIndex,
+  createCarbTooltipIndex,
+} from 'app/components/charts/CgmGraph/utils/tooltipEventIndex';
 
 export type CgmGraphTooltipMode = 'internal' | 'external';
 
@@ -120,7 +121,16 @@ export function useCgmGraphTooltipModel(params: {
       : null;
   }, [activeTimeMs, bgSamples, isInteractionActive]);
 
-  const closestBolus = useMemo(() => {
+  const bolusIndex = useMemo(
+    () => createBolusTooltipIndex(insulinData),
+    [insulinData],
+  );
+  const carbIndex = useMemo(
+    () => createCarbTooltipIndex(foodItems),
+    [foodItems],
+  );
+
+  const closestBolusTimeMs = useMemo(() => {
     // In external mode, cursor snapping/windowing is expected to be driven by the parent.
     if (shouldUseExternalCursor) {
       return null;
@@ -128,24 +138,18 @@ export function useCgmGraphTooltipModel(params: {
     if (!isTouchActive || touchTimeMs == null) {
       return null;
     }
-    if (!insulinData?.length) {
-      return null;
-    }
-    return findClosestBolus(touchTimeMs, insulinData);
-  }, [insulinData, isTouchActive, shouldUseExternalCursor, touchTimeMs]);
+    return bolusIndex.closestTime(touchTimeMs, BOLUS_MAX_FOCUS_PROXIMITY_MS);
+  }, [bolusIndex, isTouchActive, shouldUseExternalCursor, touchTimeMs]);
 
-  const closestCarb = useMemo(() => {
+  const closestCarbTimeMs = useMemo(() => {
     if (shouldUseExternalCursor) {
       return null;
     }
     if (!isTouchActive || touchTimeMs == null) {
       return null;
     }
-    if (!foodItems?.length) {
-      return null;
-    }
-    return findClosestCarbEvent(touchTimeMs, foodItems);
-  }, [foodItems, isTouchActive, shouldUseExternalCursor, touchTimeMs]);
+    return carbIndex.closestTime(touchTimeMs, BOLUS_MAX_FOCUS_PROXIMITY_MS);
+  }, [carbIndex, isTouchActive, shouldUseExternalCursor, touchTimeMs]);
 
   const cgmAnchorTimeMs = useMemo(() => {
     if (shouldUseExternalCursor) {
@@ -163,20 +167,17 @@ export function useCgmGraphTooltipModel(params: {
       return null;
     }
 
-    if (closestBolus?.timestamp != null) {
-      const t = new Date(closestBolus.timestamp).getTime();
-      if (Number.isFinite(t)) {
-        return t;
-      }
+    if (closestBolusTimeMs != null) {
+      return closestBolusTimeMs;
     }
-    if (closestCarb?.timestamp != null) {
-      return closestCarb.timestamp;
+    if (closestCarbTimeMs != null) {
+      return closestCarbTimeMs;
     }
 
     return touchTimeMs;
   }, [
-    closestBolus?.timestamp,
-    closestCarb?.timestamp,
+    closestBolusTimeMs,
+    closestCarbTimeMs,
     cursorTimeMs,
     isInteractionActive,
     shouldUseExternalCursor,
@@ -190,32 +191,27 @@ export function useCgmGraphTooltipModel(params: {
     if (eventsAnchorTimeMs == null) {
       return [];
     }
-    if (!insulinData?.length) {
-      return [];
-    }
-
-    return findBolusEventsInTooltipWindow({
-      anchorTimeMs: eventsAnchorTimeMs,
-      insulinData,
-    });
-  }, [eventsAnchorTimeMs, insulinData, isInteractionActive]);
+    return bolusIndex.within(
+      eventsAnchorTimeMs,
+      BOLUS_TOOLTIP_WINDOW_MS,
+      BOLUS_HOVER_CONFIG.maxBolusEventsInTooltip,
+    );
+  }, [eventsAnchorTimeMs, bolusIndex, isInteractionActive]);
 
   const tooltipCarbEvents = useMemo(() => {
     if (!isInteractionActive) {
-      return [];
-    }
-    if (!foodItems?.length) {
       return [];
     }
     if (eventsAnchorTimeMs == null) {
       return [];
     }
 
-    return findCarbEventsInTooltipWindow({
-      anchorTimeMs: eventsAnchorTimeMs,
-      foodItems,
-    });
-  }, [eventsAnchorTimeMs, foodItems, isInteractionActive]);
+    return carbIndex.within(
+      eventsAnchorTimeMs,
+      BOLUS_TOOLTIP_WINDOW_MS,
+      BOLUS_HOVER_CONFIG.maxBolusEventsInTooltip,
+    );
+  }, [eventsAnchorTimeMs, carbIndex, isInteractionActive]);
 
   // Avoid prop identity churn during touch-move renders.
   const focusedFoodItemIds = useMemo(

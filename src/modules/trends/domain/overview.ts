@@ -2,6 +2,7 @@ import {
   TrendsOverviewInputError,
   assertTrendsPeriod,
   prepareTrendsSampleSet,
+  type PreparedTrendsSampleSet,
 } from './sampleSet';
 
 export interface TrendsPeriod {
@@ -67,11 +68,19 @@ export interface TrendsOverview {
   readonly coefficientOfVariationPercent: number | undefined;
 }
 
-export interface BuildTrendsOverviewInput {
+export interface BuildTrendsRangeSummaryInput {
   readonly period: TrendsPeriod;
   readonly expectedSampleIntervalMs: number;
   readonly thresholds: TrendsRangeThresholds;
   readonly samples: readonly TrendsGlucoseSample[];
+}
+
+export interface TrendsRangeSummary {
+  readonly sampleSet: PreparedTrendsSampleSet;
+  readonly ranges: TrendsRangeDistribution | undefined;
+}
+
+export interface BuildTrendsOverviewInput extends BuildTrendsRangeSummaryInput {
   /** Fixed offset used to disclose and count local calendar days. */
   readonly timeZoneOffsetMinutes?: number;
 }
@@ -185,6 +194,39 @@ const emptyRangeCounts = (): Record<keyof TrendsRangeDistribution, number> => ({
   veryHighPercent: 0,
 });
 
+/**
+ * Integrity-checked readings and their configured range distribution, without
+ * computing the full overview's unrelated metrics. Calendar coverage and Trends
+ * consume the same prepared readings; callers never need to prepare them twice.
+ */
+export const buildTrendsRangeSummary = (
+  input: BuildTrendsRangeSummaryInput,
+): TrendsRangeSummary => {
+  assertPeriod(input.period);
+  assertThresholds(input.thresholds);
+  const sampleSet = prepareTrendsSampleSet(input);
+  const values = sampleSet.valuesMgDl;
+  if (values.length === 0) {
+    return {sampleSet, ranges: undefined};
+  }
+  const counts = emptyRangeCounts();
+  values.forEach(value => {
+    counts[classify(value, input.thresholds)] += 1;
+  });
+  const percent = (count: number): number =>
+    roundTo((count / values.length) * 100);
+  return {
+    sampleSet,
+    ranges: {
+      veryLowPercent: percent(counts.veryLowPercent),
+      lowPercent: percent(counts.lowPercent),
+      targetPercent: percent(counts.targetPercent),
+      highPercent: percent(counts.highPercent),
+      veryHighPercent: percent(counts.veryHighPercent),
+    },
+  };
+};
+
 export const buildTrendsOverview = (
   input: BuildTrendsOverviewInput,
 ): TrendsOverview => {
@@ -200,7 +242,7 @@ export const buildTrendsOverview = (
       'The Trends time-zone offset must be a whole number of minutes between -840 and 840.',
     );
   }
-  const prepared = prepareTrendsSampleSet(input);
+  const {sampleSet: prepared, ranges} = buildTrendsRangeSummary(input);
   const values = prepared.valuesMgDl;
   const localDays = new Set(
     prepared.validSamples.map(sample =>
@@ -240,14 +282,10 @@ export const buildTrendsOverview = (
     values.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
     values.length;
   const standardDeviation = Math.sqrt(variance);
-  const counts = emptyRangeCounts();
   const canonicalCounts = emptyRangeCounts();
   values.forEach(value => {
-    counts[classify(value, input.thresholds)] += 1;
     canonicalCounts[classify(value, CANONICAL_GRI_THRESHOLDS)] += 1;
   });
-  const percent = (count: number): number =>
-    roundTo((count / values.length) * 100);
   const rawPercent = (count: number): number =>
     (count / values.length) * 100;
   const veryLow = rawPercent(canonicalCounts.veryLowPercent);
@@ -276,13 +314,7 @@ export const buildTrendsOverview = (
     interpretationQuality: prepared.interpretationQuality,
     largestGapMs: prepared.largestGapMs,
     lastReadingTimestampMs: prepared.lastReadingTimestampMs,
-    ranges: {
-      veryLowPercent: percent(counts.veryLowPercent),
-      lowPercent: percent(counts.lowPercent),
-      targetPercent: percent(counts.targetPercent),
-      highPercent: percent(counts.highPercent),
-      veryHighPercent: percent(counts.veryHighPercent),
-    },
+    ranges,
     meanGlucoseMgDl: roundTo(mean),
     // Published GMI equation for mean glucose expressed in mg/dL. It is only
     // presented as representative after the separate duration/coverage gate.

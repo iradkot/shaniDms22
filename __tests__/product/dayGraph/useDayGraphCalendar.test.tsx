@@ -59,6 +59,89 @@ const update = async (tree: renderer.ReactTestRenderer, input: Props) => {
 };
 
 describe('lazy date calendar reads', () => {
+  it('does not rescan visible glucose when only the timeline snapshot changes', async () => {
+    let timestampReads = 0;
+    const reading = {
+      identity: {sourceId: 'fixture', recordId: 'visible-reading'},
+      valueMgDl: 120,
+      get timestampMs() {
+        timestampReads++;
+        return day + 60_000;
+      },
+    };
+    const selectedDaySnapshot = {
+      glucoseSamples: [reading],
+      timelineItems: [],
+      freshness: {kind: 'fresh' as const, fetchedAtMs: nowMs},
+    };
+    const input = {
+      ...props({loadDayGraph: jest.fn()}),
+      open: true,
+      selectedDaySnapshot,
+    };
+    const tree = await mount(input);
+    try {
+      expect(timestampReads).toBeGreaterThan(0);
+      const previousDays = latest.days;
+      timestampReads = 0;
+      await update(tree, {
+        ...input,
+        selectedDaySnapshot: {
+          ...selectedDaySnapshot,
+          timelineItems: [],
+        },
+      });
+      expect(timestampReads).toBe(0);
+      expect(latest.days).toBe(previousDays);
+      expect(latest.days.find(item => item.dayStartMs === day)).toMatchObject({
+        status: 'data',
+        timeInRangePct: 100,
+      });
+    } finally {
+      act(() => tree.unmount());
+    }
+  });
+
+  it('reuses the visible-day fallback when the monthly read settles', async () => {
+    let timestampReads = 0;
+    const pending = deferred<DayGraphCalendarSnapshot>();
+    const reading = {
+      identity: {sourceId: 'fixture', recordId: 'visible-reading'},
+      valueMgDl: 120,
+      get timestampMs() {
+        timestampReads++;
+        return day + 60_000;
+      },
+    };
+    const tree = await mount({
+      ...props({
+        loadDayGraph: jest.fn(),
+        loadCalendarGlucose: () => pending.promise,
+      }),
+      open: true,
+      selectedDaySnapshot: {
+        glucoseSamples: [reading],
+        timelineItems: [],
+        freshness: {kind: 'fresh', fetchedAtMs: nowMs},
+      },
+    });
+    try {
+      expect(timestampReads).toBeGreaterThan(0);
+      timestampReads = 0;
+      await act(async () =>
+        pending.resolve({...snapshot(), glucoseSamples: []}),
+      );
+      expect(timestampReads).toBe(0);
+      expect(latest.loading).toBe(false);
+      expect(latest.days.find(item => item.dayStartMs === day)).toMatchObject({
+        status: 'data',
+        timeInRangePct: 100,
+      });
+    } finally {
+      act(() => tree.unmount());
+    }
+  });
+
   it('loads glucose only when opened, clamps future range, caches summaries on reopen and retries explicitly', async () => {
     const loadCalendarGlucose = jest.fn(async () => snapshot());
     const loadDayGraph = jest.fn();
