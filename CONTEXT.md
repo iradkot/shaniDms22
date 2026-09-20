@@ -143,8 +143,12 @@ Another meal, carbohydrate treatment, rescue treatment, correction, activity, or
 _Avoid_: Invalid Event, Deleted Event
 
 **Hub**:
-The default navigation surface from which a Product User opens focused Modules. In V1 its sections appear in the fixed order Current Snapshot when enabled, Favorites, Recents when enabled, and All Modules. It is not inherently a live-status dashboard and may be replaced as the normal start destination by user preference.
+The navigation surface from which a Product User opens Modules and directly launchable stable destinations through All Tools, with an optional Current Snapshot below the catalogue. It may be replaced as the normal start destination by user preference.
 _Avoid_: Home screen, Dashboard
+
+**All Tools**:
+The app-style catalogue of Modules and directly launchable stable destinations, ordered alphabetically by their displayed names, with up to eight recently used destinations above it. Action categories and Favorites are optional filters; closing the filter returns to the full catalogue.
+_Avoid_: Mandatory category navigation, Dashboard
 
 **Current Snapshot**:
 An optional compact Hub preview containing current glucose, trend arrow, data age, IOB and COB when available, and a clear stale or offline state. It is hidden by default when onboarding is skipped and opens the Day Graph Module at the current point in time. It is not a mandatory or universally critical header and does not contain a mini-chart or AI recommendation.
@@ -155,7 +159,7 @@ A focused product area available from the Hub, such as trends, daily review, or 
 _Avoid_: Tab, Tile, Screen
 
 **Module Registry**:
-The extensible catalogue of Modules available to the Hub and navigation shell. The initial registry contains Day Graph, Daily Overview, Previous Day Summary, Trends, Hypo Investigation, Similar Events, Loop Changes and Impact, AI Analyst, Meals, Activity, Update Center, Alert Rules, and Settings. All Modules groups them under Today, Understand, Ask, Record, Updates, and Manage; these groups do not vary by Product User relationship.
+The extensible catalogue of Modules available to the Hub and navigation shell. Modules belong to Today, Understand, Ask, Record, Updates, or Manage; these categories support optional All Tools filtering and do not vary by Product User relationship.
 _Avoid_: Fixed tab list, Screen registry
 
 **Product Destination Registry**:
@@ -175,7 +179,7 @@ Explicit permission for one Product User and Workspace to let one versioned Runt
 _Avoid_: Account permission, Credential delegation
 
 **Module Tile**:
-The compact Hub control that opens a Module. It contains a name, a short explanation, and optionally a small operational badge such as an update count, pending sync, or stale-data state. Medical metrics remain inside the owning Module, and the tile does not embed a miniature analytical dashboard or chart.
+The compact All Tools control that opens a Module or directly launchable stable destination, showing only its icon and name, with an optional operational status dot. Its explanation and status remain available to assistive readers; it is distinct from a data preview.
 _Avoid_: Widget, Dashboard card
 
 **Hub Customisation**:
@@ -243,7 +247,7 @@ A destination that requires specific context such as an event, meal, activity, s
 _Avoid_: Module
 
 **Contextual Entry**:
-A link that opens the canonical owning Module or Deep Screen with the relevant Workspace, entity, time range, and filters already selected. Back returns to the originating view, while Recents records only the owning Module.
+A link that opens the canonical Module or Deep Screen with the relevant Workspace, entity, time range, and filters already selected. Back returns to the originating view, while Recents records only the stable destination without that context.
 _Avoid_: Duplicate screen, Saved view
 
 **Personalisation Questionnaire**:
@@ -251,11 +255,11 @@ The initial, skippable three-stage questionnaire that asks about the Product Use
 _Avoid_: Access questionnaire, Mandatory role selection
 
 **Recent Module**:
-A Module destination recorded automatically after a visit. It does not preserve transient screen state, drafts, raw data, or conversation content.
+A Module or directly launchable stable destination recorded automatically after a visit, with the eight most recently used destinations available at the top of All Tools. It does not preserve transient screen state, drafts, raw data, or conversation content.
 _Avoid_: Navigation history, Saved view
 
 **Favorite Destination**:
-A Module or stable destination inside a Module explicitly pinned by a Product User for quick access, such as Trends or Trends / AGP. It never captures transient filters or medical payloads. There is no hard product limit on Favorite Destinations. The Hub initially shows a responsive compact block and reveals the full ordered set on request rather than discarding selections.
+A Module or stable destination inside a Module explicitly pinned by a Product User for quick access, such as Trends or Trends / AGP. The optional Favorites filter in All Tools exposes the full set without a hard limit, transient filters, or medical payloads.
 _Avoid_: Saved view
 
 **Account Preference**:

@@ -1,12 +1,10 @@
 import {
   CORE_DESTINATION_IDS,
   DESTINATION_GROUPS,
-  DestinationDefinition,
   DestinationLocale,
   DestinationRegistry,
   DestinationUnavailableCode,
   ResolvedDestinationTarget,
-  StoredDestinationTarget,
   createStoredDestinationTarget,
   resolveDestinationTarget,
 } from '../destinations';
@@ -17,6 +15,8 @@ import {
   OperationalBadge,
   SelectHubModelInput,
 } from './types';
+
+export const HUB_RECENT_LIMIT = 8;
 
 const GROUP_COPY: Record<
   HubModuleGroup['id'],
@@ -118,23 +118,6 @@ const dedupeResolved = (
   });
 };
 
-const resolveOwnerModule = (
-  registry: DestinationRegistry,
-  resolved: ResolvedDestinationTarget,
-  input: SelectHubModelInput,
-): ResolvedDestinationTarget => {
-  if (resolved.status !== 'available') {
-    return resolved;
-  }
-  const ownerId = resolved.destination.ownerModuleId;
-  return resolveDestinationTarget(
-    registry,
-    createStoredDestinationTarget(ownerId),
-    undefined,
-    input.runtime,
-  );
-};
-
 export const selectFavoriteItems = (
   registry: DestinationRegistry,
   input: SelectHubModelInput,
@@ -152,29 +135,24 @@ export const selectRecentItems = (
   const ordered = [...(input.preferences.recents ?? [])].sort(
     (left, right) => right.visitedAt - left.visitedAt,
   );
-  const ownerModules = dedupeResolved(
+  const destinations = dedupeResolved(
     ordered.map(recent =>
-      resolveOwnerModule(
+      resolveDestinationTarget(
         registry,
-        resolveDestinationTarget(
-          registry,
-          recent.target,
-          undefined,
-          input.runtime,
-        ),
-        input,
+        recent.target,
+        undefined,
+        input.runtime,
       ),
     ),
   );
-  const limited = ownerModules.slice(0, Math.max(0, input.recentLimit ?? 4));
+  const limited = destinations.slice(
+    0,
+    Math.max(0, input.recentLimit ?? HUB_RECENT_LIMIT),
+  );
   return limited.map(resolved =>
     makeItem(resolved, input.locale, input.operationalBadges),
   );
 };
-
-const moduleTarget = (
-  destination: DestinationDefinition,
-): StoredDestinationTarget => createStoredDestinationTarget(destination.id);
 
 export const selectAllModuleGroups = (
   registry: DestinationRegistry,
@@ -184,14 +162,23 @@ export const selectAllModuleGroups = (
   return DESTINATION_GROUPS.map(groupId => ({
     id: groupId,
     title: GROUP_COPY[groupId][input.locale],
-    items: registry
-      .modules(groupId)
-      .filter(module => !hidden.has(module.id))
-      .map(module =>
+    items: registry.destinations
+      .filter(destination => {
+        const owner = registry.get(destination.ownerModuleId);
+        return (
+          owner?.kind === 'module' &&
+          owner.group === groupId &&
+          !hidden.has(destination.id) &&
+          !hidden.has(owner.id) &&
+          (destination.kind === 'module' || destination.targetPolicy.shortcut)
+        );
+      })
+      .sort((left, right) => left.order - right.order)
+      .map(destination =>
         makeItem(
           resolveDestinationTarget(
             registry,
-            moduleTarget(module),
+            createStoredDestinationTarget(destination.id),
             undefined,
             input.runtime,
           ),

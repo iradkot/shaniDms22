@@ -83,9 +83,8 @@ describe('Nightscout access from Product Settings', () => {
           ),
         );
       });
-      act(() => button(tree!, 'hub-category-manage').props.onPress());
       await act(async () => {
-        button(tree!, 'hub-grid-manage-tile-core.settings').props.onPress();
+        button(tree!, 'hub-grid-all-tile-core.settings').props.onPress();
       });
       expect(
         tree!.root.findByProps({testID: 'settings-module-view'}),

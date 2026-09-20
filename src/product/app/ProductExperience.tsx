@@ -351,13 +351,22 @@ export const ProductExperience = ({
     );
     return () => subscription.remove();
   }, [customizingStage, state.stack.length]);
-  const storedRecents: readonly RecentDestination[] =
-    activePersonalization.device.recentModules.map(recent => ({
-      target: recent.target,
-      visitedAt: recent.visitedAt,
-    }));
-  const recents =
-    personalization === undefined ? sessionRecents : storedRecents;
+  const recents = useMemo<readonly RecentDestination[]>(() => {
+    if (personalization === undefined) {
+      return sessionRecents;
+    }
+    const storedRecents = activePersonalization.device.recentModules.map(
+      recent => ({target: recent.target, visitedAt: recent.visitedAt}),
+    );
+    return onPersonalizationChange === undefined
+      ? [...sessionRecents, ...storedRecents]
+      : storedRecents;
+  }, [
+    activePersonalization.device.recentModules,
+    onPersonalizationChange,
+    personalization,
+    sessionRecents,
+  ]);
   const hubModel = useMemo(
     () =>
       selectHubViewModel(destinationRegistry, {
@@ -410,7 +419,7 @@ export const ProductExperience = ({
 
   const recordVisit = (destination: AvailableDestinationTarget) => {
     const target = createStoredDestinationTarget(
-      destination.destination.ownerModuleId,
+      destination.destination.id,
     );
     const visitedAt = Date.now();
     if (personalization !== undefined && onPersonalizationChange) {

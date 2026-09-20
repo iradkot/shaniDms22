@@ -2,10 +2,14 @@ import React from 'react';
 import {withTheme} from '../mocks/withTheme';
 import renderer, {act} from 'react-test-renderer';
 import {Pressable, Text} from 'react-native';
-import {ProductExperience} from '../../src/product/app';
+import {
+  ProductExperience,
+  ProductImplementationRegistry,
+} from '../../src/product/app';
 import {DayGraphModuleView} from '../../src/product/dayGraph';
 import {
   CORE_DESTINATION_IDS,
+  CORE_IMPLEMENTATION_KEYS,
   createStoredDestinationTarget,
 } from '../../src/product/destinations';
 import {
@@ -664,13 +668,9 @@ describe('Product Experience personalization behavior', () => {
       );
     });
 
-    act(() =>
-      tree!.root.findByProps({testID: 'hub-category-record'}).props.onPress(),
-    );
-
     const tile = tree!.root
       .findAllByProps({
-        testID: `hub-grid-record-tile-${CORE_DESTINATION_IDS.meals}`,
+        testID: `hub-grid-all-tile-${CORE_DESTINATION_IDS.meals}`,
       })
       .find(
         node =>
@@ -678,7 +678,7 @@ describe('Product Experience personalization behavior', () => {
           typeof node.props.onLongPress === 'function',
       );
     expect(tile?.props.accessibilityHint).toBe(
-      'Long press to customize Modules.',
+      'Long press to customize your tools.',
     );
     act(() => tile?.props.onLongPress());
 
@@ -702,6 +702,91 @@ describe('Product Experience personalization behavior', () => {
     expect(tree!.root.findByProps({testID: 'product-hub'})).toBeDefined();
     act(() => tree!.unmount());
   });
+
+  it.each(['editable', 'read-only'] as const)(
+    'remembers the exact launched child screen with %s personalization',
+    mode => {
+      const initial = recordRecentModule(
+        skipPersonalizationQuestionnaire(createDefaultProductPersonalization()),
+        target(CORE_DESTINATION_IDS.settings),
+        1,
+      );
+      const saved: StoredProductPersonalization[] = [];
+      const implementations = new ProductImplementationRegistry([
+        {
+          implementationKey: CORE_IMPLEMENTATION_KEYS.trendsAgpDailyPatterns,
+          render: host => (
+            <Text testID="launcher-child-destination">
+              {host.destination.target.destinationId}
+            </Text>
+          ),
+        },
+      ]);
+      const Experience = () => {
+        const [personalization, setPersonalization] = React.useState(initial);
+        return (
+          <ProductExperience
+            implementationRegistry={implementations}
+            locale="en"
+            personalization={personalization}
+            personalizationLayout="phone"
+            runtime={{platform: 'ios'}}
+            {...(mode === 'editable'
+              ? {
+                  onPersonalizationChange: async (
+                    change: ProductPersonalizationChange,
+                  ) => {
+                    const next = resolveProductPersonalizationChange(
+                      personalization,
+                      change,
+                    );
+                    saved.push(next);
+                    setPersonalization(next);
+                  },
+                }
+              : {})}
+          />
+        );
+      };
+      let tree: renderer.ReactTestRenderer;
+      act(() => {
+        tree = renderer.create(withTheme(<Experience />));
+      });
+      act(() =>
+        findPressableByTestId(
+          tree!,
+          `hub-grid-all-tile-${CORE_DESTINATION_IDS.trendsAgpDailyPatterns}`,
+        ).props.onPress(),
+      );
+      expect(
+        tree!.root.findByProps({testID: 'launcher-child-destination'}).props
+          .children,
+      ).toBe(CORE_DESTINATION_IDS.trendsAgpDailyPatterns);
+      act(() => findPressableByTestId(tree!, 'shell-control-hub').props.onPress());
+
+      const recentIDs = tree!.root
+        .findAllByType(Pressable)
+        .map(node => node.props.testID)
+        .filter(
+          (testID): testID is string =>
+            typeof testID === 'string' &&
+            testID.startsWith('hub-grid-recents-tile-'),
+        );
+      expect(recentIDs).toEqual([
+        `hub-grid-recents-tile-${CORE_DESTINATION_IDS.trendsAgpDailyPatterns}`,
+        `hub-grid-recents-tile-${CORE_DESTINATION_IDS.settings}`,
+      ]);
+      if (mode === 'editable') {
+        expect(saved[0]?.device.recentModules[0]?.target.destinationId).toBe(
+          CORE_DESTINATION_IDS.trendsAgpDailyPatterns,
+        );
+      } else {
+        expect(saved).toHaveLength(0);
+        expect(initial.device.recentModules).toHaveLength(1);
+      }
+      act(() => tree!.unmount());
+    },
+  );
 
   it('wires Account-hidden Modules into the Hub while keeping explicit Favorites', () => {
     const skipped = skipPersonalizationQuestionnaire(
@@ -731,7 +816,7 @@ describe('Product Experience personalization behavior', () => {
     expect(
       tree!.root
         .findAllByProps({
-          testID: `hub-grid-record-tile-${CORE_DESTINATION_IDS.meals}`,
+          testID: `hub-grid-all-tile-${CORE_DESTINATION_IDS.meals}`,
         })
         .filter(node => node.type === Pressable),
     ).toHaveLength(0);
@@ -749,7 +834,10 @@ describe('Product Experience personalization behavior', () => {
       );
     });
     act(() =>
-      findPressableByTestId(tree!, 'hub-quick-access-toggle').props.onPress(),
+      findPressableByTestId(tree!, 'hub-filter-toggle').props.onPress(),
+    );
+    act(() =>
+      findPressableByTestId(tree!, 'hub-category-favorites').props.onPress(),
     );
     expect(
       tree!.root

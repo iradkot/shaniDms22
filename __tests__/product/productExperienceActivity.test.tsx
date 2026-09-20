@@ -144,13 +144,8 @@ describe('Product Experience activity slice', () => {
         ),
       );
     });
-    act(() =>
-      tree!.root
-        .findByProps({testID: 'hub-category-understand'})
-        .props.onPress(),
-    );
     const trendsTile = tree!.root
-      .findAllByProps({testID: 'hub-grid-understand-tile-core.trends'})
+      .findAllByProps({testID: 'hub-grid-all-tile-core.trends'})
       .find(node => node.type === Pressable);
     act(() => trendsTile?.props.onPress());
 
@@ -216,12 +211,8 @@ describe('Product Experience activity slice', () => {
       );
     });
 
-    act(() =>
-      tree!.root.findByProps({testID: 'hub-category-record'}).props.onPress(),
-    );
-
     const activityTiles = tree!.root
-      .findAllByProps({testID: 'hub-grid-record-tile-core.activity'})
+      .findAllByProps({testID: 'hub-grid-all-tile-core.activity'})
       .filter(node => node.type === Pressable);
     expect(activityTiles.length).toBeGreaterThan(0);
     act(() => {

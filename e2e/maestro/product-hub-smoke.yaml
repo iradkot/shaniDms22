@@ -3,7 +3,7 @@ tags:
   - product
 ---
 # Rebuilt product smoke. This is intentionally independent of Firebase and
-# Nightscout: it verifies the navigation shell and progressive Hub disclosure.
+# Nightscout: it verifies the navigation shell and optional Hub filters.
 - launchApp:
     clearState: true
 
@@ -14,6 +14,8 @@ tags:
 
 - assertVisible:
     id: product-hub
+- tapOn:
+    id: hub-filter-toggle
 
 - scrollUntilVisible:
     element:
@@ -69,6 +71,8 @@ tags:
     timeout: 15000
 
 # Opening the same Module again and using Hub also resets to the Hub root.
+- tapOn:
+    id: hub-filter-toggle
 - scrollUntilVisible:
     element:
       id: hub-category-record
