@@ -233,7 +233,7 @@ object GlucoseWidgetUpdater {
 
     summaryWidgetIds.forEach { widgetId ->
       try {
-        val views = buildSummaryViews(context, state, manager.getAppWidgetOptions(widgetId))
+        val views = buildSummaryViews(context, widgetId, state, manager.getAppWidgetOptions(widgetId))
         manager.updateAppWidget(widgetId, views)
       } catch (_: Throwable) {
         // Prevent widget rendering issues from crashing app process.
@@ -257,32 +257,10 @@ object GlucoseWidgetUpdater {
     return summaryWidgetIds.isNotEmpty() || graphWidgetIds.isNotEmpty()
   }
 
-  private fun buildSummaryViews(context: Context, state: WidgetState, options: Bundle?): RemoteViews {
-    val views = RemoteViews(context.packageName, R.layout.glucose_widget)
-    val compact = widgetHeightDp(options) < 160
-    views.setViewVisibility(R.id.glucose_widget_metrics, if (compact) View.GONE else View.VISIBLE)
-    views.setViewVisibility(R.id.glucose_ratio, if (compact) View.GONE else View.VISIBLE)
-    views.setTextViewText(R.id.glucose_value, state.value?.toString() ?: "--")
-    views.setTextViewText(R.id.glucose_trend, state.trend.ifBlank { "•" })
-    views.setTextViewText(R.id.glucose_load, buildLoadText(state))
-    bindUpdatedTime(views, R.id.glucose_updated, R.id.glucose_updated_chrono, state.ts)
-    views.setTextViewText(R.id.glucose_basal, "${state.totalBasal} U\nBasal")
-    views.setTextViewText(R.id.glucose_bolus, "${state.totalBolus} U\nBolus")
-    views.setTextViewText(R.id.glucose_ratio, "Basal/Bolus ${state.basalBolusRatio}%")
-    views.setTextViewText(R.id.glucose_total_insulin, "${state.totalInsulin} U\nTotal")
-    views.setTextViewText(R.id.glucose_tir, "${state.tir}%\nTIR")
-    val summary = widgetForecastSummary(state.forecast, System.currentTimeMillis())
-    views.setTextViewText(R.id.glucose_projected, buildForecastText(summary, compact = true))
-    val projectedColor = when {
-      summary == null -> Color.parseColor("#99111827")
-      state.low != null && summary.point.sgv < state.low -> Color.parseColor("#7F1D1D")
-      state.high != null && summary.point.sgv > state.high -> Color.parseColor("#7C2D12")
-      else -> Color.parseColor("#111827")
-    }
-    views.setTextColor(R.id.glucose_projected, projectedColor)
-    views.setOnClickPendingIntent(R.id.glucose_widget_root, buildLaunchPendingIntent(context, 0))
-    return views
-  }
+  private fun buildSummaryViews(context: Context, widgetId: Int, state: WidgetState, options: Bundle?): RemoteViews =
+    GlucoseSummaryWidgetRenderer.build(
+      context, widgetId, options, WidgetDailySummaryStore.read(context), state.value, state.trend, state.ts,
+    )
 
   private fun buildGraphViews(context: Context, state: WidgetState, widgetOptions: Bundle?): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.glucose_graph_widget)

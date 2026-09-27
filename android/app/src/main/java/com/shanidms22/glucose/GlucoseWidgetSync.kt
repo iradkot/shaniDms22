@@ -24,11 +24,10 @@ internal object GlucoseWidgetSync {
     val sparklineHours = prefs.getInt(GlucoseSyncWorker.KEY_SPARKLINE_HOURS, 3).coerceIn(1, 12)
     val entries = fetchRecentEntries(baseUrl, secret, sparklineHours)
     val latest = latestWidgetBgFromEntries(entries) ?: return false
-    val load = fetchLatestWidgetLoad(baseUrl, secret)
-    val insulinStats = fetchLatestWidgetInsulinStats(baseUrl, secret)
+    val load = runCatching { fetchLatestWidgetLoad(baseUrl, secret) }.getOrNull()
     val (low, high) = GlucoseWidgetUpdater.getRangeThresholds(context)
 
-    return GlucoseWidgetCredentialStore.withConfigurationLock {
+    val glucoseSaved = GlucoseWidgetCredentialStore.withConfigurationLock {
       // Network requests may finish after an account switch or credential rotation.
       if (GlucoseWidgetCredentialStore.readSyncConfiguration(context) != configuration) return@withConfigurationLock false
       val history = parseValidWidgetEntries(entries)
@@ -40,10 +39,10 @@ internal object GlucoseWidgetSync {
         latest.date,
         load?.iob,
         load?.cob,
-        insulinStats?.totalBasal,
-        insulinStats?.totalBolus,
-        insulinStats?.basalBolusRatio,
-        insulinStats?.totalInsulin,
+        null,
+        null,
+        null,
+        null,
         calculateWidgetTir(entries, sparklineHours, low, high),
         null,
         null,
@@ -62,6 +61,16 @@ internal object GlucoseWidgetSync {
       GlucoseWidgetUpdater.updateNotification(context)
       true
     }
+    // Fresh glucose must reach the launcher before optional, potentially paginated history work.
+    if (!glucoseSaved) return false
+    val daily = runCatching { WidgetDailySummaryStore.fetch(context, configuration, low, high) }.getOrNull()
+    if (daily != null) GlucoseWidgetCredentialStore.withConfigurationLock {
+      if (GlucoseWidgetCredentialStore.readSyncConfiguration(context) == configuration) {
+        WidgetDailySummaryStore.save(context, configuration, daily)
+        GlucoseWidgetUpdater.updateWidgets(context)
+      }
+    }
+    return true
   }
 
   fun syncAsync(context: Context) {

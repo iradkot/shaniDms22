@@ -119,6 +119,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode configuredVersionCode.toInteger()
         versionName configuredVersionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         def e2eEnabled = (System.getenv("E2E") ?: "false").toBoolean()
         buildConfigField "boolean", "E2E", e2eEnabled ? "true" : "false"
@@ -186,6 +187,8 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

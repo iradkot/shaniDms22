@@ -2,6 +2,7 @@ package com.shanidms22.glucose
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -12,332 +13,194 @@ internal data class WidgetInsulinStats(
   val totalBolus: Double,
   val basalBolusRatio: Double,
   val totalInsulin: Double,
+  // Scheduled basal plus recorded overrides is an estimate, not a pump delivery ledger.
+  val basalEstimated: Boolean = true,
 )
 
-private data class WidgetBasalProfileEntry(val seconds: Int, val rate: Double)
+internal fun widgetInsulinStats(basal: Double, bolus: Double): WidgetInsulinStats {
+  val total = basal + bolus
+  return WidgetInsulinStats(basal, bolus, if (total > 0) basal / total else 0.0, total)
+}
 
-private data class WidgetInsulinEntry(
-  val type: String,
-  val startMs: Long,
-  val endMs: Long?,
-  val rate: Double?,
-  val amount: Double?,
-  val order: Int,
-)
+private data class BasalRate(val seconds: Int, val rate: Double)
+private data class BasalProfile(val startMs: Long, val rates: List<BasalRate>, val zone: TimeZone)
+private data class BasalControl(val startMs: Long, val endMs: Long, val rate: Double?)
 
+/** Retained for callers outside the daily dashboard. */
 internal fun fetchLatestWidgetInsulinStats(baseUrl: String, secret: String?): WidgetInsulinStats? {
-  val nowMs = System.currentTimeMillis()
-  val startMs = startOfLocalDayMs(nowMs)
-  val treatments = fetchWidgetJsonArray(
-    "${baseUrl.trimEnd('/')}/api/v1/treatments?find[created_at][\$gte]=${isoUtc(startMs - DAY_MS)}&find[created_at][\$lte]=${isoUtc(nowMs)}&count=1000",
-    secret,
-  )
-  val profiles = fetchWidgetJsonArray(
-    "${baseUrl.trimEnd('/')}/api/v1/profiles?find[startDate][\$lte]=${isoUtc(nowMs)}&sort[startDate]=-1&count=1",
-    secret,
-  )
-
-  return calculateWidgetInsulinStats(treatments, profiles, startMs, nowMs)
+  val now = System.currentTimeMillis()
+  val start = widgetStartOfDayMs(now)
+  val treatments = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "treatments", "created_at", widgetIsoUtc(start - DAY_MS), widgetIsoUtc(now)), secret)
+  val profiles = fetchWidgetProfileHistory(baseUrl, secret, start, now)
+  return calculateWidgetInsulinStats(treatments, profiles, start, now)
 }
 
-private fun calculateWidgetInsulinStats(
-  treatments: JSONArray?,
-  profiles: JSONArray?,
-  startMs: Long,
-  endMs: Long,
+/** Each date uses the profile actually effective then; today's profile is never backfilled. */
+internal fun fetchWidgetProfileHistory(baseUrl: String, secret: String?, startMs: Long, endMs: Long): JSONArray? {
+  val baselineUrl = "${baseUrl.trimEnd('/')}/api/v1/profiles?find[startDate][\$lte]=${widgetIsoUtc(startMs)}&sort[startDate]=-1&count=1"
+  val baseline = runCatching { fetchWidgetJsonArray(baselineUrl, secret) }.getOrNull() ?: return null
+  val changes = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "profiles", "startDate", widgetIsoUtc(startMs), widgetIsoUtc(endMs)), secret, pageSize = 100, maxPages = 10) ?: return null
+  return mergeWidgetRows(baseline, changes)
+}
+
+internal fun calculateWidgetInsulinStats(
+  treatments: JSONArray?, profiles: JSONArray?, startMs: Long, endMs: Long,
+  fallbackZone: TimeZone = TimeZone.getDefault(),
 ): WidgetInsulinStats? {
-  val entries = parseWidgetInsulinEntries(treatments)
-  val profile = parseWidgetBasalProfile(profiles)
-  if (entries.isEmpty() && profile.isEmpty()) return null
-
-  val totalBasal = calculateWidgetBasal(profile, entries, startMs, endMs)
-  val totalBolus = totalBolusInRange(entries, startMs, endMs)
-  val totalInsulin = totalBasal + totalBolus
-  val basalBolusRatio = if (totalInsulin > 0.0) totalBasal / totalInsulin else 0.0
-
-  return WidgetInsulinStats(totalBasal, totalBolus, basalBolusRatio, totalInsulin)
-}
-
-private fun totalBolusInRange(entries: List<WidgetInsulinEntry>, startMs: Long, endMs: Long): Double =
-  entries
-    .filter { it.type == TYPE_BOLUS && it.amount != null && it.startMs >= startMs && it.startMs < endMs }
-    .sumOf { it.amount ?: 0.0 }
-
-private fun calculateWidgetBasal(
-  profile: List<WidgetBasalProfileEntry>,
-  entries: List<WidgetInsulinEntry>,
-  startMs: Long,
-  endMs: Long,
-): Double {
-  if (endMs <= startMs) return 0.0
-
-  val overrides = buildEffectiveBasalOverrides(entries, startMs, endMs)
-  val boundaries = sortedSetOf(startMs, endMs)
-  addProfileBoundaries(boundaries, profile, startMs, endMs)
-  overrides.forEach { override ->
-    boundaries.add(override.startMs)
-    override.endMs?.let(boundaries::add)
-  }
-
-  return boundaries
-    .zipWithNext()
-    .sumOf { (segmentStart, segmentEnd) ->
-      if (segmentEnd <= segmentStart) {
-        0.0
-      } else {
-        val rate = activeOverrideAt(overrides, segmentStart)?.rate ?: scheduledBasalRateAt(profile, segmentStart)
-        rate * ((segmentEnd - segmentStart).toDouble() / HOUR_MS.toDouble())
-      }
-    }
-}
-
-private fun buildEffectiveBasalOverrides(
-  entries: List<WidgetInsulinEntry>,
-  startMs: Long,
-  endMs: Long,
-): List<WidgetInsulinEntry> {
-  val controls = entries
-    .filter { it.type == TYPE_TEMP_BASAL || it.type == TYPE_SUSPEND_PUMP }
-    .sortedWith(compareBy<WidgetInsulinEntry> { it.startMs }.thenBy { it.order })
-
-  return controls
-    .mapIndexedNotNull { index, entry ->
-      val nextStartMs = controls.getOrNull(index + 1)?.startMs
-      val ownEndMs = entry.endMs ?: endMs
-      val effectiveEndMs = nextStartMs
-        ?.takeIf { it >= entry.startMs }
-        ?.let { minOf(ownEndMs, it) }
-        ?: ownEndMs
-      val clippedStart = maxOf(startMs, entry.startMs)
-      val clippedEnd = minOf(endMs, effectiveEndMs)
-
-      if (clippedEnd > clippedStart) {
-        entry.copy(startMs = clippedStart, endMs = clippedEnd)
-      } else {
-        null
-      }
-    }
-}
-
-private fun activeOverrideAt(overrides: List<WidgetInsulinEntry>, startMs: Long): WidgetInsulinEntry? =
-  overrides.find { it.startMs <= startMs && (it.endMs ?: startMs) > startMs }
-
-private fun parseWidgetInsulinEntries(arr: JSONArray?): List<WidgetInsulinEntry> {
-  if (arr == null) return emptyList()
-
-  val resumeTimes = collectPumpResumeTimes(arr)
-  val mapped = mutableListOf<WidgetInsulinEntry>()
-
-  for (i in 0 until arr.length()) {
-    val row = arr.optJSONObject(i) ?: continue
-    val eventType = row.optString("eventType", "")
-    val ts = treatmentTimestampMs(row) ?: continue
-
+  if (treatments == null || profiles == null || endMs <= startMs) return null
+  val history = parseProfiles(profiles, fallbackZone) ?: return null
+  if (history.none { it.startMs <= startMs }) return null
+  val rows = (0 until treatments.length()).mapNotNull { treatments.optJSONObject(it) }
+    .distinctBy { it.optString("_id", "").ifEmpty { it.toString() } }
+  val controls = mutableListOf<BasalControl>()
+  val profileSwitches = mutableListOf<Long>()
+  var bolus = 0.0
+  for (row in rows) {
+    val event = row.optString("eventType", "")
+    val relevant = event.contains("bolus", true) || event.equals("Temp Basal", true) || isSuspend(event) || isResume(event) || event.contains("Profile", true)
+    val ts = widgetTreatmentTimestamp(row)
+    if (ts == null) { if (relevant) return null else continue }
+    if (ts >= endMs) continue
     when {
-      isBolus(eventType) -> parseBolus(row, ts, i)?.let(mapped::add)
-      eventType == "Temp Basal" -> parseTempBasal(row, ts, i)?.let(mapped::add)
-      isPumpSuspend(eventType) -> mapped.add(WidgetInsulinEntry(TYPE_SUSPEND_PUMP, ts, null, 0.0, null, i))
-    }
-  }
-
-  return closePumpSuspends(mapped, resumeTimes)
-}
-
-private fun collectPumpResumeTimes(arr: JSONArray): List<Long> {
-  val out = mutableListOf<Long>()
-  for (i in 0 until arr.length()) {
-    val row = arr.optJSONObject(i) ?: continue
-    if (isPumpResume(row.optString("eventType", ""))) {
-      treatmentTimestampMs(row)?.let(out::add)
-    }
-  }
-  return out
-}
-
-private fun parseBolus(row: JSONObject, ts: Long, order: Int): WidgetInsulinEntry? {
-  val insulin = finiteWidgetDouble(row.opt("insulin")) ?: finiteWidgetDouble(row.opt("amount"))
-  return insulin
-    ?.takeIf { it > 0.0 }
-    ?.let { WidgetInsulinEntry(TYPE_BOLUS, ts, ts, null, it, order) }
-}
-
-private fun parseTempBasal(row: JSONObject, ts: Long, order: Int): WidgetInsulinEntry? {
-  val durationMin = (finiteWidgetDouble(row.opt("duration")) ?: 0.0).coerceAtLeast(0.0)
-  val rate = finiteWidgetDouble(row.opt("rate"))
-    ?: finiteWidgetDouble(row.opt("absolute"))
-    ?: if (durationMin == 0.0) 0.0 else null
-
-  return rate
-    ?.takeIf { it >= 0.0 }
-    ?.let { WidgetInsulinEntry(TYPE_TEMP_BASAL, ts, ts + (durationMin * MINUTE_MS).toLong(), it, null, order) }
-}
-
-private fun closePumpSuspends(
-  entries: List<WidgetInsulinEntry>,
-  resumeTimes: List<Long>,
-): List<WidgetInsulinEntry> {
-  val sorted = entries.sortedWith(compareBy<WidgetInsulinEntry> { it.startMs }.thenBy { it.order }).toMutableList()
-
-  for (index in sorted.indices) {
-    val entry = sorted[index]
-    if (entry.type != TYPE_SUSPEND_PUMP || entry.endMs != null) continue
-
-    val nextControl = sorted
-      .drop(index + 1)
-      .filter { (it.type == TYPE_TEMP_BASAL || it.type == TYPE_SUSPEND_PUMP) && it.startMs > entry.startMs }
-      .minOfOrNull { it.startMs }
-    val nextResume = resumeTimes.filter { it > entry.startMs }.minOrNull()
-    val end = listOfNotNull(nextControl, nextResume).minOrNull()
-
-    if (end != null) {
-      sorted[index] = entry.copy(endMs = end)
-    }
-  }
-
-  return sorted
-}
-
-private fun parseWidgetBasalProfile(arr: JSONArray?): List<WidgetBasalProfileEntry> {
-  val first = arr?.optJSONObject(0) ?: return emptyList()
-  val defaultProfile = first.optString("defaultProfile", "")
-  val store = first.optJSONObject("store") ?: return emptyList()
-  val profile = store.optJSONObject(defaultProfile) ?: firstProfileObject(store) ?: return emptyList()
-  val basal = profile.optJSONArray("basal") ?: return emptyList()
-  val out = mutableListOf<WidgetBasalProfileEntry>()
-
-  for (i in 0 until basal.length()) {
-    val row = basal.optJSONObject(i) ?: continue
-    val rate = finiteWidgetDouble(row.opt("value")) ?: continue
-    val seconds = row.optInt("timeAsSeconds", parseProfileSeconds(row.optString("time", "00:00")))
-      .coerceIn(0, 86_399)
-    out.add(WidgetBasalProfileEntry(seconds, rate.coerceAtLeast(0.0)))
-  }
-
-  return out.sortedBy { it.seconds }
-}
-
-private fun addProfileBoundaries(
-  boundaries: java.util.TreeSet<Long>,
-  profile: List<WidgetBasalProfileEntry>,
-  startMs: Long,
-  endMs: Long,
-) {
-  if (profile.isEmpty()) return
-
-  val cursor = Calendar.getInstance().apply {
-    timeInMillis = startMs
-    set(Calendar.HOUR_OF_DAY, 0)
-    set(Calendar.MINUTE, 0)
-    set(Calendar.SECOND, 0)
-    set(Calendar.MILLISECOND, 0)
-  }
-
-  while (cursor.timeInMillis < endMs) {
-    for (entry in profile) {
-      val boundaryMs = profileBoundaryMs(cursor, entry)
-      if (boundaryMs > startMs && boundaryMs < endMs) {
-        boundaries.add(boundaryMs)
+      event.contains("bolus", true) -> {
+        // An extended delivery beginning before midnight can still overlap today's window.
+        if (event.contains("combo", true) || event.contains("extended", true)) {
+          val duration = finiteDouble(row.opt("duration"))
+          if (duration == null || ts + duration.coerceAtLeast(0.0) * MINUTE_MS > startMs || ts >= startMs) return null
+          continue
+        }
+        if (ts >= startMs) {
+          val amount = finiteDouble(row.opt("insulin")) ?: finiteDouble(row.opt("amount")) ?: return null
+          if (amount < 0) return null
+          bolus += amount
+        }
       }
+      event.equals("Temp Basal", true) -> {
+        val duration = finiteDouble(row.opt("duration")) ?: return null
+        if (duration < 0 || duration > 24 * 60) return null
+        val rate = finiteDouble(row.opt("absolute")) ?: finiteDouble(row.opt("rate"))
+        // Unsupported percentage basals remain an unknown interval rather than scheduled basal.
+        val supportedRate = rate?.takeIf { it >= 0 && !row.optString("temp", "").equals("percent", true) }
+        controls.add(BasalControl(ts, ts + (duration * MINUTE_MS).toLong(), supportedRate))
+      }
+      isSuspend(event) -> controls.add(BasalControl(ts, Long.MAX_VALUE, 0.0))
+      isResume(event) -> controls.add(BasalControl(ts, ts, 0.0))
+      event.contains("Profile Switch", true) || event.contains("Temporary Profile", true) -> profileSwitches.add(ts)
     }
-    cursor.add(Calendar.DATE, 1)
   }
-}
-
-private fun profileBoundaryMs(day: Calendar, entry: WidgetBasalProfileEntry): Long =
-  (day.clone() as Calendar).apply {
-    set(Calendar.HOUR_OF_DAY, entry.seconds / 3600)
-    set(Calendar.MINUTE, (entry.seconds % 3600) / 60)
-    set(Calendar.SECOND, entry.seconds % 60)
-    set(Calendar.MILLISECOND, 0)
-  }.timeInMillis
-
-private fun scheduledBasalRateAt(profile: List<WidgetBasalProfileEntry>, timeMs: Long): Double {
-  if (profile.isEmpty()) return 0.0
-  val seconds = localSecondsSinceMidnight(timeMs)
-  return profile.lastOrNull { it.seconds <= seconds }?.rate ?: profile.last().rate
-}
-
-private fun firstProfileObject(store: JSONObject): JSONObject? {
-  val keys = store.keys()
-  while (keys.hasNext()) {
-    val obj = store.optJSONObject(keys.next())
-    if (obj?.optJSONArray("basal") != null) return obj
+  val ordered = controls.sortedBy { it.startMs }
+  val overrides = ordered.mapIndexed { index, control ->
+    control.copy(endMs = minOf(control.endMs, ordered.getOrNull(index + 1)?.startMs ?: endMs))
+  }.filter { it.endMs > startMs && it.startMs < endMs && it.endMs > it.startMs }
+  val boundaries = sortedSetOf(startMs, endMs)
+  history.forEach { if (it.startMs in (startMs + 1) until endMs) boundaries.add(it.startMs) }
+  profileSwitches.forEach { if (it in (startMs + 1) until endMs) boundaries.add(it) }
+  overrides.forEach { boundaries.add(maxOf(startMs, it.startMs)); boundaries.add(minOf(endMs, it.endMs)) }
+  var basal = 0.0
+  for ((segmentStart, segmentEnd) in boundaries.zipWithNext()) {
+    val active = overrides.lastOrNull { it.startMs <= segmentStart && it.endMs > segmentStart }
+    if (active != null) {
+      basal += (active.rate ?: return null) * (segmentEnd - segmentStart) / HOUR_MS
+      continue
+    }
+    val profile = history.lastOrNull { it.startMs <= segmentStart } ?: return null
+    // A switch without a corresponding profile revision is not enough to infer a new schedule.
+    if (profileSwitches.any { it <= segmentStart && it > profile.startMs }) return null
+    if (profile.rates.isEmpty()) return null
+    basal += integrateSchedule(profile, segmentStart, segmentEnd)
   }
-  return null
+  return widgetInsulinStats(basal, bolus)
 }
 
-private fun treatmentTimestampMs(row: JSONObject): Long? =
-  parseWidgetTimestamp(row.opt("created_at")) ?: parseWidgetTimestamp(row.opt("timestamp"))
-
-private fun isBolus(eventType: String): Boolean = eventType.contains("bolus", ignoreCase = true)
-
-private fun isPumpSuspend(eventType: String): Boolean =
-  eventType.equals("Suspend Pump", true) || eventType.equals("Pump Suspend", true)
-
-private fun isPumpResume(eventType: String): Boolean =
-  eventType.equals("Resume Pump", true) || eventType.equals("Pump Resume", true)
-
-private fun parseProfileSeconds(time: String): Int {
-  val parts = time.split(":")
-  val hours = parts.getOrNull(0)?.toIntOrNull() ?: 0
-  val minutes = parts.getOrNull(1)?.toIntOrNull() ?: 0
-  return (hours * 3600 + minutes * 60).coerceIn(0, 86_399)
-}
-
-private fun finiteWidgetDouble(value: Any?): Double? {
-  val parsed = when (value) {
-    is Number -> value.toDouble()
-    is String -> value.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
-    else -> null
+private fun integrateSchedule(profile: BasalProfile, startMs: Long, endMs: Long): Double {
+  var cursor = startMs
+  var total = 0.0
+  val calendar = Calendar.getInstance(profile.zone)
+  // Advancing on the actual timeline handles both occurrences of the repeated DST hour.
+  // Minute boundaries also bound a timezone offset change; explicit seconds remain exact.
+  while (cursor < endMs) {
+    calendar.timeInMillis = cursor
+    val seconds = calendar.get(Calendar.HOUR_OF_DAY) * 3600 + calendar.get(Calendar.MINUTE) * 60 + calendar.get(Calendar.SECOND)
+    val rate = profile.rates.lastOrNull { it.seconds <= seconds }?.rate ?: profile.rates.last().rate
+    var next = minOf(endMs, (cursor / MINUTE_MS + 1) * MINUTE_MS)
+    val nextSchedule = profile.rates.firstOrNull { it.seconds > seconds && it.seconds / 60 == seconds / 60 }
+    if (nextSchedule != null) next = minOf(next, cursor + (nextSchedule.seconds - seconds) * 1000L - calendar.get(Calendar.MILLISECOND))
+    total += rate * (next - cursor) / HOUR_MS
+    cursor = next
   }
-  return parsed?.takeIf { it.isFinite() }
+  return total
 }
 
-private fun parseWidgetTimestamp(value: Any?): Long? {
-  if (value is Number) {
-    return value.toLong().takeIf { it > 0L }
+private fun parseProfiles(arr: JSONArray, fallbackZone: TimeZone): List<BasalProfile>? {
+  val profiles = mutableListOf<BasalProfile>()
+  for (i in 0 until arr.length()) {
+    val row = arr.optJSONObject(i) ?: return null
+    val start = widgetParseTimestamp(row.opt("startDate")) ?: widgetParseTimestamp(row.opt("mills")) ?: return null
+    val store = row.optJSONObject("store")
+    val profile = store?.optJSONObject(row.optString("defaultProfile", ""))
+    val schedule = profile?.optJSONArray("basal")
+    val rates = mutableListOf<BasalRate>()
+    if (schedule != null) for (j in 0 until schedule.length()) {
+      val entry = schedule.optJSONObject(j) ?: return null
+      val rate = finiteDouble(entry.opt("value")) ?: return null
+      val seconds = finiteDouble(entry.opt("timeAsSeconds"))?.toInt() ?: parseProfileSeconds(entry.optString("time", "")) ?: return null
+      if (rate < 0 || seconds !in 0..86_399) return null
+      rates.add(BasalRate(seconds, rate))
+    }
+    val zoneId = profile?.optString("timezone", "").orEmpty().ifEmpty { row.optString("timezone", "") }
+    if (zoneId.isNotEmpty() && zoneId !in TimeZone.getAvailableIDs()) return null
+    profiles.add(BasalProfile(start, rates.distinctBy { it.seconds }.sortedBy { it.seconds },
+      if (zoneId.isEmpty()) fallbackZone else TimeZone.getTimeZone(zoneId)))
   }
+  return profiles.distinctBy { it.startMs }.sortedBy { it.startMs }
+}
 
+internal fun mergeWidgetRows(vararg arrays: JSONArray): JSONArray {
+  val byId = linkedMapOf<String, JSONObject>()
+  arrays.forEach { arr -> for (i in 0 until arr.length()) {
+    val row = arr.optJSONObject(i) ?: continue
+    byId[row.optString("_id", "").ifEmpty { row.toString() }] = row
+  } }
+  return JSONArray().apply { byId.values.forEach { put(it) } }
+}
+
+internal fun widgetTreatmentTimestamp(row: JSONObject): Long? =
+  widgetParseTimestamp(row.opt("created_at")) ?: widgetParseTimestamp(row.opt("timestamp"))
+
+internal fun widgetParseTimestamp(value: Any?): Long? {
+  if (value is Number) return value.toLong().takeIf { it > 0 }
   val raw = (value as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-  for (pattern in ISO_PATTERNS) {
-    val fmt = SimpleDateFormat(pattern, Locale.US).apply {
-      timeZone = TimeZone.getTimeZone("UTC")
-    }
-    runCatching { fmt.parse(raw)?.time }.getOrNull()?.let { return it }
+  raw.toLongOrNull()?.let { return it.takeIf { time -> time > 0 } }
+  for (pattern in listOf("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd'T'HH:mm:ss.SSSXX", "yyyy-MM-dd'T'HH:mm:ssXX", "yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd'T'HH:mm:ssX")) {
+    val format = SimpleDateFormat(pattern, Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC"); isLenient = false }
+    val position = ParsePosition(0)
+    val parsed = runCatching { format.parse(raw, position) }.getOrNull()
+    if (parsed != null && position.index == raw.length) return parsed.time
   }
   return null
 }
 
-private fun startOfLocalDayMs(timeMs: Long): Long =
-  Calendar.getInstance().apply {
-    timeInMillis = timeMs
-    set(Calendar.HOUR_OF_DAY, 0)
-    set(Calendar.MINUTE, 0)
-    set(Calendar.SECOND, 0)
-    set(Calendar.MILLISECOND, 0)
-  }.timeInMillis
+internal fun widgetIsoUtc(timeMs: Long): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+  timeZone = TimeZone.getTimeZone("UTC")
+}.format(timeMs)
 
-private fun localSecondsSinceMidnight(timeMs: Long): Int =
-  Calendar.getInstance().run {
-    timeInMillis = timeMs
-    get(Calendar.HOUR_OF_DAY) * 3600 + get(Calendar.MINUTE) * 60 + get(Calendar.SECOND)
-  }
+private fun finiteDouble(value: Any?): Double? = when (value) {
+  is Number -> value.toDouble()
+  is String -> value.trim().toDoubleOrNull()
+  else -> null
+}?.takeIf { it.isFinite() }
 
-private fun isoUtc(timeMs: Long): String =
-  SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
-    timeZone = TimeZone.getTimeZone("UTC")
-  }.format(timeMs)
+private fun parseProfileSeconds(time: String): Int? {
+  val parts = time.split(":")
+  val hours = parts.getOrNull(0)?.toIntOrNull() ?: return null
+  val minutes = parts.getOrNull(1)?.toIntOrNull() ?: return null
+  val seconds = parts.getOrNull(2)?.toIntOrNull() ?: 0
+  if (hours !in 0..23 || minutes !in 0..59 || seconds !in 0..59) return null
+  return hours * 3600 + minutes * 60 + seconds
+}
 
-private const val TYPE_BOLUS = "bolus"
-private const val TYPE_TEMP_BASAL = "tempBasal"
-private const val TYPE_SUSPEND_PUMP = "suspendPump"
+private fun isSuspend(event: String) = event.equals("Suspend Pump", true) || event.equals("Pump Suspend", true)
+private fun isResume(event: String) = event.equals("Resume Pump", true) || event.equals("Pump Resume", true)
 private const val MINUTE_MS = 60_000L
-private const val HOUR_MS = 3_600_000L
-private const val DAY_MS = 24L * 60L * 60L * 1000L
-
-private val ISO_PATTERNS = listOf(
-  "yyyy-MM-dd'T'HH:mm:ss.SSSX",
-  "yyyy-MM-dd'T'HH:mm:ssX",
-  "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
-  "yyyy-MM-dd'T'HH:mm:ss'Z'",
-)
+private const val HOUR_MS = 3_600_000.0
+private const val DAY_MS = 86_400_000L
