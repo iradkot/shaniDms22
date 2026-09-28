@@ -1,198 +1,136 @@
 import {createNativeDailyOverviewDataSource} from 'app/platform/native/product/nativeDailyOverviewDataSource';
 import {getLocalDayPeriod} from 'app/modules/dailyOverview';
-import {
-  loadInsulinContext,
-  type InsulinContext,
-} from 'app/services/insulin/insulinDataSource';
+import {createRecordedInsulinDataSource} from 'app/services/insulin/recordedInsulinDataSource';
+import {getUserProfileFromNightscout} from 'app/api/apiRequests';
 
-jest.mock('app/services/insulin/insulinDataSource', () => ({
-  loadInsulinContext: jest.fn(),
-}));
 jest.mock('app/api/apiRequests', () => ({
-  fetchInsulinDataForDateRange: jest.fn(),
+  fetchTreatmentsForDateRangeWithMetadata: jest.fn(),
   getUserProfileFromNightscout: jest.fn(),
 }));
 
-const period = {startMs: 1_000, endMs: 2_000};
-
-describe('createNativeDailyOverviewDataSource', () => {
-  it('uses the shared normalized insulin context in its production path', async () => {
-    const context = {
-      insulinData: [
-        {type: 'bolus', amount: 2, timestamp: new Date(1_500).toISOString()},
-      ],
-      basalProfileData: [{time: '00:00', value: 0.8}],
-      availability: {
-        treatments: 'available',
-        deviceStatus: 'unavailable',
-        profile: 'available',
-      },
-    } as InsulinContext;
-    jest.mocked(loadInsulinContext).mockResolvedValueOnce(context);
-    const calculateTotals = jest
-      .fn()
-      .mockReturnValue({totalBasal: 0.4, totalBolus: 2});
-    const source = createNativeDailyOverviewDataSource({
-      glucoseDataSource: {loadGlucoseSamples: async () => []},
-      calculateTotals,
-      useE2EFixtures: false,
-    });
-    await expect(source.loadDailyOverview(period)).resolves.toMatchObject({
-      insulinSummary: {quality: 'available', basalUnits: 0.4, bolusUnits: 2},
-    });
-    expect(loadInsulinContext).toHaveBeenCalledWith({
-      startMs: period.startMs,
-      endMs: period.endMs,
-    });
-    expect(calculateTotals).toHaveBeenCalledWith(
-      context.insulinData,
-      context.basalProfileData,
-      new Date(period.startMs),
-      new Date(period.endMs),
-    );
+const clock = new Date(2026, 8, 28, 10, 30).getTime();
+const period = getLocalDayPeriod(clock);
+const fresh = (records: Record<string, unknown>[]) => ({
+  records,
+  freshness: {kind: 'fresh' as const, fetchedAtMs: clock},
+});
+const setup = (records: Record<string, unknown>[] = []) => {
+  const fetchTreatments = jest.fn(async () => fresh(records));
+  const recordedDataSource = createRecordedInsulinDataSource({
+    fetchTreatments,
+    getScopeKey: () => 'account',
+    now: () => clock,
   });
-
-  it.each(['stale', 'unavailable'] as const)(
-    'does not turn %s treatment history into a zero insulin total',
-    async quality => {
-      jest.mocked(loadInsulinContext).mockResolvedValueOnce({
-        insulinData: [],
-        basalProfileData: [{time: '00:00', value: 0.8}],
-        availability: {
-          treatments: quality,
-          deviceStatus: 'available',
-          profile: 'available',
-        },
-      } as InsulinContext);
-      const calculateTotals = jest
-        .fn()
-        .mockReturnValue({totalBasal: 0, totalBolus: 0});
-      const source = createNativeDailyOverviewDataSource({
-        glucoseDataSource: {loadGlucoseSamples: async () => []},
-        calculateTotals,
-        useE2EFixtures: false,
-      });
-      await expect(source.loadDailyOverview(period)).resolves.toMatchObject({
-        insulinSummary: {quality: 'unavailable'},
-      });
-      expect(calculateTotals).not.toHaveBeenCalled();
-    },
-  );
-
-  it('combines glucose with an authoritative basal and bolus summary', async () => {
-    const loadGlucoseSamples = jest
-      .fn()
-      .mockResolvedValue([{timestampMs: 1_500, valueMgDl: 111}]);
-    const fetchInsulinEntries = jest
-      .fn()
-      .mockResolvedValue([
-        {type: 'bolus', amount: 2, timestamp: new Date(1_500).toISOString()},
-      ]);
-    const fetchProfile = jest.fn().mockResolvedValue([{profile: true}]);
-    const extractBasalProfile = jest
-      .fn()
-      .mockReturnValue([{time: '00:00', value: 0.8}]);
-    const calculateTotals = jest
-      .fn()
-      .mockReturnValue({totalBasal: 0.4, totalBolus: 2});
-    const source = createNativeDailyOverviewDataSource({
-      glucoseDataSource: {loadGlucoseSamples},
-      fetchInsulinEntries,
-      fetchProfile,
-      extractBasalProfile,
-      calculateTotals,
-      useE2EFixtures: false,
-    });
-
-    await expect(source.loadDailyOverview(period)).resolves.toEqual({
-      glucoseSamples: [{timestampMs: 1_500, valueMgDl: 111}],
-      insulinSummary: {
-        quality: 'available',
-        basalUnits: 0.4,
-        bolusUnits: 2,
-        basalEstimated: true,
-      },
-    });
-    expect(fetchInsulinEntries).toHaveBeenCalledWith(
-      new Date(period.startMs),
-      new Date(period.endMs),
-    );
-    expect(calculateTotals).toHaveBeenCalledWith(
-      expect.any(Array),
-      expect.any(Array),
-      new Date(period.startMs),
-      new Date(period.endMs),
-    );
+  const loadGlucoseSamples = jest.fn(async () => [
+    {timestampMs: period.startMs, valueMgDl: 123},
+  ]);
+  const source = createNativeDailyOverviewDataSource({
+    recordedDataSource,
+    glucoseDataSource: {loadGlucoseSamples},
+    now: () => clock,
+    useE2EFixtures: false,
   });
+  return {source, fetchTreatments, loadGlucoseSamples};
+};
 
-  it('marks insulin unavailable when a basal profile is missing instead of inventing zero', async () => {
-    const source = createNativeDailyOverviewDataSource({
-      glucoseDataSource: {loadGlucoseSamples: async () => []},
-      fetchInsulinEntries: async () => [],
-      fetchProfile: async () => [],
-      extractBasalProfile: () => [],
-      calculateTotals: () => ({totalBasal: 0, totalBolus: 0}),
-      useE2EFixtures: false,
-    });
-
-    await expect(source.loadDailyOverview(period)).resolves.toEqual({
-      glucoseSamples: [],
-      insulinSummary: {quality: 'unavailable'},
-    });
-  });
-
-  it('keeps glucose available when the independent insulin request fails', async () => {
-    const source = createNativeDailyOverviewDataSource({
-      glucoseDataSource: {
-        loadGlucoseSamples: async () => [{timestampMs: 1_500, valueMgDl: 123}],
+describe('createNativeDailyOverviewDataSource recorded insulin', () => {
+  it('keeps a recorded bolus when basal delivery is unknown and never fetches a profile', async () => {
+    const {source} = setup([
+      {
+        eventType: 'Correction Bolus',
+        created_at: new Date(period.startMs + 1000).toISOString(),
+        insulin: 2,
       },
-      fetchInsulinEntries: async () => {
-        throw new Error('profile source offline');
-      },
-      fetchProfile: async () => [],
-      extractBasalProfile: () => [],
-      calculateTotals: () => ({totalBasal: 0, totalBolus: 0}),
-      useE2EFixtures: false,
-    });
-
-    await expect(source.loadDailyOverview(period)).resolves.toEqual({
-      glucoseSamples: [{timestampMs: 1_500, valueMgDl: 123}],
-      insulinSummary: {quality: 'unavailable'},
-    });
-  });
-
-  it('never includes future scheduled basal when loading today', async () => {
-    const now = new Date(2026, 8, 28, 10, 30).getTime();
-    const day = getLocalDayPeriod(now);
-    const loadInsulinSummary = jest.fn(async () => ({
-      quality: 'available' as const,
-      basalUnits: 10.5,
+    ]);
+    const result = await source.loadDailyOverview(period);
+    expect(result.insulinSummary).toEqual({
+      quality: 'partial',
       bolusUnits: 2,
+      basalEvidence: 'recorded',
+      basalCoveredMs: 0,
+      basalCoveragePercent: 0,
+    });
+    expect(result.glucoseSamples).toHaveLength(1);
+    expect(getUserProfileFromNightscout).not.toHaveBeenCalled();
+  });
+  it('does not turn a generic programmed temp basal into a recorded total', async () => {
+    const {source} = setup([
+      {
+        eventType: 'Temp Basal',
+        created_at: new Date(period.startMs).toISOString(),
+        duration: 600,
+        absolute: 1,
+      },
+    ]);
+    const result = await source.loadDailyOverview(period);
+    expect(result.insulinSummary).toMatchObject({
+      quality: 'partial',
+      bolusUnits: 0,
+      basalCoveragePercent: 0,
+    });
+    expect(result.insulinSummary).not.toHaveProperty('basalUnits');
+  });
+  it('shares raw history between current data and comparison loading', async () => {
+    const {source, fetchTreatments} = setup();
+    const [daily, comparison] = await Promise.all([
+      source.loadDailyOverview(period, {asOfMs: clock}),
+      source.loadDailyInsulinComparison!({period, asOfMs: clock}),
+    ]);
+    expect(fetchTreatments).toHaveBeenCalledTimes(1);
+    expect(daily.insulinSummary).toMatchObject({bolusUnits: 0});
+    expect(comparison.weekAverage).toMatchObject({
+      quality: 'partial',
+      bolusUnits: 0,
+    });
+    expect(comparison.weekAverage).not.toHaveProperty('totalUnits');
+  });
+  it('keeps glucose available when treatment history fails', async () => {
+    const recordedDataSource = createRecordedInsulinDataSource({
+      fetchTreatments: async () => {
+        throw new Error('offline');
+      },
+      getScopeKey: () => 'account',
+      now: () => clock,
+    });
+    const source = createNativeDailyOverviewDataSource({
+      recordedDataSource,
+      useE2EFixtures: false,
+      glucoseDataSource: {
+        loadGlucoseSamples: async () => [
+          {timestampMs: period.startMs, valueMgDl: 123},
+        ],
+      },
+      now: () => clock,
+    });
+    expect(await source.loadDailyOverview(period)).toEqual({
+      glucoseSamples: [{timestampMs: period.startMs, valueMgDl: 123}],
+      insulinSummary: {quality: 'unavailable'},
+    });
+  });
+  it('uses one exclusive current cutoff for insulin and glucose', async () => {
+    const loadInsulinSummary = jest.fn(async () => ({
+      quality: 'partial' as const,
+      bolusUnits: 2,
+      basalCoveredMs: 0,
+      basalCoveragePercent: 0,
     }));
     const loadGlucoseSamples = jest.fn(async () => []);
     const source = createNativeDailyOverviewDataSource({
-      glucoseDataSource: {loadGlucoseSamples},
       loadInsulinSummary,
-      now: () => now,
+      glucoseDataSource: {loadGlucoseSamples},
+      now: () => clock,
     });
-    await source.loadDailyOverview(day);
+    await source.loadDailyOverview(period, {asOfMs: clock - 60_000});
     expect(loadInsulinSummary).toHaveBeenCalledWith(
-      new Date(day.startMs),
-      new Date(now),
+      new Date(period.startMs),
+      new Date(clock - 60_000),
     );
     expect(loadGlucoseSamples).toHaveBeenCalledWith({
-      startMs: day.startMs,
-      endMs: now,
+      ...period,
+      endMs: clock - 60_000,
     });
-    await source.loadDailyOverview(day, {asOfMs: now - 60_000});
-    expect(loadInsulinSummary).toHaveBeenLastCalledWith(
-      new Date(day.startMs),
-      new Date(now - 60_000),
-    );
   });
-
-  it('loads seven independent same-clock histories with bounded concurrency and preserves failures', async () => {
-    const now = new Date(2026, 8, 28, 10, 30).getTime();
+  it('keeps explicitly injected independent history failures unknown with bounded concurrency', async () => {
     let active = 0;
     let maximum = 0;
     const loadInsulinSummary = jest.fn(async (start: Date, end: Date) => {
@@ -202,24 +140,27 @@ describe('createNativeDailyOverviewDataSource', () => {
       active--;
       expect(end.getHours()).toBe(10);
       expect(end.getMinutes()).toBe(30);
-      if (start.getDate() === 24) {
-        throw new Error('History unavailable');
-      }
-      return {quality: 'available' as const, basalUnits: 10, bolusUnits: 2};
+      if (start.getDate() === 24) {throw new Error('unavailable');}
+      return {
+        quality: 'partial' as const,
+        bolusUnits: 2,
+        basalCoveredMs: 0,
+        basalCoveragePercent: 0,
+      };
     });
     const source = createNativeDailyOverviewDataSource({
-      glucoseDataSource: {loadGlucoseSamples: async () => []},
       loadInsulinSummary,
+      glucoseDataSource: {loadGlucoseSamples: async () => []},
     });
     const result = await source.loadDailyInsulinComparison!({
-      period: getLocalDayPeriod(now),
-      asOfMs: now,
+      period,
+      asOfMs: clock,
     });
     expect(loadInsulinSummary).toHaveBeenCalledTimes(7);
     expect(maximum).toBe(2);
     expect(result).toMatchObject({
       status: 'available',
-      yesterday: {totalUnits: 12},
+      yesterday: {quality: 'partial', bolusUnits: 2},
       weekDays: 6,
     });
     expect(result.weekAverage).toBeUndefined();

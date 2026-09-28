@@ -94,7 +94,10 @@ export const createNativePreviousDaySummaryDataSource = (
     end: Date,
   ): Promise<PreviousDaySummaryInsulinSource> => {
     try {
-      return await loadInsulinSummary(start, end);
+      const summary = await loadInsulinSummary(start, end);
+      return summary.quality === 'available'
+        ? summary
+        : {quality: 'unavailable'};
     } catch {
       return {quality: 'unavailable'};
     }

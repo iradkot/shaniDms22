@@ -32,7 +32,12 @@ const comparison = (
   weekDays: 7,
   cutoffTimestampMs: clock,
   isPartialDay: true,
-  yesterday: {basalUnits: totalUnits, bolusUnits: 0, totalUnits},
+  yesterday: {
+    quality: 'available',
+    basalUnits: totalUnits,
+    bolusUnits: 0,
+    totalUnits,
+  },
 });
 const insulinProps = (tree: renderer.ReactTestRenderer) =>
   tree.root

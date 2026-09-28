@@ -76,7 +76,9 @@ class WidgetDailySyncIntegrationTest {
         url.contains("treatments") -> {
           treatmentRequest++
           if (treatmentRequest > 1) throw IOException("Simulated historical outage")
-          JSONArray()
+          JSONArray().put(JSONObject().put("eventType", "Temp Basal").put("enteredBy", "loop://qa")
+            .put("created_at", widgetIsoUtc(start)).put("duration", (now - start) / 60_000.0)
+            .put("amount", 2.0))
         }
         url.contains("profiles") -> profile(start)
         else -> error("Unexpected endpoint")
@@ -85,7 +87,7 @@ class WidgetDailySyncIntegrationTest {
     val summary = WidgetDailySummaryStore.read(context)!!
     assertEquals(100, summary.range!!.inRangePercent)
     assertNotNull(summary.insulin?.today)
-    assertTrue(summary.insulin!!.today!!.totalBasal > 0)
+    assertTrue(summary.insulin!!.today!!.totalBasal!! > 0)
     assertNull(summary.insulin!!.weekAverage)
   }
 

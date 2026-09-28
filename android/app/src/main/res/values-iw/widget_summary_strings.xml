@@ -21,7 +21,6 @@
   <string name="summary_hours_ago">לפני %1$d ש׳</string>
   <string name="summary_live">עכשיו</string>
   <string name="summary_insulin">אינסולין היום</string>
-  <string name="summary_insulin_estimate">אינסולין · הערכה</string>
   <string name="summary_insulin_compact">אינסולין %1$s</string>
   <string name="summary_split_compact">בזאל %1$s · בולוס %2$s</string>
   <string name="summary_units">%1$s U</string>
@@ -36,8 +35,8 @@
   <string name="summary_compare_unavailable">אין נתוני עבר · לחיצה להחלפה</string>
   <string name="summary_compare_compact">%1$s · %2$s · אותה שעה</string>
   <string name="summary_range_description">היום: %1$s מהזמן בטווח, %2$s נמוך, %3$s גבוה. טווח יעד %4$d עד %5$d מיליגרם לדציליטר. יש נתונים מ־%6$d אחוז מהיום עד כה.</string>
-  <string name="summary_insulin_description">אינסולין היום: %1$s יחידות בסך הכול. בזאל %2$s יחידות, %3$s. בולוס %4$s יחידות, %5$s. הבזאל הוא הערכה לפי התוכנית והקצבים הזמניים.</string>
-  <string name="summary_comparison_description">אינסולין היום %1$s יחידות. %2$s %3$s יחידות עד אותה שעה. שינוי %4$s. לחיצה מחליפה בין אתמול לממוצע שבעת הימים הקודמים.</string>
+  <string name="summary_insulin_description">אינסולין מתועד היום: %1$s יחידות בסך הכול. בזאל %2$s יחידות, %3$s. בולוס %4$s יחידות, %5$s.</string>
+  <string name="summary_comparison_description">כמות מתועדת היום %1$s יחידות. %2$s %3$s יחידות עד אותה שעה. שינוי %4$s. לחיצה מחליפה בין אתמול לממוצע שבעת הימים הקודמים.</string>
   <string name="summary_glucose_description">סוכר אחרון %1$s מיליגרם לדציליטר. מגמה %2$s. %3$s.</string>
   <string name="summary_trend_double_up">עולה מהר</string>
   <string name="summary_trend_up">עולה</string>
@@ -47,4 +46,12 @@
   <string name="summary_trend_down">יורד</string>
   <string name="summary_trend_double_down">יורד מהר</string>
   <string name="summary_trend_unknown">לא זמינה</string>
+  <string name="summary_bolus_compact">בולוס %1$s</string>
+  <string name="summary_bolus_until">בולוס היום · %1$s</string>
+  <string name="summary_insulin_until">אינסולין היום · %1$s</string>
+  <string name="summary_basal_incomplete">רישומי בזאל חלקיים</string>
+  <string name="summary_compare_bolus_week">↔ בולוס מול ממוצע שבוע</string>
+  <string name="summary_compare_bolus_yesterday">↔ בולוס מול אתמול</string>
+  <string name="summary_compare_until">בכל יום %1$s · להחלפה</string>
+  <string name="summary_insulin_partial_description">בולוס מתועד היום: %1$s יחידות. בזאל מתועד חלקית: %2$s יחידות עם כיסוי של %3$d אחוז. אין סך אינסולין או יחס.</string>
 </resources>

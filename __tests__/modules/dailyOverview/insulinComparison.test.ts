@@ -2,6 +2,7 @@ import {
   buildDailyInsulinComparison,
   getDailyInsulinComparisonWindows,
   getLocalDayPeriod,
+  selectRecordedInsulinComparison,
 } from 'app/modules/dailyOverview';
 
 describe('daily insulin comparisons', () => {
@@ -64,7 +65,6 @@ describe('daily insulin comparisons', () => {
       quality: 'available' as const,
       basalUnits: index,
       bolusUnits: index * 2,
-      basalEstimated: true,
     }));
     expect(buildDailyInsulinComparison(windows, previous)).toMatchObject({
       yesterday: {totalUnits: 0},
@@ -73,12 +73,11 @@ describe('daily insulin comparisons', () => {
         basalUnits: 3,
         bolusUnits: 6,
         totalUnits: 9,
-        basalEstimated: true,
       },
     });
   });
 
-  it('does not expose malformed source values as a comparison', () => {
+  it('keeps the independently known bolus when basal evidence is malformed', () => {
     const asOfMs = new Date(2026, 0, 15, 12).getTime();
     const windows = getDailyInsulinComparisonWindows({
       period: getLocalDayPeriod(asOfMs),
@@ -87,8 +86,80 @@ describe('daily insulin comparisons', () => {
     const result = buildDailyInsulinComparison(windows, [
       {quality: 'available', basalUnits: Number.NaN, bolusUnits: 1},
     ]);
-    expect(result).toMatchObject({status: 'unavailable', weekDays: 0});
-    expect(result.yesterday).toBeUndefined();
+    expect(result).toMatchObject({
+      status: 'available',
+      weekDays: 1,
+      yesterday: {quality: 'partial', bolusUnits: 1},
+    });
+    expect(result.yesterday).not.toHaveProperty('totalUnits');
     expect(result.weekAverage).toBeUndefined();
+  });
+
+  it('averages recorded bolus independently while incomplete basal stays unknown', () => {
+    const asOfMs = new Date(2026, 0, 15, 12).getTime();
+    const windows = getDailyInsulinComparisonWindows({
+      period: getLocalDayPeriod(asOfMs),
+      asOfMs,
+    });
+    const result = buildDailyInsulinComparison(
+      windows,
+      Array.from({length: 7}, (_, index) => ({
+        quality: 'partial' as const,
+        basalUnits: 2,
+        bolusUnits: index,
+        basalCoveredMs: 3_600_000,
+        basalCoveragePercent: 10,
+      })),
+    );
+    expect(result.weekAverage).toMatchObject({
+      quality: 'partial',
+      bolusUnits: 3,
+    });
+    expect(result.weekAverage).not.toHaveProperty('basalUnits');
+    expect(result.weekAverage).not.toHaveProperty('totalUnits');
+    expect(
+      selectRecordedInsulinComparison(
+        {quality: 'partial', bolusUnits: 5},
+        result.weekAverage,
+      ),
+    ).toEqual({
+      metric: 'bolus',
+      currentUnits: 5,
+      baselineUnits: 3,
+      deltaUnits: 2,
+    });
+  });
+
+  it('rejects estimated and incomplete basal totals in every comparison presentation', () => {
+    const complete = {
+      quality: 'available' as const,
+      basalUnits: 4,
+      bolusUnits: 2,
+    };
+    expect(
+      selectRecordedInsulinComparison(complete, {
+        ...complete,
+        basalEstimated: true,
+      }),
+    ).toMatchObject({metric: 'bolus', deltaUnits: 0});
+    expect(
+      selectRecordedInsulinComparison(complete, {
+        ...complete,
+        basalCoveragePercent: 50,
+      }),
+    ).toMatchObject({metric: 'bolus'});
+    expect(
+      selectRecordedInsulinComparison(complete, {...complete, basalUnits: 3}),
+    ).toMatchObject({metric: 'total', deltaUnits: 1});
+    const asOfMs = new Date(2026, 0, 15, 12).getTime();
+    const result = buildDailyInsulinComparison(
+      getDailyInsulinComparisonWindows({
+        period: getLocalDayPeriod(asOfMs),
+        asOfMs,
+      }),
+      [{...complete, basalCoveragePercent: 50}],
+    );
+    expect(result.yesterday).toMatchObject({quality: 'partial'});
+    expect(result.yesterday).not.toHaveProperty('totalUnits');
   });
 });

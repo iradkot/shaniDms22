@@ -1,6 +1,7 @@
 import {
   BrowserNightscoutClient,
   decodeBrowserNightscoutDeviceStatus,
+  decodeBrowserNightscoutTreatment,
   type IndexedDbItemUpdate,
   WebApiError,
 } from '../../../src/platform/web';
@@ -32,6 +33,10 @@ class MemoryStorage {
 }
 
 describe('BrowserNightscoutClient', () => {
+  it('preserves recorded delivery evidence and revisions without replacing malformed amounts with a rate', () => {
+    const decoded = decodeBrowserNightscoutTreatment({created_at: '2026-09-27T00:00:00Z', eventType: 'Temp Basal', enteredBy: 'loop://phone', deliveredUnits: 'bad', amount: 'bad', absolute: 2, duration: 30, isMutable: true, type: 'normal', temp: 'absolute', syncIdentifier: 'dose', srvModified: 123, modified_at: '2026-09-27T01:00:00Z'});
+    expect(decoded).toMatchObject({deliveredUnits: -1, amount: -1, isMutable: true, type: 'normal', temp: 'absolute', syncIdentifier: 'dose', srvModified: 123, modified_at: '2026-09-27T01:00:00Z'});
+  });
   it('uses strictly decoded cached data when the proxy becomes unavailable', async () => {
     const storage = new MemoryStorage();
     const api = {

@@ -20,7 +20,11 @@ export type DailyInsulinSummary =
       readonly bolusUnits: number;
       readonly totalUnits: number;
       readonly basalEstimated?: boolean;
+      readonly basalEvidence?: 'recorded';
+      readonly basalCoveredMs?: number;
+      readonly basalCoveragePercent?: number;
     }
+  | Extract<DailyInsulinSourceSummary, {quality: 'partial'}>
   | {readonly quality: 'unavailable'};
 
 export interface DailyOverview {
@@ -110,6 +114,23 @@ const buildInsulinSummary = (
   if (source.quality === 'unavailable') {
     return {quality: 'unavailable'};
   }
+  if (source.quality === 'partial') {
+    if (
+      [source.basalUnits, source.bolusUnits].some(
+        value => value !== undefined && (!Number.isFinite(value) || value < 0),
+      ) ||
+      !Number.isFinite(source.basalCoveredMs) ||
+      source.basalCoveredMs < 0 ||
+      !Number.isFinite(source.basalCoveragePercent) ||
+      source.basalCoveragePercent < 0 ||
+      source.basalCoveragePercent > 100
+    ) {
+      throw new DailyOverviewInputError(
+        'Recorded insulin evidence must be finite and non-negative.',
+      );
+    }
+    return {...source};
+  }
   if (
     !Number.isFinite(source.basalUnits) ||
     !Number.isFinite(source.bolusUnits) ||
@@ -120,7 +141,31 @@ const buildInsulinSummary = (
       'Available insulin totals must be finite and non-negative.',
     );
   }
+  // Legacy sources can still return estimates. They cannot establish recorded basal.
+  if (source.basalEstimated) {
+    return {
+      quality: 'partial',
+      bolusUnits: source.bolusUnits,
+      basalCoveredMs: 0,
+      basalCoveragePercent: 0,
+    };
+  }
+  if ((source.basalCoveragePercent ?? 100) !== 100) {
+    return {
+      quality: 'partial',
+      basalUnits: source.basalUnits,
+      bolusUnits: source.bolusUnits,
+      basalCoveredMs: source.basalCoveredMs ?? 0,
+      basalCoveragePercent: Number.isFinite(source.basalCoveragePercent)
+        ? Math.max(0, Math.min(100, source.basalCoveragePercent!))
+        : 0,
+      ...(source.basalEvidence === undefined
+        ? {}
+        : {basalEvidence: source.basalEvidence}),
+    };
+  }
   return {
+    ...source,
     quality: 'available',
     basalUnits: source.basalUnits,
     bolusUnits: source.bolusUnits,

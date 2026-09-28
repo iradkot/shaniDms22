@@ -13,7 +13,7 @@ export const buildBrowserInsulinSummary = (
   endMs: number,
   treatments: BrowserNightscoutRange<BrowserNightscoutTreatment> | undefined,
   profile: BrowserNightscoutRange<BrowserNightscoutBasalProfile> | undefined,
-): DailyInsulinSourceSummary => {
+): Exclude<DailyInsulinSourceSummary, {quality: 'partial'}> => {
   const entries = profile?.records[0]?.entries;
   if (
     !treatments ||

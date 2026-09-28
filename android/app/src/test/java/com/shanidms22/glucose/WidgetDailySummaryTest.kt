@@ -67,78 +67,55 @@ class WidgetDailySummaryTest {
     assertEquals(12.5 * hour, (windows[1].endMs - windows[1].startMs).toDouble(), 0.0)
   }
 
-  @Test fun `insulin comparison never compares a partial today with an entire yesterday`() {
+  @Test fun `recorded insulin comparisons use the same cutoff and preserve known bolus without a basal schedule`() {
     val treatments = JSONArray().put(bolus(start + hour, 2.0)).put(bolus(start - 24 * hour + hour, 3.0))
       .put(bolus(start - 24 * hour + 18 * hour, 100.0))
-    val result = calculateWidgetInsulinComparison(treatments, profiles(start - 10 * 24 * hour, 1.0), start + 12 * hour, utc)!!
-    assertEquals(14.0, result.today!!.totalInsulin, 0.00001)
-    assertEquals(15.0, result.yesterday!!.totalInsulin, 0.00001)
+    val result = calculateWidgetInsulinComparison(treatments, start + 12 * hour, utc)!!
+    assertEquals(2.0, result.today!!.totalBolus!!, 0.00001)
+    assertEquals(3.0, result.yesterday!!.totalBolus!!, 0.00001)
     assertEquals(7, result.weekDays)
-    assertEquals(12.0 + 3.0 / 7, result.weekAverage!!.totalInsulin, 0.00001)
+    assertEquals(3.0 / 7, result.weekAverage!!.totalBolus!!, 0.00001)
+    assertNull(result.today!!.totalBasal)
+    assertNull(result.today!!.totalInsulin)
+    assertNull(result.today!!.basalBolusRatio)
+    assertNull(result.weekAverage!!.totalInsulin)
+    assertEquals("partial", result.weekAverage!!.quality)
   }
 
-  @Test fun `missing past profile cannot be replaced by newest profile`() {
-    val result = calculateWidgetInsulinComparison(JSONArray(), profiles(start, 1.0), start + 12 * hour, utc)!!
-    assertNotNull(result.today)
-    assertNull(result.yesterday)
-    assertNull(result.weekAverage)
-    assertEquals(0, result.weekDays)
-    assertNull(calculateWidgetInsulinStats(null, profiles(start, 1.0), start, start + hour, utc))
-    assertNull(calculateWidgetInsulinStats(JSONArray(), JSONArray(), start, start + hour, utc))
+  @Test fun `no treatments endpoint cannot become a known zero total`() {
+    assertNull(calculateWidgetInsulinStats(null, start, start + hour))
+    val empty = calculateWidgetInsulinStats(JSONArray(), start, start + hour)!!
+    assertNull(empty.totalBasal)
+    assertEquals(0.0, empty.totalBolus!!, 0.0)
+    assertNull(empty.totalInsulin)
+    assertEquals("partial", empty.quality)
   }
 
-  @Test fun `basal follows effective profile changes within a day`() {
-    val history = profiles(start - 24 * hour, 1.0).put(profile(start + 6 * hour, 2.0))
-    val result = calculateWidgetInsulinStats(JSONArray(), history, start, start + 12 * hour, utc)!!
-    assertEquals(18.0, result.totalBasal, 0.00001)
-    assertTrue(result.basalEstimated)
+  @Test fun `all shared recorded delivery fixtures match native background calculations`() {
+    val fixture = listOf("../../__tests__/fixtures/recorded-insulin.json", "../__tests__/fixtures/recorded-insulin.json", "__tests__/fixtures/recorded-insulin.json")
+      .map { java.io.File(it) }.first { it.isFile }
+    val cases = JSONArray(fixture.readText())
+    for (index in 0 until cases.length()) {
+      val case = cases.getJSONObject(index)
+      val name = case.getString("name")
+      val result = calculateWidgetInsulinStats(case.getJSONArray("records"), stamp(case.getString("start")),
+        stamp(case.getString("end")), stamp(case.getString("observedAt")))!!
+      val expected = case.getJSONObject("expected")
+      assertEquals(name, expected.getString("quality"), result.quality)
+      assertEquals(name, expected.getString("basalEvidence"), result.basalEvidence)
+      assertEquals(name, expected.getLong("basalCoveredMs"), result.basalCoveredMs)
+      assertEquals(name, expected.getDouble("basalCoveragePercent"), result.basalCoveragePercent, 0.000001)
+      if (expected.has("basalUnits")) assertEquals(name, expected.getDouble("basalUnits"), result.totalBasal!!, 0.000001) else assertNull(name, result.totalBasal)
+      if (expected.has("bolusUnits")) assertEquals(name, expected.getDouble("bolusUnits"), result.totalBolus!!, 0.000001) else assertNull(name, result.totalBolus)
+      if (result.quality != "available") { assertNull(name, result.totalInsulin); assertNull(name, result.basalBolusRatio) }
+      assertFalse(result.basalEstimated)
+    }
   }
 
-  @Test fun `temporary basals clip at midnight overlap and cancel correctly`() {
-    val treatments = JSONArray()
-      .put(temp(start - 30 * minute, 120.0, 2.0))
-      .put(temp(start + 30 * minute, 30.0, 0.0))
-      .put(temp(start + 45 * minute, 0.0, null))
-    val result = calculateWidgetInsulinStats(treatments, profiles(start - 24 * hour, 1.0), start, start + hour, utc)!!
-    assertEquals(1.25, result.totalBasal, 0.00001)
-  }
-
-  @Test fun `suspends end on pump resume and a real zero remains zero`() {
-    val treatments = JSONArray().put(event(start, "Suspend Pump")).put(event(start + 30 * minute, "Resume Pump"))
-    assertEquals(0.5, calculateWidgetInsulinStats(treatments, profiles(start, 1.0), start, start + hour, utc)!!.totalBasal, 0.00001)
-    val zero = calculateWidgetInsulinStats(JSONArray(), profiles(start, 0.0), start, start + hour, utc)!!
-    assertEquals(0.0, zero.totalInsulin, 0.0)
-    assertEquals(0.0, zero.basalBolusRatio, 0.0)
-  }
-
-  @Test fun `unknown percentage basal and unrecorded profile switch suppress misleading totals`() {
-    val percent = temp(start, 60.0, null).put("percent", 150).put("temp", "percent")
-    assertNull(calculateWidgetInsulinStats(JSONArray().put(percent), profiles(start, 1.0), start, start + hour, utc))
-    val switched = JSONArray().put(event(start + 30 * minute, "Profile Switch").put("profile", "Exercise"))
-    assertNull(calculateWidgetInsulinStats(switched, profiles(start, 1.0), start, start + hour, utc))
-  }
-
-  @Test fun `schedule integration handles repeated hour and profile timezone`() {
-    val fallStart = stamp("2026-11-01T04:00:00Z")
-    val p = profile(fallStart - 24 * hour, 1.0, "America/New_York")
-    p.getJSONObject("store").getJSONObject("Default").getJSONArray("basal")
-      .put(JSONObject().put("timeAsSeconds", 3600).put("value", 2.0))
-      .put(JSONObject().put("timeAsSeconds", 7200).put("value", 1.0))
-    val stats = calculateWidgetInsulinStats(JSONArray(), JSONArray().put(p), fallStart, fallStart + 4 * hour, utc)!!
-    assertEquals(6.0, stats.totalBasal, 0.00001)
-  }
-
-  @Test fun `duplicate treatment IDs never double count insulin`() {
-    val treatment = bolus(start + minute, 2.0).put("_id", "b1")
-    val stats = calculateWidgetInsulinStats(JSONArray().put(treatment).put(treatment), profiles(start, 1.0), start, start + hour, utc)!!
-    assertEquals(2.0, stats.totalBolus, 0.0)
-  }
-
-  @Test fun `unsupported extended bolus crossing midnight suppresses today total`() {
-    val extended = event(start - 30 * minute, "Combo Bolus").put("duration", 120).put("insulin", 4.0)
-    assertNull(calculateWidgetInsulinStats(JSONArray().put(extended), profiles(start - 24 * hour, 1.0), start, start + hour, utc))
-    extended.put("duration", 15)
-    assertEquals(1.0, calculateWidgetInsulinStats(JSONArray().put(extended), profiles(start - 24 * hour, 1.0), start, start + hour, utc)!!.totalInsulin, 0.00001)
+  @Test fun `legacy scheduled insulin cache is never relabeled as recorded delivery`() {
+    val raw = JSONObject(widgetDailySummaryJson(WidgetDailySummary(start, start + hour, 70, 180, null, null)))
+      .put("insulin", JSONObject().put("today", JSONObject().put("basal", 1.0).put("bolus", 2.0).put("estimated", true)))
+    assertNull(parseWidgetDailySummary(raw.toString(), start + hour, utc)!!.insulin?.today)
   }
 
   @Test fun `count expands until an unsaturated response and preserves all records`() {
@@ -173,19 +150,13 @@ class WidgetDailySummaryTest {
 
   @Test fun `summary round trip retains insulin and distinguishes missing from zero`() {
     val now = start + 12 * hour
-    val insulin = WidgetInsulinComparison(widgetInsulinStats(0.0, 0.0), null, widgetInsulinStats(4.0, 8.0), 7)
+    val insulin = WidgetInsulinComparison(widgetInsulinStats(0.0, 0.0, basalCoveredMs = 12 * hour), null, widgetInsulinStats(4.0, 8.0, basalCoveredMs = 12 * hour), 7)
     val summary = WidgetDailySummary(start, now, 70, 180, null, insulin)
     assertEquals(summary, parseWidgetDailySummary(widgetDailySummaryJson(summary), now, utc))
   }
 
   private fun point(minutes: Int, value: Int) = WidgetEntryPoint(start + minutes * minute, value, null)
   private fun stamp(value: String) = widgetParseTimestamp(value)!!
-  private fun profiles(at: Long, rate: Double) = JSONArray().put(profile(at, rate))
-  private fun profile(at: Long, rate: Double, zone: String = "UTC") = JSONObject()
-    .put("startDate", widgetIsoUtc(at)).put("defaultProfile", "Default")
-    .put("store", JSONObject().put("Default", JSONObject().put("timezone", zone)
-      .put("basal", JSONArray().put(JSONObject().put("timeAsSeconds", 0).put("value", rate)))))
   private fun event(at: Long, type: String) = JSONObject().put("created_at", widgetIsoUtc(at)).put("eventType", type)
   private fun bolus(at: Long, amount: Double) = event(at, "Correction Bolus").put("insulin", amount)
-  private fun temp(at: Long, duration: Double, rate: Double?) = event(at, "Temp Basal").put("duration", duration).apply { if (rate != null) put("absolute", rate) }
 }

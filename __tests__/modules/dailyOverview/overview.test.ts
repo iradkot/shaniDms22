@@ -17,6 +17,47 @@ const localNoon = (year: number, month: number, day: number): number =>
   new Date(year, month, day, 12).getTime();
 
 describe('Daily Overview domain', () => {
+  it('keeps only recorded bolus from legacy estimates and never totals partial basal coverage', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
+    const summarize = (
+      insulinSummary: Parameters<
+        typeof buildDailyOverview
+      >[0]['source']['insulinSummary'],
+    ) =>
+      buildDailyOverview({
+        period,
+        thresholds,
+        expectedSampleIntervalMs: 300_000,
+        source: {glucoseSamples: [], insulinSummary},
+      }).insulinSummary;
+    expect(
+      summarize({
+        quality: 'available',
+        basalUnits: 24,
+        bolusUnits: 2,
+        basalEstimated: true,
+      }),
+    ).toEqual({
+      quality: 'partial',
+      bolusUnits: 2,
+      basalCoveredMs: 0,
+      basalCoveragePercent: 0,
+    });
+    const partial = summarize({
+      quality: 'available',
+      basalUnits: 2,
+      bolusUnits: 3,
+      basalCoveragePercent: 50,
+      basalCoveredMs: 43_200_000,
+    });
+    expect(partial).toMatchObject({
+      quality: 'partial',
+      basalUnits: 2,
+      bolusUnits: 3,
+      basalCoveragePercent: 50,
+    });
+    expect(partial).not.toHaveProperty('totalUnits');
+  });
   it('uses elapsed-day coverage and excludes future readings while preserving selected-day identity', () => {
     const asOfMs = new Date(2026, 8, 28, 3, 15).getTime();
     const period = getLocalDayPeriod(asOfMs);

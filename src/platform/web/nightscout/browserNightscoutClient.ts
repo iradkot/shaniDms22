@@ -228,6 +228,18 @@ export interface BrowserNightscoutEntry {
 }
 
 export interface BrowserNightscoutTreatment {
+  readonly syncIdentifier?: string;
+  readonly deliveredUnits?: number;
+  readonly srvModified?: number | string;
+  readonly modified_at?: number | string;
+  readonly type?: string;
+  readonly temp?: string;
+  readonly endDate?: string;
+  readonly endTime?: string;
+  readonly isMutable?: boolean;
+  readonly mutable?: boolean;
+  readonly isValid?: boolean;
+  readonly deleted?: boolean;
   readonly _id?: string;
   readonly identifier?: string;
   readonly created_at?: string;
@@ -329,7 +341,7 @@ export const decodeBrowserNightscoutTreatment = (
   const enteredBy = text(value.enteredBy, 160);
   const carbs = numeric('carbs');
   const insulin = numeric('insulin');
-  const amount = numeric('amount');
+  const amount = value.amount == null ? undefined : numeric('amount') ?? -1;
   const rate = bounded(value.rate, 0, 50);
   const absolute = bounded(value.absolute, 0, 50);
   const duration = bounded(value.duration, 0, 24 * 60);
@@ -337,6 +349,26 @@ export const decodeBrowserNightscoutTreatment = (
   const profile = text(value.profile, 512);
   const app = text(value.app, 160);
   const result: BrowserNightscoutTreatment = {
+    ...Object.fromEntries(
+      ['syncIdentifier', 'type', 'temp', 'endDate', 'endTime'].flatMap(key => {
+        const field = text(value[key], 160);
+        return field === undefined ? [] : [[key, field]];
+      }),
+    ),
+    ...Object.fromEntries(
+      ['isMutable', 'mutable', 'isValid', 'deleted'].flatMap(key =>
+        typeof value[key] === 'boolean' ? [[key, value[key]]] : [],
+      ),
+    ),
+    ...Object.fromEntries(
+      ['srvModified', 'modified_at'].flatMap(key => {
+        const revision = typeof value[key] === 'number' ? number(value[key]) : text(value[key], 80);
+        return revision === undefined ? [] : [[key, revision]];
+      }),
+    ),
+    ...(value.deliveredUnits == null
+      ? {}
+      : {deliveredUnits: numeric('deliveredUnits') ?? -1}),
     ...(id === undefined ? {} : {_id: id}),
     ...(identifier === undefined ? {} : {identifier}),
     ...(createdAt === undefined ? {} : {created_at: createdAt}),

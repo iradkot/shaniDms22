@@ -1,6 +1,6 @@
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
-import {Text} from 'react-native';
+import {StyleSheet, Text} from 'react-native';
 import {
   buildDailyOverview,
   type DailyInsulinComparisonPresentation,
@@ -25,14 +25,24 @@ const base = buildDailyOverview({
       quality: 'available',
       basalUnits: 18,
       bolusUnits: 8,
-      basalEstimated: true,
+      basalEvidence: 'recorded',
     },
   },
 });
 const comparison: DailyInsulinComparisonPresentation = {
   status: 'available',
-  yesterday: {basalUnits: 15, bolusUnits: 8, totalUnits: 23},
-  weekAverage: {basalUnits: 20, bolusUnits: 9, totalUnits: 29},
+  yesterday: {
+    quality: 'available',
+    basalUnits: 15,
+    bolusUnits: 8,
+    totalUnits: 23,
+  },
+  weekAverage: {
+    quality: 'available',
+    basalUnits: 20,
+    bolusUnits: 9,
+    totalUnits: 29,
+  },
   weekDays: 7,
   cutoffTimestampMs: startMs + 12 * 60 * 60 * 1000,
   isPartialDay: true,
@@ -136,8 +146,9 @@ describe('Daily overview visual cards', () => {
       tree.root.findByProps({testID: 'daily-overview-compare-week'}).props
         .accessibilityState,
     ).toEqual({selected: true});
-    expect(allText(tree)).toContain('Each day up to the same time · 12:00');
-    expect(allText(tree)).toContain('Estimated');
+    expect(allText(tree)).toContain('00:00–12:00');
+    expect(allText(tree)).toContain('Recorded total');
+    expect(allText(tree)).not.toContain('Estimated');
     const scaled = tree.root
       .findAllByType(InsulinSplitGraphic)
       .filter(node => node.props.maximum !== undefined);
@@ -218,8 +229,16 @@ describe('Daily overview visual cards', () => {
       />,
     );
     expect(textAt(tree, 'daily-overview-insulin-total')).toBe('0 U');
-    expect(textAt(tree, 'daily-overview-insulin-basal-percent')).toBe('—');
-    expect(textAt(tree, 'daily-overview-insulin-bolus-percent')).toBe('—');
+    expect(
+      tree.root.findAllByProps({
+        testID: 'daily-overview-insulin-basal-percent',
+      }),
+    ).toHaveLength(0);
+    expect(
+      tree.root.findAllByProps({
+        testID: 'daily-overview-insulin-bolus-percent',
+      }),
+    ).toHaveLength(0);
     expect(allText(tree)).not.toMatch(/NaN|Infinity/);
   });
 
@@ -235,7 +254,12 @@ describe('Daily overview visual cards', () => {
     };
     const history = {
       ...comparison,
-      yesterday: {basalUnits: 0.009, bolusUnits: 0, totalUnits: 0.01},
+      yesterday: {
+        quality: 'available' as const,
+        basalUnits: 0.009,
+        bolusUnits: 0,
+        totalUnits: 0.01,
+      },
     };
     const tree = mount(
       <DailyOverviewCard
@@ -268,7 +292,12 @@ describe('Daily overview visual cards', () => {
     };
     const history = {
       ...comparison,
-      yesterday: {basalUnits: 0.005, bolusUnits: 0, totalUnits: 0.005},
+      yesterday: {
+        quality: 'available' as const,
+        basalUnits: 0.005,
+        bolusUnits: 0,
+        totalUnits: 0.005,
+      },
     };
     const tree = mount(
       <DailyOverviewCard
@@ -310,6 +339,144 @@ describe('Daily overview visual cards', () => {
       />,
     );
     expect(allText(full)).toContain('ממוצע 7 ימים');
-    expect(allText(full)).toContain('בכל יום עד אותה שעה');
+    expect(allText(full)).toContain('00:00–12:00');
+  });
+
+  it('shows the exact date and cutoff with recorded bolus while basal is unknown', () => {
+    const day = new Date(2026, 8, 28).getTime();
+    const cutoff = new Date(2026, 8, 28, 10, 56).getTime();
+    const overview = {
+      ...base,
+      period: {startMs: day, endMs: new Date(2026, 8, 29).getTime()},
+      observedPeriod: {startMs: day, endMs: cutoff},
+      isPartialDay: true,
+      insulinSummary: {
+        quality: 'partial' as const,
+        bolusUnits: 8.2,
+        basalCoveredMs: 0,
+        basalCoveragePercent: 0,
+      },
+    };
+    const history: DailyInsulinComparisonPresentation = {
+      status: 'available',
+      yesterday: {quality: 'partial', bolusUnits: 6.2, basalCoveragePercent: 0},
+      weekAverage: {
+        quality: 'partial',
+        bolusUnits: 7.2,
+        basalCoveragePercent: 0,
+      },
+      weekDays: 7,
+      cutoffTimestampMs: cutoff,
+      isPartialDay: true,
+    };
+    const tree = mount(
+      <DailyOverviewCard
+        id="insulin"
+        overview={overview}
+        locale="he"
+        rangeStyle="ring"
+        thresholds={thresholds}
+        insulinComparison={history}
+      />,
+    );
+    const label = (testID: string) =>
+      tree.root
+        .findAllByProps({testID})
+        .find(node => node.props.accessibilityLabel)?.props.accessibilityLabel;
+    expect(label('daily-overview-insulin-period')).toBe(
+      'היום · 28/9 · 00:00–10:56',
+    );
+    expect(label('daily-overview-comparison-current-period')).toBe(
+      'היום · 28/9 · 00:00–10:56',
+    );
+    expect(label('daily-overview-comparison-baseline-period')).toBe(
+      'אתמול · 27/9 · 00:00–10:56',
+    );
+    expect(textAt(tree, 'daily-overview-insulin-recorded-bolus')).toBe('8.2 U');
+    expect(textAt(tree, 'daily-overview-insulin-basal')).toBe('—');
+    expect(
+      tree.root.findAllByProps({testID: 'daily-overview-insulin-total'}),
+    ).toHaveLength(0);
+    expect(
+      tree.root.findAllByProps({
+        testID: 'daily-overview-insulin-basal-percent',
+      }),
+    ).toHaveLength(0);
+    expect(allText(tree)).toContain('אין תיעוד מלא של בזאל שניתן');
+    expect(allText(tree)).toContain('השוואת בולוס מתועד');
+    expect(textAt(tree, 'daily-overview-insulin-delta')).toBe('+2 U');
+    act(() =>
+      tree.root
+        .findByProps({testID: 'daily-overview-compare-week'})
+        .props.onPress(),
+    );
+    expect(textAt(tree, 'daily-overview-insulin-delta')).toBe('+1 U');
+    expect(label('daily-overview-comparison-baseline-period')).toBe(
+      'ממוצע 7 ימים · 21/9–27/9 · 00:00–10:56',
+    );
+    const weeklyPeriod = tree.root
+      .findAllByProps({testID: 'daily-overview-comparison-baseline-period'})
+      .find(node => node.props.accessibilityLabel)!;
+    for (const numericRun of ['21/9–27/9', '00:00–10:56']) {
+      const text = weeklyPeriod
+        .findAllByType(Text)
+        .find(node => node.props.children === numericRun)!;
+      expect(text).toBeDefined();
+      expect(StyleSheet.flatten(text.props.style).writingDirection).toBe('ltr');
+    }
+  });
+
+  it('labels partial basal as a subtotal and rejects legacy scheduled estimates', () => {
+    const partial = {
+      ...base,
+      insulinSummary: {
+        quality: 'partial' as const,
+        basalUnits: 1.3,
+        bolusUnits: 4,
+        basalCoveredMs: 7200000,
+        basalCoveragePercent: 40,
+      },
+    };
+    const tree = mount(
+      <DailyOverviewCard
+        id="insulin"
+        overview={partial}
+        locale="en"
+        rangeStyle="ring"
+        thresholds={thresholds}
+      />,
+    );
+    expect(textAt(tree, 'daily-overview-insulin-basal')).toBe('1.3 U');
+    expect(textAt(tree, 'daily-overview-insulin-recorded-bolus')).toBe('4 U');
+    expect(allText(tree)).toContain('Recorded subtotal');
+    expect(allText(tree)).toContain('40% of the time covered by basal records');
+    expect(
+      tree.root.findAllByProps({testID: 'daily-overview-insulin-total'}),
+    ).toHaveLength(0);
+    const legacy = {
+      ...base,
+      insulinSummary: {
+        quality: 'available' as const,
+        basalUnits: 23.1,
+        bolusUnits: 8,
+        totalUnits: 31.1,
+        basalEstimated: true,
+      },
+    };
+    const old = mount(
+      <DailyOverviewCard
+        id="insulin"
+        overview={legacy}
+        locale="en"
+        rangeStyle="ring"
+        thresholds={thresholds}
+      />,
+    );
+    expect(textAt(old, 'daily-overview-insulin-recorded-bolus')).toBe('8 U');
+    expect(allText(old)).not.toContain('31.1 U');
+    expect(allText(old)).not.toContain('23.1 U');
+    expect(
+      old.root.findAllByProps({testID: 'daily-overview-insulin-total'}),
+    ).toHaveLength(0);
   });
 });

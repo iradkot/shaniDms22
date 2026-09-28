@@ -137,7 +137,7 @@ describe('DailyOverviewModuleView', () => {
         'Maximum',
         'CV',
         'Insulin',
-        'Total',
+        'Recorded total',
         'Basal',
         'Bolus',
       ]),

@@ -8,6 +8,18 @@ export type DailyInsulinSourceSummary =
       readonly basalUnits: number;
       readonly bolusUnits: number;
       readonly basalEstimated?: boolean;
+      readonly basalEvidence?: 'recorded';
+      readonly basalCoveredMs?: number;
+      readonly basalCoveragePercent?: number;
+    }
+  | {
+      readonly quality: 'partial';
+      /** Recorded subtotal only; gaps are unknown, never filled from a profile. */
+      readonly basalUnits?: number;
+      readonly bolusUnits?: number;
+      readonly basalEvidence?: 'recorded';
+      readonly basalCoveredMs: number;
+      readonly basalCoveragePercent: number;
     }
   | {readonly quality: 'unavailable'};
 
@@ -18,10 +30,14 @@ export interface DailyOverviewSourceSnapshot {
 }
 
 export interface DailyInsulinComparisonTotals {
-  readonly basalUnits: number;
-  readonly bolusUnits: number;
-  readonly totalUnits: number;
+  readonly quality: 'available' | 'partial';
+  readonly basalUnits?: number;
+  readonly bolusUnits?: number;
+  readonly totalUnits?: number;
   readonly basalEstimated?: boolean;
+  readonly basalCoveragePercent?: number;
+  readonly basalCoveredMs?: number;
+  readonly basalEvidence?: 'recorded';
 }
 
 export interface DailyInsulinComparisonPresentation {

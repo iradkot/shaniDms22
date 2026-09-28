@@ -93,6 +93,22 @@ class WidgetSummaryRenderingTest {
     build = { context, options -> views(context, options, fixture()) },
     verify = { root -> assertReadable(root, "82", "26") })
 
+  @Test fun partialBasalShowsRecordedBolusAndComparesBolusOnly() = render("partial-recorded-en", Size(340, 300),
+    build = { context, options ->
+      val partial = WidgetInsulinComparison(
+        widgetInsulinStats(2.0, 8.0, 20.0, 60_000, "partial"),
+        widgetInsulinStats(3.0, 6.0, 30.0, 90_000, "partial"), null, 0)
+      views(context, options, fixture().copy(insulin = partial))
+    },
+    verify = { root ->
+      assertReadable(root, "82", "8.0")
+      assertTrue(root.findViewById<TextView>(R.id.summary_insulin_title).text.contains("Bolus today"))
+      assertTrue(root.findViewById<TextView>(R.id.summary_basal).text.contains("incomplete"))
+      assertTrue(root.findViewById<TextView>(R.id.summary_comparison_title).text.contains("Bolus"))
+      assertTrue(root.findViewById<TextView>(R.id.summary_comparison_delta).text.contains("+2.0"))
+      assertFalse(textViews(root).any { it.text.contains("estimated") || it.text.contains("≈") })
+    })
+
   @Test fun weeklyComparisonSelectionRendersDistinctPeriod() = render("week-en", Size(340, 300),
     build = { context, options ->
       assertFalse(GlucoseSummaryWidgetPreferences.isWeek(context, widgetId))

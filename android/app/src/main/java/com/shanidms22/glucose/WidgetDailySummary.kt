@@ -83,17 +83,23 @@ internal fun calculateWidgetDailyRange(
 }
 
 internal fun calculateWidgetInsulinComparison(
-  treatments: JSONArray?, profiles: JSONArray?, nowMs: Long, zone: TimeZone = TimeZone.getDefault(),
+  treatments: JSONArray?, nowMs: Long, zone: TimeZone = TimeZone.getDefault(),
   includeHistory: Boolean = true,
 ): WidgetInsulinComparison? {
   val windows = widgetComparisonWindows(nowMs, zone)
-  val today = calculateWidgetInsulinStats(treatments, profiles, windows[0].startMs, windows[0].endMs, zone)
+  val today = calculateWidgetInsulinStats(treatments, windows[0].startMs, windows[0].endMs, nowMs)
   val previous = if (includeHistory) windows.drop(1).map {
-    calculateWidgetInsulinStats(treatments, profiles, it.startMs, it.endMs, zone)
+    calculateWidgetInsulinStats(treatments, it.startMs, it.endMs, nowMs)
   } else emptyList()
   val valid = previous.filterNotNull()
   // A weekly comparison represents all seven prior dates; never silently average a biased subset.
-  val average = if (valid.size == 7) widgetInsulinStats(valid.map { it.totalBasal }.average(), valid.map { it.totalBolus }.average()) else null
+  val average = if (valid.size == 7) {
+    val basal = valid.mapNotNull { it.totalBasal }.takeIf { it.size == 7 }?.average()
+    val bolus = valid.mapNotNull { it.totalBolus }.takeIf { it.size == 7 }?.average()
+    if (basal == null && bolus == null) null else widgetInsulinStats(basal, bolus,
+      valid.map { it.basalCoveragePercent }.average(), valid.map { it.basalCoveredMs }.average().toLong(),
+      if (valid.all { it.quality == "available" }) "available" else "partial")
+  } else null
   if (today == null && previous.firstOrNull() == null && average == null) return null
   return WidgetInsulinComparison(today, previous.firstOrNull(), average, if (average != null) 7 else 0)
 }
@@ -133,7 +139,9 @@ internal fun fetchCompleteWidgetPages(
 
 internal fun widgetRangeQuery(baseUrl: String, endpoint: String, field: String, start: String, end: String): String {
   fun encode(value: String) = URLEncoder.encode(value, "UTF-8")
-  return "${baseUrl.trimEnd('/')}/api/v1/$endpoint?${encode("find[$field][\$gte]")}=${encode(start)}&${encode("find[$field][\$lte]")}=${encode(end)}&${encode("sort[$field]")}=1"
+  // The server's default sort is sufficient: callers sort their complete range locally.
+  // Older Nightscout/MongoDB combinations pass HTTP sort values as strings and reject them.
+  return "${baseUrl.trimEnd('/')}/api/v1/$endpoint?${encode("find[$field][\$gte]")}=${encode(start)}&${encode("find[$field][\$lte]")}=${encode(end)}"
 }
 
 internal fun widgetDailySummaryJson(summary: WidgetDailySummary): String = JSONObject().apply {
@@ -175,14 +183,24 @@ internal fun parseWidgetDailySummary(raw: String?, nowMs: Long, zone: TimeZone =
 
 private fun insulinJson(stats: WidgetInsulinStats) = JSONObject().apply {
   put("basal", stats.totalBasal); put("bolus", stats.totalBolus)
-  put("estimated", stats.basalEstimated)
+  put("quality", stats.quality); put("basalCoveragePercent", stats.basalCoveragePercent)
+  put("basalCoveredMs", stats.basalCoveredMs); put("basalEvidence", stats.basalEvidence)
 }
 
 private fun parseInsulinJson(row: JSONObject?): WidgetInsulinStats? {
   if (row == null) return null
-  val basal = row.optDouble("basal", Double.NaN); val bolus = row.optDouble("bolus", Double.NaN)
-  if (!basal.isFinite() || !bolus.isFinite() || basal < 0 || bolus < 0) return null
-  return widgetInsulinStats(basal, bolus).copy(basalEstimated = row.optBoolean("estimated", true))
+  // Legacy rows contained scheduled estimates. Never relabel those as recorded delivery.
+  if (row.optString("basalEvidence", "") != "recorded" || row.optBoolean("estimated", false)) return null
+  val quality = row.optString("quality", "")
+  if (quality != "available" && quality != "partial") return null
+  fun component(key: String): Double? = row.optDouble(key, Double.NaN).takeIf { it.isFinite() && it >= 0 }
+  val basal = component("basal"); val bolus = component("bolus")
+  val coverage = row.optDouble("basalCoveragePercent", Double.NaN)
+  val covered = row.optLong("basalCoveredMs", -1)
+  if (!coverage.isFinite() || coverage !in 0.0..100.0 || covered < 0) return null
+  if (basal != null && covered == 0L) return null
+  if (quality == "available" && (basal == null || bolus == null || coverage != 100.0 || covered <= 0L)) return null
+  return widgetInsulinStats(basal, bolus, coverage, covered, quality)
 }
 
 private const val CGM_SAMPLE_MS = 5 * 60_000L

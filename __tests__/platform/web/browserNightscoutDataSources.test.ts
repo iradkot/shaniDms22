@@ -259,26 +259,29 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
     expect(result.freshness.kind).toBe('stale');
   });
 
-  it('calculates browser insulin totals with basal carryover and excludes earlier boluses', async () => {
+  it('keeps recorded bolus without filling basal gaps or fetching a profile', async () => {
     const client = clientFixture();
     const result = await sources(client).dailyOverview.loadDailyOverview({
       startMs: dayStartMs,
       endMs: dayEndMs,
     });
     expect(result.insulinSummary).toEqual({
-      quality: 'available',
-      basalUnits: 24.5,
+      quality: 'partial',
       bolusUnits: 3,
+      basalEvidence: 'recorded',
+      basalCoveredMs: 0,
+      basalCoveragePercent: 0,
     });
     expect(client.readTreatments).toHaveBeenCalledWith(
       dayStartMs - 24 * HOUR,
       dayEndMs,
     );
+    expect(client.readBasalProfile).not.toHaveBeenCalled();
   });
 
   it('does not turn missing or stale insulin evidence into an available zero', async () => {
     const client = clientFixture();
-    client.readBasalProfile.mockResolvedValue(range([]));
+    client.readTreatments.mockRejectedValue(new Error('offline'));
     expect(
       (
         await sources(client).dailyOverview.loadDailyOverview({
@@ -287,7 +290,7 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
         })
       ).insulinSummary,
     ).toEqual({quality: 'unavailable'});
-    client.readBasalProfile.mockRejectedValue(new Error('offline'));
+    expect(client.readBasalProfile).not.toHaveBeenCalled();
     expect(
       (
         await sources(client).dailyOverview.loadDailyOverview({

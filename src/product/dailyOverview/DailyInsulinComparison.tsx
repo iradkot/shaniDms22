@@ -6,112 +6,89 @@ import {
   Text,
   View,
 } from 'react-native';
-import type {DailyInsulinComparisonPresentation} from '../../modules/dailyOverview';
+import {
+  getDailyInsulinComparisonWindows,
+  selectRecordedInsulinComparison,
+  type DailyInsulinComparisonPresentation,
+  type DailyInsulinSummary,
+  type DailyOverviewPeriod,
+} from '../../modules/dailyOverview';
 import type {DestinationLocale} from '../destinations';
 import {DAILY_OVERVIEW_COPY} from './copy';
+import {DailyPeriodLabel} from './DailyPeriodLabel';
+import {InsulinSplitGraphic} from './DailyInsulinGraphics';
+import {
+  formatDailyValue,
+  recordedInsulinDisplay,
+} from './dailyOverviewPresentation';
+export {
+  InsulinSplitGraphic,
+  INSULIN_COLORS,
+  insulinGraphicTotal,
+} from './DailyInsulinGraphics';
 
-export const INSULIN_COLORS = {basal: '#68DFC7', bolus: '#BEA7FF'} as const;
-
-export interface InsulinGraphicAmounts {
-  readonly basalUnits: number;
-  readonly bolusUnits: number;
-  readonly totalUnits: number;
-}
-
-/** Use unrounded components for geometry; rounded display totals can distort tiny doses. */
-export const insulinGraphicTotal = (insulin: InsulinGraphicAmounts): number =>
-  insulin.basalUnits + insulin.bolusUnits;
-
-/** The same scale is shared by comparison bars; a true zero has no filled segment. */
-export const InsulinSplitGraphic = ({
-  insulin,
-  maximum = insulinGraphicTotal(insulin),
-  miniature = false,
-  rtl = false,
-}: {
-  readonly insulin: InsulinGraphicAmounts;
-  readonly maximum?: number;
-  readonly miniature?: boolean;
-  readonly rtl?: boolean;
-}) => {
-  const safeMaximum = Number.isFinite(maximum) && maximum > 0 ? maximum : 0;
-  const basal = safeMaximum ? Math.max(0, insulin.basalUnits) / safeMaximum : 0;
-  const bolus = safeMaximum ? Math.max(0, insulin.bolusUnits) / safeMaximum : 0;
-  return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      testID="daily-overview-insulin-split-graphic"
-      style={[
-        styles.track,
-        rtl && styles.reverse,
-        miniature && styles.miniTrack,
-      ]}>
-      {basal > 0 ? (
-        <View
-          style={[
-            styles.fill,
-            {flex: basal, backgroundColor: INSULIN_COLORS.basal},
-          ]}
-        />
-      ) : null}
-      {bolus > 0 ? (
-        <View
-          style={[
-            styles.fill,
-            {flex: bolus, backgroundColor: INSULIN_COLORS.bolus},
-          ]}
-        />
-      ) : null}
-      <View style={{flex: Math.max(0, 1 - basal - bolus)}} />
-    </View>
-  );
-};
-
-const units = (value: number) => `${Number(value.toFixed(2))} U`;
+const units = (value: number) => `${formatDailyValue(value)} U`;
 
 export const DailyInsulinComparison = ({
   today,
+  period,
+  observedPeriod,
   comparison,
   locale,
 }: {
-  readonly today: InsulinGraphicAmounts;
+  readonly today: DailyInsulinSummary;
+  readonly period: DailyOverviewPeriod;
+  readonly observedPeriod: DailyOverviewPeriod;
   readonly comparison?: DailyInsulinComparisonPresentation | undefined;
   readonly locale: DestinationLocale;
 }) => {
   const [mode, setMode] = useState<'yesterday' | 'week'>('yesterday');
   const copy = DAILY_OVERVIEW_COPY[locale];
   const rtl = locale === 'he';
+  const align = rtl && styles.rtl;
   const row = [styles.row, rtl && styles.reverse];
-  const align = rtl && styles.rtlText;
+  const windows = getDailyInsulinComparisonWindows({
+    period,
+    asOfMs: comparison?.cutoffTimestampMs ?? observedPeriod.endMs,
+  });
+  const previousDay = windows.previousDays[0]!;
+  const previousDayLabel = windows.isPartialDay
+    ? copy.yesterday
+    : copy.previousDay;
   const baseline =
     comparison?.status === 'available'
       ? mode === 'yesterday'
         ? comparison.yesterday
         : comparison.weekAverage
       : undefined;
-  const label = mode === 'yesterday' ? copy.yesterday : copy.weekAverage;
-  const delta = baseline
-    ? insulinGraphicTotal(today) - insulinGraphicTotal(baseline)
+  const selected = baseline
+    ? selectRecordedInsulinComparison(today, baseline)
     : undefined;
+  const delta = selected?.deltaUnits;
   const deltaText =
     delta === undefined
       ? '—'
       : `${Math.abs(delta) < 0.005 ? '' : delta > 0 ? '+' : '−'}${units(
           Math.abs(delta),
         )}`;
-  const cutoff = comparison
-    ? new Date(comparison.cutoffTimestampMs).toLocaleTimeString(
-        locale === 'he' ? 'he-IL' : 'en-GB',
-        {hour: '2-digit', minute: '2-digit', hour12: false},
-      )
+  const todayDisplay = recordedInsulinDisplay(today);
+  const baselineDisplay = baseline
+    ? recordedInsulinDisplay(baseline)
     : undefined;
-  const timeCaption = comparison?.isPartialDay
-    ? `${copy.comparisonSameTime} · ${cutoff}`
-    : copy.comparisonFullDays;
+  const chartParts = (current: boolean) => {
+    const display = current ? todayDisplay : baselineDisplay;
+    return selected?.metric === 'total'
+      ? {basalUnits: display?.basal ?? 0, bolusUnits: display?.bolus ?? 0}
+      : {
+          basalUnits: 0,
+          bolusUnits: current
+            ? selected?.currentUnits ?? 0
+            : selected?.baselineUnits ?? 0,
+        };
+  };
   return (
     <View style={styles.panel} testID="daily-overview-insulin-comparison">
-      <Text style={[styles.eyebrow, align]}>{copy.insulinCompare}</Text>
+      <Text style={[styles.heading, align]}>{copy.insulinCompare}</Text>
       <View style={[row, styles.tabs]}>
         {(['yesterday', 'week'] as const).map(option => (
           <Pressable
@@ -119,7 +96,7 @@ export const DailyInsulinComparison = ({
             accessibilityRole="button"
             accessibilityState={{selected: mode === option}}
             accessibilityLabel={
-              option === 'yesterday' ? copy.yesterday : copy.weekAverage
+              option === 'yesterday' ? previousDayLabel : copy.weekAverage
             }
             onPress={() => setMode(option)}
             testID={`daily-overview-compare-${option}`}
@@ -134,7 +111,7 @@ export const DailyInsulinComparison = ({
                 mode === option && styles.selectedTabText,
                 align,
               ]}>
-              {option === 'yesterday' ? copy.yesterday : copy.weekAverage}
+              {option === 'yesterday' ? previousDayLabel : copy.weekAverage}
             </Text>
           </Pressable>
         ))}
@@ -150,8 +127,13 @@ export const DailyInsulinComparison = ({
             {copy.comparisonLoading}
           </Text>
         </View>
-      ) : baseline ? (
+      ) : selected ? (
         <View testID={`daily-overview-comparison-${mode}`}>
+          <Text style={[styles.metric, align]}>
+            {selected.metric === 'total'
+              ? copy.recordedTotal
+              : copy.bolusComparisonOnly}
+          </Text>
           <View style={[row, styles.deltaRow]}>
             <Text style={[styles.message, styles.flex, align]}>
               {copy.comparisonChange}
@@ -163,37 +145,62 @@ export const DailyInsulinComparison = ({
               {deltaText}
             </Text>
           </View>
-          {[
-            {key: 'today', label: copy.comparisonDay, insulin: today},
-            {key: 'baseline', label, insulin: baseline},
-          ].map(item => (
-            <View key={item.key} style={styles.comparisonRow}>
+          {[true, false].map(current => (
+            <View key={String(current)} style={styles.comparisonRow}>
+              {current ? (
+                <DailyPeriodLabel
+                  period={windows.current}
+                  dayLabel={
+                    windows.isPartialDay ? copy.today : copy.comparisonDay
+                  }
+                  locale={locale}
+                  testID="daily-overview-comparison-current-period"
+                />
+              ) : mode === 'yesterday' ? (
+                <DailyPeriodLabel
+                  period={previousDay}
+                  dayLabel={previousDayLabel}
+                  locale={locale}
+                  testID="daily-overview-comparison-baseline-period"
+                />
+              ) : (
+                <DailyPeriodLabel
+                  period={previousDay}
+                  dayLabel={copy.weekAverage}
+                  dateRange={{
+                    firstDayMs: windows.previousDays[6]!.startMs,
+                    lastDayMs: previousDay.startMs,
+                  }}
+                  locale={locale}
+                  testID="daily-overview-comparison-baseline-period"
+                />
+              )}
               <View style={row}>
-                <Text style={[styles.barLabel, styles.flex, align]}>
-                  {item.label}
-                </Text>
+                <View style={styles.flex}>
+                  <InsulinSplitGraphic
+                    insulin={chartParts(current)}
+                    maximum={Math.max(
+                      selected.currentUnits,
+                      selected.baselineUnits,
+                    )}
+                    rtl={rtl}
+                  />
+                </View>
                 <Text style={styles.barValue}>
-                  {units(item.insulin.totalUnits)}
+                  {units(
+                    current ? selected.currentUnits : selected.baselineUnits,
+                  )}
                 </Text>
               </View>
-              <InsulinSplitGraphic
-                insulin={item.insulin}
-                maximum={Math.max(
-                  insulinGraphicTotal(today),
-                  insulinGraphicTotal(baseline),
-                )}
-                rtl={rtl}
-              />
             </View>
           ))}
-          <Text style={[styles.caption, align]}>{timeCaption}</Text>
           {mode === 'week' ? (
             <Text style={[styles.caption, align]}>{copy.weekComplete}</Text>
           ) : null}
         </View>
       ) : (
         <Text
-          style={[styles.message, styles.unavailable, align]}
+          style={[styles.message, styles.messageRow, align]}
           testID="daily-overview-comparison-unavailable">
           {copy.comparisonUnavailable}
         </Text>
@@ -205,24 +212,15 @@ export const DailyInsulinComparison = ({
 const styles = StyleSheet.create({
   row: {flexDirection: 'row', alignItems: 'center', gap: 8},
   reverse: {flexDirection: 'row-reverse'},
-  rtlText: {textAlign: 'right', writingDirection: 'rtl'},
+  rtl: {textAlign: 'right', writingDirection: 'rtl'},
   flex: {flex: 1},
-  track: {
-    height: 12,
-    borderRadius: 7,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    backgroundColor: '#34445B',
-  },
-  fill: {height: '100%'},
-  miniTrack: {width: 48, height: 10},
   panel: {
-    marginTop: 20,
-    padding: 14,
+    marginTop: 18,
+    padding: 12,
     borderRadius: 18,
     backgroundColor: '#1B2A3E',
   },
-  eyebrow: {color: '#A6B7CC', fontSize: 12, fontWeight: '600', marginBottom: 9},
+  heading: {color: '#D7E3F3', fontSize: 13, fontWeight: '700', marginBottom: 9},
   tabs: {gap: 4, padding: 4, backgroundColor: '#111D2D', borderRadius: 13},
   tab: {
     flex: 1,
@@ -242,9 +240,10 @@ const styles = StyleSheet.create({
   },
   selectedTabText: {color: '#F3F7FF'},
   pressed: {opacity: 0.7},
-  deltaRow: {marginTop: 16, marginBottom: 7},
+  metric: {fontSize: 14, fontWeight: '700', color: '#F3F7FF', marginTop: 14},
+  deltaRow: {marginTop: 8},
   delta: {
-    fontSize: 26,
+    fontSize: 25,
     fontWeight: '800',
     color: '#F3F7FF',
     writingDirection: 'ltr',
@@ -252,15 +251,13 @@ const styles = StyleSheet.create({
   },
   message: {fontSize: 12, color: '#B7C6D9', lineHeight: 18},
   messageRow: {marginTop: 14},
-  unavailable: {marginTop: 14},
-  comparisonRow: {gap: 6, marginTop: 10},
-  barLabel: {fontSize: 12, color: '#D7E3F3'},
+  comparisonRow: {gap: 8, marginTop: 5},
   barValue: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#F3F7FF',
     writingDirection: 'ltr',
     fontVariant: ['tabular-nums'],
     fontWeight: '700',
   },
-  caption: {fontSize: 10, color: '#A6B7CC', lineHeight: 16, marginTop: 12},
+  caption: {fontSize: 11, color: '#A6B7CC', lineHeight: 17, marginTop: 12},
 });

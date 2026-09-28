@@ -28,6 +28,7 @@ import {
 import {projectNightscoutTherapyContext} from '../../nightscout/therapyContextProjection';
 import {mapNightscoutTreatmentsToInsulinDataEntries} from '../../../utils/nightscoutTreatments.utils';
 import {buildBrowserInsulinSummary} from './browserInsulinSummary';
+import {buildRecordedInsulinSummary} from '../../../services/insulin/recordedInsulin';
 import {loadCalendarGlucoseRange} from '../../nightscout/loadCalendarGlucoseRange';
 import {
   createGlucoseForecastLoader,
@@ -365,22 +366,28 @@ export const createBrowserNightscoutDataSources = (input: {
     },
   };
   const dailyOverview: DailyOverviewDataSource = {
-    async loadDailyOverview(period) {
-      const [glucoseSamples, treatments, profile] = await Promise.all([
-        trends.loadGlucoseSamples(period),
+    async loadDailyOverview(period, options) {
+      const observedAtMs = Date.now();
+      const cutoff = Math.min(period.endMs, options?.asOfMs ?? observedAtMs);
+      const observedPeriod = {...period, endMs: cutoff};
+      const [glucoseSamples, treatments] = await Promise.all([
+        cutoff > period.startMs
+          ? trends.loadGlucoseSamples(observedPeriod)
+          : Promise.resolve([]),
         input.client
-          .readTreatments(period.startMs - DAY_MS, period.endMs)
+          .readTreatments(period.startMs - DAY_MS, cutoff)
           .catch(() => undefined),
-        input.client.readBasalProfile(period.startMs).catch(() => undefined),
       ]);
       return {
         glucoseSamples,
-        insulinSummary: buildBrowserInsulinSummary(
-          period.startMs,
-          period.endMs,
-          treatments,
-          profile,
-        ),
+        insulinSummary:
+          treatments?.freshness.kind === 'fresh'
+            ? buildRecordedInsulinSummary(
+                treatments.records.map(record => ({...record})),
+                observedPeriod,
+                observedAtMs,
+              )
+            : {quality: 'unavailable'},
       };
     },
   };

@@ -51,19 +51,20 @@ class WidgetDailyFetchingTest {
         if (URI(url).path.contains("entries")) server.fetch(url, secret)
         else { hadRangeBeforeOptionalRequest = saved?.range != null; null }
       })
-    assertTrue("a slow or unavailable profile/history request must not leave today's TIR blank", hadRangeBeforeOptionalRequest)
+    assertTrue("a slow or unavailable insulin/history request must not leave today's TIR blank", hadRangeBeforeOptionalRequest)
   }
 
-  @Test fun `unusable historical profile cannot erase today's independently valid insulin`() {
-    val server = NightscoutV1Server(glucoseCount = 40, treatmentCount = 40, malformedOldProfile = true)
+  @Test fun `profile endpoints are not needed for recorded insulin and are never requested`() {
+    val server = NightscoutV1Server(glucoseCount = 40, treatmentCount = 40)
     val result = fetchWidgetDailySummary("https://nightscout.test", null, 70, 180, now, zone, fetch = server::fetch)
     assertNotNull(result.summary.range)
-    assertNotNull("today's profile is valid even when last week's is unsupported", result.summary.insulin?.today)
-    assertNull(result.summary.insulin?.weekAverage)
+    assertNotNull(result.summary.insulin?.today)
+    assertNull("no schedule may fill today's missing recorded basal", result.summary.insulin?.today?.totalBasal)
+    assertTrue(server.requests.none { it.contains("profile") })
   }
 
-  /** Mirrors Nightscout 15 lib/server/{entries,treatments,profile}.js: count, find, sort; no skip. */
-  private inner class NightscoutV1Server(glucoseCount: Int = 601, treatmentCount: Int = 620, malformedOldProfile: Boolean = false) {
+  /** Mirrors Nightscout 15 lib/server/{entries,treatments}.js: count, find, sort; no skip. */
+  private inner class NightscoutV1Server(glucoseCount: Int = 601, treatmentCount: Int = 620) {
     val requests = mutableListOf<String>()
     private val entries = (0 until glucoseCount).map { index ->
       JSONObject().put("_id", "g$index").put("date", start + index * 60_000L).put("sgv", 81).put("type", "sgv")
@@ -72,17 +73,6 @@ class WidgetDailyFetchingTest {
       JSONObject().put("_id", "t$index").put("created_at", widgetIsoUtc(start - 7 * 24 * 60 * 60_000L + index * 15 * 60_000L))
         .put("eventType", "Temp Basal").put("absolute", 1.0).put("duration", 15)
     }
-    private val baselineProfile = JSONObject().put("_id", "p1").put("startDate", "2026-01-01T00:00:00Z")
-      .put("defaultProfile", "Default").put("store", JSONObject().put("Default", JSONObject()
-        .put("timezone", zone.id).put("basal", JSONArray().put(JSONObject().put("timeAsSeconds", 0).put("value", 1.0)))))
-    private val profiles = if (!malformedOldProfile) listOf(baselineProfile) else listOf(
-      baselineProfile,
-      JSONObject(baselineProfile.toString()).put("_id", "old-profile").put("startDate", widgetIsoUtc(start - 5 * 24 * 60 * 60_000L)).apply {
-        getJSONObject("store").getJSONObject("Default").put("timezone", "unsupported-zone")
-      },
-      JSONObject(baselineProfile.toString()).put("_id", "current-profile").put("startDate", widgetIsoUtc(start - 24 * 60 * 60_000L)),
-    )
-
     fun fetch(url: String, @Suppress("UNUSED_PARAMETER") secret: String?): JSONArray {
       requests.add(url)
       val uri = URI(url)
@@ -93,7 +83,6 @@ class WidgetDailyFetchingTest {
       val (source, field) = when {
         uri.path.contains("entries") -> entries to "date"
         uri.path.contains("treatments") -> treatments to "created_at"
-        uri.path.contains("profiles") -> profiles to "startDate"
         else -> error("Unexpected endpoint")
       }
       fun timestamp(value: Any?): Long = widgetParseTimestamp(value)!!
