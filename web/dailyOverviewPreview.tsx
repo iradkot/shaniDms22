@@ -10,6 +10,10 @@ import {parseStoredLayoutProfile} from '../src/product/personalization/validatio
 import {createDefaultProductPersonalization} from '../src/product/personalization/presets';
 import {selectLayoutProfile} from '../src/product/personalization/updates';
 import type {DailyOverviewDataSource} from '../src/modules/dailyOverview';
+import {
+  buildDailyInsulinComparison,
+  getDailyInsulinComparisonWindows,
+} from '../src/modules/dailyOverview';
 import './styles.css';
 
 const key = 'shani.daily-overview.development-preview';
@@ -52,8 +56,31 @@ const source: DailyOverviewDataSource = {
               quality: 'available',
               basalUnits: 32.06189509722221,
               bolusUnits: 28.200000000000003,
+              basalEstimated: true,
             },
     };
+  },
+  async loadDailyInsulinComparison(request) {
+    const scenario = new URLSearchParams(window.location.search).get(
+      'scenario',
+    );
+    if (scenario === 'history-loading') {return new Promise(() => {});}
+    if (scenario === 'history-error')
+      {throw new Error('Synthetic history failure');}
+    const windows = getDailyInsulinComparisonWindows(request);
+    return buildDailyInsulinComparison(
+      windows,
+      Array.from({length: 7}, (_, index) =>
+        scenario === 'empty' || (scenario === 'partial' && index > 4)
+          ? {quality: 'unavailable' as const}
+          : {
+              quality: 'available' as const,
+              basalUnits: 29 + index,
+              bolusUnits: 23 + index * 0.8,
+              basalEstimated: true,
+            },
+      ),
+    );
   },
 };
 const initial = (): StoredDailyOverviewPreferences => {

@@ -21,6 +21,24 @@ Missing or unusable data shows a placeholder. A prior day's summary is never
 relabeled as today. Historical comparisons are withheld when the available data
 cannot support them.
 
+## Data refresh
+
+Foreground snapshot loading does not clear the native daily cache. Account
+replacement and logout still clear it through the native sync configuration.
+Foreground glucose updates and threshold changes request a missing/stale daily
+summary, throttled to one attempt per minute for the same source and thresholds.
+
+CGM is published before optional insulin requests. Today's insulin is calculated
+independently of historical profiles and is published before comparison history.
+Nightscout v1 history uses bounded increasing `count` requests because its list
+endpoints do not apply `skip`. A saturated bound stays unknown rather than being
+shown as a complete total.
+
+The in-app Daily Overview uses the same visual hierarchy: time in range, then
+basal/bolus and selectable previous-day/seven-day comparisons. Saved card orders
+are respected. Current-day insulin stops at a captured cutoff; comparisons use
+the same local clock time. Basal remains explicitly estimated.
+
 ## Verification
 
 From `android`, run the native unit tests:
@@ -38,3 +56,9 @@ With an Android emulator running, run the native rendering and interaction tests
 `WidgetSummaryRenderingTest` renders the actual RemoteViews at several sizes,
 including Hebrew, larger text, and missing-data states. It also saves PNGs for
 visual inspection.
+
+`WidgetDailySyncIntegrationTest` exercises the real sync, isolated Android
+preferences and launcher renderer with synthetic Nightscout responses, including
+optional endpoint failures and an account replacement during a request.
+`WidgetDailyFetchingTest` covers the Nightscout v1 history contract, progressive
+publication and independent availability of current and historical insulin.

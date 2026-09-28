@@ -141,21 +141,22 @@ class WidgetDailySummaryTest {
     assertEquals(1.0, calculateWidgetInsulinStats(JSONArray().put(extended), profiles(start - 24 * hour, 1.0), start, start + hour, utc)!!.totalInsulin, 0.00001)
   }
 
-  @Test fun `pagination continues until an unsaturated page and preserves all records`() {
+  @Test fun `count expands until an unsaturated response and preserves all records`() {
     val urls = mutableListOf<String>()
     val rows = fetchCompleteWidgetPages("https://example.test/entries?x=1", null, pageSize = 2, maxPages = 3) { url, _ ->
       urls.add(url)
       if (urls.size == 1) JSONArray().put(JSONObject().put("_id", "a")).put(JSONObject().put("_id", "b"))
-      else JSONArray().put(JSONObject().put("_id", "c"))
+      else JSONArray().put(JSONObject().put("_id", "a")).put(JSONObject().put("_id", "b")).put(JSONObject().put("_id", "c"))
     }
     assertEquals(3, rows!!.length())
-    assertTrue(urls.last().contains("skip=2"))
+    assertTrue(urls.last().contains("count=4"))
+    assertTrue(urls.none { it.contains("skip=") })
   }
 
-  @Test fun `saturated caps ignored pagination and network errors fail closed`() {
+  @Test fun `saturated caps malformed responses and network errors fail closed`() {
     val page = JSONArray().put(JSONObject().put("_id", "a"))
     assertNull(fetchCompleteWidgetPages("https://example.test/x?x=1", null, 1, 1) { _, _ -> page })
-    assertNull(fetchCompleteWidgetPages("https://example.test/x?x=1", null, 1, 3) { _, _ -> page })
+    assertNull(fetchCompleteWidgetPages("https://example.test/x?x=1", null, 2, 3) { _, _ -> JSONArray().put("invalid row") })
     assertNull(fetchCompleteWidgetPages("https://example.test/x?x=1", null) { _, _ -> error("offline") })
   }
 

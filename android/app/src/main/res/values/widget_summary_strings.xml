@@ -2,7 +2,7 @@
 <resources>
   <string name="summary_today">Today</string>
   <string name="summary_waiting">Waiting for data</string>
-  <string name="summary_no_today_data">No readings today</string>
+  <string name="summary_no_today_data">Daily glucose summary unavailable</string>
   <string name="summary_time_in_range">Time in range</string>
   <string name="summary_time_in_range_short">in range</string>
   <string name="summary_thresholds">%1$d–%2$d mg/dL</string>

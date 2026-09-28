@@ -2,10 +2,7 @@ import {useEffect} from 'react';
 import {Platform} from 'react-native';
 
 import {LatestNightscoutSnapshot} from 'app/hooks/useLatestNightscoutSnapshot';
-import {
-  clearAndroidGlucoseLiveSurface,
-  updateAndroidGlucoseLiveSurface,
-} from 'app/services/androidGlucoseLiveSurface';
+import {updateAndroidGlucoseLiveSurface} from 'app/services/androidGlucoseLiveSurface';
 
 export function useAndroidGlucoseLiveSurface(
   snapshot?: LatestNightscoutSnapshot | null,
@@ -14,9 +11,10 @@ export function useAndroidGlucoseLiveSurface(
   const low = thresholds?.low;
   const high = thresholds?.high;
   useEffect(() => {
-    if (Platform.OS !== 'android') return;
+    if (Platform.OS !== 'android') {return;}
     if (!snapshot?.enrichedBg) {
-      clearAndroidGlucoseLiveSurface();
+      // A foreground load starts empty even when native sync has valid data.
+      // Account changes/logout clear native data through configureBackgroundSync.
       return;
     }
     updateAndroidGlucoseLiveSurface(

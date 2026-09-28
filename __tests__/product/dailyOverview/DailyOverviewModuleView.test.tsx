@@ -54,7 +54,7 @@ const availableSnapshot = (
   glucoseSamples: [
     {timestampMs: period.startMs, valueMgDl},
     {
-      timestampMs: period.startMs + (period.endMs - period.startMs) / 2,
+      timestampMs: period.startMs + (period.endMs - period.startMs) / 2 - 1,
       valueMgDl: valueMgDl + 20,
     },
   ],
@@ -62,6 +62,37 @@ const availableSnapshot = (
 });
 
 describe('DailyOverviewModuleView', () => {
+  it('defaults to time in range followed by insulin without replacing saved layouts', async () => {
+    let tree!: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(
+        <DailyOverviewModuleView
+          locale="en"
+          now={() => localNoon(2026, 0, 15)}
+          thresholds={thresholds}
+          dataSource={dataSource(async period =>
+            availableSnapshot(period, 120),
+          )}
+        />,
+      );
+    });
+    const ids = Array.from(
+      new Set(
+        tree.root
+          .findAll(node =>
+            /^daily-overview-card-(ranges|mean|glucose|insulin|coverage)$/.test(
+              String(node.props.testID),
+            ),
+          )
+          .map(node =>
+            String(node.props.testID).replace('daily-overview-card-', ''),
+          ),
+      ),
+    );
+    expect(ids).toEqual(['ranges', 'insulin', 'mean', 'glucose', 'coverage']);
+    act(() => tree.unmount());
+  });
+
   it('honors a typed day focus and renders factual glucose and available insulin data', async () => {
     const focusedDay = new Date(2026, 0, 12).getTime();
     const load = jest.fn(async (period: DailyOverviewPeriod) =>
@@ -85,6 +116,11 @@ describe('DailyOverviewModuleView', () => {
     expect(load).toHaveBeenCalledWith({
       startMs: focusedDay,
       endMs: new Date(2026, 0, 13).getTime(),
+    });
+    act(() => {
+      tree!.root
+        .findAllByProps({testID: 'daily-overview-range-details'})[0]!
+        .props.onPress();
     });
     expect(textValues(tree!)).toEqual(
       expect.arrayContaining([

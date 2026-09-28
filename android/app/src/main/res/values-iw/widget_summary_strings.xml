@@ -2,7 +2,7 @@
 <resources>
   <string name="summary_today">היום</string>
   <string name="summary_waiting">ממתין לנתונים</string>
-  <string name="summary_no_today_data">אין מדידות מהיום</string>
+  <string name="summary_no_today_data">סיכום הסוכר היומי עדיין לא זמין</string>
   <string name="summary_time_in_range">זמן בטווח</string>
   <string name="summary_time_in_range_short">בטווח</string>
   <string name="summary_thresholds">%1$d–%2$d mg/dL</string>

@@ -1,4 +1,5 @@
 import {createNativeDailyOverviewDataSource} from 'app/platform/native/product/nativeDailyOverviewDataSource';
+import {getLocalDayPeriod} from 'app/modules/dailyOverview';
 import {
   loadInsulinContext,
   type InsulinContext,
@@ -109,6 +110,7 @@ describe('createNativeDailyOverviewDataSource', () => {
         quality: 'available',
         basalUnits: 0.4,
         bolusUnits: 2,
+        basalEstimated: true,
       },
     });
     expect(fetchInsulinEntries).toHaveBeenCalledWith(
@@ -157,5 +159,69 @@ describe('createNativeDailyOverviewDataSource', () => {
       glucoseSamples: [{timestampMs: 1_500, valueMgDl: 123}],
       insulinSummary: {quality: 'unavailable'},
     });
+  });
+
+  it('never includes future scheduled basal when loading today', async () => {
+    const now = new Date(2026, 8, 28, 10, 30).getTime();
+    const day = getLocalDayPeriod(now);
+    const loadInsulinSummary = jest.fn(async () => ({
+      quality: 'available' as const,
+      basalUnits: 10.5,
+      bolusUnits: 2,
+    }));
+    const loadGlucoseSamples = jest.fn(async () => []);
+    const source = createNativeDailyOverviewDataSource({
+      glucoseDataSource: {loadGlucoseSamples},
+      loadInsulinSummary,
+      now: () => now,
+    });
+    await source.loadDailyOverview(day);
+    expect(loadInsulinSummary).toHaveBeenCalledWith(
+      new Date(day.startMs),
+      new Date(now),
+    );
+    expect(loadGlucoseSamples).toHaveBeenCalledWith({
+      startMs: day.startMs,
+      endMs: now,
+    });
+    await source.loadDailyOverview(day, {asOfMs: now - 60_000});
+    expect(loadInsulinSummary).toHaveBeenLastCalledWith(
+      new Date(day.startMs),
+      new Date(now - 60_000),
+    );
+  });
+
+  it('loads seven independent same-clock histories with bounded concurrency and preserves failures', async () => {
+    const now = new Date(2026, 8, 28, 10, 30).getTime();
+    let active = 0;
+    let maximum = 0;
+    const loadInsulinSummary = jest.fn(async (start: Date, end: Date) => {
+      active++;
+      maximum = Math.max(maximum, active);
+      await Promise.resolve();
+      active--;
+      expect(end.getHours()).toBe(10);
+      expect(end.getMinutes()).toBe(30);
+      if (start.getDate() === 24) {
+        throw new Error('History unavailable');
+      }
+      return {quality: 'available' as const, basalUnits: 10, bolusUnits: 2};
+    });
+    const source = createNativeDailyOverviewDataSource({
+      glucoseDataSource: {loadGlucoseSamples: async () => []},
+      loadInsulinSummary,
+    });
+    const result = await source.loadDailyInsulinComparison!({
+      period: getLocalDayPeriod(now),
+      asOfMs: now,
+    });
+    expect(loadInsulinSummary).toHaveBeenCalledTimes(7);
+    expect(maximum).toBe(2);
+    expect(result).toMatchObject({
+      status: 'available',
+      yesterday: {totalUnits: 12},
+      weekDays: 6,
+    });
+    expect(result.weekAverage).toBeUndefined();
   });
 });

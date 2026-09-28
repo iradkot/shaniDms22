@@ -19,11 +19,14 @@ export type DailyInsulinSummary =
       readonly basalUnits: number;
       readonly bolusUnits: number;
       readonly totalUnits: number;
+      readonly basalEstimated?: boolean;
     }
   | {readonly quality: 'unavailable'};
 
 export interface DailyOverview {
   readonly period: DailyOverviewPeriod;
+  readonly observedPeriod?: DailyOverviewPeriod;
+  readonly isPartialDay?: boolean;
   readonly thresholds: TrendsRangeThresholds;
   readonly validSampleCount: number;
   readonly excludedSampleCount: number;
@@ -46,6 +49,8 @@ export interface BuildDailyOverviewInput {
   readonly expectedSampleIntervalMs: number;
   readonly thresholds: TrendsRangeThresholds;
   readonly source: DailyOverviewSourceSnapshot;
+  /** Exclusive observation cutoff; omitted for a complete historical day. */
+  readonly asOfMs?: number;
 }
 
 export class DailyOverviewInputError extends Error {
@@ -83,9 +88,7 @@ export const moveLocalDay = (dayStartMs: number, dayDelta: number): number => {
   return localDate.getTime();
 };
 
-export const getLocalDayPeriod = (
-  timestampMs: number,
-): DailyOverviewPeriod => {
+export const getLocalDayPeriod = (timestampMs: number): DailyOverviewPeriod => {
   const startMs = localDayStart(timestampMs);
   return {startMs, endMs: moveLocalDay(startMs, 1)};
 };
@@ -122,6 +125,9 @@ const buildInsulinSummary = (
     basalUnits: source.basalUnits,
     bolusUnits: source.bolusUnits,
     totalUnits: roundTo(source.basalUnits + source.bolusUnits),
+    ...(source.basalEstimated === undefined
+      ? {}
+      : {basalEstimated: source.basalEstimated}),
   };
 };
 
@@ -137,21 +143,42 @@ export const buildDailyOverview = (
   assertOneLocalDay(input.period);
   // Keep the daily module's established cadence-before-threshold validation.
   assertTrendsSampleInterval(input.expectedSampleIntervalMs);
+  if (input.asOfMs !== undefined) {
+    assertFiniteTimestamp(input.asOfMs);
+  }
+  const observedPeriod = {
+    startMs: input.period.startMs,
+    endMs: Math.min(
+      input.period.endMs,
+      Math.max(input.period.startMs, input.asOfMs ?? input.period.endMs),
+    ),
+  };
+  const hasElapsedTime = observedPeriod.endMs > observedPeriod.startMs;
   const sharedOverview = buildTrendsDescriptiveSummary({
-    period: input.period,
+    // A zero-duration day has no expected readings. Validate the usual domain
+    // invariants through the empty full-day model, then expose zero expectation.
+    period: hasElapsedTime ? observedPeriod : input.period,
     expectedSampleIntervalMs: input.expectedSampleIntervalMs,
     thresholds: input.thresholds,
-    samples: input.source.glucoseSamples,
+    samples: hasElapsedTime ? input.source.glucoseSamples : [],
   });
   const prepared = sharedOverview.sampleSet;
 
   return {
     period: input.period,
+    ...(input.asOfMs === undefined
+      ? {}
+      : {
+          observedPeriod,
+          isPartialDay: observedPeriod.endMs < input.period.endMs,
+        }),
     thresholds: input.thresholds,
     validSampleCount: prepared.validSampleCount,
-    excludedSampleCount: prepared.excludedSampleCount,
+    excludedSampleCount: hasElapsedTime
+      ? prepared.excludedSampleCount
+      : input.source.glucoseSamples.length,
     duplicateSampleCount: prepared.duplicateSampleCount,
-    expectedSampleCount: prepared.expectedSampleCount,
+    expectedSampleCount: hasElapsedTime ? prepared.expectedSampleCount : 0,
     coveragePercent: prepared.coveragePercent,
     coverageQuality: prepared.coverageQuality,
     largestGapMs: prepared.largestGapMs,
@@ -160,8 +187,7 @@ export const buildDailyOverview = (
     meanGlucoseMgDl: sharedOverview.meanGlucoseMgDl,
     minimumGlucoseMgDl: sharedOverview.minimumGlucoseMgDl,
     maximumGlucoseMgDl: sharedOverview.maximumGlucoseMgDl,
-    coefficientOfVariationPercent:
-      sharedOverview.coefficientOfVariationPercent,
+    coefficientOfVariationPercent: sharedOverview.coefficientOfVariationPercent,
     insulinSummary: buildInsulinSummary(input.source.insulinSummary),
   };
 };

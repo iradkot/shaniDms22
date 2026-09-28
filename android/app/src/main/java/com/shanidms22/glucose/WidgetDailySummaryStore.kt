@@ -58,7 +58,11 @@ internal object WidgetDailySummaryStore {
     editor.apply()
   }
 
-  fun fetch(context: Context, configuration: WidgetSyncConfiguration.Ready, low: Int, high: Int): WidgetDailySyncResult {
+  fun fetch(
+    context: Context, configuration: WidgetSyncConfiguration.Ready, low: Int, high: Int,
+    fetch: (String, String?) -> JSONArray? = ::fetchWidgetJsonArray,
+    onProgress: (WidgetDailySyncResult) -> Unit = {},
+  ): WidgetDailySyncResult {
     val now = System.currentTimeMillis()
     val dayStart = widgetStartOfDayMs(now)
     val baseUrl = configuration.baseUrl
@@ -78,31 +82,70 @@ internal object WidgetDailySummaryStore {
         Pair(history, attempt)
       }
     }
-    // This request is deliberately unrelated to the small glucose graph's configured window.
-    val glucose = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "entries.json", "date", (dayStart - 5 * 60_000).toString(), now.toString()), secret, maxPages = 6)
-    val range = glucose?.let { calculateWidgetDailyRange(parseValidWidgetEntries(it), dayStart, now, low, high) }
-    val todayTreatments = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "treatments", "created_at", widgetIsoUtc(dayStart - DAY_MS), widgetIsoUtc(now)), secret)
-    val todayProfiles = fetchWidgetProfileHistory(baseUrl, secret, dayStart, now)
-    var history = cached.first
-    var attempt: Long? = null
-    // Past-day history is reusable as the wall-clock cutoff moves; retry failures at most twice/hour.
-    if (history == null && (cached.second == 0L || now - cached.second >= HISTORY_RETRY_MS)) {
-      attempt = now
-      val historyStart = widgetComparisonWindows(now).last().startMs
-      val treatments = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "treatments", "created_at", widgetIsoUtc(historyStart - DAY_MS), widgetIsoUtc(dayStart - 1)), secret)
-      val profiles = fetchWidgetProfileHistory(baseUrl, secret, historyStart, dayStart)
-      if (treatments != null && profiles != null) history = WidgetDailyHistoryCache(dayStart, now, zoneId, treatments, profiles)
-    }
-    val treatments = if (todayTreatments != null && history != null) mergeWidgetRows(history.treatments, todayTreatments) else todayTreatments
-    val profiles = if (todayProfiles != null && history != null) mergeWidgetRows(history.profiles, todayProfiles) else todayProfiles
-    val comparison = calculateWidgetInsulinComparison(treatments, profiles, now, includeHistory = history != null)
-    return WidgetDailySyncResult(WidgetDailySummary(dayStart, now, low, high, range, comparison), history, attempt)
+    var displayed = read(context)
+    return fetchWidgetDailySummary(baseUrl, secret, low, high, now, TimeZone.getDefault(), cached.first, cached.second,
+      onProgress = { progress ->
+        // Partial first-load results are useful. Existing complete results stay visible during refresh.
+        if (widgetDailyProgressPreservesData(displayed, progress.summary)) {
+          onProgress(progress)
+          displayed = progress.summary
+        }
+      }, fetch = fetch)
   }
 
   private fun accountKey(configuration: WidgetSyncConfiguration.Ready): String = MessageDigest.getInstance("SHA-256")
     .digest((configuration.baseUrl.trim().trimEnd('/') + "|" + configuration.apiSecretSha1.orEmpty()).toByteArray(Charsets.UTF_8))
     .joinToString("") { "%02x".format(it.toInt() and 255) }
 }
+
+/** Transport seam shared by the real sync and deterministic Nightscout contract tests. */
+internal fun fetchWidgetDailySummary(
+  baseUrl: String,
+  secret: String?,
+  low: Int,
+  high: Int,
+  now: Long,
+  zone: TimeZone,
+  cachedHistory: WidgetDailyHistoryCache? = null,
+  lastHistoryAttemptMs: Long = 0,
+  onProgress: (WidgetDailySyncResult) -> Unit = {},
+  fetch: (String, String?) -> JSONArray? = ::fetchWidgetJsonArray,
+): WidgetDailySyncResult {
+  val dayStart = widgetStartOfDayMs(now, zone)
+  // This request is deliberately unrelated to the small glucose graph's configured window.
+  val glucose = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "entries.json", "date", (dayStart - 5 * 60_000).toString(), now.toString()), secret, maxPages = 6, fetch = fetch)
+  val range = glucose?.let { calculateWidgetDailyRange(parseValidWidgetEntries(it), dayStart, now, low, high) }
+  if (range != null) onProgress(WidgetDailySyncResult(WidgetDailySummary(dayStart, now, low, high, range, null), null, null))
+  val todayTreatments = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "treatments", "created_at", widgetIsoUtc(dayStart - DAY_MS), widgetIsoUtc(now)), secret, fetch = fetch)
+  val todayProfiles = fetchWidgetProfileHistory(baseUrl, secret, dayStart, now, fetch)
+  val today = calculateWidgetInsulinComparison(todayTreatments, todayProfiles, now, zone, includeHistory = false)
+  if (today != null) onProgress(WidgetDailySyncResult(WidgetDailySummary(dayStart, now, low, high, range, today), null, null))
+  var history = cachedHistory
+  var attempt: Long? = null
+  // Past-day history is reusable as the wall-clock cutoff moves; retry failures at most twice/hour.
+  if (history == null && (lastHistoryAttemptMs == 0L || now - lastHistoryAttemptMs >= HISTORY_RETRY_MS)) {
+    attempt = now
+    val historyStart = widgetComparisonWindows(now, zone).last().startMs
+    val treatments = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "treatments", "created_at", widgetIsoUtc(historyStart - DAY_MS), widgetIsoUtc(dayStart - 1)), secret, fetch = fetch)
+    val profiles = fetchWidgetProfileHistory(baseUrl, secret, historyStart, dayStart, fetch)
+    if (treatments != null && profiles != null) history = WidgetDailyHistoryCache(dayStart, now, zone.id, treatments, profiles)
+  }
+  val treatments = if (todayTreatments != null && history != null) mergeWidgetRows(history.treatments, todayTreatments) else todayTreatments
+  val profiles = if (todayProfiles != null && history != null) mergeWidgetRows(history.profiles, todayProfiles) else todayProfiles
+  // Past profiles may be malformed or unsupported. They must not erase independently valid today totals.
+  val comparison = if (history != null) {
+    calculateWidgetInsulinComparison(treatments, profiles, now, zone, includeHistory = true)?.copy(today = today?.today) ?: today
+  } else today
+  return WidgetDailySyncResult(WidgetDailySummary(dayStart, now, low, high, range, comparison), history, attempt)
+}
+
+internal fun widgetDailyProgressPreservesData(previous: WidgetDailySummary?, incoming: WidgetDailySummary): Boolean =
+  previous == null || (
+    (previous.range == null || incoming.range != null) &&
+      (previous.insulin?.today == null || incoming.insulin?.today != null) &&
+      (previous.insulin?.yesterday == null || incoming.insulin?.yesterday != null) &&
+      (previous.insulin?.weekAverage == null || incoming.insulin?.weekAverage != null)
+    )
 
 private const val DAY_MS = 86_400_000L
 private const val HISTORY_CACHE_MS = 6 * 60 * 60_000L

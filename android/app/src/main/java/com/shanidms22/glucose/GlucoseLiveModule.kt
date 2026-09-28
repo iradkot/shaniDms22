@@ -62,6 +62,7 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
       )
       GlucoseWidgetUpdater.updateWidgets(reactApplicationContext)
       GlucoseWidgetUpdater.updateNotification(reactApplicationContext)
+      GlucoseWidgetSync.refreshDailyIfNeeded(reactApplicationContext)
     } catch (_: Throwable) {
       // Prevent native widget failures from crashing app process.
     }
@@ -85,6 +86,7 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
     val lowInt = low.takeIf { it.isFinite() && it > 0 }?.toInt()
     val highInt = high.takeIf { it.isFinite() && it > 0 }?.toInt()
     GlucoseWidgetUpdater.setThresholds(reactApplicationContext, lowInt, highInt)
+    GlucoseWidgetSync.refreshDailyIfNeeded(reactApplicationContext)
   }
 
   @ReactMethod

@@ -17,6 +17,64 @@ const localNoon = (year: number, month: number, day: number): number =>
   new Date(year, month, day, 12).getTime();
 
 describe('Daily Overview domain', () => {
+  it('uses elapsed-day coverage and excludes future readings while preserving selected-day identity', () => {
+    const asOfMs = new Date(2026, 8, 28, 3, 15).getTime();
+    const period = getLocalDayPeriod(asOfMs);
+    const samples = Array.from({length: 39}, (_, index) => ({
+      timestampMs: period.startMs + index * 5 * 60_000,
+      valueMgDl: 120,
+    }));
+    const overview = buildDailyOverview({
+      period,
+      asOfMs,
+      expectedSampleIntervalMs: 5 * 60_000,
+      thresholds,
+      source: {
+        glucoseSamples: [
+          ...samples,
+          {timestampMs: period.endMs - 1, valueMgDl: 400},
+        ],
+        insulinSummary: {quality: 'unavailable'},
+      },
+    });
+    expect(overview.period).toEqual(period);
+    expect(overview.observedPeriod).toEqual({
+      startMs: period.startMs,
+      endMs: asOfMs,
+    });
+    expect(overview).toMatchObject({
+      isPartialDay: true,
+      validSampleCount: 39,
+      excludedSampleCount: 1,
+      expectedSampleCount: 39,
+      coveragePercent: 100,
+      coverageQuality: 'adequate',
+      meanGlucoseMgDl: 120,
+    });
+    expect(overview.ranges?.targetPercent).toBe(100);
+  });
+
+  it('has no expected readings or numeric glucose summary exactly at midnight', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28, 0).getTime());
+    const overview = buildDailyOverview({
+      period,
+      asOfMs: period.startMs,
+      expectedSampleIntervalMs: 5 * 60_000,
+      thresholds,
+      source: {
+        glucoseSamples: [{timestampMs: period.startMs, valueMgDl: 120}],
+        insulinSummary: {quality: 'unavailable'},
+      },
+    });
+    expect(overview).toMatchObject({
+      validSampleCount: 0,
+      expectedSampleCount: 0,
+      coverageQuality: 'no-data',
+      isPartialDay: true,
+    });
+    expect(overview.ranges).toBeUndefined();
+  });
+
   it('prepares each source reading only once for all descriptive daily metrics', () => {
     const period = getLocalDayPeriod(localNoon(2026, 0, 15));
     const sampleCount = 288;

@@ -36,10 +36,13 @@ internal fun fetchLatestWidgetInsulinStats(baseUrl: String, secret: String?): Wi
 }
 
 /** Each date uses the profile actually effective then; today's profile is never backfilled. */
-internal fun fetchWidgetProfileHistory(baseUrl: String, secret: String?, startMs: Long, endMs: Long): JSONArray? {
+internal fun fetchWidgetProfileHistory(
+  baseUrl: String, secret: String?, startMs: Long, endMs: Long,
+  fetch: (String, String?) -> JSONArray? = ::fetchWidgetJsonArray,
+): JSONArray? {
   val baselineUrl = "${baseUrl.trimEnd('/')}/api/v1/profiles?find[startDate][\$lte]=${widgetIsoUtc(startMs)}&sort[startDate]=-1&count=1"
-  val baseline = runCatching { fetchWidgetJsonArray(baselineUrl, secret) }.getOrNull() ?: return null
-  val changes = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "profiles", "startDate", widgetIsoUtc(startMs), widgetIsoUtc(endMs)), secret, pageSize = 100, maxPages = 10) ?: return null
+  val baseline = runCatching { fetch(baselineUrl, secret) }.getOrNull() ?: return null
+  val changes = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "profiles", "startDate", widgetIsoUtc(startMs), widgetIsoUtc(endMs)), secret, pageSize = 100, maxPages = 10, fetch = fetch) ?: return null
   return mergeWidgetRows(baseline, changes)
 }
 

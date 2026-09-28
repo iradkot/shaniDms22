@@ -98,7 +98,11 @@ internal fun calculateWidgetInsulinComparison(
   return WidgetInsulinComparison(today, previous.firstOrNull(), average, if (average != null) 7 else 0)
 }
 
-/** A saturated page is not proof of a complete day. Fail closed at the request cap. */
+/**
+ * Nightscout v1 applies count but does not implement skip, including for treatments.
+ * Expand the count for the same bounded range until an unsaturated response proves completeness.
+ * Keep the existing request/record cap; never cache a saturated prefix as the complete day.
+ */
 internal fun fetchCompleteWidgetPages(
   url: String,
   secret: String?,
@@ -106,22 +110,25 @@ internal fun fetchCompleteWidgetPages(
   maxPages: Int = 12,
   fetch: (String, String?) -> JSONArray? = ::fetchWidgetJsonArray,
 ): JSONArray? {
-  val out = JSONArray()
-  val seenPages = mutableSetOf<String>()
-  val seenIds = mutableSetOf<String>()
-  for (page in 0 until maxPages) {
-    val rows = runCatching { fetch("$url&count=$pageSize&skip=${page * pageSize}", secret) }.getOrNull() ?: return null
-    if (rows.length() > pageSize) return null
-    // Some older servers ignore skip. Do not treat a repeated page as more coverage.
-    if (rows.length() > 0 && !seenPages.add(rows.toString())) return null
-    for (index in 0 until rows.length()) {
-      val row = rows.optJSONObject(index) ?: return null
-      val id = row.optString("_id", "")
-      if (id.isEmpty() || seenIds.add(id)) out.put(row)
+  if (pageSize <= 0 || maxPages <= 0) return null
+  val maxCount = (pageSize.toLong() * maxPages).coerceAtMost(100_000L).toInt()
+  var count = minOf(pageSize, maxCount)
+  while (true) {
+    val rows = runCatching { fetch("$url&count=$count", secret) }.getOrNull() ?: return null
+    if (rows.length() > count) return null
+    if (rows.length() < count) {
+      val complete = JSONArray()
+      val seenIds = mutableSetOf<String>()
+      for (index in 0 until rows.length()) {
+        val row = rows.optJSONObject(index) ?: return null
+        val id = row.optString("_id", "")
+        if (id.isEmpty() || seenIds.add(id)) complete.put(row)
+      }
+      return complete
     }
-    if (rows.length() < pageSize) return out
+    if (count >= maxCount) return null
+    count = minOf(count * 2, maxCount)
   }
-  return null
 }
 
 internal fun widgetRangeQuery(baseUrl: String, endpoint: String, field: String, start: String, end: String): String {

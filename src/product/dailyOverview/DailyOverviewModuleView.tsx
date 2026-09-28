@@ -10,12 +10,14 @@ import type {
   DailyOverview,
   DailyOverviewDataSource,
   DailyOverviewPeriod,
+  DailyInsulinComparisonPresentation,
 } from '../../modules/dailyOverview';
 import {
   buildDailyOverview,
   getLocalDayPeriod,
   localDayStart,
   moveLocalDay,
+  getDailyInsulinComparisonWindows,
 } from '../../modules/dailyOverview';
 import type {TrendsRangeThresholds} from '../../modules/trends';
 import type {DestinationLocale} from '../destinations';
@@ -97,6 +99,8 @@ const DailyOverviewSession = ({
   const rtl = locale === 'he';
   const [reloadSequence, setReloadSequence] = useState(0);
   const [state, setState] = useState<LoadState>({kind: 'loading'});
+  const [insulinComparison, setInsulinComparison] =
+    useState<DailyInsulinComparisonPresentation>();
   const requestSequence = useRef(0);
   const mounted = useRef(true);
   const savingRef = useRef(false);
@@ -136,9 +140,45 @@ const DailyOverviewSession = ({
   useEffect(() => {
     const request = ++requestSequence.current;
     let active = true;
+    const asOfMs = now();
+    const comparisonWindows = getDailyInsulinComparisonWindows({
+      period: selectedPeriod,
+      asOfMs,
+    });
+    const comparisonMetadata = {
+      weekDays: 0,
+      cutoffTimestampMs: comparisonWindows.current.endMs,
+      isPartialDay: comparisonWindows.isPartialDay,
+    };
     setState({kind: 'loading'});
-    dataSource
-      .loadDailyOverview(selectedPeriod)
+    setInsulinComparison(
+      dataSource.loadDailyInsulinComparison
+        ? {status: 'loading', ...comparisonMetadata}
+        : undefined,
+    );
+    // Start the selected day first, before historical requests share its connection.
+    const overviewRequest = dataSource.loadDailyInsulinComparison
+      ? dataSource.loadDailyOverview(selectedPeriod, {asOfMs})
+      : dataSource.loadDailyOverview(selectedPeriod);
+    // Historical requests must never hold up the selected day's summary.
+    if (dataSource.loadDailyInsulinComparison) {
+      dataSource
+        .loadDailyInsulinComparison({period: selectedPeriod, asOfMs})
+        .then(comparison => {
+          if (active && requestSequence.current === request) {
+            setInsulinComparison(comparison);
+          }
+        })
+        .catch(() => {
+          if (active && requestSequence.current === request) {
+            setInsulinComparison({
+              status: 'unavailable',
+              ...comparisonMetadata,
+            });
+          }
+        });
+    }
+    overviewRequest
       .then(source => {
         if (active && requestSequence.current === request) {
           setState({
@@ -148,6 +188,7 @@ const DailyOverviewSession = ({
               expectedSampleIntervalMs,
               thresholds,
               source,
+              asOfMs,
             }),
           });
         }
@@ -166,6 +207,7 @@ const DailyOverviewSession = ({
     reloadSequence,
     selectedPeriod,
     thresholds,
+    now,
   ]);
   const moveSelection = (delta: -1 | 1): void => {
     if (delta === 1 && isToday) {
@@ -412,6 +454,7 @@ const DailyOverviewSession = ({
                   locale={locale}
                   thresholds={thresholds}
                   rangeStyle={draft.rangeStyle}
+                  insulinComparison={insulinComparison}
                 />
                 <Text style={[styles.controlTitle, textDirection]}>
                   {copy.reorder}
@@ -432,6 +475,7 @@ const DailyOverviewSession = ({
                         locale={locale}
                         thresholds={thresholds}
                         rangeStyle={draft.rangeStyle}
+                        insulinComparison={insulinComparison}
                         compact
                       />
                     ),
@@ -524,6 +568,7 @@ const DailyOverviewSession = ({
                   locale={locale}
                   thresholds={thresholds}
                   rangeStyle={preferences.rangeStyle}
+                  insulinComparison={insulinComparison}
                 />
               </View>
             ))}

@@ -6,7 +6,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const url = process.env.DAILY_OVERVIEW_PREVIEW_URL || 'http://127.0.0.1:5176/daily-overview-preview.html';
 const output = 'artifacts/daily-overview';
 mkdirSync(output, {recursive: true});
-const defaultOrder = ['ranges', 'mean', 'glucose', 'insulin', 'coverage'];
+const defaultOrder = ['ranges', 'insulin', 'mean', 'glucose', 'coverage'];
 const pageOrder = page => page.getByTestId('daily-overview-content').locator(':scope > [data-testid^="daily-overview-card-"]').evaluateAll(nodes => nodes.map(node => node.dataset.testid.replace('daily-overview-card-', '')));
 async function ready(page) { await page.getByTestId('daily-overview-content').waitFor(); }
 async function noClipping(page, label) {
@@ -68,7 +68,7 @@ async function touchDrag(page, cdp, id, endY, {hold = 0, cancel = false} = {}) {
     assert(bounds);
     const beforeScroll = await page.getByTestId('daily-overview-view').evaluate(node => node.scrollTop);
     await touchDrag(page, cdp, 'ranges', bounds.y + bounds.height - 10, {hold: 1000});
-    assert.deepEqual(await pageOrder(page), ['mean', 'glucose', 'insulin', 'coverage', 'ranges']);
+    assert.deepEqual(await pageOrder(page), ['insulin', 'mean', 'glucose', 'coverage', 'ranges']);
     assert.equal(await page.getByTestId('daily-overview-view').evaluate(node => node.scrollTop), beforeScroll, 'Dragging handle must not scroll the outer page');
     assert((await viewport.evaluate(node => node.scrollTop)) > 100, 'A held finger autoscrolls the inner list');
     await page.screenshot({path: `${output}/touch-reordered.png`});
@@ -76,7 +76,7 @@ async function touchDrag(page, cdp, id, endY, {hold = 0, cancel = false} = {}) {
     await page.getByTestId('daily-overview-customize').waitFor();
     await page.reload();
     await ready(page);
-    assert.deepEqual(await pageOrder(page), ['mean', 'glucose', 'insulin', 'coverage', 'ranges']);
+    assert.deepEqual(await pageOrder(page), ['insulin', 'mean', 'glucose', 'coverage', 'ranges']);
     assert.equal(await page.getByTestId('daily-overview-range-visual-bar').count(), 1);
     report.push('Real touch drag moves first to last with edge autoscroll; saves across reload');
 
@@ -84,12 +84,12 @@ async function touchDrag(page, cdp, id, endY, {hold = 0, cancel = false} = {}) {
     await viewport.scrollIntoViewIfNeeded();
     const cancellationBounds = await viewport.boundingBox();
     await touchDrag(page, cdp, 'mean', cancellationBounds.y + 250, {cancel: true});
-    assert.deepEqual(await pageOrder(page), ['mean', 'glucose', 'insulin', 'coverage', 'ranges']);
+    assert.deepEqual(await pageOrder(page), ['insulin', 'mean', 'glucose', 'coverage', 'ranges']);
     await page.getByTestId('daily-overview-drag-mean').focus();
     await page.keyboard.press('ArrowDown');
-    assert.deepEqual(await pageOrder(page), ['glucose', 'mean', 'insulin', 'coverage', 'ranges']);
+    assert.deepEqual(await pageOrder(page), ['insulin', 'glucose', 'mean', 'coverage', 'ranges']);
     await page.getByTestId('daily-overview-cancel').click();
-    assert.deepEqual(await pageOrder(page), ['mean', 'glucose', 'insulin', 'coverage', 'ranges']);
+    assert.deepEqual(await pageOrder(page), ['insulin', 'mean', 'glucose', 'coverage', 'ranges']);
     report.push('Touch cancellation, keyboard reordering and Cancel preserve the saved design');
 
     for (const scenario of ['empty', 'partial']) {

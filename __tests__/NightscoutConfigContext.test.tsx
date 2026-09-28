@@ -20,6 +20,12 @@ import {
 const mockConfigureNightscoutInstance = jest.fn();
 const mockClearNightscoutInstance = jest.fn();
 const mockTestNightscoutConnection = jest.fn();
+const mockConfigureWidgetSync = jest.fn();
+
+jest.mock('app/services/androidGlucoseLiveSurface', () => ({
+  configureAndroidWidgetBackgroundSync: (...args: unknown[]) =>
+    mockConfigureWidgetSync(...args),
+}));
 
 jest.mock('app/api/shaniNightscoutInstances', () => {
   return {
@@ -67,6 +73,7 @@ describe('NightscoutConfigContext', () => {
     mockConfigureNightscoutInstance.mockClear();
     mockClearNightscoutInstance.mockClear();
     mockTestNightscoutConnection.mockReset();
+    mockConfigureWidgetSync.mockClear();
     mockTestNightscoutConnection.mockResolvedValue({ok: true, entriesCount: 1});
     await AsyncStorage.clear();
   });
@@ -521,5 +528,9 @@ describe('NightscoutConfigContext', () => {
     );
     expect(configuredUrls).toEqual(['https://a.example', 'https://b.example']);
     expect(mockClearNightscoutInstance).toHaveBeenCalled();
+    expect(mockConfigureWidgetSync).toHaveBeenCalledWith({enabled: false});
+    expect(mockConfigureWidgetSync).toHaveBeenLastCalledWith(
+      expect.objectContaining({baseUrl: 'https://b.example', enabled: true}),
+    );
   });
 });

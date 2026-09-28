@@ -11,6 +11,10 @@ import type {
   DailyInsulinSourceSummary,
   DailyOverviewDataSource,
 } from '../../../modules/dailyOverview';
+import {
+  buildDailyInsulinComparison,
+  getDailyInsulinComparisonWindows,
+} from '../../../modules/dailyOverview';
 import type {TrendsDataSource} from '../../../modules/trends';
 import type {
   BasalProfile,
@@ -54,6 +58,7 @@ export interface NativeDailyOverviewDataSourceDependencies
   extends NativeDailyInsulinSummaryDependencies {
   readonly glucoseDataSource?: TrendsDataSource;
   readonly loadInsulinSummary?: NativeDailyInsulinSummaryLoader;
+  readonly now?: () => number;
 }
 
 const isAuthoritativeTotal = (value: number): boolean =>
@@ -121,6 +126,7 @@ export const createNativeDailyInsulinSummaryLoader = (
         quality: 'available',
         basalUnits: totals.totalBasal,
         bolusUnits: totals.totalBolus,
+        basalEstimated: true,
       };
     } catch {
       return {quality: 'unavailable'};
@@ -143,16 +149,49 @@ export const createNativeDailyOverviewDataSource = (
   const loadInsulinSummary =
     dependencies.loadInsulinSummary ??
     createNativeDailyInsulinSummaryLoader(dependencies);
+  const now = dependencies.now ?? Date.now;
+  const loadSummary = async (
+    startMs: number,
+    endMs: number,
+  ): Promise<DailyInsulinSourceSummary> => {
+    if (endMs <= startMs) {
+      return {quality: 'unavailable'};
+    }
+    try {
+      return await loadInsulinSummary(new Date(startMs), new Date(endMs));
+    } catch {
+      return {quality: 'unavailable'};
+    }
+  };
 
   return {
-    async loadDailyOverview(period) {
-      const start = new Date(period.startMs);
-      const end = new Date(period.endMs);
+    async loadDailyOverview(period, options) {
+      const cutoff = Math.min(period.endMs, options?.asOfMs ?? now());
       const [glucoseSamples, insulinSummary] = await Promise.all([
-        glucoseDataSource.loadGlucoseSamples(period),
-        loadInsulinSummary(start, end),
+        cutoff > period.startMs
+          ? glucoseDataSource.loadGlucoseSamples({...period, endMs: cutoff})
+          : Promise.resolve([]),
+        loadSummary(period.startMs, cutoff),
       ]);
       return {glucoseSamples, insulinSummary};
+    },
+    async loadDailyInsulinComparison(request) {
+      const windows = getDailyInsulinComparisonWindows(request);
+      const previous: DailyInsulinSourceSummary[] = [];
+      let next = 0;
+      // Each shared context may load several resources. Bound history fan-out.
+      const worker = async (): Promise<void> => {
+        while (next < windows.previousDays.length) {
+          const index = next++;
+          const period = windows.previousDays[index];
+          if (!period) {
+            continue;
+          }
+          previous[index] = await loadSummary(period.startMs, period.endMs);
+        }
+      };
+      await Promise.all([worker(), worker()]);
+      return buildDailyInsulinComparison(windows, previous);
     },
   };
 };
