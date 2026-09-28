@@ -4,6 +4,9 @@ import type {
   AiConversationSummary,
   AiLocale,
   AiSpecialistId,
+  AiRecommendationStart,
+  AiRecommendationFeedback,
+  AiPatientMemorySnapshot,
 } from '../../modules/ai';
 
 export type AiAnalystAvailability =
@@ -18,6 +21,11 @@ export type AiAnalystSurface =
   | {readonly kind: 'history-detail'; readonly conversationId: string};
 
 export interface AiAnalystModuleSnapshot {
+  readonly recommendationContextKey?: string;
+  readonly messageFeedback?: Readonly<Record<number, AiRecommendationFeedback>>;
+  readonly patientMemory?: AiPatientMemorySnapshot;
+  readonly memoryBusy?: boolean;
+  readonly memoryError?: string;
   readonly availability: AiAnalystAvailability;
   readonly surface: AiAnalystSurface;
   readonly activeSpecialist: AiSpecialistId;
@@ -42,6 +50,18 @@ export interface AiAnalystModuleSnapshot {
  * only renders this snapshot and invokes these explicit advisory actions.
  */
 export interface AiAnalystModuleRuntime {
+  reviseFromFeedback?(messageIndex: number): Promise<void>;
+  startRecommendation?(input: AiRecommendationStart): Promise<void>;
+  saveFeedback?:
+    | ((
+        input: AiRecommendationFeedback & {readonly messageIndex: number},
+      ) => Promise<void>)
+    | undefined;
+  savePatientMemory?(input: {
+    readonly enabled: boolean;
+    readonly instructions: string;
+  }): Promise<void>;
+  clearPatientMemory?(): Promise<void>;
   readonly snapshot: AiAnalystModuleSnapshot;
   setDraft(value: string): void;
   start(input: {

@@ -25,11 +25,21 @@ export const resolveProductShellConfiguration = (
       }
     : {kind: 'hub' as const};
 
+  const seenShortcuts = new Set<string>();
+  const shortcuts = stored.shortcuts
+    .map(shortcut => resolveDestinationTarget(registry, shortcut, 'shortcut', runtime))
+    .filter(shortcut => {
+      const id = shortcut.destination?.id ?? shortcut.target.destinationId;
+      if (seenShortcuts.has(id)) {
+        return false;
+      }
+      seenShortcuts.add(id);
+      return true;
+    });
+
   return {
     stored,
     start,
-    shortcuts: stored.shortcuts.map(shortcut =>
-      resolveDestinationTarget(registry, shortcut, 'shortcut', runtime),
-    ),
+    shortcuts,
   };
 };

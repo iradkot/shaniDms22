@@ -140,7 +140,7 @@ export const selectRecentItems = (
       resolveDestinationTarget(
         registry,
         recent.target,
-        undefined,
+        'recent',
         input.runtime,
       ),
     ),

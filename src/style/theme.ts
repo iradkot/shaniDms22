@@ -308,7 +308,9 @@ export const theme: ThemeType = getThemeById('calmBlue');
 
 export const applyThemeToSingleton = (id: AppThemeId): ThemeType => {
   const next = getThemeById(id);
-  Object.assign(theme, next);
+  // Browser builds retain getter-only helpers. Copy descriptors rather than
+  // assigning their values, while keeping existing consumers on this singleton.
+  Object.defineProperties(theme, Object.getOwnPropertyDescriptors(next));
   theme.colors = {...next.colors};
   theme.chart = {...next.chart};
   theme.loadBars = {

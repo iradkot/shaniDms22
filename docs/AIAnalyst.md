@@ -1,5 +1,9 @@
 # AI Analyst (LLM Integration) — PRD + Implementation Notes
 
+> Historical design. The current shared patient experience is documented in
+> [AI recommendations](AIRecommendations.md). Analysis logic below remains as
+> reusable infrastructure and compatibility support.
+
 > Date: 2026-01-24
 
 This document specifies the **AI Analyst** feature for `shaniDms22`.

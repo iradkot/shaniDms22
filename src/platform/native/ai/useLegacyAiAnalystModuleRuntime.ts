@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import {useCallback, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
   createAiConversationLaunch,
   decodeAiConversationHistory,
@@ -16,6 +10,8 @@ import {
 } from '../../../modules/ai';
 import {guardAssistantOutput} from '../../../services/aiAnalyst/assistantOutputGuard';
 import {useActiveAiWorkspaceScope} from '../../../services/aiMemory/useActiveAiWorkspaceScope';
+import {useRecommendationRuntime} from '../../../product/ai/useRecommendationRuntime';
+import {useNativeRecommendationPorts} from './useNativeRecommendationPorts';
 import type {
   AiAnalystModuleRuntime,
   AiAnalystSurface,
@@ -79,7 +75,8 @@ type LegacyEngineModule = {
 
 // A runtime-only migration seam. A static import here would pull the entire
 // legacy screen tree into the strict Product/Web type graph.
-const legacyEngineModule = require('../../../containers/MainTabsNavigator/Containers/AiAnalyst/hooks/useAiAnalystEngine') as LegacyEngineModule;
+const legacyEngineModule =
+  require('../../../containers/MainTabsNavigator/Containers/AiAnalyst/hooks/useAiAnalystEngine') as LegacyEngineModule;
 
 export interface LegacyAiAnalystModuleRuntimeOptions {
   /** Lets the Product host route to its first-class Settings destination. */
@@ -149,9 +146,7 @@ const surfaceFromEngine = (
     case 'dashboard':
     case 'modeSelection':
     case 'locked':
-      return conversationRequested
-        ? {kind: 'conversation'}
-        : {kind: 'landing'};
+      return conversationRequested ? {kind: 'conversation'} : {kind: 'landing'};
   }
 };
 
@@ -297,10 +292,7 @@ export const useLegacyAiAnalystModuleRuntime = (
   );
 
   const retry = useCallback(async (): Promise<void> => {
-    if (
-      engine.state.mode === 'mission' &&
-      engine.input.trim().length > 0
-    ) {
+    if (engine.state.mode === 'mission' && engine.input.trim().length > 0) {
       await engine.sendFollowUp();
       return;
     }
@@ -322,14 +314,14 @@ export const useLegacyAiAnalystModuleRuntime = (
   const availability = !engine.hasKey
     ? 'missing-credentials'
     : engine.isEnabled
-      ? 'ready'
-      : 'disabled';
+    ? 'ready'
+    : 'disabled';
   const inferredSpecialist =
     engine.state.mode === 'mission'
       ? missionSpecialist(engine.state.mission)
       : activeSpecialist;
 
-  return {
+  const legacyRuntime: AiAnalystModuleRuntime = {
     snapshot: {
       availability,
       surface,
@@ -361,4 +353,6 @@ export const useLegacyAiAnalystModuleRuntime = (
     openSettings: options.onOpenSettings ?? engine.openSettings,
     attachMealImage: engine.onAttachMealImage,
   };
+  const recommendationPorts = useNativeRecommendationPorts(workspace, locale);
+  return useRecommendationRuntime(legacyRuntime, recommendationPorts);
 };

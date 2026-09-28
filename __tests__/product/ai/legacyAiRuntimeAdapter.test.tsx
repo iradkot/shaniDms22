@@ -6,6 +6,8 @@ import {useActiveAiWorkspaceScope} from 'app/services/aiMemory/useActiveAiWorksp
 import {
   type AiAnalystModuleRuntime,
 } from 'app/product/ai';
+import type {RecommendationRuntimePorts} from 'app/product/ai/useRecommendationRuntime';
+import {useNativeRecommendationPorts} from 'app/platform/native/ai/useNativeRecommendationPorts';
 import {
   type LegacyAiAnalystEnginePort,
   useLegacyAiAnalystModuleRuntime,
@@ -18,6 +20,9 @@ jest.mock(
 jest.mock('app/services/aiMemory/useActiveAiWorkspaceScope', () => ({
   useActiveAiWorkspaceScope: jest.fn(),
 }));
+jest.mock('app/platform/native/ai/useNativeRecommendationPorts', () => ({
+  useNativeRecommendationPorts: jest.fn(),
+}));
 
 const mockedEngine = jest.requireMock(
   'app/containers/MainTabsNavigator/Containers/AiAnalyst/hooks/useAiAnalystEngine',
@@ -25,6 +30,34 @@ const mockedEngine = jest.requireMock(
 const mockedScope = useActiveAiWorkspaceScope as jest.MockedFunction<
   typeof useActiveAiWorkspaceScope
 >;
+const mockedPorts = useNativeRecommendationPorts as jest.MockedFunction<
+  typeof useNativeRecommendationPorts
+>;
+let chat: jest.MockedFunction<RecommendationRuntimePorts['chat']>;
+let loadEvidence: jest.MockedFunction<RecommendationRuntimePorts['loadEvidence']>;
+
+const providerPayloads = () => chat.mock.calls.map(([messages]) => {
+  const userMessage = messages.find(message => message.role === 'user');
+  if (!userMessage) {
+    throw new Error('Missing recommendation provider payload');
+  }
+  return JSON.parse(userMessage.content) as {
+    request: string;
+    requestedDays: number;
+    evidence: string;
+  };
+});
+
+const expectNoLegacyGeneration = (current: LegacyAiAnalystEnginePort) => {
+  [
+    current.startOpenChat,
+    current.startOpenChatWithContext,
+    current.startMealAnalysis,
+    current.startHypoDetective,
+    current.startUserBehavior,
+    current.startLoopSettingsAdvisor,
+  ].forEach(start => expect(start).not.toHaveBeenCalled());
+};
 
 const engine = (
   overrides: Partial<LegacyAiAnalystEnginePort> = {},
@@ -68,6 +101,28 @@ const Harness = ({locale}: {readonly locale: 'en' | 'he'}) => {
 describe('legacy AI runtime adapter', () => {
   beforeEach(() => {
     captured = undefined;
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: async (key: string) => values.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        values.set(key, value);
+      },
+    };
+    chat = jest.fn<
+      ReturnType<RecommendationRuntimePorts['chat']>,
+      Parameters<RecommendationRuntimePorts['chat']>
+    >(async () => 'Review the recorded pattern with your care team.');
+    loadEvidence = jest.fn<
+      ReturnType<RecommendationRuntimePorts['loadEvidence']>,
+      Parameters<RecommendationRuntimePorts['loadEvidence']>
+    >(async () => 'No current glucose reading is available.');
+    mockedPorts.mockImplementation((workspace, locale) => ({
+      scopeId: workspace ? `${workspace.productUserId}/${workspace.workspaceId}` : null,
+      locale,
+      storage,
+      chat,
+      loadEvidence,
+    }));
     mockedScope.mockReturnValue({
       productUserId: 'user-a' as ProductUserId,
       workspaceId: 'workspace-a' as WorkspaceId,
@@ -87,7 +142,7 @@ describe('legacy AI runtime adapter', () => {
     act(() => tree!.unmount());
   });
 
-  it('sends general-chat focus as the exact visible user context', async () => {
+  it('sends a contextual general-chat launch through the shared recommendation workflow', async () => {
     const current = engine();
     mockedEngine.mockReturnValue(current);
     let tree: renderer.ReactTestRenderer;
@@ -101,16 +156,26 @@ describe('legacy AI runtime adapter', () => {
         focus: {kind: 'loop-change', changeId: 'change-42'},
       });
     });
-    expect(captured?.snapshot.visibleContext).toBe(
+    expect(captured?.snapshot.visibleContext).toContain(
       'General chat · Focused Loop setting change: change-42.',
     );
-    expect(current.startOpenChatWithContext).toHaveBeenCalledWith(
-      captured?.snapshot.visibleContext,
-    );
+    expect(loadEvidence).toHaveBeenCalledWith({
+      request: {kind: 'now'},
+      locale: 'en',
+      focus: {kind: 'loop-change', changeId: 'change-42'},
+    }, expect.objectContaining({aborted: false}));
+    expect(chat).toHaveBeenCalledTimes(2);
+    for (const payload of providerPayloads()) {
+      expect(payload.evidence).toContain('Focused Loop setting change: change-42.');
+      expect(payload.evidence).toContain('No current glucose reading is available.');
+    }
+    expect(captured?.snapshot.messages[1]?.content)
+      .toBe('Review the recorded pattern with your care team.');
+    expectNoLegacyGeneration(current);
     act(() => tree!.unmount());
   });
 
-  it('keeps focused Loop advice on its guarded workflow and prefills visible context', async () => {
+  it('converts focused Loop advice into a shared recommendation for discussion with the care team', async () => {
     const current = engine();
     mockedEngine.mockReturnValue(current);
     let tree: renderer.ReactTestRenderer;
@@ -124,15 +189,28 @@ describe('legacy AI runtime adapter', () => {
         focus: {kind: 'loop-change', changeId: 'change-42'},
       });
     });
-    expect(current.startLoopSettingsAdvisor).toHaveBeenCalledTimes(1);
-    expect(current.startOpenChatWithContext).not.toHaveBeenCalled();
-    expect(current.setInput).toHaveBeenCalledWith(
-      'Loop advice · Focused Loop setting change: change-42.',
-    );
+    expect(loadEvidence).toHaveBeenCalledWith({
+      request: {
+        kind: 'guided',
+        horizon: 'weekly',
+        focus: 'care-team',
+        goal: 'steadier-glucose',
+      },
+      locale: 'en',
+      focus: {kind: 'loop-change', changeId: 'change-42'},
+    }, expect.objectContaining({aborted: false}));
+    expect(chat).toHaveBeenCalledTimes(3);
+    for (const payload of providerPayloads()) {
+      expect(payload.request).toContain('a plan to discuss with my care team');
+      expect(payload.requestedDays).toBe(7);
+      expect(payload.evidence).toContain('Focused Loop setting change: change-42.');
+    }
+    expectNoLegacyGeneration(current);
+    expect(current.setInput).not.toHaveBeenCalled();
     act(() => tree!.unmount());
   });
 
-  it('launches Meal Analysis as its own typed mission', async () => {
+  it('converts Meal Analysis into the shared food-focused recommendation workflow', async () => {
     const current = engine();
     mockedEngine.mockReturnValue(current);
     let tree: renderer.ReactTestRenderer;
@@ -145,11 +223,25 @@ describe('legacy AI runtime adapter', () => {
         locale: 'en',
       });
     });
-    expect(current.startMealAnalysis).toHaveBeenCalledWith(
-      'Meal analysis · Discuss repeated glucose observations around meals.',
-    );
-    expect(current.startOpenChatWithContext).not.toHaveBeenCalled();
-    expect(captured?.snapshot.activeSpecialist).toBe('meal-analysis');
+    expect(loadEvidence).toHaveBeenCalledWith({
+      request: {
+        kind: 'guided',
+        horizon: 'weekly',
+        focus: 'food',
+        goal: 'steadier-glucose',
+      },
+      locale: 'en',
+    }, expect.objectContaining({aborted: false}));
+    expect(chat).toHaveBeenCalledTimes(3);
+    for (const payload of providerPayloads()) {
+      expect(payload.request).toContain('food and meals');
+      expect(payload.requestedDays).toBe(7);
+    }
+    expect(captured?.snapshot.history[0]?.recommendation).toMatchObject({
+      kind: 'guided',
+      focus: 'food',
+    });
+    expectNoLegacyGeneration(current);
     act(() => tree!.unmount());
   });
 

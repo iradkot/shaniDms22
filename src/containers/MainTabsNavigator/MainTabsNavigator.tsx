@@ -13,9 +13,7 @@ import {theme} from 'app/style/theme';
 import FoodTracker from 'app/containers/MainTabsNavigator/Containers/FoodTracker/FoodTracker';
 import SportTracker from './Containers/SportTracker/SportTracker';
 import Trends from 'app/containers/MainTabsNavigator/Containers/Trends';
-import Oracle from 'app/containers/MainTabsNavigator/Containers/Oracle';
-import AiAnalyst from 'app/containers/MainTabsNavigator/Containers/AiAnalyst';
-import LoopTuner from 'app/containers/MainTabsNavigator/Containers/LoopTuner';
+import UnifiedAiAnalystScreen from 'app/platform/native/ai/UnifiedAiAnalystScreen';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import SettingsNavigator from 'app/containers/MainTabsNavigator/Containers/Settings/SettingsNavigator';
 import {useTabsSettings} from 'app/contexts/TabsSettingsContext';
@@ -88,41 +86,27 @@ const MainTabsNavigator: React.FC = () => {
 
         <Tab.Screen
           name={SCREEN_NAMES.ORACLE_TAB_SCREEN}
-          component={Oracle}
-          options={{
-            ...(settings.showOracle ? {} : hiddenTabOptions),
-            tabBarIcon: ({color, size}: {color: string; size: number}) => (
-              <MaterialIcons name="insights" color={color} size={size} />
-            ),
-            tabBarLabel: tr(language, 'nav.oracle'),
-            tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.oracle),
-          }}
+          component={UnifiedAiAnalystScreen}
+          options={hiddenTabOptions}
         />
 
         <Tab.Screen
           name={SCREEN_NAMES.AI_ANALYST_TAB_SCREEN}
-          component={AiAnalyst}
+          component={UnifiedAiAnalystScreen}
           options={{
-            ...(settings.showAiAnalyst ? {} : hiddenTabOptions),
             tabBarIcon: ({color, size}: {color: string; size: number}) => (
               <MaterialIcons name="smart-toy" color={color} size={size} />
             ),
-            tabBarLabel: tr(language, 'nav.aiAnalyst'),
+            tabBarLabel: language === 'he' ? 'המלצות AI' : 'AI recommendations',
             tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.aiAnalyst),
+            ...(settings.showAiAnalyst ? {} : hiddenTabOptions),
           }}
         />
 
         <Tab.Screen
           name={SCREEN_NAMES.LOOP_TUNER_TAB_SCREEN}
-          component={LoopTuner}
-          options={{
-            ...(settings.showLoopTuner ? {} : hiddenTabOptions),
-            tabBarIcon: ({color, size}: {color: string; size: number}) => (
-              <MaterialIcons name="tune" color={color} size={size} />
-            ),
-            tabBarLabel: tr(language, 'nav.loopTuner'),
-            tabBarButton: makeTabBarButton(E2E_TEST_IDS.tabs.loopTuner),
-          }}
+          component={UnifiedAiAnalystScreen}
+          options={hiddenTabOptions}
         />
 
         <Tab.Screen

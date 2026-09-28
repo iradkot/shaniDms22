@@ -63,6 +63,9 @@ jest.mock('app/containers/MainTabsNavigator/Containers/Home/RanksInfoScreen', ()
 jest.mock('app/containers/MainTabsNavigator/Containers/Home/LoopAdjustmentAssistScreen', () =>
   mockScreenModule('loop-assist'),
 );
+jest.mock('app/platform/native/ai/UnifiedAiAnalystScreen', () =>
+  mockScreenModule('ai-recommendations'),
+);
 jest.mock('app/containers/MainTabsNavigator/Containers/Trends/HypoInvestigationScreen', () =>
   mockScreenModule('hypo-investigation'),
 );
@@ -133,6 +136,10 @@ it('evaluates secondary screen modules only when navigation requests them', asyn
     expect(load()).toBe(component);
     expect(mockEvaluatedScreens).toHaveLength(before + 1);
   }
+  // The preserved route remains valid for daily-review links, but it must
+  // open the shared recommendations rather than load the retired AI engine.
+  expect(mockEvaluatedScreens).toContain('ai-recommendations');
+  expect(mockEvaluatedScreens).not.toContain('loop-assist');
   act(() => {
     legacyTree.unmount();
     tree.unmount();

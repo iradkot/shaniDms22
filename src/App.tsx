@@ -544,8 +544,8 @@ const AppInner: () => React.ReactElement = () => {
                               headerShown: true,
                               headerTitle:
                                 language === 'he'
-                                  ? 'סייע התאמת לופ'
-                                  : 'Loop Tuning Assist',
+                                  ? 'המלצות AI'
+                                  : 'AI recommendations',
                               headerTitleStyle: {
                                 fontSize: 16,
                                 fontWeight: '700',
@@ -553,7 +553,7 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={LOOP_ADJUSTMENT_ASSIST_SCREEN}
                             getComponent={() =>
-                              require('./containers/MainTabsNavigator/Containers/Home/LoopAdjustmentAssistScreen').default
+                              require('./platform/native/ai/UnifiedAiAnalystScreen').default
                             }
                           />
 

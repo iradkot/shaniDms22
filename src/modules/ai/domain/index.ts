@@ -12,3 +12,4 @@ export type {
   AiSpecialistDefinition,
   AiSpecialistId,
 } from './types';
+export * from './recommendations';

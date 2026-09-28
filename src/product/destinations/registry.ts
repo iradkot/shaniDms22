@@ -19,8 +19,12 @@ export class DestinationRegistry {
 
   private readonly byId: ReadonlyMap<string, DestinationDefinition>;
   private readonly aliases: ReadonlyMap<string, DestinationDefinition>;
+  private readonly savedTargetRedirects: ReadonlyMap<DestinationId, DestinationId>;
 
-  constructor(untrustedDefinitions: unknown) {
+  constructor(
+    untrustedDefinitions: unknown,
+    savedTargetRedirects: ReadonlyMap<DestinationId, DestinationId> = new Map(),
+  ) {
     const validated = parseDestinationDefinitions(untrustedDefinitions);
     this.destinations = Object.freeze([...validated]);
     this.byId = new Map(validated.map(item => [item.id, item]));
@@ -30,6 +34,17 @@ export class DestinationRegistry {
       item.aliases?.forEach(alias => aliases.set(alias, item));
     });
     this.aliases = aliases;
+    this.savedTargetRedirects = new Map(savedTargetRedirects);
+    for (const replacement of this.savedTargetRedirects.values()) {
+      if (!this.byId.has(replacement)) {
+        throw new Error(`Saved destination replacement is not installed: ${replacement}`);
+      }
+    }
+  }
+
+  savedTargetReplacement(id: DestinationId): DestinationDefinition | undefined {
+    const replacement = this.savedTargetRedirects.get(id);
+    return replacement === undefined ? undefined : this.byId.get(replacement);
   }
 
   get(id: string): DestinationDefinition | undefined {
@@ -87,11 +102,18 @@ const targetUnavailable = (
 export const resolveDestinationTarget = (
   registry: DestinationRegistry,
   untrustedTarget: unknown,
-  purpose: DestinationTargetPurpose | undefined,
+  purpose: DestinationTargetPurpose | 'recent' | undefined,
   runtime: DestinationRuntimeContext,
 ): ResolvedDestinationTarget => {
   const target = parseStoredDestinationTarget(untrustedTarget);
-  const match = registry.getByIdOrAlias(target.destinationId);
+  // Saved entry points should follow their replacement. Contextual navigation
+  // has no purpose and keeps its original ID, focus, and history behavior.
+  const replacement = purpose === undefined
+    ? undefined
+    : registry.savedTargetReplacement(target.destinationId);
+  const match = replacement
+    ? {destination: replacement, migratedFrom: target.destinationId}
+    : registry.getByIdOrAlias(target.destinationId);
   if (!match) {
     return targetUnavailable(
       target,
@@ -101,7 +123,7 @@ export const resolveDestinationTarget = (
   }
 
   const {destination, migratedFrom} = match;
-  if (purpose !== undefined && !destination.targetPolicy[purpose]) {
+  if (purpose !== undefined && purpose !== 'recent' && !destination.targetPolicy[purpose]) {
     return targetUnavailable(
       target,
       'target-not-allowed',
@@ -150,7 +172,7 @@ export const resolveDestinationTarget = (
 
   return {
     status: 'available',
-    target,
+    target: replacement ? createStoredDestinationTarget(replacement.id) : target,
     destination,
     ...(migratedFrom === undefined ? {} : {migratedFrom}),
   };

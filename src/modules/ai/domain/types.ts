@@ -1,3 +1,5 @@
+import type {AiRecommendationRequest} from './recommendations';
+
 export type AiSpecialistId =
   | 'general-chat'
   | 'hypo-investigation'
@@ -5,10 +7,7 @@ export type AiSpecialistId =
   | 'meal-analysis'
   | 'loop-advice';
 
-export type AiSpecialistCategory =
-  | 'primary'
-  | 'investigation'
-  | 'improvement';
+export type AiSpecialistCategory = 'primary' | 'investigation' | 'improvement';
 
 export type AiLocale = 'en' | 'he';
 
@@ -68,6 +67,8 @@ export interface AiConversationMessage {
 }
 
 export interface AiConversationSummary {
+  readonly recommendation?: AiRecommendationRequest;
+  readonly recommendationFocus?: AiConversationFocus;
   readonly id: string;
   readonly title: string;
   readonly specialist: AiSpecialistId;
