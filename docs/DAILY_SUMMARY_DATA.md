@@ -35,6 +35,12 @@ components and basal coverage without inventing a total. If both compared period
 have known bolus but incomplete basal, the comparison explicitly shows bolus only.
 The weekly average requires all seven days for the component being compared.
 
+The widget shows recorded basal subtotals even when coverage is partial. Its partial
+basal bar represents recorded time coverage, not an insulin ratio; the adjacent
+label identifies this. Compact widgets omit that bar but retain the subtotal.
+Comparison amounts remain visible when the widget is too short for comparison
+charts. Coverage just below 100% is displayed as `<100%`, never rounded to complete.
+
 Old native cached insulin without recorded evidence is discarded. Glucose can
 remain available independently when insulin history fails.
 

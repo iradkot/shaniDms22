@@ -33,7 +33,6 @@
   <string name="summary_compare_hint">עד אותה שעה · לחיצה להחלפה</string>
   <string name="summary_compare_week_hint">אותה שעה · %1$d/7 ימים · להחלפה</string>
   <string name="summary_compare_unavailable">אין נתוני עבר · לחיצה להחלפה</string>
-  <string name="summary_compare_compact">%1$s · %2$s · אותה שעה</string>
   <string name="summary_range_description">היום: %1$s מהזמן בטווח, %2$s נמוך, %3$s גבוה. טווח יעד %4$d עד %5$d מיליגרם לדציליטר. יש נתונים מ־%6$d אחוז מהיום עד כה.</string>
   <string name="summary_insulin_description">אינסולין מתועד היום: %1$s יחידות בסך הכול. בזאל %2$s יחידות, %3$s. בולוס %4$s יחידות, %5$s.</string>
   <string name="summary_comparison_description">כמות מתועדת היום %1$s יחידות. %2$s %3$s יחידות עד אותה שעה. שינוי %4$s. לחיצה מחליפה בין אתמול לממוצע שבעת הימים הקודמים.</string>
@@ -49,9 +48,14 @@
   <string name="summary_bolus_compact">בולוס %1$s</string>
   <string name="summary_bolus_until">בולוס היום · %1$s</string>
   <string name="summary_insulin_until">אינסולין היום · %1$s</string>
-  <string name="summary_basal_incomplete">רישומי בזאל חלקיים</string>
+  <string name="summary_basal_missing">בזאל — אין תיעוד</string>
+  <string name="summary_basal_partial">בזאל %1$s · חלקי</string>
+  <string name="summary_basal_amount">בזאל %1$s</string>
+  <string name="summary_basal_coverage">תיעוד בזאל מכסה %1$s מהזמן שחלף</string>
+  <string name="summary_compare_values">היום %1$s · %2$s %3$s</string>
+  <string name="summary_compare_compact_values">%1$s %2$s · Δ %3$s</string>
   <string name="summary_compare_bolus_week">↔ בולוס מול ממוצע שבוע</string>
   <string name="summary_compare_bolus_yesterday">↔ בולוס מול אתמול</string>
   <string name="summary_compare_until">בכל יום %1$s · להחלפה</string>
-  <string name="summary_insulin_partial_description">בולוס מתועד היום: %1$s יחידות. בזאל מתועד חלקית: %2$s יחידות עם כיסוי של %3$d אחוז. אין סך אינסולין או יחס.</string>
+  <string name="summary_insulin_partial_description">בולוס מתועד היום: %1$s יחידות. בזאל מתועד חלקית: %2$s יחידות עם כיסוי של %3$s. אין סך אינסולין או יחס.</string>
 </resources>

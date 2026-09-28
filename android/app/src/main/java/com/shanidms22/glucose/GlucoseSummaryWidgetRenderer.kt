@@ -106,6 +106,17 @@ internal object GlucoseSummaryWidgetRenderer {
     val basalShare = stats?.totalBasal?.takeIf { todayTotal != null && todayTotal > 0 }
       ?.let { (it / todayTotal!! * 100).roundToInt().coerceIn(0, 100) }
     val bolusShare = basalShare?.let { 100 - it }
+    val basalComplete = stats?.totalBasal != null && stats.basalCoveragePercent == 100.0
+    val basalCoverage = stats?.basalCoveragePercent?.let {
+      // Fractional gaps and upload delays must not be rounded into complete coverage.
+      ltrToken(if (it < 100 && it.roundToInt() == 100) "<100%" else "${it.roundToInt()}%")
+    } ?: MISSING
+    val basalLabel = when {
+      stats?.totalBasal == null -> context.getString(R.string.summary_basal_missing)
+      !basalComplete -> context.getString(R.string.summary_basal_partial, unit(stats.totalBasal))
+      basalShare == null -> context.getString(R.string.summary_basal_amount, unit(stats.totalBasal))
+      else -> context.getString(R.string.summary_basal, unit(stats.totalBasal), percent(basalShare))
+    }
     val bolusOnly = todayTotal == null && stats?.totalBolus != null
     val comparison = widgetInsulinComparison(stats, baseline)
     val comparedToday = comparison?.first
@@ -118,7 +129,7 @@ internal object GlucoseSummaryWidgetRenderer {
     val insulinDescription = if (stats != null && todayTotal != null) context.getString(
       R.string.summary_insulin_description, amount(todayTotal), amount(stats.totalBasal), percent(basalShare), amount(stats.totalBolus), percent(bolusShare),
     ) else if (stats != null) context.getString(
-      R.string.summary_insulin_partial_description, amount(stats.totalBolus), amount(stats.totalBasal), stats.basalCoveragePercent.roundToInt(),
+      R.string.summary_insulin_partial_description, amount(stats.totalBolus), amount(stats.totalBasal), basalCoverage,
     ) else context.getString(R.string.summary_waiting)
     val comparisonLabel = context.getString(if (week) R.string.summary_week_average else R.string.summary_yesterday)
     val comparisonTitle = context.getString(when {
@@ -151,12 +162,16 @@ internal object GlucoseSummaryWidgetRenderer {
     views.setTextViewText(R.id.summary_coverage, coverage)
     views.setContentDescription(R.id.summary_coverage, "$coverage. ${freshness(context, summary?.updatedAtMs, now)}")
     views.setTextColor(R.id.summary_coverage, if (range != null && (range.coveragePercent < 70 || summaryStale)) highColor else muted)
-    views.setImageViewBitmap(R.id.summary_insulin_split, insulinBar(stats, isRtl(context)))
+    views.setImageViewBitmap(R.id.summary_insulin_split, if (todayTotal == null)
+      comparisonBar(stats?.basalCoveragePercent, 100.0, teal, isRtl(context)) else insulinBar(stats, isRtl(context)))
+    views.setViewVisibility(R.id.summary_insulin_split, if (compact && todayTotal == null) View.GONE else View.VISIBLE)
     views.setContentDescription(R.id.summary_insulin_split, insulinDescription)
     val headline = unit(if (bolusOnly) stats?.totalBolus else todayTotal)
     views.setTextViewText(R.id.summary_insulin_total, if (compact && bolusOnly) context.getString(R.string.summary_bolus_compact, headline) else headline)
     views.setContentDescription(R.id.summary_insulin_total, insulinDescription)
-    views.setTextViewText(R.id.summary_comparison_title, if (compact) context.getString(R.string.summary_compare_compact, comparisonTitle, delta) else comparisonTitle)
+    views.setTextViewText(R.id.summary_comparison_title, if (compact) context.getString(
+      R.string.summary_compare_compact_values, comparisonLabel, unit(comparedBaseline), delta,
+    ) else comparisonTitle)
     views.setContentDescription(R.id.summary_comparison_button, context.getString(
       R.string.summary_comparison_description, amount(comparedToday), comparisonLabel, amount(comparedBaseline), delta,
     ))
@@ -166,18 +181,19 @@ internal object GlucoseSummaryWidgetRenderer {
       if (height <= 120 && context.resources.configuration.fontScale > 1.15f) {
         views.setTextViewTextSize(R.id.summary_tir, TypedValue.COMPLEX_UNIT_SP, 22f)
       }
-      val splitText = if (todayTotal == null) context.getString(R.string.summary_basal_incomplete)
+      val splitText = if (todayTotal == null) basalLabel
         else context.getString(R.string.summary_split_compact, percent(basalShare), percent(bolusShare))
       val split = splitText.indexOf('·')
       val legend = SpannableString(splitText)
       if (split >= 0) {
         legend.setSpan(ForegroundColorSpan(teal), 0, split, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        legend.setSpan(ForegroundColorSpan(violet), split + 1, legend.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        legend.setSpan(ForegroundColorSpan(if (todayTotal == null) highColor else violet), split + 1, legend.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
       }
       views.setTextViewText(R.id.summary_compact_split_legend, legend)
       views.setTextViewText(R.id.summary_day, if (glucoseClock == null || stale) visibleGlucoseTime else context.getString(R.string.summary_compact_clock, glucoseClock))
-      views.setTextViewTextSize(R.id.summary_compact_split_legend, TypedValue.COMPLEX_UNIT_SP, if (width < 210) 8f else 10f)
+      views.setTextViewTextSize(R.id.summary_compact_split_legend, TypedValue.COMPLEX_UNIT_SP, if (width < 210 || todayTotal == null) 8f else 10f)
     } else {
+      if (height < 280) views.setTextViewTextSize(R.id.summary_tir, TypedValue.COMPLEX_UNIT_SP, 23f)
       views.setTextViewText(R.id.summary_comparison_delta, delta)
       views.setTextViewText(R.id.summary_freshness, visibleGlucoseTime)
       views.setTextColor(R.id.summary_freshness, if (stale) highColor else muted)
@@ -189,15 +205,18 @@ internal object GlucoseSummaryWidgetRenderer {
       views.setTextViewText(R.id.summary_insulin_title, context.getString(
         if (bolusOnly) R.string.summary_bolus_until else R.string.summary_insulin_until, summaryWindow,
       ))
-      views.setTextViewText(R.id.summary_basal, if (todayTotal == null) context.getString(R.string.summary_basal_incomplete)
-        else context.getString(R.string.summary_basal, unit(stats?.totalBasal), percent(basalShare)))
+      views.setTextViewText(R.id.summary_basal, basalLabel)
       views.setTextViewText(R.id.summary_bolus, if (bolusShare == null) context.getString(R.string.summary_bolus_compact, unit(stats?.totalBolus))
         else context.getString(R.string.summary_bolus, unit(stats?.totalBolus), percent(bolusShare)))
+      views.setViewVisibility(R.id.summary_insulin_coverage, if (todayTotal == null && stats != null) View.VISIBLE else View.GONE)
+      views.setTextViewText(R.id.summary_insulin_coverage, context.getString(R.string.summary_basal_coverage, basalCoverage))
+      val showComparisonBars = height >= 300
       views.setTextViewText(R.id.summary_comparison_hint, when {
         comparison == null -> context.getString(R.string.summary_compare_unavailable)
+        !showComparisonBars -> context.getString(R.string.summary_compare_values, unit(comparedToday), comparisonLabel, unit(comparedBaseline))
         else -> context.getString(R.string.summary_compare_until, summaryWindow)
       })
-      views.setViewVisibility(R.id.summary_comparison_bars, if (height >= 300) View.VISIBLE else View.GONE)
+      views.setViewVisibility(R.id.summary_comparison_bars, if (showComparisonBars) View.VISIBLE else View.GONE)
       views.setTextViewText(R.id.summary_today_value, unit(comparedToday))
       views.setTextViewText(R.id.summary_baseline_label, comparisonLabel)
       views.setTextViewText(R.id.summary_baseline_value, unit(comparedBaseline))

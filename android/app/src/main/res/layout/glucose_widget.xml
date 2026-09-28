@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:id="@+id/glucose_widget_root"
   android:layout_width="match_parent" android:layout_height="match_parent"
-  android:orientation="vertical" android:padding="10dp"
+  android:orientation="vertical" android:padding="8dp"
   android:background="@drawable/glucose_summary_background">
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="30dp"
     android:orientation="horizontal" android:gravity="center_vertical">
@@ -37,30 +37,30 @@
           android:layout_height="wrap_content" android:text="—" android:textSize="29sp"
           android:fontFamily="sans-serif-medium" android:textColor="#68DFC7" android:includeFontPadding="false" />
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-          android:text="@string/summary_time_in_range_short" android:textSize="10sp" android:textColor="#D7E3F3" />
+          android:text="@string/summary_time_in_range_short" android:textSize="10sp" android:textColor="#D7E3F3" android:includeFontPadding="false" />
       </LinearLayout>
     </FrameLayout>
     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
       android:layout_weight="1" android:layout_marginStart="10dp" android:orientation="vertical">
       <TextView android:id="@+id/summary_range_title" android:layout_width="match_parent"
         android:layout_height="wrap_content" android:text="@string/summary_time_in_range"
-        android:textColor="#F3F7FF" android:textStyle="bold" android:textSize="12sp" android:maxLines="1" />
+        android:textColor="#F3F7FF" android:textStyle="bold" android:textSize="12sp" android:maxLines="1" android:includeFontPadding="false" />
       <TextView android:id="@+id/summary_thresholds" android:layout_width="match_parent"
         android:layout_height="wrap_content" android:textColor="#A6B7CC" android:textSize="10sp"
-        android:layout_marginBottom="4dp" android:maxLines="1" android:gravity="start" android:textAlignment="viewStart" />
+        android:layout_marginBottom="2dp" android:maxLines="1" android:gravity="start" android:textAlignment="viewStart" android:includeFontPadding="false" />
       <TextView android:id="@+id/summary_low" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:textColor="#FF94A3" android:textSize="11sp" android:maxLines="1" />
+        android:layout_height="wrap_content" android:textColor="#FF94A3" android:textSize="11sp" android:maxLines="1" android:includeFontPadding="false" />
       <TextView android:id="@+id/summary_in_range" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:textColor="#68DFC7" android:textSize="11sp" android:maxLines="1" />
+        android:layout_height="wrap_content" android:textColor="#68DFC7" android:textSize="11sp" android:maxLines="1" android:includeFontPadding="false" />
       <TextView android:id="@+id/summary_high" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:textColor="#F4C276" android:textSize="11sp" android:maxLines="1" />
+        android:layout_height="wrap_content" android:textColor="#F4C276" android:textSize="11sp" android:maxLines="1" android:includeFontPadding="false" />
     </LinearLayout>
   </LinearLayout>
   <TextView android:id="@+id/summary_coverage" android:layout_width="match_parent"
     android:layout_height="wrap_content" android:minHeight="15dp" android:gravity="center_vertical" android:maxLines="1"
     android:ellipsize="end" android:textSize="10sp" android:textColor="#A6B7CC" />
   <LinearLayout android:id="@+id/summary_insulin_panel" android:layout_width="match_parent"
-    android:layout_height="wrap_content" android:orientation="vertical" android:padding="6dp"
+    android:layout_height="wrap_content" android:orientation="vertical" android:padding="5dp"
     android:background="@drawable/glucose_summary_panel">
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="22dp"
       android:orientation="horizontal" android:gravity="center_vertical">
@@ -76,28 +76,32 @@
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="18dp"
       android:orientation="horizontal" android:gravity="center_vertical">
       <TextView android:id="@+id/summary_basal" android:layout_width="0dp"
-        android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="1"
-        android:textSize="10sp" android:textColor="#68DFC7" />
+        android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="1" android:ellipsize="end"
+        android:textSize="10sp" android:textColor="#68DFC7" android:includeFontPadding="false" />
       <TextView android:id="@+id/summary_bolus" android:layout_width="0dp"
         android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end"
-        android:maxLines="1" android:textSize="10sp" android:textColor="#BEA7FF" />
+        android:maxLines="1" android:ellipsize="end" android:textSize="10sp" android:textColor="#BEA7FF" android:includeFontPadding="false" />
     </LinearLayout>
+    <TextView android:id="@+id/summary_insulin_coverage" android:layout_width="match_parent"
+      android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end"
+      android:textSize="9sp" android:textColor="#F4C276" android:visibility="gone"
+      android:gravity="start" android:textAlignment="viewStart" />
     <LinearLayout android:id="@+id/summary_comparison_button" android:layout_width="match_parent"
-      android:layout_height="wrap_content" android:minHeight="40dp" android:orientation="vertical"
+      android:layout_height="wrap_content" android:minHeight="36dp" android:orientation="vertical"
       android:background="@drawable/glucose_summary_button" android:paddingStart="7dp"
-      android:paddingEnd="7dp" android:paddingTop="5dp" android:paddingBottom="5dp">
+      android:paddingEnd="7dp" android:paddingTop="4dp" android:paddingBottom="4dp">
       <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="horizontal" android:gravity="center_vertical">
         <TextView android:id="@+id/summary_comparison_title" android:layout_width="0dp"
           android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="1"
-          android:ellipsize="end" android:textColor="#D7E3F3" android:textSize="11sp" />
+          android:ellipsize="end" android:textColor="#D7E3F3" android:textSize="11sp" android:includeFontPadding="false" />
         <TextView android:id="@+id/summary_comparison_delta" android:layout_width="wrap_content"
           android:layout_height="wrap_content" android:layout_marginStart="3dp" android:maxLines="1"
           android:textDirection="ltr" android:textColor="#F3F7FF" android:textSize="11sp" android:textStyle="bold" />
       </LinearLayout>
       <TextView android:id="@+id/summary_comparison_hint" android:layout_width="match_parent"
         android:layout_height="wrap_content" android:textColor="#A6B7CC" android:textSize="9sp"
-        android:maxLines="1" android:ellipsize="end" />
+        android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" />
       <LinearLayout android:id="@+id/summary_comparison_bars" android:layout_width="match_parent"
         android:layout_height="38dp" android:orientation="vertical" android:layout_marginTop="3dp">
         <LinearLayout android:layout_width="match_parent" android:layout_height="19dp"
