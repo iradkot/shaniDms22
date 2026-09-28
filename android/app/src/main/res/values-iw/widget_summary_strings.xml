@@ -52,8 +52,8 @@
   <string name="summary_basal_partial">בזאל %1$s · חלקי</string>
   <string name="summary_basal_amount">בזאל %1$s</string>
   <string name="summary_basal_coverage">תיעוד בזאל מכסה %1$s מהזמן שחלף</string>
-  <string name="summary_compare_values">היום %1$s · %2$s %3$s</string>
-  <string name="summary_compare_compact_values">%1$s %2$s · Δ %3$s</string>
+  <string name="summary_compare_values">%1$s מול %2$s · אותה שעה</string>
+  <string name="summary_compare_compact_values">%1$s %2$s · אותה שעה</string>
   <string name="summary_compare_bolus_week">↔ בולוס מול ממוצע שבוע</string>
   <string name="summary_compare_bolus_yesterday">↔ בולוס מול אתמול</string>
   <string name="summary_compare_until">בכל יום %1$s · להחלפה</string>

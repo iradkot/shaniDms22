@@ -170,7 +170,7 @@ internal object GlucoseSummaryWidgetRenderer {
     views.setTextViewText(R.id.summary_insulin_total, if (compact && bolusOnly) context.getString(R.string.summary_bolus_compact, headline) else headline)
     views.setContentDescription(R.id.summary_insulin_total, insulinDescription)
     views.setTextViewText(R.id.summary_comparison_title, if (compact) context.getString(
-      R.string.summary_compare_compact_values, comparisonLabel, unit(comparedBaseline), delta,
+      R.string.summary_compare_compact_values, comparisonLabel, unit(comparedBaseline),
     ) else comparisonTitle)
     views.setContentDescription(R.id.summary_comparison_button, context.getString(
       R.string.summary_comparison_description, amount(comparedToday), comparisonLabel, amount(comparedBaseline), delta,
@@ -213,7 +213,7 @@ internal object GlucoseSummaryWidgetRenderer {
       val showComparisonBars = height >= 300
       views.setTextViewText(R.id.summary_comparison_hint, when {
         comparison == null -> context.getString(R.string.summary_compare_unavailable)
-        !showComparisonBars -> context.getString(R.string.summary_compare_values, unit(comparedToday), comparisonLabel, unit(comparedBaseline))
+        !showComparisonBars -> context.getString(R.string.summary_compare_values, unit(comparedToday), unit(comparedBaseline))
         else -> context.getString(R.string.summary_compare_until, summaryWindow)
       })
       views.setViewVisibility(R.id.summary_comparison_bars, if (showComparisonBars) View.VISIBLE else View.GONE)

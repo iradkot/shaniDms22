@@ -131,6 +131,7 @@ class WidgetSummaryRenderingTest {
       val baseline = textViews(comparisonPanel).firstOrNull { unitsPattern(6).containsMatchIn(plainText(it)) }
       assertTrue("Yesterday's 6 U baseline must remain visible at the default height; a delta alone is insufficient", baseline != null)
       assertTextFullyVisible(root, baseline!!, "Yesterday's bolus amount")
+      assertTrue("Same clock cutoff must remain visible alongside the amounts", plainText(baseline).contains("same time"))
       assertTrue("The baseline must identify yesterday's bolus", textViews(comparisonPanel).any {
         val value = plainText(it)
         value.contains("Bolus", ignoreCase = true) && value.contains("yesterday", ignoreCase = true)
@@ -170,6 +171,7 @@ class WidgetSummaryRenderingTest {
       }
       assertTrue(plainText(root.findViewById(R.id.summary_basal)).contains("חלקי"))
       assertTrue(unitsPattern(6).containsMatchIn(plainText(root.findViewById(R.id.summary_comparison_hint))))
+      assertTrue(plainText(root.findViewById(R.id.summary_comparison_hint)).contains("אותה שעה"))
     })
 
   @Test fun nearlyCompleteBasalDoesNotRoundIntoCompleteCoverage() = render("default-nearly-complete-basal-en", Size(250, 250),

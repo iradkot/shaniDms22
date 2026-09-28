@@ -52,8 +52,8 @@
   <string name="summary_basal_partial">Basal %1$s · partial</string>
   <string name="summary_basal_amount">Basal %1$s</string>
   <string name="summary_basal_coverage">Basal records cover %1$s of elapsed time</string>
-  <string name="summary_compare_values">Today %1$s · %2$s %3$s</string>
-  <string name="summary_compare_compact_values">%1$s %2$s · Δ %3$s</string>
+  <string name="summary_compare_values">%1$s vs %2$s · same time</string>
+  <string name="summary_compare_compact_values">%1$s %2$s · same time</string>
   <string name="summary_compare_bolus_week">↔ Bolus vs 7-day avg</string>
   <string name="summary_compare_bolus_yesterday">↔ Bolus vs yesterday</string>
   <string name="summary_compare_until">Each day %1$s · tap to switch</string>
