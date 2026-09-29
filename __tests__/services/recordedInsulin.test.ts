@@ -109,7 +109,10 @@ describe('recorded insulin evidence', () => {
     ).toMatchObject({bolusUnits: 1});
     expect(
       buildRecordedInsulinSummary(
-        [basal, {...bolus, type: 'dual'}],
+        [
+          {...basal, amount: 1},
+          {...bolus, type: 'dual'},
+        ],
         period,
         period.endMs,
       ),
@@ -120,7 +123,10 @@ describe('recorded insulin evidence', () => {
     });
     expect(
       buildRecordedInsulinSummary(
-        [basal, {...bolus, type: 'dual'}],
+        [
+          {...basal, amount: 1},
+          {...bolus, type: 'dual'},
+        ],
         period,
         period.endMs,
       ),
@@ -140,5 +146,29 @@ describe('recorded insulin evidence', () => {
         startMs + 10_000,
       ),
     ).not.toHaveProperty('bolusUnits');
+  });
+
+  it('integrates 10000 completed intervals with exact coverage and a known sum', () => {
+    const count = 10_000;
+    const intervalMs = 5 * 60_000;
+    const endMs = startMs + count * intervalMs;
+    const records = Array.from({length: count}, (_, index) => ({
+      _id: `dose-${index}`,
+      eventType: 'Temp Basal',
+      enteredBy: 'loop://fixture',
+      created_at: new Date(startMs + index * intervalMs).toISOString(),
+      duration: 5,
+      amount: 0.125,
+    }));
+    expect(
+      buildRecordedInsulinSummary(records, {startMs, endMs}, endMs),
+    ).toEqual({
+      quality: 'available',
+      basalUnits: 1250,
+      bolusUnits: 0,
+      basalCoveredMs: count * intervalMs,
+      basalCoveragePercent: 100,
+      basalEvidence: 'recorded',
+    });
   });
 });

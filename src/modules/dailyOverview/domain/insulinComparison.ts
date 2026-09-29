@@ -117,10 +117,16 @@ export const buildDailyInsulinComparison = (
   const completeBolus =
     allDays && available.every(value => value.bolusUnits !== undefined);
   const weekBasal = completeBasal
-    ? available.reduce((sum, value) => sum + value.basalUnits!, 0) / 7
+    ? available.reduce(
+        (mean, value, index) => mean + (value.basalUnits! - mean) / (index + 1),
+        0,
+      )
     : undefined;
   const weekBolus = completeBolus
-    ? available.reduce((sum, value) => sum + value.bolusUnits!, 0) / 7
+    ? available.reduce(
+        (mean, value, index) => mean + (value.bolusUnits! - mean) / (index + 1),
+        0,
+      )
     : undefined;
   const weekAverage: DailyInsulinComparisonTotals | undefined =
     weekBasal !== undefined || weekBolus !== undefined

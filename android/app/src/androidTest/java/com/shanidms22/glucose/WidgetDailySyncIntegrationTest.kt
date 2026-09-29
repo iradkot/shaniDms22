@@ -80,15 +80,36 @@ class WidgetDailySyncIntegrationTest {
             .put("created_at", widgetIsoUtc(start)).put("duration", (now - start) / 60_000.0)
             .put("amount", 2.0))
         }
-        url.contains("profiles") -> profile(start)
         else -> error("Unexpected endpoint")
       }
     })
     val summary = WidgetDailySummaryStore.read(context)!!
     assertEquals(100, summary.range!!.inRangePercent)
     assertNotNull(summary.insulin?.today)
-    assertTrue(summary.insulin!!.today!!.totalBasal!! > 0)
+    assertEquals(2.0, summary.insulin!!.today!!.totalBasal!!, 0.000001)
+    assertFalse(summary.insulin!!.today!!.basalEstimated)
     assertNull(summary.insulin!!.weekAverage)
+  }
+
+  @Test fun programmedRateCannotBecomeRecordedBasalAfterSyncAndStore() = withSource { context ->
+    val now = System.currentTimeMillis()
+    val start = widgetStartOfDayMs(now)
+    assertTrue(GlucoseWidgetSync.syncOnce(context) { url, _ ->
+      when {
+        url.contains("entries.json") -> readings(now)
+        url.contains("devicestatus") -> JSONArray()
+        url.contains("treatments") -> JSONArray().put(JSONObject()
+          .put("eventType", "Temp Basal").put("enteredBy", "loop://qa")
+          .put("created_at", widgetIsoUtc(start)).put("duration", (now - start) / 60_000.0)
+          .put("absolute", 1.0).put("rate", 1.0))
+        else -> error("Unexpected endpoint")
+      }
+    })
+    val today = WidgetDailySummaryStore.read(context)!!.insulin!!.today!!
+    assertNull("Elapsed programmed duration does not prove delivered basal", today.totalBasal)
+    assertNull(today.totalInsulin)
+    assertEquals(0.0, today.basalCoveragePercent, 0.0)
+    assertEquals(0.0, today.totalBolus!!, 0.0)
   }
 
   @Test fun accountReplacementWhileHistoryLoadsCannotRepublishPreviousSummary() = withSource { context ->
@@ -122,11 +143,6 @@ class WidgetDailySyncIntegrationTest {
     }
     return result
   }
-
-  private fun profile(start: Long) = JSONArray().put(JSONObject()
-    .put("_id", "schedule").put("startDate", widgetIsoUtc(start - 10 * 86_400_000L))
-    .put("defaultProfile", "Default").put("store", JSONObject().put("Default", JSONObject()
-      .put("timezone", "UTC").put("basal", JSONArray().put(JSONObject().put("time", "00:00").put("value", 1))))))
 
   private fun withSource(block: (Context) -> Unit) {
     val context = IsolatedContext(instrumentation.targetContext)

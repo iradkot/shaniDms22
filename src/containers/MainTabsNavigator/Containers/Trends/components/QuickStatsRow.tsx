@@ -148,7 +148,7 @@ export const QuickStatsRow: React.FC<Props> = ({
       <CardRow>
         <CardWrap $withGap>
           <CardSurface testID={avgTddTestID} collapsable={false}>
-            <CardTitle numberOfLines={1}>{tr(language, 'trends.avgTdd')}</CardTitle>
+            <CardTitle>{tr(language, 'trends.avgTdd')}</CardTitle>
             <CardValue>{fmtMaybe(avgTddRounded, ' U/day')}</CardValue>
             <CardSubtle>{tr(language, 'trends.basalPlusBolus')}</CardSubtle>
           </CardSurface>
@@ -156,7 +156,7 @@ export const QuickStatsRow: React.FC<Props> = ({
 
         <CardWrap>
           <CardSurface>
-            <CardTitle numberOfLines={1}>{tr(language, 'trends.basalBolus')}</CardTitle>
+            <CardTitle>{tr(language, 'trends.basalBolus')}</CardTitle>
             <CardValue>{basalBolusText}</CardValue>
             <CardSubtle>{tr(language, 'trends.percentOfTotal')}</CardSubtle>
           </CardSurface>

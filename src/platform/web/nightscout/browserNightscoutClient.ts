@@ -13,6 +13,7 @@ const DEVICE_STATUS_CHUNK_MS = 2 * 60 * 60 * 1_000;
 const MAX_DEVICE_STATUS_SERIES_MS = 27 * 60 * 60 * 1_000;
 // Matches the existing upstream entries route; saturation is not a complete range.
 const ENTRIES_RANGE_LIMIT = 15_000;
+const TREATMENTS_RANGE_LIMIT = 5_000;
 
 export type BrowserNightscoutResource =
   | 'entries'
@@ -29,7 +30,7 @@ export interface BrowserNightscoutStatus {
 
 export interface BrowserNightscoutRange<T> {
   readonly records: readonly T[];
-  /** Glucose-only raw response completeness, evaluated before invalid rows are removed. */
+  /** Raw response completeness, evaluated before decoding can remove invalid rows. */
   readonly complete?: boolean;
   readonly freshness:
     | {readonly kind: 'fresh'; readonly fetchedAtMs: number}
@@ -234,8 +235,8 @@ export interface BrowserNightscoutTreatment {
   readonly modified_at?: number | string;
   readonly type?: string;
   readonly temp?: string;
-  readonly endDate?: string;
-  readonly endTime?: string;
+  readonly endDate?: string | number;
+  readonly endTime?: string | number;
   readonly isMutable?: boolean;
   readonly mutable?: boolean;
   readonly isValid?: boolean;
@@ -350,7 +351,7 @@ export const decodeBrowserNightscoutTreatment = (
   const app = text(value.app, 160);
   const result: BrowserNightscoutTreatment = {
     ...Object.fromEntries(
-      ['syncIdentifier', 'type', 'temp', 'endDate', 'endTime'].flatMap(key => {
+      ['syncIdentifier', 'type', 'temp'].flatMap(key => {
         const field = text(value[key], 160);
         return field === undefined ? [] : [[key, field]];
       }),
@@ -361,8 +362,11 @@ export const decodeBrowserNightscoutTreatment = (
       ),
     ),
     ...Object.fromEntries(
-      ['srvModified', 'modified_at'].flatMap(key => {
-        const revision = typeof value[key] === 'number' ? number(value[key]) : text(value[key], 80);
+      ['srvModified', 'modified_at', 'endDate', 'endTime'].flatMap(key => {
+        const revision =
+          typeof value[key] === 'number'
+            ? number(value[key])
+            : text(value[key], 80);
         return revision === undefined ? [] : [[key, revision]];
       }),
     ),
@@ -683,6 +687,27 @@ export class BrowserNightscoutClient {
     );
   }
 
+  /**
+   * Raw evidence for buildRecordedInsulinSummary. Unlike chart readTreatments,
+   * this retains malformed fields, delivered amounts, revisions and duplicate
+   * identities so the canonical calculator can distinguish unknown from zero.
+   * A separate cache prevents chart decoding from erasing delivery evidence.
+   */
+  async readRecordedTreatments(
+    startMs: number,
+    endMs: number,
+    signal?: AbortSignal,
+  ): Promise<BrowserNightscoutRange<Record<string, unknown>>> {
+    return this.readRange(
+      'treatments',
+      startMs,
+      endMs,
+      value => (isRecord(value) ? {...value} : null),
+      signal,
+      'recorded',
+    );
+  }
+
   async readTreatments(
     startMs: number,
     endMs: number,
@@ -824,6 +849,7 @@ export class BrowserNightscoutClient {
     endMs: number,
     decode: (value: unknown) => T | null,
     signal?: AbortSignal,
+    cacheVariant?: 'recorded',
   ): Promise<BrowserNightscoutRange<T>> {
     if (
       !Number.isSafeInteger(startMs) ||
@@ -832,13 +858,14 @@ export class BrowserNightscoutClient {
     ) {
       throw new Error('Nightscout range is invalid.');
     }
-    const key = cacheKey(
-      this.options.workspaceId,
-      this.options.sourceId,
-      resource,
-      startMs,
-      endMs,
-    );
+    const key =
+      cacheKey(
+        this.options.workspaceId,
+        this.options.sourceId,
+        resource,
+        startMs,
+        endMs,
+      ) + (cacheVariant === undefined ? '' : `:${cacheVariant}`);
     try {
       const value = responseData(
         await this.options.api.requestJson('/v1/nightscout/range', {
@@ -857,8 +884,11 @@ export class BrowserNightscoutClient {
       if (!Array.isArray(value)) {
         throw new Error('Nightscout range is invalid.');
       }
-      if (resource === 'entries' && value.length >= ENTRIES_RANGE_LIMIT) {
-        throw new Error('Nightscout returned an incomplete glucose range.');
+      if (
+        (resource === 'entries' && value.length >= ENTRIES_RANGE_LIMIT) ||
+        (resource === 'treatments' && value.length >= TREATMENTS_RANGE_LIMIT)
+      ) {
+        throw new Error(`Nightscout returned an incomplete ${resource} range.`);
       }
       const records = value.map(decode).filter((row): row is T => row !== null);
       const fetchedAtMs = this.now();
@@ -876,7 +906,9 @@ export class BrowserNightscoutClient {
       return {
         records,
         freshness: {kind: 'fresh', fetchedAtMs},
-        ...(resource === 'entries' ? {complete: true} : {}),
+        ...(['entries', 'treatments'].includes(resource)
+          ? {complete: true}
+          : {}),
       };
     } catch (error) {
       if (signal?.aborted) {
@@ -916,7 +948,9 @@ export class BrowserNightscoutClient {
       return {
         records,
         freshness: {kind: 'stale', fetchedAtMs: cached.fetchedAtMs},
-        ...(resource === 'entries' ? {complete: false} : {}),
+        ...(['entries', 'treatments'].includes(resource)
+          ? {complete: false}
+          : {}),
       };
     }
   }

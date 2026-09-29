@@ -1,10 +1,8 @@
+import type {DailyInsulinSourceSummary} from '../../modules/dailyOverview';
+
 type Availability = 'available' | 'stale' | 'unavailable';
 interface RecordedTreatmentContext {
-  readonly insulinData: readonly {
-    readonly type: string;
-    readonly timestamp?: string;
-    readonly amount?: number;
-  }[];
+  readonly recordedInsulin?: DailyInsulinSourceSummary;
   readonly carbTreatments: readonly {
     readonly timestamp: number;
     readonly carbs: number;
@@ -47,17 +45,11 @@ export const loadNativeRecordedTreatmentSummary = async (
     if (context.availability.treatments !== 'available') {
       return {ok: true, result: {range, availability: context.availability}};
     }
-    const boluses = context.insulinData.flatMap(entry => {
-      const timestampMs = Date.parse(entry.timestamp ?? '');
-      return entry.type === 'bolus' &&
-        timestampMs >= startMs &&
-        timestampMs < endMs &&
-        typeof entry.amount === 'number' &&
-        Number.isFinite(entry.amount) &&
-        entry.amount >= 0
-        ? [entry.amount]
-        : [];
-    });
+    const recorded: DailyInsulinSourceSummary = context.recordedInsulin ?? {
+      quality: 'unavailable',
+    };
+    const bolusUnits =
+      recorded.quality === 'unavailable' ? undefined : recorded.bolusUnits;
     const carbs = context.carbTreatments.flatMap(entry =>
       entry.timestamp >= startMs &&
       entry.timestamp < endMs &&
@@ -70,15 +62,15 @@ export const loadNativeRecordedTreatmentSummary = async (
       ok: true,
       result: {
         range,
+        recordedInsulin: recorded,
         totals: {
-          bolusU: Number(
-            boluses.reduce((sum, amount) => sum + amount, 0).toFixed(2),
-          ),
+          ...(bolusUnits === undefined ? {} : {bolusU: bolusUnits}),
           carbsG: Number(
             carbs.reduce((sum, amount) => sum + amount, 0).toFixed(2),
           ),
         },
-        counts: {bolusCount: boluses.length, carbTreatments: carbs.length},
+        // Normalized chart entries cannot establish deduplicated dose counts.
+        counts: {carbTreatments: carbs.length},
         availability: context.availability,
       },
     };

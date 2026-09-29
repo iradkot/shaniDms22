@@ -34,6 +34,7 @@ export const DEFAULT_TOOL_SYSTEM_PROMPT =
   `- listMemoryEntries: {category?: string, folderKey?: string, limit?: number}  → show editable memory records.\n` +
   `- updateMemoryEntry: {id: string, patch: {...}}  → update a memory record when the user explicitly asks to edit what is saved.\n\n` +
   `Tool choice guidance:\n` +
+  `- getInsulinSummary includes recordedInsulin evidence. Missing basal is unknown, not zero. Never replace it with scheduled basal. Results marked basalEstimated or calculation=profile-model are estimates, not measured delivery.\n` +
   `- If the user asks about hypers/highs, do NOT call getHypoDetectiveContext. Use getGlycemicEvents(kind="hyper") or getCgmData.\n` +
   `- If the user asks about hypos/lows, use getGlycemicEvents(kind="hypo") or getHypoDetectiveContext.\n` +
   `- To get ALL pump/loop settings, call getCurrentProfileSettings which includes basal, ISF, CR, targets and DIA.\n\n` +

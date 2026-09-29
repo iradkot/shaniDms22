@@ -4,6 +4,12 @@ import {
   sumBasalDelivery,
 } from './basalDeliveryTimeline';
 
+/**
+ * Legacy chart model: integrates programmed basal and normalized bolus events.
+ * A valid result is still an estimate, not recorded delivery. New analysis
+ * callers use getModeledInsulinRangeMetrics; recorded totals use
+ * recordedInsulinDataSource/buildRecordedInsulinSummary. See docs/DATA_ACCESS.md.
+ */
 export const calculateTotalInsulin = (
   insulinData: InsulinDataEntry[],
   basalProfile: BasalProfile,
@@ -42,4 +48,3 @@ export const calculateTotalInsulin = (
 
   return {totalBasal, totalBolus: totalBolusInsulin};
 };
-

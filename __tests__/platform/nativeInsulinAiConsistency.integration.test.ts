@@ -46,6 +46,7 @@ describe('native insulin evidence is consistent between legacy UI and AI', () =>
   let failedResource: 'treatments' | 'profiles' | 'devicestatus' | undefined;
   let emptyTreatments = false;
   let explicitMissingLoads = false;
+  let doseRecords: readonly Record<string, unknown>[] = treatments;
   let resources: string[];
 
   beforeEach(async () => {
@@ -58,6 +59,7 @@ describe('native insulin evidence is consistent between legacy UI and AI', () =>
     failedResource = undefined;
     emptyTreatments = false;
     explicitMissingLoads = false;
+    doseRecords = treatments;
     resources = [];
     configureNightscoutInstance({
       baseUrl: 'https://fixture.example',
@@ -89,7 +91,7 @@ describe('native insulin evidence is consistent between legacy UI and AI', () =>
         : resource?.startsWith('treatments')
         ? emptyTreatments
           ? []
-          : treatments
+          : doseRecords
         : resource?.startsWith('devicestatus')
         ? explicitMissingLoads
           ? [
@@ -133,7 +135,7 @@ describe('native insulin evidence is consistent between legacy UI and AI', () =>
     jest.restoreAllMocks();
   });
 
-  it('reports the same delivered basal and bolus in the chart, range metrics and AI tool', async () => {
+  it('labels the shared chart and AI basal model as an estimate', async () => {
     const chart = await fetchStackedChartsDataForRange({startMs, endMs});
     expect(chart.bgSamples[0]).toMatchObject({sgv: 123, iob: 1.2, cob: 18});
     expect(chart.insulinData).toEqual(
@@ -162,6 +164,8 @@ describe('native insulin evidence is consistent between legacy UI and AI', () =>
     expect(evidence).toMatchObject({
       ok: true,
       result: {
+        calculation: 'profile-model',
+        basalEstimated: true,
         totals: {
           bolusU: 1.25,
           basalU: 1.5,
@@ -179,6 +183,20 @@ describe('native insulin evidence is consistent between legacy UI and AI', () =>
     expect(
       resources.filter(resource => resource.startsWith('profile')),
     ).toHaveLength(1);
+  });
+
+  it('reuses recorded dose rules for AI bolus totals without another treatment read', async () => {
+    const dose = {_id: 'one-dose', syncIdentifier: '', eventType: 'Correction Bolus', insulin: 2,
+      deliveredUnits: 0.4, created_at: timestamp};
+    doseRecords = [dose, {...dose}];
+    const range = {startMs: endMs - 86_400_000, endMs};
+    const context = await loadInsulinContext(range);
+    const evidence = await runAiAnalystTool(scope, 'getInsulinSummary', {rangeDays: 1});
+    expect(context.recordedInsulin).toMatchObject({quality: 'partial', bolusUnits: 0.4});
+    expect(evidence).toMatchObject({ok: true, result: {
+      totals: {bolusU: 0.4}, recordedInsulin: {quality: 'partial', bolusUnits: 0.4},
+    }});
+    expect(resources.filter(resource => resource.startsWith('treatments'))).toHaveLength(1);
   });
 
   it('does not tell AI that insulin delivery was zero when treatments could not be loaded', async () => {

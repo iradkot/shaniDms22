@@ -9,7 +9,12 @@ import type {
   BrowserNightscoutRange,
   BrowserNightscoutTreatment,
 } from '../nightscout';
-import {treatmentTimestampMs} from '../nightscout';
+import {
+  decodeBrowserNightscoutTreatment,
+  treatmentTimestampMs,
+} from '../nightscout';
+import {buildRecordedInsulinSummary} from '../../../services/insulin/recordedInsulin';
+import {getLocalDayPeriod} from '../../../modules/dailyOverview';
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const MAX_RANGE_MS = 14 * DAY_MS;
@@ -30,16 +35,17 @@ export interface BrowserAiEvidenceProvider {
 }
 
 interface EvidenceClient {
+  assertCurrentSource?(): void;
   readEntries(
     startMs: number,
     endMs: number,
     signal?: AbortSignal,
   ): Promise<BrowserNightscoutRange<BrowserNightscoutEntry>>;
-  readTreatments(
+  readRecordedTreatments(
     startMs: number,
     endMs: number,
     signal?: AbortSignal,
-  ): Promise<BrowserNightscoutRange<BrowserNightscoutTreatment>>;
+  ): Promise<BrowserNightscoutRange<Record<string, unknown>>>;
   readDeviceStatuses(
     startMs: number,
     endMs: number,
@@ -62,7 +68,7 @@ const requestedPeriod = (
   let requestedEnd = nowMs;
   if (focus?.kind === 'day' && Number.isSafeInteger(focus.dayStartMs)) {
     requestedStart = focus.dayStartMs;
-    requestedEnd = Math.min(nowMs, focus.dayStartMs + DAY_MS);
+    requestedEnd = Math.min(nowMs, getLocalDayPeriod(focus.dayStartMs).endMs);
   } else if (
     focus?.kind === 'period' &&
     Number.isSafeInteger(focus.startMs) &&
@@ -102,12 +108,6 @@ const treatmentFact = (
     treatment.carbs === undefined
       ? undefined
       : `${formatNumber(treatment.carbs)} g carbs`,
-    treatment.insulin === undefined
-      ? undefined
-      : `${formatNumber(treatment.insulin, 2)} U insulin`,
-    treatment.amount === undefined
-      ? undefined
-      : `${formatNumber(treatment.amount)} amount`,
     treatment.duration === undefined
       ? undefined
       : `${formatNumber(treatment.duration)} min`,
@@ -149,12 +149,13 @@ const glucoseFacts = (
   const expected = Math.max(1, Math.round((endMs - startMs) / (5 * 60_000)));
   const coverage = Math.min(100, (sorted.length / expected) * 100);
   return [
-    `${locale === 'he' ? 'דגימה אחרונה בטווח שנבחר' : 'Latest sample in selected range'}: ${formatNumber(
-      latest.sgv,
-      0,
-    )} mg/dL${latest.direction ? ` (${latest.direction})` : ''}, ${new Date(
-      latest.date,
-    ).toISOString()}.`,
+    `${
+      locale === 'he'
+        ? 'דגימה אחרונה בטווח שנבחר'
+        : 'Latest sample in selected range'
+    }: ${formatNumber(latest.sgv, 0)} mg/dL${
+      latest.direction ? ` (${latest.direction})` : ''
+    }, ${new Date(latest.date).toISOString()}.`,
     `${locale === 'he' ? 'דגימות' : 'Samples'}: ${sorted.length}; ${
       locale === 'he' ? 'כיסוי משוער' : 'estimated coverage'
     }: ${formatNumber(coverage)}%; ${
@@ -190,11 +191,14 @@ export const createBrowserAiEvidenceProvider = (input: {
       );
       const [entries, treatments, deviceStatuses] = await Promise.all([
         input.client.readEntries(period.startMs, period.endMs, request.signal),
-        input.client.readTreatments(
-          period.startMs,
-          period.endMs,
-          request.signal,
-        ),
+        // Include a carry-in day for completed delivery intervals crossing start.
+        input.client
+          .readRecordedTreatments(
+            Math.max(0, period.startMs - DAY_MS),
+            period.endMs - 1,
+            request.signal,
+          )
+          .catch(() => undefined),
         input.client.readDeviceStatuses(
           deviceStartMs,
           period.endMs,
@@ -206,7 +210,61 @@ export const createBrowserAiEvidenceProvider = (input: {
         error.name = 'AbortError';
         throw error;
       }
-      ensureFresh([entries, treatments, deviceStatuses]);
+      input.client.assertCurrentSource?.();
+      ensureFresh([entries, deviceStatuses]);
+      const recordedInsulin =
+        treatments?.freshness.kind === 'fresh' && treatments.complete !== false
+          ? buildRecordedInsulinSummary(
+              treatments.records,
+              period,
+              Math.min(nowMs, treatments.freshness.fetchedAtMs),
+            )
+          : {quality: 'unavailable' as const};
+      const units = (value: number | undefined): string =>
+        value === undefined
+          ? request.locale === 'he'
+            ? 'לא ידוע'
+            : 'unknown'
+          : `${formatNumber(value, 2)} U`;
+      const insulinFacts =
+        recordedInsulin.quality === 'unavailable'
+          ? [
+              request.locale === 'he'
+                ? 'כמויות אינסולין מתועדות אינן זמינות.'
+                : 'Recorded insulin amounts are unavailable.',
+            ]
+          : [
+              `${
+                request.locale === 'he'
+                  ? 'באזל מתועד'
+                  : 'Recorded basal subtotal'
+              }: ${units(recordedInsulin.basalUnits)}; ${
+                request.locale === 'he' ? 'בולוס מתועד' : 'recorded bolus'
+              }: ${units(recordedInsulin.bolusUnits)}.`,
+              `${
+                request.locale === 'he'
+                  ? 'כיסוי הבאזל המתועד'
+                  : 'Recorded basal coverage'
+              }: ${formatNumber(
+                recordedInsulin.basalCoveragePercent ?? 0,
+                2,
+              )}%.`,
+              ...(recordedInsulin.quality === 'available'
+                ? [
+                    `${
+                      request.locale === 'he'
+                        ? 'סך אינסולין מתועד'
+                        : 'Recorded insulin total'
+                    }: ${units(
+                      recordedInsulin.basalUnits + recordedInsulin.bolusUnits,
+                    )}.`,
+                  ]
+                : [
+                    request.locale === 'he'
+                      ? 'הנתונים חלקיים. סך האינסולין אינו ידוע; החוסרים לא הושלמו לפי תכנית באזל.'
+                      : 'Data is partial. Total insulin is unknown; gaps are not filled from a basal schedule.',
+                  ]),
+            ];
 
       const locale = request.locale;
       const latestDeviceStatus = [...deviceStatuses.records].sort(
@@ -222,7 +280,21 @@ export const createBrowserAiEvidenceProvider = (input: {
               : `COB ${formatNumber(latestDeviceStatus.cobGrams)} g`,
           ].filter((value): value is string => value !== undefined)
         : [];
-      const treatmentFacts = treatments.records
+      const visibleTreatments =
+        treatments?.freshness.kind === 'fresh' && treatments.complete !== false
+          ? treatments.records.flatMap(record => {
+              const decoded = decodeBrowserNightscoutTreatment(record);
+              const timestampMs =
+                decoded === null ? undefined : treatmentTimestampMs(decoded);
+              return decoded !== null &&
+                timestampMs !== undefined &&
+                timestampMs >= period.startMs &&
+                timestampMs < period.endMs
+                ? [decoded]
+                : [];
+            })
+          : [];
+      const treatmentFacts = visibleTreatments
         .map(treatment => treatmentFact(treatment, locale))
         .filter((value): value is string => value !== undefined)
         .sort()
@@ -281,7 +353,8 @@ export const createBrowserAiEvidenceProvider = (input: {
           locale === 'he'
             ? 'אירועי טיפול מוצגים מתוך הטווח'
             : 'Displayed treatment events from the range'
-        }: ${treatmentFacts.length} / ${treatments.records.length}.`,
+        }: ${treatmentFacts.length} / ${visibleTreatments.length}.`,
+        ...insulinFacts,
         ...treatmentFacts.map(fact => `- ${fact}`),
         locale === 'he'
           ? 'הנתונים תיאוריים בלבד, עשויים להיות חסרים, ואינם הוראה לשינוי טיפול.'

@@ -1,3 +1,7 @@
+import {
+  MAX_NIGHTSCOUT_TIMESTAMP_MS,
+  parseNightscoutTimestampMs as timestamp,
+} from '../../utils/nightscoutTimestamp';
 import type {
   DailyInsulinSourceSummary,
   DailyOverviewPeriod,
@@ -9,22 +13,22 @@ interface Interval {
   endMs: number;
   units: number;
 }
+interface IntervalEvent {
+  timeMs: number;
+  interval: Interval;
+  starts: boolean;
+}
 
 const number = (value: unknown): number | undefined => {
   const parsed =
     typeof value === 'number'
       ? value
-      : typeof value === 'string' && value.trim()
+      : typeof value === 'string' &&
+        /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())
       ? Number(value)
       : NaN;
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 };
-const timestamp = (value: unknown): number =>
-  typeof value === 'number'
-    ? value
-    : typeof value === 'string'
-    ? Date.parse(value)
-    : NaN;
 const startTime = (record: Treatment): number => {
   for (const value of [record.created_at, record.timestamp, record.date]) {
     const parsed = timestamp(value);
@@ -35,24 +39,44 @@ const startTime = (record: Treatment): number => {
   return NaN;
 };
 const endTime = (record: Treatment, startMs: number): number => {
+  let hasExplicitEnd = false;
   for (const value of [record.endDate, record.endTime]) {
+    hasExplicitEnd ||= value != null;
     const parsed = timestamp(value);
     if (Number.isFinite(parsed)) {
       return parsed;
     }
   }
-  return startMs + (number(record.duration) ?? 0) * 60_000;
+  if (hasExplicitEnd) {
+    return NaN;
+  }
+  const duration = record.duration == null ? 0 : number(record.duration);
+  if (duration === undefined) {
+    return NaN;
+  }
+  const durationMs = Math.round(duration * 60_000);
+  return Number.isFinite(durationMs) &&
+    durationMs <= MAX_NIGHTSCOUT_TIMESTAMP_MS - startMs
+    ? startMs + durationMs
+    : NaN;
 };
 
 const deduplicate = (records: readonly Treatment[]): Treatment[] => {
   const byId = new Map<string, Treatment>();
   records.forEach((record, index) => {
-    const identity = record.syncIdentifier ?? record.identifier ?? record._id;
-    const key =
-      typeof identity === 'string' && identity ? identity : `row:${index}`;
+    const identity = [
+      record.syncIdentifier,
+      record.identifier,
+      record._id,
+    ].find(value => typeof value === 'string' && value.trim().length > 0);
+    const key = typeof identity === 'string' ? identity.trim() : `row:${index}`;
     const previous = byId.get(key);
-    const revision = (item: Treatment): number =>
-      timestamp(item.srvModified ?? item.modified_at) || 0;
+    const revision = (item: Treatment): number => {
+      const primary = timestamp(item.srvModified);
+      return Number.isFinite(primary)
+        ? primary
+        : timestamp(item.modified_at) || 0;
+    };
     if (!previous || revision(record) >= revision(previous)) {
       byId.set(key, record);
     }
@@ -64,7 +88,10 @@ const deduplicate = (records: readonly Treatment[]): Treatment[] => {
  * Recorded events only. Loop's uploader exports actual dose start/end and
  * amount=deliveredUnits for temp basals; .basal schedule doses are omitted.
  * https://github.com/LoopKit/NightscoutService/blob/dev/NightscoutServiceKit/Extensions/DoseEntry.swift
- * A generic programmed temp rate, profile, or gap cannot establish delivery.
+ * Only explicit deliveredUnits or Loop amount establishes basal quantity.
+ * A programmed rate, profile, elapsed time, or gap cannot establish delivery.
+ * When a completed dose crosses a boundary, its recorded total is allocated
+ * uniformly across its recorded duration; this does not claim pulse timestamps.
  */
 export const buildRecordedInsulinSummary = (
   records: readonly Treatment[],
@@ -98,13 +125,16 @@ export const buildRecordedInsulinSummary = (
         bolusKnown = false;
         continue;
       }
-      const extended =
+      const requiresDuration =
         /combo|extended/i.test(type) ||
         record.type === 'square' ||
         record.type === 'dual';
+      const interval = end > start;
       const overlaps =
         start < endMs &&
-        (extended && end > start ? end > startMs : start >= startMs);
+        (!Number.isFinite(end) ||
+          end < start ||
+          (interval ? end > startMs : start >= startMs));
       if (!overlaps) {
         continue;
       }
@@ -114,6 +144,8 @@ export const buildRecordedInsulinSummary = (
           : number(record.insulin);
       if (
         amount === undefined ||
+        !Number.isFinite(end) ||
+        end < start ||
         mutable ||
         end > observedAtMs ||
         record.type === 'dual' ||
@@ -122,14 +154,14 @@ export const buildRecordedInsulinSummary = (
         bolusKnown = false;
         continue;
       }
-      if (extended) {
-        if (end <= start) {
-          bolusKnown = false;
-          continue;
-        }
+      if (requiresDuration && !interval) {
+        bolusKnown = false;
+        continue;
+      }
+      if (interval) {
         bolusUnits +=
-          (amount * (Math.min(end, endMs) - Math.max(start, startMs))) /
-          (end - start);
+          amount *
+          ((Math.min(end, endMs) - Math.max(start, startMs)) / (end - start));
       } else {
         bolusUnits += amount;
       }
@@ -138,6 +170,7 @@ export const buildRecordedInsulinSummary = (
     if (
       !/^(Temp Basal|Basal)$/i.test(type) ||
       !Number.isFinite(start) ||
+      !Number.isFinite(end) ||
       end <= start ||
       mutable ||
       end > observedAtMs
@@ -147,21 +180,12 @@ export const buildRecordedInsulinSummary = (
     if (start >= endMs || end <= startMs) {
       continue;
     }
-    const hasExplicitAmount =
-      record.deliveredUnits != null || (loop && record.amount != null);
-    const explicitAmount =
+    const amount =
       record.deliveredUnits != null
         ? number(record.deliveredUnits)
         : loop
         ? number(record.amount)
         : undefined;
-    const absolute = number(record.absolute) ?? number(record.rate);
-    const isAbsolute = record.temp === undefined || record.temp === 'absolute';
-    const amount = hasExplicitAmount
-      ? explicitAmount
-      : loop && isAbsolute && absolute !== undefined
-      ? (absolute * (end - start)) / 3_600_000
-      : undefined;
     if (amount === undefined) {
       continue;
     }
@@ -172,32 +196,35 @@ export const buildRecordedInsulinSummary = (
     basalFingerprints.add(fingerprint);
     intervals.push({startMs: start, endMs: end, units: amount});
   }
-  const boundaries = [
-    ...new Set([
-      startMs,
-      endMs,
-      ...intervals.flatMap(interval => [
-        Math.max(startMs, interval.startMs),
-        Math.min(endMs, interval.endMs),
-      ]),
-    ]),
-  ].sort((left, right) => left - right);
+  const events: IntervalEvent[] = intervals.flatMap(interval => [
+    {timeMs: Math.max(startMs, interval.startMs), interval, starts: true},
+    {timeMs: Math.min(endMs, interval.endMs), interval, starts: false},
+  ]);
+  events.sort((left, right) => left.timeMs - right.timeMs);
+  const active = new Set<Interval>();
   let basalCoveredMs = 0;
   let basalUnits = 0;
-  for (let index = 1; index < boundaries.length; index++) {
-    const left = boundaries[index - 1]!;
-    const right = boundaries[index]!;
-    const active = intervals.filter(
-      interval => interval.startMs <= left && interval.endMs >= right,
-    );
-    // Conflicting records do not prove which delivery occurred in the overlap.
-    if (active.length !== 1) {
-      continue;
+  let left = startMs;
+  let index = 0;
+  // Sweep the boundaries once. Multiple active records leave that segment unknown.
+  while (index < events.length) {
+    const right = events[index]!.timeMs;
+    if (active.size === 1 && right > left) {
+      const interval = active.values().next().value!;
+      basalCoveredMs += right - left;
+      basalUnits +=
+        interval.units * ((right - left) / (interval.endMs - interval.startMs));
     }
-    const interval = active[0]!;
-    basalCoveredMs += right - left;
-    basalUnits +=
-      (interval.units * (right - left)) / (interval.endMs - interval.startMs);
+    // Apply all changes together, so an end and the next start at one time do not overlap.
+    while (index < events.length && events[index]!.timeMs === right) {
+      const event = events[index++]!;
+      if (event.starts) {
+        active.add(event.interval);
+      } else {
+        active.delete(event.interval);
+      }
+    }
+    left = right;
   }
   const evidence = {
     basalEvidence: 'recorded' as const,
@@ -207,12 +234,19 @@ export const buildRecordedInsulinSummary = (
       (basalCoveredMs / (endMs - startMs)) * 100,
     ),
   };
-  if (basalCoveredMs === endMs - startMs && bolusKnown) {
+  const basalKnown = basalCoveredMs > 0 && Number.isFinite(basalUnits);
+  bolusKnown &&= Number.isFinite(bolusUnits);
+  if (
+    basalCoveredMs === endMs - startMs &&
+    basalKnown &&
+    bolusKnown &&
+    Number.isFinite(basalUnits + bolusUnits)
+  ) {
     return {quality: 'available', basalUnits, bolusUnits, ...evidence};
   }
   return {
     quality: 'partial',
-    ...(basalCoveredMs > 0 ? {basalUnits} : {}),
+    ...(basalKnown ? {basalUnits} : {}),
     ...(bolusKnown ? {bolusUnits} : {}),
     ...evidence,
   };

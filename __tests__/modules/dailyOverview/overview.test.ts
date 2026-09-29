@@ -17,6 +17,106 @@ const localNoon = (year: number, month: number, day: number): number =>
   new Date(year, month, day, 12).getTime();
 
 describe('Daily Overview domain', () => {
+  it('preserves source freshness and makes omitted or invalid metadata explicitly unknown', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
+    const summarize = (
+      glucoseFreshness?: Parameters<
+        typeof buildDailyOverview
+      >[0]['source']['glucoseFreshness'],
+    ) =>
+      buildDailyOverview({
+        period,
+        asOfMs: period.startMs + 600_000,
+        expectedSampleIntervalMs: 300_000,
+        thresholds,
+        source: {
+          glucoseSamples: [{timestampMs: period.startMs, valueMgDl: 123}],
+          insulinSummary: {quality: 'unavailable'},
+          ...(glucoseFreshness ? {glucoseFreshness} : {}),
+        },
+      });
+    const stale = {
+      kind: 'stale' as const,
+      fetchedAtMs: period.startMs + 120_000,
+    };
+    expect(summarize(stale).glucoseFreshness).toEqual(stale);
+    expect(summarize(stale).ranges?.targetPercent).toBe(100);
+    expect(summarize().glucoseFreshness).toEqual({kind: 'unknown'});
+    expect(
+      summarize({kind: 'fresh', fetchedAtMs: NaN}).glucoseFreshness,
+    ).toEqual({kind: 'unknown'});
+  });
+
+  it('weights the observed duration of uneven readings without filling gaps', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
+    const overview = buildDailyOverview({
+      period,
+      asOfMs: period.startMs + 10 * 60_000,
+      expectedSampleIntervalMs: 5 * 60_000,
+      thresholds,
+      source: {
+        glucoseSamples: [
+          {timestampMs: period.startMs, valueMgDl: 100},
+          {timestampMs: period.startMs + 60_000, valueMgDl: 200},
+        ],
+        insulinSummary: {quality: 'unavailable'},
+      },
+    });
+    expect(overview.ranges?.targetPercent).toBe(16.67);
+    expect(overview.coveragePercent).toBe(60);
+    expect(overview.coverageQuality).toBe('low');
+    expect(overview.meanGlucoseMgDl).toBe(150);
+    expect(overview.validSampleCount).toBe(2);
+  });
+
+  it('excludes daily outliers from sample statistics as well as elapsed ranges', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
+    const overview = buildDailyOverview({
+      period,
+      asOfMs: period.startMs + 15 * 60_000,
+      expectedSampleIntervalMs: 5 * 60_000,
+      thresholds,
+      source: {
+        glucoseSamples: [
+          {timestampMs: period.startMs, valueMgDl: 19},
+          {timestampMs: period.startMs + 5 * 60_000, valueMgDl: 120},
+          {timestampMs: period.startMs + 10 * 60_000, valueMgDl: 601},
+        ],
+        insulinSummary: {quality: 'unavailable'},
+      },
+    });
+    expect(overview).toMatchObject({
+      validSampleCount: 1,
+      excludedSampleCount: 2,
+      meanGlucoseMgDl: 120,
+      minimumGlucoseMgDl: 120,
+      maximumGlucoseMgDl: 120,
+      coveragePercent: 33.33,
+    });
+    expect(overview.ranges?.targetPercent).toBe(100);
+  });
+
+  it('uses midnight carry-in for observed time without adding it to the selected-day mean', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
+    const overview = buildDailyOverview({
+      period,
+      asOfMs: period.startMs + 10 * 60_000,
+      expectedSampleIntervalMs: 5 * 60_000,
+      thresholds,
+      source: {
+        glucoseSamples: [
+          {timestampMs: period.startMs - 2 * 60_000, valueMgDl: 100},
+          {timestampMs: period.startMs + 3 * 60_000, valueMgDl: 200},
+        ],
+        insulinSummary: {quality: 'unavailable'},
+      },
+    });
+    expect(overview.coveragePercent).toBe(80);
+    expect(overview.ranges?.targetPercent).toBe(37.5);
+    expect(overview.validSampleCount).toBe(1);
+    expect(overview.meanGlucoseMgDl).toBe(200);
+  });
+
   it('keeps only recorded bolus from legacy estimates and never totals partial basal coverage', () => {
     const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
     const summarize = (

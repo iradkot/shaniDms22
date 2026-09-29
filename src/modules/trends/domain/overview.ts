@@ -118,9 +118,8 @@ const roundTo = (value: number, digits = 2): number => {
 const MINUTE_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
 
-const normalizedTimeZoneOffset = (
-  input: BuildTrendsOverviewInput,
-): number => input.timeZoneOffsetMinutes ?? 0;
+const normalizedTimeZoneOffset = (input: BuildTrendsOverviewInput): number =>
+  input.timeZoneOffsetMinutes ?? 0;
 
 const assertFinite = (value: number, label: string): void => {
   if (!Number.isFinite(value)) {
@@ -132,7 +131,9 @@ const assertPeriod = (period: TrendsPeriod): void => {
   assertTrendsPeriod(period);
 };
 
-const assertThresholds = (thresholds: TrendsRangeThresholds): void => {
+export const assertTrendsRangeThresholds = (
+  thresholds: TrendsRangeThresholds,
+): void => {
   const ordered = [
     thresholds.veryLowMaxMgDl,
     thresholds.targetMinMgDl,
@@ -165,9 +166,10 @@ const sameThresholds = (
   left.targetMaxMgDl === right.targetMaxMgDl &&
   left.highMaxMgDl === right.highMaxMgDl;
 
-const duration = (period: TrendsPeriod): number => period.endMs - period.startMs;
+const duration = (period: TrendsPeriod): number =>
+  period.endMs - period.startMs;
 
-const classify = (
+export const classifyTrendsRange = (
   valueMgDl: number,
   thresholds: TrendsRangeThresholds,
 ): keyof TrendsRangeDistribution => {
@@ -210,7 +212,7 @@ export const buildTrendsRangeSummary = (
   input: BuildTrendsRangeSummaryInput,
 ): TrendsRangeSummary => {
   assertPeriod(input.period);
-  assertThresholds(input.thresholds);
+  assertTrendsRangeThresholds(input.thresholds);
   const sampleSet = prepareTrendsSampleSet(input);
   const values = sampleSet.valuesMgDl;
   if (values.length === 0) {
@@ -218,7 +220,7 @@ export const buildTrendsRangeSummary = (
   }
   const counts = emptyRangeCounts();
   values.forEach(value => {
-    counts[classify(value, input.thresholds)] += 1;
+    counts[classifyTrendsRange(value, input.thresholds)] += 1;
   });
   const percent = (count: number): number =>
     roundTo((count / values.length) * 100);
@@ -299,18 +301,16 @@ const buildGlycemiaRiskIndex = (
 ): GlycemiaRiskIndex => {
   const canonicalCounts = emptyRangeCounts();
   values.forEach(value => {
-    canonicalCounts[classify(value, CANONICAL_GRI_THRESHOLDS)] += 1;
+    canonicalCounts[classifyTrendsRange(value, CANONICAL_GRI_THRESHOLDS)] += 1;
   });
-  const rawPercent = (count: number): number =>
-    (count / values.length) * 100;
+  const rawPercent = (count: number): number => (count / values.length) * 100;
   const veryLow = rawPercent(canonicalCounts.veryLowPercent);
   const low = rawPercent(canonicalCounts.lowPercent);
   const high = rawPercent(canonicalCounts.highPercent);
   const veryHigh = rawPercent(canonicalCounts.veryHighPercent);
   const hypoglycemiaComponent = veryLow + 0.8 * low;
   const hyperglycemiaComponent = veryHigh + 0.5 * high;
-  const griRaw =
-    3 * veryLow + 2.4 * low + 1.6 * veryHigh + 0.8 * high;
+  const griRaw = 3 * veryLow + 2.4 * low + 1.6 * veryHigh + 0.8 * high;
   return {
     formulaVersion: 'gri-2022',
     hypoglycemiaComponent: roundTo(hypoglycemiaComponent),
@@ -324,7 +324,7 @@ export const buildTrendsOverview = (
   input: BuildTrendsOverviewInput,
 ): TrendsOverview => {
   assertPeriod(input.period);
-  assertThresholds(input.thresholds);
+  assertTrendsRangeThresholds(input.thresholds);
   const timeZoneOffsetMinutes = normalizedTimeZoneOffset(input);
   if (
     !Number.isFinite(timeZoneOffsetMinutes) ||
@@ -335,7 +335,9 @@ export const buildTrendsOverview = (
       'The Trends time-zone offset must be a whole number of minutes between -840 and 840.',
     );
   }
-  const {summary, rawMean} = describeRangeSummary(buildTrendsRangeSummary(input));
+  const {summary, rawMean} = describeRangeSummary(
+    buildTrendsRangeSummary(input),
+  );
   const {sampleSet: prepared, ranges} = summary;
   const values = prepared.valuesMgDl;
   const localDays = new Set(
@@ -371,8 +373,7 @@ export const buildTrendsOverview = (
     };
   }
 
-  const representative =
-    prepared.interpretationQuality === 'representative';
+  const representative = prepared.interpretationQuality === 'representative';
 
   return {
     period: input.period,
@@ -393,7 +394,9 @@ export const buildTrendsOverview = (
     meanGlucoseMgDl: summary.meanGlucoseMgDl,
     // Published GMI equation for mean glucose expressed in mg/dL. It is only
     // presented as representative after the separate duration/coverage gate.
-    gmiPercent: representative ? roundTo(3.31 + 0.02392 * rawMean!, 1) : undefined,
+    gmiPercent: representative
+      ? roundTo(3.31 + 0.02392 * rawMean!, 1)
+      : undefined,
     gmiFormulaVersion: representative ? 'gmi-2018' : undefined,
     gri: representative ? buildGlycemiaRiskIndex(values) : undefined,
     coefficientOfVariationPercent: summary.coefficientOfVariationPercent,
@@ -461,8 +464,7 @@ export const buildMatchedPeriodComparison = (input: {
               1,
             ),
             veryLowRangePercentagePoints: roundTo(
-              current.ranges!.veryLowPercent -
-                previous.ranges!.veryLowPercent,
+              current.ranges!.veryLowPercent - previous.ranges!.veryLowPercent,
             ),
             lowRangePercentagePoints: roundTo(
               current.ranges!.lowPercent - previous.ranges!.lowPercent,

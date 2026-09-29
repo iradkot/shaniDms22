@@ -108,13 +108,17 @@ The context accepts an inclusive start and exclusive end. It handles the
 device-status decoding and per-resource availability. It shares pending work
 and a bounded 60-second memory cache by account/source revision and exact
 range. Explicit refresh bypasses that cache. Late responses from an earlier
-source are rejected. `insulinRangeMetrics` owns delivery totals and the policy
-for whether their source data is sufficiently complete.
+source are rejected. `insulinRangeMetrics` owns explicitly **modeled** totals and
+their source-availability checks. Its basal timeline can fill from a programmed
+profile; it does not establish actual delivered insulin. Daily Overview and the
+summary widget instead use the recorded-dose path described in
+[Data access and calculations](DATA_ACCESS.md).
 
 Raw record readers (for example, journal links and profile history) use the
 canonical API wrappers and `api/nightscoutRecords.ts` transport. Uncached
 readers do not write generic offline storage. Failed or malformed responses
-reject; they cannot masquerade as successful empty ranges. The native direct
+reject; they cannot masquerade as successful empty ranges. The legacy uncached
+glucose reader requires `throwOnError: true` to preserve that distinction. The native direct
 connection and the web authenticated proxy remain platform boundaries.
 
 Range reads also verify completeness. Nightscout v1 applies `count` without

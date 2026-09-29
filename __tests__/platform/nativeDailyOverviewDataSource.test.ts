@@ -104,7 +104,29 @@ describe('createNativeDailyOverviewDataSource recorded insulin', () => {
     });
     expect(await source.loadDailyOverview(period)).toEqual({
       glucoseSamples: [{timestampMs: period.startMs, valueMgDl: 123}],
+      glucoseFreshness: {kind: 'unknown'},
       insulinSummary: {quality: 'unavailable'},
+    });
+  });
+  it('keeps cached glucose samples and their original freshness without substituting the current cutoff', async () => {
+    const freshness = {kind: 'stale' as const, fetchedAtMs: clock - 3_600_000};
+    const samples = [{timestampMs: period.startMs, valueMgDl: 123}];
+    const loadGlucoseSamples = jest.fn(async () => []);
+    const loadGlucoseSnapshot = jest.fn(async () => ({samples, freshness}));
+    const source = createNativeDailyOverviewDataSource({
+      glucoseDataSource: {loadGlucoseSamples, loadGlucoseSnapshot},
+      loadInsulinSummary: async () => ({quality: 'unavailable'}),
+      now: () => clock,
+    });
+    expect(await source.loadDailyOverview(period, {asOfMs: clock})).toEqual({
+      glucoseSamples: samples,
+      glucoseFreshness: freshness,
+      insulinSummary: {quality: 'unavailable'},
+    });
+    expect(loadGlucoseSamples).not.toHaveBeenCalled();
+    expect(loadGlucoseSnapshot).toHaveBeenCalledWith({
+      startMs: period.startMs - 300_000,
+      endMs: clock,
     });
   });
   it('uses one exclusive current cutoff for insulin and glucose', async () => {
@@ -126,7 +148,7 @@ describe('createNativeDailyOverviewDataSource recorded insulin', () => {
       new Date(clock - 60_000),
     );
     expect(loadGlucoseSamples).toHaveBeenCalledWith({
-      ...period,
+      startMs: period.startMs - 5 * 60_000,
       endMs: clock - 60_000,
     });
   });
@@ -140,7 +162,9 @@ describe('createNativeDailyOverviewDataSource recorded insulin', () => {
       active--;
       expect(end.getHours()).toBe(10);
       expect(end.getMinutes()).toBe(30);
-      if (start.getDate() === 24) {throw new Error('unavailable');}
+      if (start.getDate() === 24) {
+        throw new Error('unavailable');
+      }
       return {
         quality: 'partial' as const,
         bolusUnits: 2,

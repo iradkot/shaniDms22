@@ -6,7 +6,9 @@ import {
   sumBasalDelivery,
 } from 'app/utils/insulin.utils/basalDeliveryTimeline';
 
-export type InsulinRangeMetrics = {
+/** Profile-based approximation for legacy charts and analysis, not recorded delivery. */
+export type ModeledInsulinRangeMetrics = {
+  readonly basalEstimated: true;
   totalBasal: number;
   totalTempBasal: number;
   totalBolus: number;
@@ -29,8 +31,8 @@ function hasValidScheduleTime(entry: TimeValueEntry): boolean {
   );
 }
 
-/** An incomplete or malformed schedule cannot establish a delivery total. */
-export function hasAuthoritativeBasalProfile(profile: BasalProfile): boolean {
+/** Validates a schedule for modeling; a valid schedule does not prove delivery. */
+export function hasUsableModeledBasalProfile(profile: BasalProfile): boolean {
   return (
     profile.length > 0 &&
     profile.every(
@@ -44,25 +46,30 @@ export function hasAuthoritativeBasalProfile(profile: BasalProfile): boolean {
   );
 }
 
-/** Charts may show labelled stale evidence; current numeric totals require fresh inputs. */
-export function hasAuthoritativeInsulinTotalsContext(
+/** Fresh, valid inputs are required even for profile-based estimates. */
+export function hasUsableModeledInsulinContext(
   context: InsulinContext,
 ): boolean {
   return (
     context.availability.treatments === 'available' &&
     context.availability.profile === 'available' &&
-    hasAuthoritativeBasalProfile(context.basalProfileData)
+    hasUsableModeledBasalProfile(context.basalProfileData)
   );
 }
 
-export function calculateInsulinContextMetrics(
+/**
+ * Integrates the active profile and programmed temp-basal events. Missing basal
+ * intervals use the profile; do not display these values as recorded delivery.
+ * Use buildRecordedInsulinSummary / recordedInsulinDataSource for daily totals.
+ */
+export function calculateModeledInsulinContextMetrics(
   context: InsulinContext,
   start: Date,
   end: Date,
-): InsulinRangeMetrics {
-  if (!hasAuthoritativeInsulinTotalsContext(context)) {
+): ModeledInsulinRangeMetrics {
+  if (!hasUsableModeledInsulinContext(context)) {
     throw new Error(
-      'Insulin totals are unavailable because current, valid treatment and basal-profile data is required.',
+      'Modeled insulin totals require current, valid treatment and basal-profile data.',
     );
   }
   const {totalBasal, totalBolus} = calculateTotalInsulin(
@@ -85,6 +92,7 @@ export function calculateInsulinContextMetrics(
     0,
   );
   return {
+    basalEstimated: true,
     totalBasal,
     totalTempBasal,
     totalBolus,
@@ -93,13 +101,26 @@ export function calculateInsulinContextMetrics(
   };
 }
 
-export async function getInsulinRangeMetrics(
+export async function getModeledInsulinRangeMetrics(
   start: Date,
   end: Date,
-): Promise<InsulinRangeMetrics> {
+): Promise<ModeledInsulinRangeMetrics> {
   const context = await loadInsulinContext({
     startMs: start.getTime(),
     endMs: end.getTime(),
   });
-  return calculateInsulinContextMetrics(context, start, end);
+  return calculateModeledInsulinContextMetrics(context, start, end);
 }
+
+/** @deprecated Use ModeledInsulinRangeMetrics; these values include scheduled basal. */
+export type InsulinRangeMetrics = ModeledInsulinRangeMetrics;
+/** @deprecated Use hasUsableModeledBasalProfile; a profile cannot prove delivery. */
+export const hasAuthoritativeBasalProfile = hasUsableModeledBasalProfile;
+/** @deprecated Use hasUsableModeledInsulinContext; this checks modeled inputs only. */
+export const hasAuthoritativeInsulinTotalsContext =
+  hasUsableModeledInsulinContext;
+/** @deprecated Use calculateModeledInsulinContextMetrics for explicit estimate semantics. */
+export const calculateInsulinContextMetrics =
+  calculateModeledInsulinContextMetrics;
+/** @deprecated Use getModeledInsulinRangeMetrics for explicit estimate semantics. */
+export const getInsulinRangeMetrics = getModeledInsulinRangeMetrics;

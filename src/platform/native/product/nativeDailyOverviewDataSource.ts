@@ -7,7 +7,11 @@ import {
   buildDailyInsulinComparison,
   getDailyInsulinComparisonWindows,
 } from '../../../modules/dailyOverview';
-import type {TrendsDataSource} from '../../../modules/trends';
+import {
+  DEFAULT_DAILY_CGM_INTERVAL_MS,
+  type TrendsDataSource,
+  type TrendsGlucoseSnapshot,
+} from '../../../modules/trends';
 import {
   recordedInsulinDataSource,
   type RecordedDailyInsulinBundle,
@@ -100,13 +104,31 @@ export const createNativeDailyOverviewDataSource = (
   return {
     async loadDailyOverview(period, options) {
       const cutoff = Math.min(period.endMs, options?.asOfMs ?? now());
-      const [glucoseSamples, insulinSummary] = await Promise.all([
-        cutoff > period.startMs
-          ? glucoseDataSource.loadGlucoseSamples({...period, endMs: cutoff})
-          : Promise.resolve([]),
+      const glucosePeriod = {
+        startMs: period.startMs - DEFAULT_DAILY_CGM_INTERVAL_MS,
+        endMs: cutoff,
+      };
+      const loadGlucose = async (): Promise<TrendsGlucoseSnapshot> => {
+        if (cutoff <= period.startMs) {
+          return {samples: [], freshness: {kind: 'unknown'}};
+        }
+        if (glucoseDataSource.loadGlucoseSnapshot) {
+          return glucoseDataSource.loadGlucoseSnapshot(glucosePeriod);
+        }
+        return {
+          samples: await glucoseDataSource.loadGlucoseSamples(glucosePeriod),
+          freshness: {kind: 'unknown'},
+        };
+      };
+      const [glucose, insulinSummary] = await Promise.all([
+        loadGlucose(),
         loadSummary(period.startMs, cutoff),
       ]);
-      return {glucoseSamples, insulinSummary};
+      return {
+        glucoseSamples: glucose.samples,
+        glucoseFreshness: glucose.freshness,
+        insulinSummary,
+      };
     },
     async loadDailyInsulinComparison(request) {
       if (loadInsulinSummary.loadDailyBundle) {

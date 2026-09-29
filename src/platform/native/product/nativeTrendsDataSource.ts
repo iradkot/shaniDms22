@@ -1,5 +1,12 @@
-import {fetchBgDataForDateRange} from '../../../api/apiRequests';
-import type {TrendsDataSource} from '../../../modules/trends';
+import {
+  fetchBgDataForDateRangeWithMetadata,
+  type NightscoutRangeResult,
+} from '../../../api/apiRequests';
+import type {
+  TrendsDataSource,
+  TrendsGlucoseSnapshot,
+  TrendsPeriod,
+} from '../../../modules/trends';
 import {isE2E} from '../../../utils/e2e';
 import {makeE2EBgSamplesForRange} from '../../../utils/e2eFixtures';
 
@@ -15,6 +22,10 @@ export interface NativeTrendsDataSourceDependencies {
     start: Date,
     end: Date,
   ) => Promise<readonly NightscoutGlucoseRecord[]>;
+  readonly fetchRangeWithMetadata?: (
+    start: Date,
+    end: Date,
+  ) => Promise<NightscoutRangeResult<NightscoutGlucoseRecord>>;
   readonly fixtureRange?: (
     start: Date,
     end: Date,
@@ -26,22 +37,43 @@ export interface NativeTrendsDataSourceDependencies {
 export const createNativeTrendsDataSource = (
   dependencies: NativeTrendsDataSourceDependencies = {},
 ): TrendsDataSource => {
-  const fetchRange = dependencies.fetchRange ?? fetchBgDataForDateRange;
-  const fixtureRange =
-    dependencies.fixtureRange ?? makeE2EBgSamplesForRange;
+  const fetchRangeWithMetadata =
+    dependencies.fetchRangeWithMetadata ??
+    (dependencies.fetchRange ? undefined : fetchBgDataForDateRangeWithMetadata);
+  const fixtureRange = dependencies.fixtureRange ?? makeE2EBgSamplesForRange;
   const useE2EFixtures = dependencies.useE2EFixtures ?? isE2E;
 
-  return {
-    async loadGlucoseSamples(period) {
-      const start = new Date(period.startMs);
-      const end = new Date(period.endMs);
-      const records = useE2EFixtures
+  const loadGlucoseSnapshot = async (
+    period: TrendsPeriod,
+  ): Promise<TrendsGlucoseSnapshot> => {
+    const start = new Date(period.startMs);
+    const end = new Date(period.endMs);
+    const result =
+      !useE2EFixtures && fetchRangeWithMetadata
+        ? await fetchRangeWithMetadata(start, end)
+        : undefined;
+    const records =
+      result?.records ??
+      (useE2EFixtures
         ? fixtureRange(start, end)
-        : await fetchRange(start, end);
-      return records.map(record => ({
+        : await dependencies.fetchRange!(start, end));
+    return {
+      samples: records.map(record => ({
         timestampMs: record.date,
         valueMgDl: record.sgv,
-      }));
+      })),
+      freshness: result
+        ? {
+            kind: result.freshness.kind,
+            fetchedAtMs: result.freshness.fetchedAtMs,
+          }
+        : {kind: 'unknown'},
+    };
+  };
+  return {
+    loadGlucoseSnapshot,
+    async loadGlucoseSamples(period) {
+      return (await loadGlucoseSnapshot(period)).samples;
     },
   };
 };

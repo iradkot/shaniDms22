@@ -1,5 +1,9 @@
 import type {JournalWorkspace} from 'app/modules/journal';
 import {
+  buildPreviousDaySummary,
+  getPreviousDaySummaryWindow,
+} from 'app/modules/previousDaySummary';
+import {
   BrowserNightscoutClient,
   createBrowserNightscoutDataSources,
   loadBrowserCurrentSnapshot,
@@ -28,38 +32,41 @@ const journal = {
   },
   activities: {getListSnapshot: () => ({items: []})},
 } as unknown as JournalWorkspace;
-const clientFixture = () => ({
-  readEntries: jest.fn(async () =>
-    range([{_id: 'g1', date: dayStartMs + HOUR, sgv: 120}]),
-  ),
-  readTreatments: jest.fn(async () =>
-    range([
-      {
-        _id: 'prior-bolus',
-        created_at: new Date(dayStartMs - HOUR).toISOString(),
-        eventType: 'Correction Bolus',
-        insulin: 9,
-      },
-      {
-        _id: 'carryover',
-        created_at: new Date(dayStartMs - HOUR / 2).toISOString(),
-        eventType: 'Temp Basal',
-        rate: 2,
-        duration: 60,
-      },
-      {
-        _id: 'bolus',
-        created_at: new Date(dayStartMs + HOUR).toISOString(),
-        eventType: 'Correction Bolus',
-        insulin: 3,
-      },
-    ]),
-  ),
-  readDeviceStatusesForRange: jest.fn(async () => range([])),
-  readBasalProfile: jest.fn(async () =>
-    range([{entries: [{secondsFromMidnight: 0, rateUnitsPerHour: 1}]}]),
-  ),
-});
+const clientFixture = () => {
+  const fixture = {
+    readEntries: jest.fn(async () =>
+      range([{_id: 'g1', date: dayStartMs + HOUR, sgv: 120}]),
+    ),
+    readTreatments: jest.fn(async () =>
+      range([
+        {
+          _id: 'prior-bolus',
+          created_at: new Date(dayStartMs - HOUR).toISOString(),
+          eventType: 'Correction Bolus',
+          insulin: 9,
+        },
+        {
+          _id: 'carryover',
+          created_at: new Date(dayStartMs - HOUR / 2).toISOString(),
+          eventType: 'Temp Basal',
+          rate: 2,
+          duration: 60,
+        },
+        {
+          _id: 'bolus',
+          created_at: new Date(dayStartMs + HOUR).toISOString(),
+          eventType: 'Correction Bolus',
+          insulin: 3,
+        },
+      ]),
+    ),
+    readDeviceStatusesForRange: jest.fn(async () => range([])),
+    readBasalProfile: jest.fn(async () =>
+      range([{entries: [{secondsFromMidnight: 0, rateUnitsPerHour: 1}]}]),
+    ),
+  };
+  return {...fixture, readRecordedTreatments: fixture.readTreatments};
+};
 const sources = (client: ReturnType<typeof clientFixture>) =>
   createBrowserNightscoutDataSources({
     client: client as unknown as BrowserNightscoutClient,
@@ -77,36 +84,56 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
     }));
     const client = {
       ...clientFixture(),
-      readEntries: jest.fn(async (startMs: number, endMs: number) => range(
-        glucose.filter(value => value.date >= startMs && value.date < endMs),
-      )),
-      readDeviceStatuses: jest.fn(async (startMs: number, endMs: number) => range(
-        startMs <= nowMs - 10_000 && endMs > nowMs - 10_000 ? [{
-          createdAtMs: nowMs - 10_000,
-          forecastStatus: {
-            ts: nowMs - 10_000,
-            loopTimestampMs: nowMs - 30_000,
-            loopPrediction: {startMs: latestMs, values: [130, 128, 126, 124, 122, 120, 118]},
-            iobUnits: -0.25, iobTimestampMs: latestMs,
-            cobGrams: 12, cobTimestampMs: latestMs,
-          },
-        }] : [],
-      )),
+      readEntries: jest.fn(async (startMs: number, endMs: number) =>
+        range(
+          glucose.filter(value => value.date >= startMs && value.date < endMs),
+        ),
+      ),
+      readDeviceStatuses: jest.fn(async (startMs: number, endMs: number) =>
+        range(
+          startMs <= nowMs - 10_000 && endMs > nowMs - 10_000
+            ? [
+                {
+                  createdAtMs: nowMs - 10_000,
+                  forecastStatus: {
+                    ts: nowMs - 10_000,
+                    loopTimestampMs: nowMs - 30_000,
+                    loopPrediction: {
+                      startMs: latestMs,
+                      values: [130, 128, 126, 124, 122, 120, 118],
+                    },
+                    iobUnits: -0.25,
+                    iobTimestampMs: latestMs,
+                    cobGrams: 12,
+                    cobTimestampMs: latestMs,
+                  },
+                },
+              ]
+            : [],
+        ),
+      ),
     };
     const source = createBrowserNightscoutDataSources({
       client: client as unknown as BrowserNightscoutClient,
       sourceId: 'source-1', locale: 'en', journal, now: () => nowMs,
     });
     const snapshot = await source.dayGraph.loadGlucoseForecast!();
-    expect(snapshot.series.find(series => series.id === 'loop')?.points)
-      .toEqual(expect.arrayContaining([expect.objectContaining({ts: latestMs + 300_000, sgv: 128})]));
+    expect(
+      snapshot.series.find(series => series.id === 'loop')?.points,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ts: latestMs + 300_000, sgv: 128}),
+      ]),
+    );
     expect(snapshot.context).toMatchObject({iobUnits: -0.25, cobGrams: 12});
     expect(client.readTreatments).not.toHaveBeenCalled();
     expect(client.readBasalProfile).not.toHaveBeenCalled();
     expect(client.readDeviceStatusesForRange).not.toHaveBeenCalled();
-    expect(client.readDeviceStatuses.mock.calls.every(([start, end]) =>
-      end - start <= 2 * HOUR,
-    )).toBe(true);
+    expect(
+      client.readDeviceStatuses.mock.calls.every(
+        ([start, end]) => end - start <= 2 * HOUR,
+      ),
+    ).toBe(true);
   });
 
   it('forwards the calendar signal to browser glucose reads and stops queued chunks on abort', async () => {
@@ -118,9 +145,13 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
       await pending;
       return range([]);
     });
-    const request = sources(client).dayGraph.loadCalendarGlucose!({
-      dayStartMs, dayEndMs: dayStartMs + 31 * 24 * HOUR,
-    }, {signal: controller.signal});
+    const request = sources(client).dayGraph.loadCalendarGlucose!(
+      {
+        dayStartMs,
+        dayEndMs: dayStartMs + 31 * 24 * HOUR,
+      },
+      {signal: controller.signal},
+    );
     expect(client.readEntries).toHaveBeenNthCalledWith(
       1, dayStartMs, dayStartMs + 7 * 24 * HOUR, controller.signal,
     );
@@ -135,7 +166,10 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
 
   it('loads only glucose in bounded calendar chunks and proves empty ranges only with completeness metadata', async () => {
     const client = clientFixture();
-    client.readEntries.mockImplementation(async () => ({...range([]), complete: true}));
+    client.readEntries.mockImplementation(async () => ({
+      ...range([]),
+      complete: true,
+    }));
     const result = await sources(client).dayGraph.loadCalendarGlucose!({
       dayStartMs, dayEndMs: dayStartMs + 31 * 24 * HOUR,
     });
@@ -148,7 +182,9 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
   });
 
   it('does not infer completeness from successfully decoded glucose without raw metadata', async () => {
-    const result = await sources(clientFixture()).dayGraph.loadCalendarGlucose!({dayStartMs, dayEndMs});
+    const result = await sources(clientFixture()).dayGraph.loadCalendarGlucose!(
+      {dayStartMs, dayEndMs},
+    );
     expect(result.glucoseSamples).toHaveLength(1);
     expect(result.complete).toBe(false);
     expect(result.freshness.kind).toBe('stale');
@@ -157,9 +193,9 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
   it('retains successful glucose chunks when another chunk is unavailable', async () => {
     const client = clientFixture();
     client.readEntries.mockRejectedValueOnce(new Error('offline'));
-    client.readEntries.mockResolvedValueOnce(range([
-      {_id: 'g2', date: dayStartMs + 8 * 24 * HOUR, sgv: 120},
-    ]));
+    client.readEntries.mockResolvedValueOnce(
+      range([{_id: 'g2', date: dayStartMs + 8 * 24 * HOUR, sgv: 120}]),
+    );
     const result = await sources(client).dayGraph.loadCalendarGlucose!({
       dayStartMs, dayEndMs: dayStartMs + 14 * 24 * HOUR,
     });
@@ -187,9 +223,15 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
   });
 
   it('rejects a calendar load if any chunk detects a source identity change', async () => {
-    const requestJson = jest.fn()
-      .mockResolvedValueOnce({version: 1, data: [{date: dayStartMs + HOUR, sgv: 120}]})
-      .mockRejectedValueOnce(new WebApiError(409, 'nightscout_identity_mismatch', 'changed'));
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({
+        version: 1,
+        data: [{date: dayStartMs + HOUR, sgv: 120}],
+      })
+      .mockRejectedValueOnce(
+        new WebApiError(409, 'nightscout_identity_mismatch', 'changed'),
+      );
     const client = new BrowserNightscoutClient({
       api: {requestJson},
       storage: {
@@ -200,11 +242,17 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
       },
       sourceId: 'source-1', workspaceId: 'workspace-1', now: () => dayEndMs,
     });
-    await expect(createBrowserNightscoutDataSources({
-      client, sourceId: 'source-1', locale: 'en', journal,
-    }).dayGraph.loadCalendarGlucose!({
-      dayStartMs, dayEndMs: dayStartMs + 14 * 24 * HOUR,
-    })).rejects.toThrow('source changed');
+    await expect(
+      createBrowserNightscoutDataSources({
+        client,
+        sourceId: 'source-1',
+        locale: 'en',
+        journal,
+      }).dayGraph.loadCalendarGlucose!({
+        dayStartMs,
+        dayEndMs: dayStartMs + 14 * 24 * HOUR,
+      }),
+    ).rejects.toThrow('source changed');
   });
 
   it('does not display an old IOB/COB reading as current alongside fresh glucose', async () => {
@@ -273,9 +321,81 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
       basalCoveragePercent: 0,
     });
     expect(client.readTreatments).toHaveBeenCalledWith(
-      dayStartMs - 24 * HOUR,
+      dayStartMs - 8 * 24 * HOUR,
+      dayEndMs - 1,
+    );
+    expect(client.readEntries).toHaveBeenCalledWith(
+      dayStartMs - 300_000,
       dayEndMs,
     );
+    expect(client.readBasalProfile).not.toHaveBeenCalled();
+  });
+
+  it('retains cached glucose freshness through trends and daily adapters', async () => {
+    const fixture = clientFixture();
+    const freshness = {kind: 'stale' as const, fetchedAtMs: dayStartMs + HOUR};
+    const client = {
+      ...fixture,
+      readEntries: jest.fn(async () => ({
+        records: [{date: dayStartMs + HOUR, sgv: 120}],
+        freshness,
+      })),
+    };
+    const adapters = createBrowserNightscoutDataSources({
+      client: client as unknown as BrowserNightscoutClient,
+      sourceId: 'source-1',
+      locale: 'en',
+      journal,
+    });
+    const period = {startMs: dayStartMs, endMs: dayEndMs};
+    expect(
+      (await adapters.trends.loadGlucoseSnapshot!(period)).freshness,
+    ).toEqual(freshness);
+    const daily = await adapters.dailyOverview.loadDailyOverview(period);
+    expect(daily.glucoseFreshness).toEqual(freshness);
+    expect(daily.glucoseSamples).toEqual([
+      {timestampMs: dayStartMs + HOUR, valueMgDl: 120},
+    ]);
+  });
+
+  it('shares browser recorded history with same-time yesterday and week comparisons', async () => {
+    const client = clientFixture();
+    const cutoff = dayStartMs + 12 * HOUR;
+    client.readTreatments.mockResolvedValue(
+      range(
+        Array.from({length: 8}, (_, index) => ({
+          _id: `bolus-${index}`,
+          eventType: 'Correction Bolus',
+          created_at: new Date(
+            dayStartMs - index * 24 * HOUR + HOUR,
+          ).toISOString(),
+          insulin: 2,
+        })),
+      ),
+    );
+    const daily = sources(client).dailyOverview;
+    const [today, comparison] = await Promise.all([
+      daily.loadDailyOverview(
+        {startMs: dayStartMs, endMs: dayEndMs},
+        {asOfMs: cutoff},
+      ),
+      daily.loadDailyInsulinComparison!({
+        period: {startMs: dayStartMs, endMs: dayEndMs},
+        asOfMs: cutoff,
+      }),
+    ]);
+    expect(today.insulinSummary).toMatchObject({
+      quality: 'partial',
+      bolusUnits: 2,
+    });
+    expect(comparison).toMatchObject({
+      status: 'available',
+      cutoffTimestampMs: cutoff,
+      isPartialDay: true,
+      weekAverage: {quality: 'partial'},
+    });
+    expect(comparison.weekAverage?.bolusUnits).toBeCloseTo(2);
+    expect(client.readTreatments).toHaveBeenCalledTimes(1);
     expect(client.readBasalProfile).not.toHaveBeenCalled();
   });
 
@@ -301,7 +421,36 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
     ).toHaveLength(1);
   });
 
-  it('preserves local summary events during a treatment outage and uses the same insulin totals when available', async () => {
+  it('never turns profile-only basal into a known total at the previous-day presentation boundary', async () => {
+    const client = clientFixture();
+    const window = getPreviousDaySummaryWindow({
+      anchorDayStartMs: dayStartMs,
+      nowMs: dayEndMs + 12 * HOUR,
+    });
+    const snapshot = await sources(
+      client,
+    ).previousDaySummary.loadPreviousDaySummary(window.period);
+    const summary = buildPreviousDaySummary({
+      window,
+      expectedSampleIntervalMs: 300_000,
+      thresholds: {
+        veryLowMaxMgDl: 54,
+        targetMinMgDl: 70,
+        targetMaxMgDl: 180,
+        highMaxMgDl: 250,
+      },
+      source: snapshot,
+    });
+    expect(summary.insulinSummary).toEqual({quality: 'unavailable'});
+    expect(summary.insulinSummary).not.toHaveProperty('totalUnits');
+    expect(snapshot.glucoseSamples).toHaveLength(1);
+    expect(summary.events).toEqual(
+      expect.arrayContaining([expect.objectContaining({id: 'journal:meal-1'})]),
+    );
+    expect(client.readBasalProfile).not.toHaveBeenCalled();
+  });
+
+  it('preserves local summary events and glucose when recorded insulin is partial or unavailable', async () => {
     const client = clientFixture();
     const source = sources(client).previousDaySummary;
     expect(
@@ -311,7 +460,7 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
           endMs: dayEndMs,
         })
       ).insulinSummary,
-    ).toEqual({quality: 'available', basalUnits: 24.5, bolusUnits: 3});
+    ).toEqual({quality: 'unavailable'});
     client.readTreatments.mockRejectedValue(new Error('offline'));
     const result = await source.loadPreviousDaySummary({
       startMs: dayStartMs,
@@ -322,6 +471,73 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
       expect.objectContaining({id: 'journal:meal-1', kind: 'meal'}),
     ]);
     expect(result.insulinSummary).toEqual({quality: 'unavailable'});
+  });
+
+  it('keeps complete recorded totals across the 30-hour previous-day window even if timeline loading fails', async () => {
+    const nowMs = dayEndMs + 12 * HOUR;
+    const client = {
+      ...clientFixture(),
+      readTreatments: jest.fn(async () => {
+        throw new Error('timeline unavailable');
+      }),
+      readRecordedTreatments: jest.fn(async () => ({
+        records: [
+          {
+            eventType: 'Temp Basal',
+            created_at: new Date(dayStartMs).toISOString(),
+            duration: 1440,
+            deliveredUnits: 24,
+          },
+          {
+            eventType: 'Temp Basal',
+            created_at: new Date(dayEndMs).toISOString(),
+            duration: 360,
+            deliveredUnits: 6,
+          },
+          {
+            eventType: 'Correction Bolus',
+            created_at: new Date(dayStartMs + HOUR).toISOString(),
+            insulin: 3,
+          },
+        ],
+        freshness: {kind: 'fresh' as const, fetchedAtMs: nowMs},
+        complete: true,
+      })),
+    };
+    const source = createBrowserNightscoutDataSources({
+      client: client as unknown as BrowserNightscoutClient,
+      sourceId: 'source-1',
+      locale: 'en',
+      journal,
+      now: () => nowMs,
+    }).previousDaySummary;
+    const window = getPreviousDaySummaryWindow({
+      anchorDayStartMs: dayStartMs,
+      nowMs,
+    });
+    const snapshot = await source.loadPreviousDaySummary(window.period);
+    const summary = buildPreviousDaySummary({
+      window,
+      expectedSampleIntervalMs: 300_000,
+      thresholds: {
+        veryLowMaxMgDl: 54,
+        targetMinMgDl: 70,
+        targetMaxMgDl: 180,
+        highMaxMgDl: 250,
+      },
+      source: snapshot,
+    });
+    expect(summary.insulinSummary).toEqual({
+      quality: 'available',
+      basalUnits: 30,
+      bolusUnits: 3,
+      totalUnits: 33,
+    });
+    expect(snapshot.glucoseSamples).toHaveLength(1);
+    expect(summary.events).toEqual([
+      expect.objectContaining({id: 'journal:meal-1'}),
+    ]);
+    expect(client.readBasalProfile).not.toHaveBeenCalled();
   });
 
   it('projects browser Nightscout facts into the complete rich chart context', async () => {

@@ -1,3 +1,5 @@
+import {createRecordedInsulinDataSource} from 'app/services/insulin/createRecordedInsulinDataSource';
+import recordedFixtures from '../../fixtures/recorded-insulin.json';
 import {
   BrowserNightscoutClient,
   decodeBrowserNightscoutDeviceStatus,
@@ -33,9 +35,104 @@ class MemoryStorage {
 }
 
 describe('BrowserNightscoutClient', () => {
+  it.each(recordedFixtures)(
+    'preserves recorded-calculator evidence through browser transport: $name',
+    async fixture => {
+      const observedAtMs = Date.parse(fixture.observedAt);
+      const requestJson = jest.fn(async () => ({
+        version: 1,
+        data: fixture.records,
+      }));
+      const client = new BrowserNightscoutClient({
+        api: {requestJson},
+        storage: new MemoryStorage(),
+        sourceId: 'source-1',
+        workspaceId: 'workspace-1',
+        now: () => observedAtMs,
+      });
+      const source = createRecordedInsulinDataSource({
+        fetchTreatments: (start, end) =>
+          client.readRecordedTreatments(+start, +end),
+        getScopeKey: () => 'source-1',
+        now: () => observedAtMs,
+      });
+      expect(
+        await source.loadWindow({
+          startMs: Date.parse(fixture.start),
+          endMs: Date.parse(fixture.end),
+        }),
+      ).toEqual(fixture.expected);
+      expect(requestJson).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('rejects raw saturated treatments before decoding or caching could hide truncation', async () => {
+    const storage = new MemoryStorage();
+    const requestJson = jest.fn(async () => ({
+      version: 1,
+      data: [
+        {
+          eventType: 'Correction Bolus',
+          created_at: '2023-11-14T22:13:20Z',
+          insulin: 2,
+        },
+        ...Array(4_999).fill(null),
+      ],
+    }));
+    const client = new BrowserNightscoutClient({
+      api: {requestJson},
+      storage,
+      sourceId: 'source-1',
+      workspaceId: 'workspace-1',
+      now: () => 1_700_000_100_000,
+    });
+    await expect(
+      client.readTreatments(1_699_999_900_000, 1_700_000_100_000),
+    ).rejects.toThrow('incomplete');
+    expect(storage.values.size).toBe(0);
+  });
+
+  it('preserves numeric delivery endpoint timestamps for the shared recorded calculator', () => {
+    expect(
+      decodeBrowserNightscoutTreatment({
+        created_at: '2026-09-27T00:00:00Z',
+        eventType: 'Temp Basal',
+        endDate: 1790467260000,
+        endTime: '1790467260000',
+        deliveredUnits: 0.1,
+      }),
+    ).toMatchObject({
+      endDate: 1790467260000,
+      endTime: '1790467260000',
+      deliveredUnits: 0.1,
+    });
+  });
   it('preserves recorded delivery evidence and revisions without replacing malformed amounts with a rate', () => {
-    const decoded = decodeBrowserNightscoutTreatment({created_at: '2026-09-27T00:00:00Z', eventType: 'Temp Basal', enteredBy: 'loop://phone', deliveredUnits: 'bad', amount: 'bad', absolute: 2, duration: 30, isMutable: true, type: 'normal', temp: 'absolute', syncIdentifier: 'dose', srvModified: 123, modified_at: '2026-09-27T01:00:00Z'});
-    expect(decoded).toMatchObject({deliveredUnits: -1, amount: -1, isMutable: true, type: 'normal', temp: 'absolute', syncIdentifier: 'dose', srvModified: 123, modified_at: '2026-09-27T01:00:00Z'});
+    const decoded = decodeBrowserNightscoutTreatment({
+      created_at: '2026-09-27T00:00:00Z',
+      eventType: 'Temp Basal',
+      enteredBy: 'loop://phone',
+      deliveredUnits: 'bad',
+      amount: 'bad',
+      absolute: 2,
+      duration: 30,
+      isMutable: true,
+      type: 'normal',
+      temp: 'absolute',
+      syncIdentifier: 'dose',
+      srvModified: 123,
+      modified_at: '2026-09-27T01:00:00Z',
+    });
+    expect(decoded).toMatchObject({
+      deliveredUnits: -1,
+      amount: -1,
+      isMutable: true,
+      type: 'normal',
+      temp: 'absolute',
+      syncIdentifier: 'dose',
+      srvModified: 123,
+      modified_at: '2026-09-27T01:00:00Z',
+    });
   });
   it('uses strictly decoded cached data when the proxy becomes unavailable', async () => {
     const storage = new MemoryStorage();
@@ -87,36 +184,53 @@ describe('BrowserNightscoutClient', () => {
 
   it('rejects raw saturated glucose even when decoding removes most rows and never caches it', async () => {
     const storage = new MemoryStorage();
-    const requestJson = jest.fn()
-      .mockResolvedValueOnce({version: 1, data: [
-        {_id: 'one', date: 1_700_000_000_000, sgv: 123},
-        ...Array(14_999).fill(null),
-      ]})
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({
+        version: 1,
+        data: [
+          {_id: 'one', date: 1_700_000_000_000, sgv: 123},
+          ...Array(14_999).fill(null),
+        ],
+      })
       .mockRejectedValueOnce(new Error('offline'));
     const client = new BrowserNightscoutClient({
       api: {requestJson}, storage, sourceId: 'source-1', workspaceId: 'workspace-1',
       now: () => 1_700_000_100_000,
     });
-    await expect(client.readEntries(1_699_999_900_000, 1_700_000_100_000)).rejects.toThrow('incomplete');
+    await expect(
+      client.readEntries(1_699_999_900_000, 1_700_000_100_000),
+    ).rejects.toThrow('incomplete');
     expect(storage.values.size).toBe(0);
-    await expect(client.readEntries(1_699_999_900_000, 1_700_000_100_000)).rejects.toThrow('offline');
+    await expect(
+      client.readEntries(1_699_999_900_000, 1_700_000_100_000),
+    ).rejects.toThrow('offline');
   });
 
   it('falls back to existing stale glucose after saturation instead of replacing it with a truncated response', async () => {
     const storage = new MemoryStorage();
-    const requestJson = jest.fn()
-      .mockResolvedValueOnce({version: 1, data: [
-        {_id: 'saved', date: 1_700_000_000_000, sgv: 100},
-      ]})
-      .mockResolvedValueOnce({version: 1, data: Array(15_000).fill(
-        {_id: 'truncated', date: 1_700_000_000_000, sgv: 300},
-      )});
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({
+        version: 1,
+        data: [{_id: 'saved', date: 1_700_000_000_000, sgv: 100}],
+      })
+      .mockResolvedValueOnce({
+        version: 1,
+        data: Array(15_000).fill({
+          _id: 'truncated',
+          date: 1_700_000_000_000,
+          sgv: 300,
+        }),
+      });
     const client = new BrowserNightscoutClient({
       api: {requestJson}, storage, sourceId: 'source-1', workspaceId: 'workspace-1',
       now: () => 1_700_000_100_000,
     });
     await client.readEntries(1_699_999_900_000, 1_700_000_100_000);
-    await expect(client.readEntries(1_699_999_900_000, 1_700_000_100_000)).resolves.toMatchObject({
+    await expect(
+      client.readEntries(1_699_999_900_000, 1_700_000_100_000),
+    ).resolves.toMatchObject({
       records: [{_id: 'saved', sgv: 100}],
       freshness: {kind: 'stale'},
       complete: false,
@@ -483,26 +597,31 @@ describe('BrowserNightscoutClient', () => {
     const nowMs = Date.parse('2026-09-07T08:01:00Z');
     const startMs = nowMs - 2 * 60 * 60 * 1_000;
     const storage = new MemoryStorage();
-    const requestJson = jest.fn().mockResolvedValueOnce({
-      version: 1,
-      data: [{
-        _id: 'forecast-1',
-        created_at: '2026-09-07T08:00:30Z',
-        loop: {
-          timestamp: '2026-09-07T08:00:15Z',
-          predicted: {
-            startDate: '2026-09-07T08:00:00Z',
-            values: [120, 117, 114, 110, 106, 102, 100],
-            IOB: [900, 900],
-            COB: [800, 800],
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({
+        version: 1,
+        data: [
+          {
+            _id: 'forecast-1',
+            created_at: '2026-09-07T08:00:30Z',
+            loop: {
+              timestamp: '2026-09-07T08:00:15Z',
+              predicted: {
+                startDate: '2026-09-07T08:00:00Z',
+                values: [120, 117, 114, 110, 106, 102, 100],
+                IOB: [900, 900],
+                COB: [800, 800],
+              },
+              iob: {timestamp: '2026-09-07T07:59:00Z', iob: -0.25},
+              cob: {timestamp: '2026-09-07T07:58:00Z', cob: 12},
+              failureReason: 'private failure detail',
+            },
+            pump: {serial: 'private pump detail'},
           },
-          iob: {timestamp: '2026-09-07T07:59:00Z', iob: -0.25},
-          cob: {timestamp: '2026-09-07T07:58:00Z', cob: 12},
-          failureReason: 'private failure detail',
-        },
-        pump: {serial: 'private pump detail'},
-      }],
-    }).mockRejectedValueOnce(new Error('offline'));
+        ],
+      })
+      .mockRejectedValueOnce(new Error('offline'));
     const client = new BrowserNightscoutClient({
       api: {requestJson}, storage, sourceId: 'source-1',
       workspaceId: 'workspace-1', now: () => nowMs,
@@ -538,10 +657,12 @@ describe('BrowserNightscoutClient', () => {
     expect(withPrediction?.forecastStatus?.loopPrediction).toEqual({
       startMs: Date.parse(created_at), values: [120, 122],
     });
-    expect(decodeBrowserNightscoutDeviceStatus({
-      created_at,
-      loop: {predicted: {values: [120, 122]}},
-    })).toBeNull();
+    expect(
+      decodeBrowserNightscoutDeviceStatus({
+        created_at,
+        loop: {predicted: {values: [120, 122]}},
+      }),
+    ).toBeNull();
   });
 
   it('loads a long device-status range in bounded compatible chunks', async () => {

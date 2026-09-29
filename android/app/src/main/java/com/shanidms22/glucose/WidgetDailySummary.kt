@@ -72,7 +72,7 @@ internal fun calculateWidgetDailyRange(
     durations[bucket] += duration
   }
   val observed = durations.sum()
-  if (observed < 60_000L) return null
+  if (observed <= 0L) return null
   val exact = durations.map { it * 100.0 / observed }
   val percentages = exact.map { floor(it).toInt() }.toMutableList()
   exact.indices.sortedByDescending { exact[it] - percentages[it] }
@@ -91,18 +91,21 @@ internal fun calculateWidgetInsulinComparison(
   val previous = if (includeHistory) windows.drop(1).map {
     calculateWidgetInsulinStats(treatments, it.startMs, it.endMs, nowMs)
   } else emptyList()
-  val valid = previous.filterNotNull()
+  val valid = previous.filterNotNull().filter { it.totalBasal != null || it.totalBolus != null }
   // A weekly comparison represents all seven prior dates; never silently average a biased subset.
   val average = if (valid.size == 7) {
-    val basal = valid.mapNotNull { it.totalBasal }.takeIf { it.size == 7 }?.average()
-    val bolus = valid.mapNotNull { it.totalBolus }.takeIf { it.size == 7 }?.average()
+    val basal = valid.filter { it.basalCoveragePercent == 100.0 }.mapNotNull { it.totalBasal }.completeWeekMean()
+    val bolus = valid.mapNotNull { it.totalBolus }.completeWeekMean()
     if (basal == null && bolus == null) null else widgetInsulinStats(basal, bolus,
-      valid.map { it.basalCoveragePercent }.average(), valid.map { it.basalCoveredMs }.average().toLong(),
-      if (valid.all { it.quality == "available" }) "available" else "partial")
+      if (basal != null) 100.0 else 0.0, if (basal != null) valid.map { it.basalCoveredMs }.average().toLong() else 0L,
+      if (basal != null && bolus != null) "available" else "partial")
   } else null
   if (today == null && previous.firstOrNull() == null && average == null) return null
-  return WidgetInsulinComparison(today, previous.firstOrNull(), average, if (average != null) 7 else 0)
+  return WidgetInsulinComparison(today, previous.firstOrNull(), average, valid.size)
 }
+
+private fun List<Double>.completeWeekMean(): Double? =
+  if (size != 7) null else foldIndexed(0.0) { index, mean, value -> mean + (value - mean) / (index + 1) }
 
 /**
  * Nightscout v1 applies count but does not implement skip, including for treatments.
@@ -153,6 +156,7 @@ internal fun widgetDailySummaryJson(summary: WidgetDailySummary): String = JSONO
     put("observedMinutes", range.observedMinutes)
   }) }
   summary.insulin?.let { comparison -> put("insulin", JSONObject().apply {
+    put("schemaVersion", 2)
     comparison.today?.let { put("today", insulinJson(it)) }
     comparison.yesterday?.let { put("yesterday", insulinJson(it)) }
     comparison.weekAverage?.let { put("weekAverage", insulinJson(it)) }
@@ -170,11 +174,12 @@ internal fun parseWidgetDailySummary(raw: String?, nowMs: Long, zone: TimeZone =
   val range = root.optJSONObject("range")?.let {
     val values = listOf(it.getInt("lowPercent"), it.getInt("inRangePercent"), it.getInt("highPercent"))
     val coverage = it.getInt("coveragePercent"); val observed = it.getInt("observedMinutes")
-    if (values.any { value -> value !in 0..100 } || values.sum() != 100 || coverage !in 0..100 || observed <= 0) return null
+    if (values.any { value -> value !in 0..100 } || values.sum() != 100 || coverage !in 0..100 || observed < 0) return null
     if (observed * 60_000L > updated - start + 60_000L) return null
     WidgetDailyRange(values[0], values[1], values[2], coverage, observed)
   }
-  val insulin = root.optJSONObject("insulin")?.let {
+  // Version 1 could contain rate-derived basal labeled recorded. Keep TIR, discard those doses.
+  val insulin = root.optJSONObject("insulin")?.takeIf { it.optInt("schemaVersion", 0) == 2 }?.let {
     WidgetInsulinComparison(parseInsulinJson(it.optJSONObject("today")), parseInsulinJson(it.optJSONObject("yesterday")),
       parseInsulinJson(it.optJSONObject("weekAverage")), it.optInt("weekDays", 0).coerceIn(0, 7))
   }

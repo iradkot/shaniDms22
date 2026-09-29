@@ -25,6 +25,32 @@ function bg(date: number, values: Partial<BgSample> = {}): BgSample {
 }
 
 describe('chart data integrity', () => {
+  it('does not interpret a percentage temp basal as units per hour', () => {
+    expect(
+      mapNightscoutTreatmentsToInsulinDataEntries([
+        {
+          eventType: 'Temp Basal',
+          temp: 'percentage',
+          rate: 50,
+          duration: 60,
+          created_at: '2026-01-01T12:00:00Z',
+        },
+      ]),
+    ).toEqual([]);
+    expect(
+      mapNightscoutTreatmentsToInsulinDataEntries([
+        {
+          eventType: 'Temp Basal',
+          temp: 'percentage',
+          rate: 50,
+          absolute: 0.5,
+          duration: 60,
+          created_at: '2026-01-01T12:00:00Z',
+        },
+      ]),
+    ).toEqual([expect.objectContaining({type: 'tempBasal', rate: 0.5})]);
+  });
+
   it('uses one consistent IOB total and scales split areas to that total', () => {
     const series = buildChartLoadSeries(
       [bg(1_000, {iob: 3, iobBolus: 1, iobBasal: 1})],
@@ -132,7 +158,11 @@ describe('chart data integrity', () => {
         timestamp: new Date(0).toISOString(),
       },
       {type: 'bolus', amount: 2, timestamp: new Date(0).toISOString()},
-      {type: 'bolus', amount: 1, timestamp: new Date(90 * 60_000).toISOString()},
+      {
+        type: 'bolus',
+        amount: 1,
+        timestamp: new Date(90 * 60_000).toISOString(),
+      },
     ];
 
     const filtered = filterInsulinDataToRange(
@@ -147,8 +177,24 @@ describe('chart data integrity', () => {
   it('keeps carb events inside the visible range only', () => {
     const filtered = filterFoodItemsToRange(
       [
-        {id: 'before', timestamp: 10, carbs: 10, name: '', image: '', notes: '', score: 0},
-        {id: 'inside', timestamp: 20, carbs: 20, name: '', image: '', notes: '', score: 0},
+        {
+          id: 'before',
+          timestamp: 10,
+          carbs: 10,
+          name: '',
+          image: '',
+          notes: '',
+          score: 0,
+        },
+        {
+          id: 'inside',
+          timestamp: 20,
+          carbs: 20,
+          name: '',
+          image: '',
+          notes: '',
+          score: 0,
+        },
       ],
       15,
       25,

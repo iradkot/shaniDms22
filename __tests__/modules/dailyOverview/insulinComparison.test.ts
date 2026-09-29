@@ -6,6 +6,14 @@ import {
 } from 'app/modules/dailyOverview';
 
 describe('daily insulin comparisons', () => {
+  it('keeps a finite weekly mean when summing large source values would overflow', () => {
+    const asOfMs = new Date(2026, 0, 15, 12).getTime();
+    const windows = getDailyInsulinComparisonWindows({period: getLocalDayPeriod(asOfMs), asOfMs});
+    const previous = Array.from({length: 7}, () => ({
+      quality: 'available' as const, basalUnits: 1e308, bolusUnits: 0,
+    }));
+    expect(Number.isFinite(buildDailyInsulinComparison(windows, previous).weekAverage?.totalUnits)).toBe(true);
+  });
   it('uses the same local clock across the preceding seven dates, including a DST transition', () => {
     const asOfMs = new Date(2026, 2, 9, 12, 34, 56, 123).getTime();
     const period = getLocalDayPeriod(asOfMs);

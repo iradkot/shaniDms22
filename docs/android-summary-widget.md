@@ -9,8 +9,8 @@ window.
   segment without relying on color.
 - Data coverage shows how much of the elapsed day has CGM readings. Missing
   readings are not counted as in range. Each reading covers at most five minutes.
-- The insulin bar separates basal and bolus. The totals are estimates from the
-  available Nightscout schedule and treatments.
+- Complete recorded insulin uses a basal/bolus ratio bar. Partial insulin retains
+  known amounts and labels basal time coverage; it never fills a schedule estimate.
 - Tap the comparison to switch between yesterday and the previous seven days.
   Each comparison ends at the same local time of day as today's summary. The
   selection is saved separately for each widget.
@@ -37,7 +37,9 @@ shown as a complete total.
 The in-app Daily Overview uses the same visual hierarchy: time in range, then
 basal/bolus and selectable previous-day/seven-day comparisons. Saved card orders
 are respected. Current-day insulin stops at a captured cutoff; comparisons use
-the same local clock time. Basal remains explicitly estimated.
+the same local clock time. Only explicit delivered basal amounts establish recorded
+basal; a rate and duration alone do not. See [data access](DATA_ACCESS.md) and the
+[daily data contract](DAILY_SUMMARY_DATA.md) before adding another calculator.
 
 ## Verification
 

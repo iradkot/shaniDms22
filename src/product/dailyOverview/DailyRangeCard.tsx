@@ -11,7 +11,11 @@ import {
   RANGE_LABELS,
   RangeGraphic,
 } from './DailyRangeGraphic';
-import {formatDailyValue, formatDailyClock} from './dailyOverviewPresentation';
+import {
+  formatDailyValue,
+  formatDailyClock,
+  formatDailyDate,
+} from './dailyOverviewPresentation';
 import {dailyOverviewCardStyles as styles} from './dailyOverviewCardStyles';
 
 export const DailyRangeCard = ({
@@ -37,6 +41,19 @@ export const DailyRangeCard = ({
   const value = (n: number | undefined, unit = '') =>
     n === undefined ? '—' : formatDailyValue(n) + unit;
   const ranges = overview.ranges;
+  const freshness = overview.glucoseFreshness;
+  const freshnessLabel =
+    freshness.kind === 'unknown'
+      ? copy.glucoseFreshnessUnknown
+      : freshness.kind === 'stale'
+      ? copy.glucoseCached
+      : copy.glucoseFetched;
+  const fetchedTime =
+    freshness.kind === 'unknown'
+      ? undefined
+      : `${formatDailyDate(freshness.fetchedAtMs)} ${formatDailyClock(
+          freshness.fetchedAtMs,
+        )}`;
   const thresholdLabels = [
     `<${thresholds.veryLowMaxMgDl}`,
     `${thresholds.veryLowMaxMgDl}–<${thresholds.targetMinMgDl}`,
@@ -53,6 +70,26 @@ export const DailyRangeCard = ({
           {copy.ranges}
         </Text>
         <Text style={styles.tag}>TIR</Text>
+      </View>
+      <View
+        style={[row, styles.freshnessRow]}
+        accessible
+        accessibilityLabel={`${freshnessLabel}${
+          fetchedTime ? ` ${fetchedTime}` : ''
+        }`}
+        testID="daily-overview-glucose-freshness">
+        <Text
+          style={[
+            styles.rangeNote,
+            styles.flexText,
+            freshness.kind !== 'fresh' && styles.darkWarning,
+            align,
+          ]}>
+          {freshnessLabel}
+        </Text>
+        {fetchedTime ? (
+          <Text style={[styles.rangeNote, styles.ltrText]}>{fetchedTime}</Text>
+        ) : null}
       </View>
       {ranges ? (
         <View testID={`daily-overview-range-visual-${rangeStyle}`}>
@@ -206,7 +243,7 @@ export const DailyRangeCard = ({
                 ))}
               </View>
               <Text style={[styles.footnote, styles.darkFootnote, align]}>
-                {copy.basedOnReadings} · mg/dL
+                {copy.basedOnObservedTime} · mg/dL
               </Text>
             </>
           ) : null}

@@ -5,6 +5,9 @@ export const dailyOverviewCardStyles = StyleSheet.create({
   reverse: {flexDirection: 'row-reverse'},
   rtlText: {textAlign: 'right', writingDirection: 'rtl'},
   alignRight: {textAlign: 'right'},
+  ltrText: {writingDirection: 'ltr'},
+  flexText: {flexShrink: 1},
+  freshnessRow: {flexWrap: 'wrap', marginTop: 3},
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 22,

@@ -2,7 +2,7 @@ import {useEffect, useMemo, useState} from 'react';
 
 import {BgSample} from 'app/types/day_bgs.types';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
-import {getInsulinRangeMetrics} from 'app/services/insulin/insulinRangeMetrics';
+import {getModeledInsulinRangeMetrics} from 'app/services/insulin/insulinRangeMetrics';
 import {isE2E} from 'app/utils/e2e';
 import {DEFAULT_NIGHT_WINDOW, isInHourWindowLocal} from 'app/constants/GLUCOSE_WINDOWS';
 import {calculateTargetTimeInRangePct} from 'app/utils/glucose/timeInRange';
@@ -121,7 +121,7 @@ export function useTrendsQuickStats(params: {
       setError(null);
 
       try {
-        const metrics = await getInsulinRangeMetrics(start, end);
+        const metrics = await getModeledInsulinRangeMetrics(start, end);
 
         if (!isMounted) return;
 

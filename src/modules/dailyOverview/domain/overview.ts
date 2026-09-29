@@ -1,11 +1,14 @@
 import type {
   TrendsCoverageQuality,
+  TrendsGlucoseFreshness,
   TrendsRangeDistribution,
   TrendsRangeThresholds,
 } from '../../trends';
 import {
   assertTrendsSampleInterval,
+  buildElapsedGlucoseSummary,
   buildTrendsDescriptiveSummary,
+  isDailyGlucoseValue,
 } from '../../trends';
 import type {
   DailyInsulinSourceSummary,
@@ -31,6 +34,7 @@ export interface DailyOverview {
   readonly period: DailyOverviewPeriod;
   readonly observedPeriod?: DailyOverviewPeriod;
   readonly isPartialDay?: boolean;
+  readonly glucoseFreshness: TrendsGlucoseFreshness;
   readonly thresholds: TrendsRangeThresholds;
   readonly validSampleCount: number;
   readonly excludedSampleCount: number;
@@ -199,18 +203,45 @@ export const buildDailyOverview = (
     ),
   };
   const hasElapsedTime = observedPeriod.endMs > observedPeriod.startMs;
+  // Snapshot source values once. Every daily metric uses the same accepted
+  // evidence, while the original Trends acceptance policy remains unchanged.
+  const dailySamples = input.source.glucoseSamples
+    .map(sample => ({
+      timestampMs: sample.timestampMs,
+      valueMgDl: sample.valueMgDl,
+    }))
+    .filter(sample => isDailyGlucoseValue(sample.valueMgDl));
+  const excludedDailyValues =
+    input.source.glucoseSamples.length - dailySamples.length;
   const sharedOverview = buildTrendsDescriptiveSummary({
     // A zero-duration day has no expected readings. Validate the usual domain
     // invariants through the empty full-day model, then expose zero expectation.
     period: hasElapsedTime ? observedPeriod : input.period,
     expectedSampleIntervalMs: input.expectedSampleIntervalMs,
     thresholds: input.thresholds,
-    samples: hasElapsedTime ? input.source.glucoseSamples : [],
+    samples: hasElapsedTime ? dailySamples : [],
   });
   const prepared = sharedOverview.sampleSet;
+  const elapsed = hasElapsedTime
+    ? buildElapsedGlucoseSummary({
+        period: observedPeriod,
+        expectedSampleIntervalMs: input.expectedSampleIntervalMs,
+        thresholds: input.thresholds,
+        samples: dailySamples,
+      })
+    : undefined;
 
+  const freshness = input.source.glucoseFreshness;
+  const glucoseFreshness: TrendsGlucoseFreshness =
+    freshness &&
+    freshness.kind !== 'unknown' &&
+    Number.isFinite(freshness.fetchedAtMs) &&
+    freshness.fetchedAtMs >= 0
+      ? freshness
+      : {kind: 'unknown'};
   return {
     period: input.period,
+    glucoseFreshness,
     ...(input.asOfMs === undefined
       ? {}
       : {
@@ -220,15 +251,15 @@ export const buildDailyOverview = (
     thresholds: input.thresholds,
     validSampleCount: prepared.validSampleCount,
     excludedSampleCount: hasElapsedTime
-      ? prepared.excludedSampleCount
+      ? prepared.excludedSampleCount + excludedDailyValues
       : input.source.glucoseSamples.length,
     duplicateSampleCount: prepared.duplicateSampleCount,
     expectedSampleCount: hasElapsedTime ? prepared.expectedSampleCount : 0,
-    coveragePercent: prepared.coveragePercent,
-    coverageQuality: prepared.coverageQuality,
+    coveragePercent: elapsed?.coveragePercent ?? 0,
+    coverageQuality: elapsed?.coverageQuality ?? 'no-data',
     largestGapMs: prepared.largestGapMs,
     lastReadingTimestampMs: prepared.lastReadingTimestampMs,
-    ranges: sharedOverview.ranges,
+    ranges: elapsed?.ranges,
     meanGlucoseMgDl: sharedOverview.meanGlucoseMgDl,
     minimumGlucoseMgDl: sharedOverview.minimumGlucoseMgDl,
     maximumGlucoseMgDl: sharedOverview.maximumGlucoseMgDl,

@@ -6,6 +6,7 @@ import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.roundToLong
 
 internal data class WidgetInsulinStats(
   val totalBasal: Double?,
@@ -25,8 +26,9 @@ internal fun widgetInsulinStats(
 ): WidgetInsulinStats {
   val knownBasal = basal?.takeIf { it.isFinite() && it >= 0 }
   val knownBolus = bolus?.takeIf { it.isFinite() && it >= 0 }
-  val complete = quality == "available" && knownBasal != null && knownBolus != null && basalCoveragePercent == 100.0
-  val total = if (complete) knownBasal!! + knownBolus!! else null
+  val sum = if (knownBasal != null && knownBolus != null) (knownBasal + knownBolus).takeIf { it.isFinite() } else null
+  val complete = quality == "available" && sum != null && basalCoveragePercent == 100.0
+  val total = if (complete) sum else null
   return WidgetInsulinStats(knownBasal, knownBolus,
     total?.let { if (it > 0) knownBasal!! / it else 0.0 }, total,
     quality = if (complete) "available" else "partial",
@@ -34,8 +36,12 @@ internal fun widgetInsulinStats(
 }
 
 private data class RecordedBasal(val startMs: Long, val endMs: Long, val units: Double)
+private data class RecordedBasalEvent(val timeMs: Long, val intervalIndex: Int, val starts: Boolean)
 
-/** No profiles, programmed schedule, or missing interval is converted into delivered insulin. */
+/**
+ * Explicit recorded amounts only; no rate, schedule, or elapsed time proves basal delivery.
+ * Boundary allocation prorates a completed recorded total uniformly over its recorded duration.
+ */
 internal fun calculateWidgetInsulinStats(
   treatments: JSONArray?, startMs: Long, endMs: Long, observedAtMs: Long = endMs,
 ): WidgetInsulinStats? {
@@ -43,7 +49,7 @@ internal fun calculateWidgetInsulinStats(
   val byIdentity = linkedMapOf<String, JSONObject>()
   for (index in 0 until treatments.length()) {
     val row = treatments.optJSONObject(index) ?: continue
-    val identity = sequenceOf("syncIdentifier", "identifier", "_id").mapNotNull { row.opt(it) as? String }.firstOrNull { it.isNotEmpty() } ?: "row:$index"
+    val identity = sequenceOf("syncIdentifier", "identifier", "_id").mapNotNull { (row.opt(it) as? String)?.trim() }.firstOrNull { it.isNotEmpty() } ?: "row:$index"
     val previous = byIdentity[identity]
     fun revision(item: JSONObject) = widgetParseTimestamp(item.opt("srvModified")) ?: widgetParseTimestamp(item.opt("modified_at")) ?: 0L
     if (previous == null || revision(row) >= revision(previous)) byIdentity[identity] = row
@@ -56,50 +62,55 @@ internal fun calculateWidgetInsulinStats(
     if (row.opt("isValid") == false || row.opt("deleted") == true) continue
     val type = row.optString("eventType", "")
     val start = widgetTreatmentTimestamp(row) ?: widgetParseTimestamp(row.opt("date"))
-    val end = start?.let {
-      widgetParseTimestamp(row.opt("endDate")) ?: widgetParseTimestamp(row.opt("endTime"))
-        ?: (it + ((nonnegative(row.opt("duration")) ?: 0.0) * MINUTE_MS).toLong())
-    }
+    val end = start?.let { recordedEndTime(row, it) }
     val mutable = row.opt("isMutable") == true || row.opt("mutable") == true
     if (type.contains("bolus", true)) {
-      if (start == null || end == null) { bolusKnown = false; continue }
+      if (start == null) { bolusKnown = false; continue }
       val bolusType = row.optString("type", "normal")
-      val extended = type.contains("combo", true) || type.contains("extended", true) || bolusType == "square" || bolusType == "dual"
-      val overlaps = start < endMs && if (extended && end > start) end > startMs else start >= startMs
+      val requiresDuration = type.contains("combo", true) || type.contains("extended", true) || bolusType == "square" || bolusType == "dual"
+      val interval = end != null && end > start
+      val overlaps = start < endMs && (end == null || end < start || if (interval) end > startMs else start >= startMs)
       if (!overlaps) continue
       val amount = if (!row.isNull("deliveredUnits")) nonnegative(row.opt("deliveredUnits")) else nonnegative(row.opt("insulin"))
-      if (amount == null || mutable || end > observedAtMs || bolusType == "dual" || type.contains("combo", true)) {
+      if (amount == null || end == null || end < start || mutable || end > observedAtMs || bolusType == "dual" || type.contains("combo", true)) {
         bolusKnown = false; continue
       }
-      if (extended) {
-        if (end <= start) { bolusKnown = false; continue }
-        bolus += amount * (minOf(end, endMs) - maxOf(start, startMs)) / (end - start)
+      if (requiresDuration && !interval) { bolusKnown = false; continue }
+      if (interval) {
+        bolus += amount * ((minOf(end, endMs) - maxOf(start, startMs)).toDouble() / (end - start))
       } else bolus += amount
       continue
     }
     if (!type.equals("Temp Basal", true) && !type.equals("Basal", true)) continue
     if (start == null || end == null || end <= start || mutable || end > observedAtMs || start >= endMs || end <= startMs) continue
     val loop = row.optString("enteredBy", "").startsWith("loop://", true)
-    val hasExplicitAmount = !row.isNull("deliveredUnits") || (loop && !row.isNull("amount"))
-    val explicit = if (!row.isNull("deliveredUnits")) nonnegative(row.opt("deliveredUnits")) else if (loop) nonnegative(row.opt("amount")) else null
-    val absolute = nonnegative(row.opt("absolute")) ?: nonnegative(row.opt("rate"))
-    val isAbsolute = !row.has("temp") || row.optString("temp", "") == "absolute"
-    // A malformed recorded amount is unknown; it cannot authorize a programmed-rate fallback.
-    val amount = if (hasExplicitAmount) explicit else if (loop && isAbsolute && absolute != null) absolute * (end - start) / HOUR_MS else null
+    val amount = if (!row.isNull("deliveredUnits")) nonnegative(row.opt("deliveredUnits")) else if (loop) nonnegative(row.opt("amount")) else null
     if (amount == null || !amount.isFinite() || !basalFingerprints.add("$start:$end:$amount")) continue
     intervals.add(RecordedBasal(start, end, amount))
   }
-  val boundaries = sortedSetOf(startMs, endMs)
-  intervals.forEach { boundaries.add(maxOf(startMs, it.startMs)); boundaries.add(minOf(endMs, it.endMs)) }
+  val events = intervals.flatMapIndexed { index, interval -> listOf(
+    RecordedBasalEvent(maxOf(startMs, interval.startMs), index, true),
+    RecordedBasalEvent(minOf(endMs, interval.endMs), index, false),
+  ) }.sortedBy { it.timeMs }
+  val active = linkedSetOf<Int>()
   var covered = 0L
   var basal = 0.0
-  for ((left, right) in boundaries.zipWithNext()) {
-    val active = intervals.filter { it.startMs <= left && it.endMs >= right }
-    // Distinct overlapping records do not establish which delivery occurred in that segment.
-    if (active.size != 1) continue
-    val interval = active.single()
-    covered += right - left
-    basal += interval.units * (right - left) / (interval.endMs - interval.startMs)
+  var left = startMs
+  var eventIndex = 0
+  // Sweep once; conflicting active records leave that segment unknown.
+  while (eventIndex < events.size) {
+    val right = events[eventIndex].timeMs
+    if (active.size == 1 && right > left) {
+      val interval = intervals[active.first()]
+      covered += right - left
+      basal += interval.units * ((right - left).toDouble() / (interval.endMs - interval.startMs))
+    }
+    // Group simultaneous starts and ends to preserve half-open interval boundaries.
+    while (eventIndex < events.size && events[eventIndex].timeMs == right) {
+      val event = events[eventIndex++]
+      if (event.starts) active.add(event.intervalIndex) else active.remove(event.intervalIndex)
+    }
+    left = right
   }
   val coverage = (covered * 100.0 / (endMs - startMs)).coerceIn(0.0, 100.0)
   return widgetInsulinStats(if (covered > 0) basal else null, if (bolusKnown) bolus else null, coverage, covered,
@@ -107,6 +118,16 @@ internal fun calculateWidgetInsulinStats(
 }
 
 private fun nonnegative(value: Any?): Double? = finiteDouble(value)?.takeIf { it >= 0 }
+
+private fun recordedEndTime(row: JSONObject, startMs: Long): Long? {
+  widgetParseTimestamp(row.opt("endDate"))?.let { return it }
+  widgetParseTimestamp(row.opt("endTime"))?.let { return it }
+  if (!row.isNull("endDate") || !row.isNull("endTime")) return null
+  val duration = if (row.isNull("duration")) 0.0 else nonnegative(row.opt("duration")) ?: return null
+  val durationMs = duration * MINUTE_MS
+  if (!durationMs.isFinite() || durationMs > MAX_TIMESTAMP_MS - startMs) return null
+  return startMs + durationMs.roundToLong()
+}
 
 internal fun mergeWidgetRows(vararg arrays: JSONArray): JSONArray {
   val byId = linkedMapOf<String, JSONObject>()
@@ -121,16 +142,25 @@ internal fun widgetTreatmentTimestamp(row: JSONObject): Long? =
   widgetParseTimestamp(row.opt("created_at")) ?: widgetParseTimestamp(row.opt("timestamp"))
 
 internal fun widgetParseTimestamp(value: Any?): Long? {
-  if (value is Number) return value.toLong().takeIf { it > 0 }
-  val raw = (value as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-  raw.toLongOrNull()?.let { return it.takeIf { time -> time > 0 } }
-  for (pattern in listOf("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd'T'HH:mm:ss.SSSXX", "yyyy-MM-dd'T'HH:mm:ssXX", "yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd'T'HH:mm:ssX")) {
-    val format = SimpleDateFormat(pattern, Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC"); isLenient = false }
-    val position = ParsePosition(0)
-    val parsed = runCatching { format.parse(raw, position) }.getOrNull()
-    if (parsed != null && position.index == raw.length) return parsed.time
+  if (value is Number) {
+    val numeric = value.toDouble()
+    return value.toLong().takeIf { numeric.isFinite() && numeric == it.toDouble() && it in 1..MAX_TIMESTAMP_MS }
   }
-  return null
+  val raw = (value as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+  if (raw.matches(Regex("[0-9]+"))) return raw.toLongOrNull()?.takeIf { it in 1..MAX_TIMESTAMP_MS }
+  val groups = ISO_TIMESTAMP.matchEntire(raw)?.groupValues ?: return null
+  val offset = groups[8]
+  val zone = when {
+    offset.equals("Z", true) -> "+00:00"
+    offset.length == 3 -> "$offset:00"
+    offset.length == 5 -> offset.take(3) + ":" + offset.takeLast(2)
+    else -> offset
+  }
+  val normalized = "${groups[1]}-${groups[2]}-${groups[3]}T${groups[4]}:${groups[5]}:${groups[6]}.${groups[7].padEnd(3, '0').take(3)}$zone"
+  val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC"); isLenient = false }
+  val position = ParsePosition(0)
+  val parsed = runCatching { format.parse(normalized, position) }.getOrNull()
+  return parsed?.time?.takeIf { position.index == normalized.length && it in 1..MAX_TIMESTAMP_MS }
 }
 
 internal fun widgetIsoUtc(timeMs: Long): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
@@ -139,10 +169,12 @@ internal fun widgetIsoUtc(timeMs: Long): String = SimpleDateFormat("yyyy-MM-dd'T
 
 private fun finiteDouble(value: Any?): Double? = when (value) {
   is Number -> value.toDouble()
-  is String -> value.trim().toDoubleOrNull()
+  is String -> value.trim().takeIf { DECIMAL_NUMBER.matches(it) }?.toDoubleOrNull()
   else -> null
 }?.takeIf { it.isFinite() }
 
 
 private const val MINUTE_MS = 60_000L
-private const val HOUR_MS = 3_600_000.0
+private const val MAX_TIMESTAMP_MS = 8_640_000_000_000_000L
+private val DECIMAL_NUMBER = Regex("[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?", RegexOption.IGNORE_CASE)
+private val ISO_TIMESTAMP = Regex("^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,9}))?(Z|[+-]\\d{2}(?::?\\d{2})?)$", RegexOption.IGNORE_CASE)

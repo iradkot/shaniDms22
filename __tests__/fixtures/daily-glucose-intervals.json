@@ -1,0 +1,173 @@
+[
+  {
+    "name": "uneven readings do not turn a gap into full coverage",
+    "durationMs": 600000,
+    "samples": [
+      {"offsetMs": 0, "valueMgDl": 100},
+      {"offsetMs": 60000, "valueMgDl": 200}
+    ],
+    "expected": {
+      "observedMs": 360000,
+      "coveragePercent": 60,
+      "ranges": {
+        "veryLowPercent": 0,
+        "lowPercent": 0,
+        "targetPercent": 16.67,
+        "highPercent": 83.33,
+        "veryHighPercent": 0
+      },
+      "widget": {
+        "lowPercent": 0,
+        "inRangePercent": 17,
+        "highPercent": 83,
+        "coveragePercent": 60,
+        "observedMinutes": 6
+      }
+    }
+  },
+  {
+    "name": "a carry-in sample clips at midnight",
+    "durationMs": 600000,
+    "samples": [
+      {"offsetMs": -120000, "valueMgDl": 100},
+      {"offsetMs": 180000, "valueMgDl": 200}
+    ],
+    "expected": {
+      "observedMs": 480000,
+      "coveragePercent": 80,
+      "ranges": {
+        "veryLowPercent": 0,
+        "lowPercent": 0,
+        "targetPercent": 37.5,
+        "highPercent": 62.5,
+        "veryHighPercent": 0
+      },
+      "widget": {
+        "lowPercent": 0,
+        "inRangePercent": 38,
+        "highPercent": 62,
+        "coveragePercent": 80,
+        "observedMinutes": 8
+      }
+    }
+  },
+  {
+    "name": "sensor gaps stay uncovered",
+    "durationMs": 1200000,
+    "samples": [
+      {"offsetMs": 0, "valueMgDl": 100},
+      {"offsetMs": 900000, "valueMgDl": 60}
+    ],
+    "expected": {
+      "observedMs": 600000,
+      "coveragePercent": 50,
+      "ranges": {
+        "veryLowPercent": 0,
+        "lowPercent": 50,
+        "targetPercent": 50,
+        "highPercent": 0,
+        "veryHighPercent": 0
+      },
+      "widget": {
+        "lowPercent": 50,
+        "inRangePercent": 50,
+        "highPercent": 0,
+        "coveragePercent": 50,
+        "observedMinutes": 10
+      }
+    }
+  },
+  {
+    "name": "duplicate, outlier and cutoff readings do not create observed time",
+    "durationMs": 1200000,
+    "samples": [
+      {"offsetMs": 0, "valueMgDl": 100},
+      {"offsetMs": 0, "valueMgDl": 300},
+      {"offsetMs": 300000, "valueMgDl": 601},
+      {"offsetMs": 600000, "valueMgDl": 70},
+      {"offsetMs": 900000, "valueMgDl": 180},
+      {"offsetMs": 1200000, "valueMgDl": 60},
+      {"offsetMs": 1500000, "valueMgDl": 200}
+    ],
+    "expected": {
+      "observedMs": 900000,
+      "coveragePercent": 75,
+      "ranges": {
+        "veryLowPercent": 0,
+        "lowPercent": 0,
+        "targetPercent": 100,
+        "highPercent": 0,
+        "veryHighPercent": 0
+      },
+      "widget": {
+        "lowPercent": 0,
+        "inRangePercent": 100,
+        "highPercent": 0,
+        "coveragePercent": 75,
+        "observedMinutes": 15
+      }
+    }
+  },
+  {
+    "name": "valid glucose bounds are inclusive and outside readings are excluded",
+    "durationMs": 1200000,
+    "samples": [
+      {"offsetMs": 0, "valueMgDl": 19},
+      {"offsetMs": 300000, "valueMgDl": 20},
+      {"offsetMs": 600000, "valueMgDl": 600},
+      {"offsetMs": 900000, "valueMgDl": 601}
+    ],
+    "expected": {
+      "observedMs": 600000,
+      "coveragePercent": 50,
+      "ranges": {
+        "veryLowPercent": 50,
+        "lowPercent": 0,
+        "targetPercent": 0,
+        "highPercent": 0,
+        "veryHighPercent": 50
+      },
+      "widget": {
+        "lowPercent": 50,
+        "inRangePercent": 0,
+        "highPercent": 50,
+        "coveragePercent": 50,
+        "observedMinutes": 10
+      }
+    }
+  },
+  {
+    "name": "fractional minutes still establish measured glucose",
+    "durationMs": 30000,
+    "samples": [{"offsetMs": 0, "valueMgDl": 50}],
+    "expected": {
+      "observedMs": 30000,
+      "coveragePercent": 100,
+      "ranges": {
+        "veryLowPercent": 100,
+        "lowPercent": 0,
+        "targetPercent": 0,
+        "highPercent": 0,
+        "veryHighPercent": 0
+      },
+      "widget": {
+        "lowPercent": 100,
+        "inRangePercent": 0,
+        "highPercent": 0,
+        "coveragePercent": 100,
+        "observedMinutes": 0
+      }
+    }
+  },
+  {
+    "name": "an expired carry-in sample is no data",
+    "durationMs": 600000,
+    "samples": [{"offsetMs": -360000, "valueMgDl": 100}],
+    "expected": {
+      "observedMs": 0,
+      "coveragePercent": 0,
+      "ranges": null,
+      "widget": null
+    }
+  }
+]

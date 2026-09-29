@@ -2,7 +2,6 @@ import {
   createBrowserAiEvidenceProvider,
   type BrowserNightscoutEntry,
   type BrowserNightscoutRange,
-  type BrowserNightscoutTreatment,
   type BrowserNightscoutDeviceStatus,
 } from '../../../src/platform/web';
 
@@ -15,16 +14,14 @@ const fresh = <T>(records: readonly T[]): BrowserNightscoutRange<T> => ({
 
 describe('browser AI Nightscout evidence provider', () => {
   it('loads the full requested month and exposes stale device timestamps and incomplete coverage', async () => {
-    const readEntries = jest
-      .fn()
-      .mockResolvedValue({
-        ...fresh([{date: NOW_MS - 60_000, sgv: 110}]),
-        complete: false,
-      });
+    const readEntries = jest.fn().mockResolvedValue({
+      ...fresh([{date: NOW_MS - 60_000, sgv: 110}]),
+      complete: false,
+    });
     const provider = createBrowserAiEvidenceProvider({
       client: {
         readEntries,
-        readTreatments: jest.fn().mockResolvedValue(fresh([])),
+        readRecordedTreatments: jest.fn().mockResolvedValue(fresh([])),
         readDeviceStatuses: jest
           .fn()
           .mockResolvedValue(
@@ -68,9 +65,9 @@ describe('browser AI Nightscout evidence provider', () => {
           },
         ]),
       );
-    const readTreatments = jest
+    const readRecordedTreatments = jest
       .fn<
-        Promise<BrowserNightscoutRange<BrowserNightscoutTreatment>>,
+        Promise<BrowserNightscoutRange<Record<string, unknown>>>,
         [number, number, AbortSignal?]
       >()
       .mockResolvedValue(
@@ -100,7 +97,7 @@ describe('browser AI Nightscout evidence provider', () => {
         ]),
       );
     const provider = createBrowserAiEvidenceProvider({
-      client: {readEntries, readTreatments, readDeviceStatuses},
+      client: {readEntries, readRecordedTreatments, readDeviceStatuses},
       sourceId: 'ns_source_a',
       now: () => NOW_MS,
     });
@@ -132,7 +129,7 @@ describe('browser AI Nightscout evidence provider', () => {
       ),
     ).toBe(true);
     expect(
-      [readEntries, readTreatments, readDeviceStatuses].every(mock =>
+      [readEntries, readRecordedTreatments, readDeviceStatuses].every(mock =>
         mock.mock.calls.every(call => call[2] === controller.signal),
       ),
     ).toBe(true);
@@ -145,7 +142,7 @@ describe('browser AI Nightscout evidence provider', () => {
           records: [{date: NOW_MS - 60_000, sgv: 101}],
           freshness: {kind: 'stale', fetchedAtMs: NOW_MS - DAY_MS},
         }),
-        readTreatments: jest.fn().mockResolvedValue(fresh([])),
+        readRecordedTreatments: jest.fn().mockResolvedValue(fresh([])),
         readDeviceStatuses: jest.fn().mockResolvedValue(fresh([])),
       },
       sourceId: 'ns_source_a',
@@ -161,3 +158,84 @@ describe('browser AI Nightscout evidence provider', () => {
     ).rejects.toThrow('Fresh Nightscout evidence is unavailable');
   });
 });
+
+it.each([
+  [
+    {eventType: 'Correction Bolus', insulin: 2, deliveredUnits: 1},
+    'recorded bolus: 1 U',
+  ],
+  [
+    {eventType: 'Correction Bolus', insulin: 2, duration: -1},
+    'recorded bolus: unknown',
+  ],
+  [
+    {
+      eventType: 'Temp Basal',
+      enteredBy: 'loop://fixture',
+      amount: 'bad',
+      duration: 5,
+    },
+    'Recorded basal subtotal: unknown',
+  ],
+])(
+  'uses raw evidence for insulin facts without exposing planned or malformed amounts: %p',
+  async (record, expected) => {
+    const provider = createBrowserAiEvidenceProvider({
+      client: {
+        readEntries: jest.fn(async () =>
+          fresh([{date: NOW_MS - 60_000, sgv: 110}]),
+        ),
+        readRecordedTreatments: jest.fn(async () =>
+          fresh([
+            {...record, created_at: new Date(NOW_MS - 3_600_000).toISOString()},
+          ]),
+        ),
+        readDeviceStatuses: jest.fn(async () => fresh([])),
+      },
+      sourceId: 'source-a',
+      now: () => NOW_MS,
+    });
+    const text = await provider.loadVisibleContext({
+      specialist: 'general-chat',
+      locale: 'en',
+      rangeDays: 1,
+      signal: new AbortController().signal,
+    });
+    expect(text).toContain(expected);
+    expect(text).not.toContain('2 U insulin');
+    expect(text).not.toContain('-1 amount');
+    expect(text).not.toContain('Recorded insulin total:');
+  },
+);
+
+it.each([
+  [2026, 2, 8],
+  [2026, 10, 1],
+  [2026, 2, 27],
+  [2026, 9, 25],
+])(
+  'ends selected local days at the next calendar midnight: %p',
+  async (year, month, day) => {
+    const startMs = new Date(year, month, day).getTime();
+    const endMs = new Date(year, month, day + 1).getTime();
+    const nowMs = new Date(year, month, day + 2).getTime();
+    const readEntries = jest.fn(async () => fresh([]));
+    const provider = createBrowserAiEvidenceProvider({
+      client: {
+        readEntries,
+        readRecordedTreatments: jest.fn(async () => fresh([])),
+        readDeviceStatuses: jest.fn(async () => fresh([])),
+      },
+      sourceId: 'source-a',
+      now: () => nowMs,
+    });
+    const signal = new AbortController().signal;
+    await provider.loadVisibleContext({
+      specialist: 'general-chat',
+      locale: 'en',
+      focus: {kind: 'day', dayStartMs: startMs},
+      signal,
+    });
+    expect(readEntries).toHaveBeenCalledWith(startMs, endMs, signal);
+  },
+);

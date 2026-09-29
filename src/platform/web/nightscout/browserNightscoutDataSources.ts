@@ -27,8 +27,7 @@ import {
 } from './browserInvestigationDataSources';
 import {projectNightscoutTherapyContext} from '../../nightscout/therapyContextProjection';
 import {mapNightscoutTreatmentsToInsulinDataEntries} from '../../../utils/nightscoutTreatments.utils';
-import {buildBrowserInsulinSummary} from './browserInsulinSummary';
-import {buildRecordedInsulinSummary} from '../../../services/insulin/recordedInsulin';
+import {createRecordedInsulinDataSource} from '../../../services/insulin/createRecordedInsulinDataSource';
 import {loadCalendarGlucoseRange} from '../../nightscout/loadCalendarGlucoseRange';
 import {
   createGlucoseForecastLoader,
@@ -201,16 +200,22 @@ export const createBrowserNightscoutDataSources = (input: {
   readonly journal: JournalWorkspace;
   readonly now?: () => number;
 }): BrowserNightscoutDataSources => {
-  const trends: TrendsDataSource = {
-    async loadGlucoseSamples(period) {
-      const result = await input.client.readEntries(
-        period.startMs,
-        period.endMs,
-      );
-      return result.records.map(record => ({
+  const loadGlucoseSnapshot = async (
+    period: Parameters<TrendsDataSource['loadGlucoseSamples']>[0],
+  ) => {
+    const result = await input.client.readEntries(period.startMs, period.endMs);
+    return {
+      samples: result.records.map(record => ({
         timestampMs: record.date,
         valueMgDl: record.sgv,
-      }));
+      })),
+      freshness: result.freshness,
+    };
+  };
+  const trends: TrendsDataSource = {
+    loadGlucoseSnapshot,
+    async loadGlucoseSamples(period) {
+      return (await loadGlucoseSnapshot(period)).samples;
     },
   };
   const loadGlucoseForecast = createGlucoseForecastLoader({
@@ -365,41 +370,61 @@ export const createBrowserNightscoutDataSources = (input: {
       };
     },
   };
+  const recordedInsulin = createRecordedInsulinDataSource({
+    getScopeKey: () => {
+      input.client.assertCurrentSource?.();
+      return input.sourceId;
+    },
+    ...(input.now === undefined ? {} : {now: input.now}),
+    fetchTreatments: async (start, end) => {
+      const range = await input.client.readRecordedTreatments(
+        start.getTime(),
+        end.getTime(),
+      );
+      return {...range, records: range.records.map(record => ({...record}))};
+    },
+  });
   const dailyOverview: DailyOverviewDataSource = {
     async loadDailyOverview(period, options) {
-      const observedAtMs = Date.now();
-      const cutoff = Math.min(period.endMs, options?.asOfMs ?? observedAtMs);
-      const observedPeriod = {...period, endMs: cutoff};
-      const [glucoseSamples, treatments] = await Promise.all([
-        cutoff > period.startMs
-          ? trends.loadGlucoseSamples(observedPeriod)
-          : Promise.resolve([]),
-        input.client
-          .readTreatments(period.startMs - DAY_MS, cutoff)
-          .catch(() => undefined),
+      const observedAtMs = (input.now ?? Date.now)();
+      const cutoff = Math.min(
+        period.endMs,
+        observedAtMs,
+        options?.asOfMs ?? observedAtMs,
+      );
+      if (cutoff <= period.startMs) {
+        return {glucoseSamples: [], insulinSummary: {quality: 'unavailable'}};
+      }
+      const [entries, insulinSummary] = await Promise.all([
+        // Carry the final pre-midnight reading into the first five minutes.
+        loadGlucoseSnapshot({
+          ...period,
+          startMs: period.startMs - 5 * MINUTE_MS,
+          endMs: cutoff,
+        }),
+        recordedInsulin.loadWindow({...period, endMs: cutoff}),
       ]);
+      input.client.assertCurrentSource?.();
       return {
-        glucoseSamples,
-        insulinSummary:
-          treatments?.freshness.kind === 'fresh'
-            ? buildRecordedInsulinSummary(
-                treatments.records.map(record => ({...record})),
-                observedPeriod,
-                observedAtMs,
-              )
-            : {quality: 'unavailable'},
+        glucoseSamples: entries.samples,
+        glucoseFreshness: entries.freshness,
+        insulinSummary,
       };
+    },
+    async loadDailyInsulinComparison(request) {
+      return (await recordedInsulin.loadDailyBundle(request)).comparison;
     },
   };
   const previousDaySummary: PreviousDaySummaryDataSource = {
     async loadPreviousDaySummary(period) {
-      const [glucoseSamples, treatments, profile] = await Promise.all([
+      const [glucoseSamples, treatments, insulinSummary] = await Promise.all([
         trends.loadGlucoseSamples(period),
         input.client
           .readTreatments(period.startMs - DAY_MS, period.endMs)
           .catch(() => undefined),
-        input.client.readBasalProfile(period.startMs).catch(() => undefined),
+        recordedInsulin.loadWindow(period).catch(() => undefined),
       ]);
+      input.client.assertCurrentSource?.();
       const events = [
         ...treatmentTimeline(
           treatments?.records ?? [],
@@ -432,12 +457,12 @@ export const createBrowserNightscoutDataSources = (input: {
         }));
       return {
         glucoseSamples,
-        insulinSummary: buildBrowserInsulinSummary(
-          period.startMs,
-          period.endMs,
-          treatments,
-          profile,
-        ),
+        // The legacy previous-day contract requires complete totals. Keep its
+        // total unavailable when only a recorded component is known.
+        insulinSummary:
+          insulinSummary?.quality === 'available'
+            ? insulinSummary
+            : {quality: 'unavailable'},
         events,
       };
     },

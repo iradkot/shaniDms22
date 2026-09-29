@@ -76,6 +76,61 @@ const mount = (element: React.ReactElement) => {
 afterEach(() => mounted.splice(0).forEach(tree => act(() => tree.unmount())));
 
 describe('Daily overview visual cards', () => {
+  it.each([
+    ['en', 'Cached glucose · fetched'],
+    ['he', 'סוכר שמור · נטען'],
+  ] as const)(
+    'labels cached glucose and its source fetch time in %s while retaining the metrics',
+    (locale, label) => {
+      const overview = {
+        ...base,
+        glucoseFreshness: {
+          kind: 'stale' as const,
+          fetchedAtMs: new Date(2026, 8, 27, 8, 15).getTime(),
+        },
+      };
+      const tree = mount(
+        <DailyOverviewCard
+          id="ranges"
+          overview={overview}
+          locale={locale}
+          rangeStyle="ring"
+          thresholds={thresholds}
+        />,
+      );
+      expect(allText(tree)).toContain(label);
+      expect(allText(tree)).toContain('27/9 08:15');
+      expect(textAt(tree, 'daily-overview-tir-hero')).toBe('100%');
+      const status = tree.root.findByProps({
+        testID: 'daily-overview-glucose-freshness',
+      });
+      expect(status.props.accessibilityLabel).toBe(`${label} 27/9 08:15`);
+      const timestamp = status
+        .findAllByType(Text)
+        .find(node => node.props.children === '27/9 08:15')!;
+      expect(StyleSheet.flatten(timestamp.props.style).writingDirection).toBe(
+        'ltr',
+      );
+    },
+  );
+
+  it('states unknown freshness for array-only data without inventing a fetch time', () => {
+    const tree = mount(
+      <DailyOverviewCard
+        id="ranges"
+        overview={base}
+        locale="en"
+        rangeStyle="ring"
+        thresholds={thresholds}
+      />,
+    );
+    const status = tree.root.findByProps({
+      testID: 'daily-overview-glucose-freshness',
+    });
+    expect(status.props.accessibilityLabel).toBe('Glucose freshness unknown');
+    expect(allText(tree)).not.toContain('Glucose fetched');
+  });
+
   it.each(['ring', 'bar', 'list'] as const)(
     'keeps a glanceable TIR hero and exact accessible value in %s style',
     rangeStyle => {

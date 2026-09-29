@@ -52,6 +52,13 @@ const context = (): InsulinContext => ({
   deviceStatus: [],
   profileData: null,
   basalProfileData: [],
+  recordedInsulin: {
+    quality: 'partial',
+    bolusUnits: 4,
+    basalCoveragePercent: 0,
+    basalCoveredMs: 0,
+    basalEvidence: 'recorded',
+  },
   insulinData: [
     {type: 'bolus', timestamp: iso(startMs), amount: 1.25},
     {type: 'bolus', timestamp: iso(endMs - 1), amount: 2.75},
@@ -139,7 +146,7 @@ it.each(['unavailable', 'stale'] as const)(
       available: true,
       range: {start: iso(startMs), end: iso(endMs)},
       totals: {bolusU: 4, carbsG: 55},
-      counts: {bolusCount: 2, carbTreatments: 2},
+      counts: {carbTreatments: 2},
       availability: {profile},
     });
     expect(text).not.toContain('"basalU"');
@@ -181,4 +188,39 @@ it('preserves the existing rolling summary when no dates were selected', async (
     rangeDays: 7,
   });
   expect(mockLoadContext).not.toHaveBeenCalled();
+});
+
+it('uses canonical recorded amounts rather than recounting normalized programmed entries', async () => {
+  const data = context();
+  mockLoadContext.mockResolvedValue({
+    ...data,
+    recordedInsulin: {
+      quality: 'partial',
+      bolusUnits: 1.5,
+      basalCoveragePercent: 0,
+      basalCoveredMs: 0,
+      basalEvidence: 'recorded',
+    },
+  });
+  const {evidence} = await loadSelectedEvidence();
+  expect(evidence.insulin.totals.bolusU).toBe(1.5);
+  expect(evidence.insulin.recordedInsulin.quality).toBe('partial');
+  expect(evidence.insulin.counts).not.toHaveProperty('bolusCount');
+  expect(evidence.insulin.counts).not.toHaveProperty('insulinEntries');
+});
+
+it('keeps an unknown canonical bolus unknown even when normalized entries contain amounts', async () => {
+  const data = context();
+  mockLoadContext.mockResolvedValue({
+    ...data,
+    recordedInsulin: {
+      quality: 'partial',
+      basalCoveragePercent: 0,
+      basalCoveredMs: 0,
+      basalEvidence: 'recorded',
+    },
+  });
+  const {evidence} = await loadSelectedEvidence();
+  expect(evidence.insulin.available).toBe(false);
+  expect(evidence.insulin).not.toHaveProperty('totals');
 });

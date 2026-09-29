@@ -1,4 +1,8 @@
-import type {TrendsGlucoseSample, TrendsPeriod} from '../../trends';
+import type {
+  TrendsGlucoseFreshness,
+  TrendsGlucoseSample,
+  TrendsPeriod,
+} from '../../trends';
 
 export type DailyOverviewPeriod = TrendsPeriod;
 
@@ -25,6 +29,7 @@ export type DailyInsulinSourceSummary =
 
 export interface DailyOverviewSourceSnapshot {
   readonly glucoseSamples: readonly TrendsGlucoseSample[];
+  readonly glucoseFreshness?: TrendsGlucoseFreshness;
   /** Missing insulin is explicit. Consumers must never treat it as zero. */
   readonly insulinSummary: DailyInsulinSourceSummary;
 }

@@ -70,8 +70,24 @@ export const buildNativeRecommendationEvidence = (input: {
     Math.round(Math.min(100, (count / expectedSamples) * 100) * 10) / 10;
   const insulin = input.insulin?.ok ? input.insulin.result : undefined;
   const insulinAvailability = availability(insulin?.availability);
+  const rawRecorded = insulin?.recordedInsulin;
+  const recorded = isRecord(rawRecorded) ? rawRecorded : undefined;
+  const knownUnits = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0;
   const treatmentsAvailable =
-    insulin !== undefined && insulinAvailability.treatments === 'available';
+    insulin !== undefined &&
+    insulinAvailability.treatments === 'available' &&
+    recorded?.basalEvidence === 'recorded' &&
+    recorded.basalEstimated !== true &&
+    (recorded.quality === 'partial' || recorded.quality === 'available') &&
+    (knownUnits(recorded.basalUnits) || knownUnits(recorded.bolusUnits));
+  const rawTotals = insulin?.totals;
+  const rawCounts = insulin?.counts;
+  const bolusUnits = recorded?.bolusUnits;
+  const carbsG = isRecord(rawTotals) ? rawTotals.carbsG : undefined;
+  const carbTreatments = isRecord(rawCounts)
+    ? rawCounts.carbTreatments
+    : undefined;
 
   return {
     observedAt: new Date(input.observedAtMs).toISOString(),
@@ -129,10 +145,16 @@ export const buildNativeRecommendationEvidence = (input: {
       ? {
           available: true,
           range: insulin.range,
-          totals: insulin.totals,
-          counts: insulin.counts,
+          recordedInsulin: recorded,
+          totals: {
+            ...(knownUnits(bolusUnits) ? {bolusU: bolusUnits} : {}),
+            ...(knownUnits(carbsG) ? {carbsG} : {}),
+          },
+          counts: {
+            ...(knownUnits(carbTreatments) ? {carbTreatments} : {}),
+          },
           availability: insulinAvailability,
-          note: 'These are historical treatment totals, not current insulin on board.',
+          note: 'Recorded historical components are shown with their coverage. Missing components and a partial total remain unknown. These are not current insulin on board.',
         }
       : {
           available: false,

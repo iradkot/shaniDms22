@@ -27,6 +27,13 @@ const build = (
     insulin: {
       ok: true,
       result: {
+        recordedInsulin: {
+          quality: 'partial',
+          bolusUnits: 0,
+          basalEvidence: 'recorded',
+          basalCoveragePercent: 0,
+          basalCoveredMs: 0,
+        },
         totals: {bolusU: 0, carbsG: 0},
         counts: {insulinEntries: 0},
         availability: {treatments: 'available'},
@@ -170,4 +177,24 @@ describe('native recommendation evidence', () => {
       expect(evidence.insulin).not.toHaveProperty('totals');
     }
   });
+});
+
+it('does not promote a fresh modeled total to recorded recommendation evidence', () => {
+  const evidence = build({
+    insulin: {
+      ok: true,
+      result: {
+        availability: {treatments: 'available'},
+        totals: {bolusU: 9, basalU: 24},
+        recordedInsulin: {
+          quality: 'available',
+          basalUnits: 24,
+          bolusUnits: 9,
+          basalEstimated: true,
+        },
+      },
+    },
+  });
+  expect(evidence.insulin.available).toBe(false);
+  expect(evidence.insulin).not.toHaveProperty('totals');
 });

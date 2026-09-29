@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {AxiosAdapter} from 'axios';
-import {fetchBgDataForDateRangeWithMetadata, fetchTreatmentsForDateRangeWithMetadata} from 'app/api/apiRequests';
+import {fetchBgDataForDateRangeUncached, fetchBgDataForDateRangeWithMetadata, fetchTreatmentsForDateRangeWithMetadata} from 'app/api/apiRequests';
 import {
   requestCompleteNightscoutRange,
   NightscoutIncompleteRangeError,
@@ -64,6 +64,38 @@ describe('Nightscout range completeness', () => {
     await expect(fetchBgDataForDateRangeWithMetadata(dayStart, dayEnd)).rejects.toBeInstanceOf(NightscoutIncompleteRangeError);
     nightscoutInstance.defaults.adapter = async () => {throw new Error('offline-after-saturation');};
     await expect(fetchBgDataForDateRangeWithMetadata(dayStart, dayEnd)).rejects.toThrow('offline-after-saturation');
+  });
+
+  it('uses the same complete decoded glucose range for uncached analysis readers', async () => {
+    const raw = [
+      {date: String(+start), sgv: '110'},
+      null,
+      {date: +start + 60_000, sgv: 120},
+      {date: +start + 120_000, sgv: -5},
+      {date: +start + 180_000, sgv: 130},
+    ];
+    const counts: number[] = [];
+    nightscoutInstance.defaults.adapter = async config => {
+      const count = Number(config.url?.match(/[?&]count=(\d+)/)?.[1]);
+      counts.push(count);
+      return {config, data: raw.slice(0, count), status: 200, statusText: 'OK', headers: {}};
+    };
+    const result = await fetchBgDataForDateRangeUncached(start, end, {count: 2, throwOnError: true});
+    expect(counts).toEqual([2, 4, 8]);
+    expect(result).toEqual([
+      {date: +start + 180_000, sgv: 130},
+      {date: +start + 60_000, sgv: 120},
+      {date: +start, sgv: 110},
+    ]);
+    expect(await AsyncStorage.getAllKeys()).toEqual([]);
+  });
+
+  it('rejects malformed uncached glucose and does not relabel it as an empty history in strict mode', async () => {
+    nightscoutInstance.defaults.adapter = async config => ({
+      config, data: {error: 'not a record list'}, status: 200, statusText: 'OK', headers: {},
+    });
+    await expect(fetchBgDataForDateRangeUncached(start, end, {throwOnError: true}))
+      .rejects.toThrow('invalid record list');
   });
 
   it('loads every five-minute basal event in a seven-day analysis plus its carry-in day', async () => {

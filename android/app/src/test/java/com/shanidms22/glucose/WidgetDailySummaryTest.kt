@@ -91,6 +91,32 @@ class WidgetDailySummaryTest {
     assertEquals("partial", empty.quality)
   }
 
+  @Test fun `weekly basal does not average incomplete subtotals into a baseline`() {
+    val treatments = JSONArray()
+    for (daysAgo in 1..7) {
+      val dayStart = start - daysAgo * 24 * hour
+      treatments.put(event(dayStart, "Temp Basal").put("enteredBy", "loop://fixture").put("duration", 30).put("amount", 0.5))
+      treatments.put(bolus(dayStart + 10 * minute, 2.0))
+    }
+    val comparison = calculateWidgetInsulinComparison(treatments, start + hour, utc)!!
+    assertEquals(0.5, comparison.yesterday!!.totalBasal!!, 0.0)
+    assertEquals(50.0, comparison.yesterday!!.basalCoveragePercent, 0.0)
+    assertEquals(7, comparison.weekDays)
+    assertNull(comparison.weekAverage!!.totalBasal)
+    assertEquals(0.0, comparison.weekAverage!!.basalCoveragePercent, 0.0)
+    assertEquals(2.0, comparison.weekAverage!!.totalBolus!!, 0.0)
+  }
+
+  @Test fun `insulin schema upgrade discards rate-derived cached amounts while preserving TIR`() {
+    val range = WidgetDailyRange(10, 80, 10, 100, 60)
+    val insulin = WidgetInsulinComparison(widgetInsulinStats(1.0, 2.0, basalCoveredMs = hour), null, null, 0)
+    val raw = JSONObject(widgetDailySummaryJson(WidgetDailySummary(start, start + hour, 70, 180, range, insulin)))
+    raw.getJSONObject("insulin").remove("schemaVersion")
+    val summary = parseWidgetDailySummary(raw.toString(), start + hour, utc)!!
+    assertEquals(range, summary.range)
+    assertNull(summary.insulin)
+  }
+
   @Test fun `all shared recorded delivery fixtures match native background calculations`() {
     val fixture = listOf("../../__tests__/fixtures/recorded-insulin.json", "../__tests__/fixtures/recorded-insulin.json", "__tests__/fixtures/recorded-insulin.json")
       .map { java.io.File(it) }.first { it.isFile }
@@ -153,6 +179,23 @@ class WidgetDailySummaryTest {
     val insulin = WidgetInsulinComparison(widgetInsulinStats(0.0, 0.0, basalCoveredMs = 12 * hour), null, widgetInsulinStats(4.0, 8.0, basalCoveredMs = 12 * hour), 7)
     val summary = WidgetDailySummary(start, now, 70, 180, null, insulin)
     assertEquals(summary, parseWidgetDailySummary(widgetDailySummaryJson(summary), now, utc))
+  }
+
+  @Test fun `ten thousand completed basal intervals retain exact sum and coverage`() {
+    val count = 10_000
+    val step = 5 * minute
+    val end = start + count * step
+    val treatments = JSONArray()
+    for (index in 0 until count) {
+      treatments.put(event(start + index * step, "Temp Basal").put("_id", "dose-$index")
+        .put("enteredBy", "loop://fixture").put("duration", 5).put("amount", 0.125))
+    }
+    val summary = calculateWidgetInsulinStats(treatments, start, end, end)!!
+    assertEquals("available", summary.quality)
+    assertEquals(1250.0, summary.totalBasal!!, 0.0)
+    assertEquals(0.0, summary.totalBolus!!, 0.0)
+    assertEquals(count * step, summary.basalCoveredMs)
+    assertEquals(100.0, summary.basalCoveragePercent, 0.0)
   }
 
   private fun point(minutes: Int, value: Int) = WidgetEntryPoint(start + minutes * minute, value, null)
