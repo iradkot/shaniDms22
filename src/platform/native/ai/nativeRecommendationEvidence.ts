@@ -1,3 +1,9 @@
+import {
+  currentFactsExpireAtMs,
+  reobserveCurrentData,
+  type CurrentDataSnapshot,
+} from '../../../modules/currentData';
+
 export type NativeRecommendationToolResult =
   | {readonly ok: true; readonly result: Record<string, unknown>}
   | {readonly ok: false; readonly error: string};
@@ -18,12 +24,9 @@ const availability = (value: unknown) => ({
   profile: availabilityValue(isRecord(value) ? value.profile : undefined),
 });
 
-/**
- * The legacy tool merges device values onto CGM timestamps. That merged time
- * does not establish when IOB/COB were observed, so they cannot be called current.
- */
+/** Current observations and historical coverage are independent evidence. */
 export const buildNativeRecommendationEvidence = (input: {
-  readonly cgm: NativeRecommendationToolResult | undefined;
+  readonly current: CurrentDataSnapshot;
   readonly stats: NativeRecommendationToolResult | undefined;
   readonly insulin: NativeRecommendationToolResult | undefined;
   readonly startMs: number;
@@ -31,30 +34,14 @@ export const buildNativeRecommendationEvidence = (input: {
   readonly observedAtMs: number;
   readonly days: number;
 }) => {
-  const cgm = input.cgm?.ok ? input.cgm.result : undefined;
-  const rawSamples = cgm && Array.isArray(cgm.samples) ? cgm.samples : [];
-  const validSamples = rawSamples.flatMap((sample: unknown) => {
-    if (
-      !isRecord(sample) ||
-      typeof sample.tMs !== 'number' ||
-      !Number.isSafeInteger(sample.tMs) ||
-      sample.tMs < 0 ||
-      sample.tMs > input.observedAtMs ||
-      typeof sample.mgdl !== 'number' ||
-      !Number.isFinite(sample.mgdl) ||
-      sample.mgdl <= 0
-    ) {
-      return [];
-    }
-    // Preserve only independently established CGM facts. In particular, do
-    // not copy the merged sample's iobU/cobG into a current glucose snapshot.
-    return [{tMs: sample.tMs, mgdl: sample.mgdl}];
-  });
+  const current = reobserveCurrentData(input.current, input.observedAtMs);
+  const {glucose, iob, cob} = current;
   const latest =
-    validSamples.sort((left, right) => right.tMs - left.tMs)[0] ?? null;
-  const ageMs = latest === null ? null : input.observedAtMs - latest.tMs;
-  const current = ageMs !== null && ageMs <= 15 * 60_000;
-  const cgmAvailability = availability(cgm?.availability);
+    glucose.value !== null && glucose.sourceTimestampMs !== null
+      ? {tMs: glucose.sourceTimestampMs, mgdl: glucose.value}
+      : null;
+  const currentIob = iob.status === 'fresh';
+  const currentCob = cob.status === 'fresh';
   const stats = input.stats?.ok ? input.stats.result : undefined;
   const count =
     typeof stats?.sampleCount === 'number' &&
@@ -91,30 +78,34 @@ export const buildNativeRecommendationEvidence = (input: {
 
   return {
     observedAt: new Date(input.observedAtMs).toISOString(),
+    currentFactsExpireAtMs: currentFactsExpireAtMs(current),
     range: {
       start: new Date(input.startMs).toISOString(),
       end: new Date(input.endMs).toISOString(),
       days: input.days,
     },
     currentSnapshot: {
-      fresh: current,
+      fresh: glucose.status === 'fresh',
       latest,
-      ageMinutes: ageMs === null ? null : Math.round(ageMs / 6000) / 10,
-      invalidSampleCount: rawSamples.length - validSamples.length,
-      sourceAvailability: cgmAvailability,
-      warning: current
-        ? null
-        : 'No valid current glucose reading. Do not give immediate glucose or meal-timing advice.',
+      ageMinutes:
+        glucose.ageMs === null ? null : Math.round(glucose.ageMs / 6000) / 10,
+      observation: glucose,
+      warning:
+        glucose.status === 'fresh'
+          ? null
+          : 'No valid current glucose reading. Do not give immediate glucose or meal-timing advice.',
     },
     currentDeviceStatus: {
-      available: false,
-      fresh: false,
-      sourceTimestampMs: null,
-      iobU: null,
-      cobG: null,
-      sourceAvailability: cgmAvailability.deviceStatus,
+      available: currentIob || currentCob,
+      fresh: currentIob && currentCob,
+      iobU: currentIob ? iob.value : null,
+      cobG: currentCob ? cob.value : null,
+      iob: {...iob, value: currentIob ? iob.value : null},
+      cob: {...cob, value: currentCob ? cob.value : null},
       warning:
-        'Current IOB and COB are unknown. The merged CGM tool does not expose their original device observation timestamp. A fresh glucose sample or a successful fetch does not verify device-value freshness.',
+        currentIob && currentCob
+          ? null
+          : 'Use only fields marked fresh. IOB and COB have independent source observation timestamps. Missing or stale values are unknown, never zero; fresh glucose does not verify their freshness.',
     },
     glucose:
       count > 0 && stats !== undefined
@@ -162,6 +153,6 @@ export const buildNativeRecommendationEvidence = (input: {
           warning:
             'Treatment totals are unavailable or stale; do not interpret them as zero or as current insulin on board.',
         },
-    note: 'Size is a patient description, not a carbohydrate estimate. Missing data is unknown, never zero. No causal or medical efficacy claims.',
+    note: 'The currentSnapshot and currentDeviceStatus are loaded independently of the selected historical period. Sparse or unavailable history does not invalidate a fresh current observation. Size is a patient description, not a carbohydrate estimate. Missing data is unknown, never zero. No causal or medical efficacy claims.',
   };
 };

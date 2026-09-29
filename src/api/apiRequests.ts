@@ -94,11 +94,14 @@ const readGlucoseRange = async (
   endDate: Date,
   initialCount = estimateBgCountForRange(startDate, endDate),
 ): Promise<BgSample[]> => {
-  const startIso = startDate.toISOString();
-  const endIso = endDate.toISOString();
+  const startMs = startDate.getTime();
+  const endMs = endDate.getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
+    throw new Error('Invalid glucose range.');
+  }
   const records = await requestCompleteNightscoutRange(
     count =>
-      `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=${count}`,
+      `/api/v1/entries?find[date][$gte]=${startMs}&find[date][$lte]=${endMs}&count=${count}`,
     initialCount,
     MAX_BG_COUNT,
   );

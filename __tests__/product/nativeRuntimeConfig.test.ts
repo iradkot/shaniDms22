@@ -4,6 +4,18 @@ import {
 } from 'app/platform/native/runtimeConfig';
 
 describe('native release runtime configuration', () => {
+  it('preserves actual native version and build independently of backend configuration', () => {
+    expect(decodeShaniDmsRuntimeConfig({
+      versionName: ' 1.0.529-preview ',
+      buildNumber: 53568000,
+    }).appInfo).toEqual({versionName: '1.0.529-preview', buildNumber: '53568000'});
+    expect(decodeShaniDmsRuntimeConfig({
+      versionName: '2.1',
+      buildNumber: '142.3',
+    }).appInfo).toEqual({versionName: '2.1', buildNumber: '142.3'});
+    expect(decodeShaniDmsRuntimeConfig({versionName: '', buildNumber: Number.NaN}).appInfo)
+      .toBeUndefined();
+  });
   it('fails closed when values are missing or malformed', () => {
     expect(decodeShaniDmsRuntimeConfig(undefined)).toEqual({
       firestoreRulesSchemaVersion: 0,

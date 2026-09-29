@@ -34,7 +34,7 @@ internal data class WidgetForecastSnapshot(
 internal data class WidgetForecastSummary(val series: WidgetForecastSeries, val point: WidgetForecastPoint)
 
 internal fun widgetTimestampIsFresh(ts: Long, nowMs: Long): Boolean =
-  ts > 0 && ts <= nowMs + 2L * 60L * 1000L && nowMs - ts < WIDGET_FORECAST_FRESH_MS
+  ts > 0 && ts <= nowMs && nowMs - ts < WIDGET_FORECAST_FRESH_MS
 
 internal fun freshWidgetForecastSeries(
   snapshot: WidgetForecastSnapshot?,

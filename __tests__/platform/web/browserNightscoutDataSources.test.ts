@@ -267,8 +267,14 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
     const snapshot = await loadBrowserCurrentSnapshot({
       client: {
         ...client,
+        readEntries: async () => ({
+          records: [{date: nowMs, sgv: 120}],
+          freshness: {kind: 'fresh', fetchedAtMs: nowMs},
+        }),
         readDeviceStatuses: async () =>
-          range([{createdAtMs: nowMs - 30 * 60000, iobUnits: 3, cobGrams: 25}]),
+          ({records: [{createdAtMs: nowMs - 30 * 60000, iobUnits: 3, cobGrams: 25,
+            iobTimestampMs: nowMs - 30 * 60000, cobTimestampMs: nowMs - 30 * 60000}],
+          freshness: {kind: 'fresh', fetchedAtMs: nowMs}}),
       },
       target,
       locale: 'en',

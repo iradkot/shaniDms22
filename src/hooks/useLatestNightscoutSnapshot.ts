@@ -7,11 +7,10 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
+import {AppState} from 'react-native';
 
-import {
-  fetchLatestBgEntry,
-  fetchLatestDeviceStatusEntry,
-} from 'app/api/apiRequests';
+import {nativeCurrentDataSource} from 'app/services/currentData/nativeCurrentDataSource';
+import type {CurrentDataSnapshot} from '../modules/currentData';
 import {
   getNightscoutBaseUrl,
   getNightscoutConfigurationRevision,
@@ -20,10 +19,6 @@ import {
 import {BgSample} from 'app/types/day_bgs.types';
 import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
 import {futureLoopPoints} from '../modules/glucoseForecast';
-import {
-  extractLoad,
-  getDeviceStatusTimestampMs,
-} from 'app/utils/mergeDeviceStatusIntoBgSamples.utils';
 import {
   assertActiveNightscoutCacheScope,
   createNightscoutCacheScope,
@@ -44,6 +39,11 @@ export type PredictedBgPoint = {
 };
 
 export type LatestNightscoutSnapshot = {
+  /** Captured native source identity for foreground consumers; never model evidence. */
+  configurationRevision?: number;
+  sourceBaseUrl?: string;
+  /** Shared current observations, including each source clock and availability. */
+  currentData?: CurrentDataSnapshot;
   bg: BgSample;
   /** Latest device status entry, if available. */
   deviceStatus: DeviceStatusEntry | null;
@@ -55,10 +55,17 @@ export type LatestNightscoutSnapshot = {
   staleLevel: SnapshotStaleLevel;
 };
 
-function computeStaleLevel(bgTimestampMs: number, nowMs: number): SnapshotStaleLevel {
+function computeStaleLevel(
+  bgTimestampMs: number,
+  nowMs: number,
+): SnapshotStaleLevel {
   const ageMs = nowMs - bgTimestampMs;
-  if (ageMs >= STALE_HIDE_PREDICTION_MS) return 'very-stale';
-  if (ageMs >= STALE_WARNING_MS) return 'stale';
+  if (ageMs >= STALE_HIDE_PREDICTION_MS) {
+    return 'very-stale';
+  }
+  if (ageMs >= STALE_WARNING_MS) {
+    return 'stale';
+  }
   return 'fresh';
 }
 
@@ -76,6 +83,7 @@ function extractPredictionPoints(params: {
  *
  * Polling behavior (PRD):
  * - Poll every 60s when enabled (typically collapsed mode)
+ * - Refresh immediately after background/inactive -> active, even without interval polling
  * - Stale rules are based on BG timestamp (10m warning, 15m hide predictions)
  */
 export function useLatestNightscoutSnapshot(params: {
@@ -94,7 +102,9 @@ export function useLatestNightscoutSnapshot(params: {
     getNightscoutConfigurationRevision,
   );
 
-  const [snapshot, setSnapshot] = useState<LatestNightscoutSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<LatestNightscoutSnapshot | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -119,8 +129,11 @@ export function useLatestNightscoutSnapshot(params: {
     if (configurationRevision !== getNightscoutConfigurationRevision()) {
       return;
     }
-    const cacheScope = createNightscoutCacheScope(getNightscoutBaseUrl());
-    if (!cacheScope) return;
+    const sourceBaseUrl = getNightscoutBaseUrl();
+    const cacheScope = createNightscoutCacheScope(sourceBaseUrl);
+    if (!cacheScope) {
+      return;
+    }
     if (inFlightRef.current?.sourceIdentity === cacheScope.sourceIdentity) {
       return;
     }
@@ -135,6 +148,7 @@ export function useLatestNightscoutSnapshot(params: {
     inFlightRef.current = request;
 
     const isCurrentRequest = () =>
+      configurationRevision === getNightscoutConfigurationRevision() &&
       generationRef.current === generation &&
       inFlightRef.current?.sourceIdentity === request.sourceIdentity &&
       inFlightRef.current?.requestId === request.requestId;
@@ -144,42 +158,47 @@ export function useLatestNightscoutSnapshot(params: {
 
     try {
       assertActiveNightscoutCacheScope(cacheScope);
-      const [bg, deviceStatus] = await Promise.all([
-        fetchLatestBgEntry(),
-        fetchLatestDeviceStatusEntry(),
-      ]);
+      const currentData = await nativeCurrentDataSource.loadCurrent();
 
-      if (!isCurrentRequest()) return;
+      if (!isCurrentRequest()) {
+        return;
+      }
       assertActiveNightscoutCacheScope(cacheScope);
 
-      if (!bg) {
+      const bg = currentData.glucoseReading;
+      const deviceStatus = currentData.deviceStatus as DeviceStatusEntry | null;
+      if (!bg || currentData.glucose.status === 'unavailable') {
         setSnapshot(null);
+        if (currentData.glucose.reason === 'read-failed') {
+          setError(new Error('Current glucose could not be loaded.'));
+        }
         return;
       }
 
-      const nowMs = Date.now();
+      const nowMs = currentData.observedAtMs;
       const staleLevel = computeStaleLevel(bg.date, nowMs);
 
-      const load = deviceStatus ? extractLoad(deviceStatus) : {};
       const enrichedBg: BgSample = {
         ...bg,
-        ...load,
+        ...(currentData.iob.status === 'fresh' && currentData.iob.value !== null
+          ? {iob: currentData.iob.value}
+          : {}),
+        ...(currentData.cob.status === 'fresh' && currentData.cob.value !== null
+          ? {cob: currentData.cob.value}
+          : {}),
       };
 
       const shouldHidePredictions =
-        staleLevel === 'very-stale' ||
-        (() => {
-          const deviceTs = deviceStatus ? getDeviceStatusTimestampMs(deviceStatus) : undefined;
-          return typeof deviceTs === 'number'
-            ? nowMs - deviceTs >= STALE_HIDE_PREDICTION_MS
-            : false;
-        })();
+        staleLevel === 'very-stale' || currentData.glucose.status !== 'fresh';
 
       const predictions = shouldHidePredictions
         ? []
         : extractPredictionPoints({deviceStatus, nowMs});
 
       setSnapshot({
+        configurationRevision,
+        ...(sourceBaseUrl ? {sourceBaseUrl} : {}),
+        currentData,
         bg,
         deviceStatus,
         enrichedBg,
@@ -200,10 +219,34 @@ export function useLatestNightscoutSnapshot(params: {
 
   useEffect(() => {
     refresh();
+    return () => {
+      generationRef.current += 1;
+      inFlightRef.current = null;
+    };
   }, [refresh]);
 
   useEffect(() => {
-    if (!pollingEnabled) return;
+    let previousState = AppState.currentState;
+    let active = true;
+    const subscription = AppState.addEventListener('change', nextState => {
+      const resumed =
+        (previousState === 'background' || previousState === 'inactive') &&
+        nextState === 'active';
+      previousState = nextState;
+      if (active && resumed) {
+        refresh();
+      }
+    });
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!pollingEnabled) {
+      return;
+    }
 
     const id = setInterval(() => {
       refresh();
@@ -213,8 +256,12 @@ export function useLatestNightscoutSnapshot(params: {
   }, [pollingEnabled, refresh]);
 
   useEffect(() => {
-    if (!pollingEnabled) return;
-    if (snapshot?.bg) return;
+    if (!pollingEnabled) {
+      return;
+    }
+    if (snapshot?.bg) {
+      return;
+    }
 
     const retryId = setInterval(() => {
       refresh();

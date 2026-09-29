@@ -18,6 +18,13 @@ export type SettingsOfflineStatus =
   | 'offline'
   | 'unavailable';
 
+export interface SettingsAppInfo {
+  readonly versionName?: string;
+  readonly buildNumber?: string;
+  readonly revision?: string;
+  readonly builtAt?: string;
+}
+
 export interface SettingsPersonalizationSummary {
   readonly questionnaireStatus: SettingsQuestionnaireStatus;
   readonly favoritesCount: number;
@@ -29,6 +36,7 @@ export interface SettingsPersonalizationSummary {
 }
 
 export interface SettingsOverviewInput {
+  readonly appInfo?: SettingsAppInfo;
   readonly language: SettingsLanguage;
   readonly layout: SettingsLayout;
   readonly personalization: SettingsPersonalizationSummary;
@@ -57,6 +65,7 @@ export interface SettingsOverviewInput {
 
 export interface SettingsOverview {
   readonly schemaVersion: 1;
+  readonly appInfo?: SettingsAppInfo;
   readonly language: SettingsLanguage;
   readonly layout: {
     readonly profile: SettingsLayout;

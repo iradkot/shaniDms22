@@ -2,9 +2,17 @@ import {NativeModules, Platform} from 'react-native';
 
 import {BgSample} from 'app/types/day_bgs.types';
 import type {GlucoseForecastSnapshot} from '../modules/glucoseForecast';
+import {
+  reobserveCurrentData,
+  type CurrentDataSnapshot,
+} from '../modules/currentData';
+import {getNightscoutConfigurationRevision} from '../api/shaniNightscoutInstances';
 
 type GlucoseNativeModule = {
-  updateForecastSnapshot?: (accountBaseUrl: string, snapshotJson: string) => void;
+  updateForecastSnapshot?: (
+    accountBaseUrl: string,
+    snapshotJson: string,
+  ) => void;
   updateLiveSurface: (
     value: number,
     trend: string,
@@ -21,16 +29,28 @@ type GlucoseNativeModule = {
     projected3: number,
     low: number,
     high: number,
+    iobTimestampMs: number,
+    cobTimestampMs: number,
+    sourceBaseUrl: string,
+    configurationRevision: number,
   ) => void;
   clearLiveSurface: () => void;
   setWidgetThresholds: (low: number, high: number) => void;
-  configureBackgroundSync: (baseUrl?: string, apiSecretSha1?: string, enabled?: boolean) => void;
+  configureBackgroundSync: (
+    baseUrl: string | undefined,
+    apiSecretSha1: string | undefined,
+    enabled: boolean,
+    configurationRevision: number,
+  ) => void;
   setLiveModeEnabled: (enabled: boolean) => void;
   setWidgetRangeHours?: (hours: number) => void;
   setWidgetChartStyle?: (style: string) => void;
 };
 
 type GlucoseWidgetSnapshot = {
+  currentData?: CurrentDataSnapshot;
+  sourceBaseUrl?: string;
+  configurationRevision?: number;
   enrichedBg?: BgSample | null;
   predictions?: Array<{sgv: number}>;
   recentBgSamples?: BgSample[];
@@ -63,14 +83,25 @@ type AndroidGlucoseWidgetUpdateArgs = [
   projected3: number,
   low: number,
   high: number,
+  iobTimestampMs: number,
+  cobTimestampMs: number,
+  sourceBaseUrl: string,
+  configurationRevision: number,
 ];
 
 const nativeModule: GlucoseNativeModule | undefined =
-  Platform.OS === 'android' ? (NativeModules.GlucoseLiveModule as GlucoseNativeModule | undefined) : undefined;
+  Platform.OS === 'android'
+    ? (NativeModules.GlucoseLiveModule as GlucoseNativeModule | undefined)
+    : undefined;
 
 /** Native independently checks account identity, source timestamps and freshness. */
-export function publishAndroidGlucoseForecast(baseUrl: string, snapshot: GlucoseForecastSnapshot): void {
-  if (!nativeModule?.updateForecastSnapshot) {return;}
+export function publishAndroidGlucoseForecast(
+  baseUrl: string,
+  snapshot: GlucoseForecastSnapshot,
+): void {
+  if (!nativeModule?.updateForecastSnapshot) {
+    return;
+  }
   try {
     nativeModule.updateForecastSnapshot(baseUrl, JSON.stringify(snapshot));
   } catch {
@@ -79,10 +110,15 @@ export function publishAndroidGlucoseForecast(baseUrl: string, snapshot: Glucose
 }
 
 function finiteNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
-export function calculateWidgetTir(samples: BgSample[] | undefined, thresholds?: RangeThresholds): number | undefined {
+export function calculateWidgetTir(
+  samples: BgSample[] | undefined,
+  thresholds?: RangeThresholds,
+): number | undefined {
   const low = finiteNumber(thresholds?.low);
   const high = finiteNumber(thresholds?.high);
   if (low == null || high == null) {
@@ -129,6 +165,7 @@ function trendToSymbol(direction?: string): string {
 export function buildAndroidGlucoseWidgetUpdateArgs(
   snapshot?: GlucoseWidgetSnapshot | null,
   thresholds?: RangeThresholds,
+  nowMs: number = Date.now(),
 ): AndroidGlucoseWidgetUpdateArgs | undefined {
   const sample = snapshot?.enrichedBg;
   if (!sample) {
@@ -143,10 +180,21 @@ export function buildAndroidGlucoseWidgetUpdateArgs(
 
   const value = Math.round(sgv);
   const trend = trendToSymbol(sample.direction);
-  const timestampMs = typeof sample.date === 'number' && Number.isFinite(sample.date) ? sample.date : Date.now();
+  const timestampMs = finiteNumber(sample.date);
+  if (timestampMs === undefined || timestampMs <= 0 || timestampMs > nowMs) {
+    return;
+  }
 
-  const iob = finiteNumber(sample.iob);
-  const cob = finiteNumber(sample.cob);
+  const current =
+    snapshot?.currentData && reobserveCurrentData(snapshot.currentData, nowMs);
+  const iob =
+    current?.iob.status === 'fresh'
+      ? current.iob.value ?? undefined
+      : undefined;
+  const cob =
+    current?.cob.status === 'fresh'
+      ? current.cob.value ?? undefined
+      : undefined;
   const totalBasal = finiteNumber(snapshot?.insulinStats?.totalBasal);
   const totalBolus = finiteNumber(snapshot?.insulinStats?.totalBolus);
   const basalBolusRatio = finiteNumber(snapshot?.insulinStats?.basalBolusRatio);
@@ -155,12 +203,27 @@ export function buildAndroidGlucoseWidgetUpdateArgs(
   const p1Raw = snapshot?.predictions?.[0]?.sgv;
   const p2Raw = snapshot?.predictions?.[1]?.sgv;
   const p3Raw = snapshot?.predictions?.[2]?.sgv;
-  const projected1 = typeof p1Raw === 'number' && Number.isFinite(p1Raw) ? Math.round(p1Raw) : undefined;
-  const projected2 = typeof p2Raw === 'number' && Number.isFinite(p2Raw) ? Math.round(p2Raw) : undefined;
-  const projected3 = typeof p3Raw === 'number' && Number.isFinite(p3Raw) ? Math.round(p3Raw) : undefined;
+  const projected1 =
+    typeof p1Raw === 'number' && Number.isFinite(p1Raw)
+      ? Math.round(p1Raw)
+      : undefined;
+  const projected2 =
+    typeof p2Raw === 'number' && Number.isFinite(p2Raw)
+      ? Math.round(p2Raw)
+      : undefined;
+  const projected3 =
+    typeof p3Raw === 'number' && Number.isFinite(p3Raw)
+      ? Math.round(p3Raw)
+      : undefined;
 
-  const low = typeof thresholds?.low === 'number' && Number.isFinite(thresholds.low) ? thresholds.low : -1;
-  const high = typeof thresholds?.high === 'number' && Number.isFinite(thresholds.high) ? thresholds.high : -1;
+  const low =
+    typeof thresholds?.low === 'number' && Number.isFinite(thresholds.low)
+      ? thresholds.low
+      : -1;
+  const high =
+    typeof thresholds?.high === 'number' && Number.isFinite(thresholds.high)
+      ? thresholds.high
+      : -1;
 
   return [
     value,
@@ -168,16 +231,34 @@ export function buildAndroidGlucoseWidgetUpdateArgs(
     timestampMs,
     typeof iob === 'number' && Number.isFinite(iob) ? iob : -999,
     typeof cob === 'number' && Number.isFinite(cob) ? cob : -1,
-    typeof totalBasal === 'number' && Number.isFinite(totalBasal) ? totalBasal : -1,
-    typeof totalBolus === 'number' && Number.isFinite(totalBolus) ? totalBolus : -1,
-    typeof basalBolusRatio === 'number' && Number.isFinite(basalBolusRatio) ? basalBolusRatio : -1,
-    typeof totalInsulin === 'number' && Number.isFinite(totalInsulin) ? totalInsulin : -1,
+    typeof totalBasal === 'number' && Number.isFinite(totalBasal)
+      ? totalBasal
+      : -1,
+    typeof totalBolus === 'number' && Number.isFinite(totalBolus)
+      ? totalBolus
+      : -1,
+    typeof basalBolusRatio === 'number' && Number.isFinite(basalBolusRatio)
+      ? basalBolusRatio
+      : -1,
+    typeof totalInsulin === 'number' && Number.isFinite(totalInsulin)
+      ? totalInsulin
+      : -1,
     typeof tir === 'number' && Number.isFinite(tir) ? tir : -1,
-    typeof projected1 === 'number' && Number.isFinite(projected1) ? projected1 : -1,
-    typeof projected2 === 'number' && Number.isFinite(projected2) ? projected2 : -1,
-    typeof projected3 === 'number' && Number.isFinite(projected3) ? projected3 : -1,
+    typeof projected1 === 'number' && Number.isFinite(projected1)
+      ? projected1
+      : -1,
+    typeof projected2 === 'number' && Number.isFinite(projected2)
+      ? projected2
+      : -1,
+    typeof projected3 === 'number' && Number.isFinite(projected3)
+      ? projected3
+      : -1,
     low,
     high,
+    iob === undefined ? -1 : current?.iob.sourceTimestampMs ?? -1,
+    cob === undefined ? -1 : current?.cob.sourceTimestampMs ?? -1,
+    snapshot?.sourceBaseUrl ?? '',
+    snapshot?.configurationRevision ?? -1,
   ];
 }
 
@@ -186,6 +267,12 @@ export function updateAndroidGlucoseLiveSurface(
   thresholds?: RangeThresholds,
 ): void {
   if (!nativeModule) {
+    return;
+  }
+  if (
+    !snapshot?.sourceBaseUrl ||
+    snapshot.configurationRevision !== getNightscoutConfigurationRevision()
+  ) {
     return;
   }
   const args = buildAndroidGlucoseWidgetUpdateArgs(snapshot, thresholds);
@@ -239,9 +326,13 @@ export function configureAndroidWidgetBackgroundSync(params: {
       params.baseUrl,
       params.apiSecretSha1,
       params.enabled,
+      getNightscoutConfigurationRevision(),
     );
   } catch (err) {
-    console.warn('androidGlucoseLiveSurface: configureBackgroundSync failed', err);
+    console.warn(
+      'androidGlucoseLiveSurface: configureBackgroundSync failed',
+      err,
+    );
   }
 }
 

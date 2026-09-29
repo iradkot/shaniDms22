@@ -5,6 +5,7 @@ import type {
   PreMealTrend,
 } from '../../../modules/preMealAssistance';
 import type {LatestNightscoutSnapshotState} from './LatestNightscoutSnapshotStateContext';
+import {selectLatestNightscoutSample} from './latestNightscoutSample';
 
 export const PRE_MEAL_INTENT_DURATION_MS = 90 * 60 * 1000;
 
@@ -121,11 +122,14 @@ const boundedNumber = (
     : undefined;
 };
 
-const parseFacts = (snapshot: unknown): PreMealAssistanceFacts | undefined => {
-  if (!isRecord(snapshot) || !isRecord(snapshot.enrichedBg)) {
+const parseFacts = (
+  snapshot: unknown,
+  nowMs: number,
+): PreMealAssistanceFacts | undefined => {
+  const source = selectLatestNightscoutSample(snapshot, nowMs);
+  if (!source) {
     return undefined;
   }
-  const source = snapshot.enrichedBg;
   const observedAtMs = finiteNumber(source.date);
   if (observedAtMs === undefined || observedAtMs <= 0) {
     return undefined;
@@ -135,7 +139,7 @@ const parseFacts = (snapshot: unknown): PreMealAssistanceFacts | undefined => {
     typeof source.direction === 'string'
       ? NIGHTSCOUT_TRENDS[source.direction]
       : undefined;
-  const iobUnits = boundedNumber(source.iob, 0, 100);
+  const iobUnits = boundedNumber(source.iob, -100, 100);
   const cobGrams = boundedNumber(source.cob, 0, 1000);
   if (
     glucoseMgDl === undefined &&
@@ -149,8 +153,12 @@ const parseFacts = (snapshot: unknown): PreMealAssistanceFacts | undefined => {
     observedAtMs,
     ...(glucoseMgDl === undefined ? {} : {glucoseMgDl}),
     ...(direction === undefined ? {} : {trend: direction}),
-    ...(iobUnits === undefined ? {} : {iobUnits}),
-    ...(cobGrams === undefined ? {} : {cobGrams}),
+    ...(iobUnits === undefined || source.iobTimestampMs === undefined
+      ? {}
+      : {iobUnits, iobTimestampMs: source.iobTimestampMs}),
+    ...(cobGrams === undefined || source.cobTimestampMs === undefined
+      ? {}
+      : {cobGrams, cobTimestampMs: source.cobTimestampMs}),
   };
 };
 
@@ -168,7 +176,7 @@ export const createNativePreMealAssistanceDataSource = ({
       intent.expiresAtMs > nowMs
         ? {kind: 'active' as const, ...intent}
         : {kind: 'inactive' as const};
-    const facts = parseFacts(latestSnapshotState.snapshot);
+    const facts = parseFacts(latestSnapshotState.snapshot, nowMs);
     return {
       relevance,
       sourceState:

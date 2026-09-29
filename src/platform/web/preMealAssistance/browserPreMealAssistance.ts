@@ -6,6 +6,8 @@ import type {
 import type {JournalWorkspaceScope} from '../../../modules/journal';
 import type {BrowserNightscoutClient} from '../nightscout';
 import type {IndexedDbKeyValueStore} from '../storage';
+import {reobserveCurrentData, type CurrentDataSource} from '../../../modules/currentData';
+import {createBrowserCurrentDataSource} from '../nightscout/browserCurrentDataSource';
 
 const INTENT_DURATION_MS = 90 * 60 * 1_000;
 const MAX_FUTURE_CLOCK_SKEW_MS = 5 * 60 * 1_000;
@@ -134,6 +136,7 @@ export class BrowserPreMealAssistanceController {
   private readonly listeners = new Set<() => void>();
   private writeTail: Promise<void> = Promise.resolve();
   private readonly key: string;
+  private readonly currentDataSource: CurrentDataSource | undefined;
 
   readonly dataSource: PreMealAssistanceDataSource = {
     loadContext: async ({nowMs}) => {
@@ -142,57 +145,36 @@ export class BrowserPreMealAssistanceController {
         intent === undefined
           ? ({kind: 'inactive'} as const)
           : ({kind: 'active', ...intent} as const);
-      if (this.input.client === undefined) {
+      if (this.currentDataSource === undefined) {
         return {relevance, sourceState: {kind: 'offline'} as const};
       }
       try {
-        const [result, deviceStatuses] = await Promise.all([
-          this.input.client.readEntries(
-            nowMs - 2 * 60 * 60 * 1_000,
-            nowMs + 1,
-          ),
-          this.input.client.readDeviceStatuses === undefined
-            ? Promise.resolve(undefined)
-            : this.input.client
-                .readDeviceStatuses(nowMs - 2 * 60 * 60 * 1_000, nowMs)
-                .catch(() => undefined),
-        ]);
-        const latest = [...result.records]
-          .filter(record => record.date <= nowMs)
-          .sort((left, right) => right.date - left.date)[0];
-        const latestDeviceStatus = deviceStatuses?.records
-          .filter(record => record.createdAtMs <= nowMs)
-          .sort((left, right) => right.createdAtMs - left.createdAtMs)[0];
-        const observedAtMs =
-          latest === undefined
-            ? latestDeviceStatus?.createdAtMs
-            : latestDeviceStatus === undefined
-              ? latest.date
-              : Math.min(latest.date, latestDeviceStatus.createdAtMs);
+        const loaded = await this.currentDataSource.loadCurrent();
+        const current = reobserveCurrentData(loaded, this.input.now?.() ?? Date.now());
+        const latest = current.glucoseReading;
+        const observedAtMs = current.glucose.sourceTimestampMs;
         const trend =
           latest?.direction === undefined
             ? undefined
             : NIGHTSCOUT_TRENDS[latest.direction];
         const facts =
-          observedAtMs === undefined
+          observedAtMs === null || current.glucose.value === null
             ? undefined
             : {
                 observedAtMs,
-                ...(latest === undefined ? {} : {glucoseMgDl: latest.sgv}),
+                glucoseMgDl: current.glucose.value,
                 ...(trend === undefined ? {} : {trend}),
-                ...(latestDeviceStatus?.iobUnits === undefined
+                ...(current.iob.status !== 'fresh' || current.iob.value === null || current.iob.sourceTimestampMs === null
                   ? {}
-                  : {iobUnits: latestDeviceStatus.iobUnits}),
-                ...(latestDeviceStatus?.cobGrams === undefined
+                  : {iobUnits: current.iob.value, iobTimestampMs: current.iob.sourceTimestampMs}),
+                ...(current.cob.status !== 'fresh' || current.cob.value === null || current.cob.sourceTimestampMs === null
                   ? {}
-                  : {cobGrams: latestDeviceStatus.cobGrams}),
+                  : {cobGrams: current.cob.value, cobTimestampMs: current.cob.sourceTimestampMs}),
               };
         return {
           relevance,
           sourceState:
-            result.freshness.kind === 'fresh' &&
-            (latestDeviceStatus === undefined ||
-              deviceStatuses?.freshness.kind === 'fresh')
+            current.glucose.status === 'fresh'
               ? ({kind: 'live'} as const)
               : ({kind: 'offline'} as const),
           ...(facts === undefined ? {} : {facts}),
@@ -208,10 +190,15 @@ export class BrowserPreMealAssistanceController {
       readonly storage: Pick<IndexedDbKeyValueStore, 'getItem' | 'setItem'>;
       readonly scope: JournalWorkspaceScope;
       readonly client?: BrowserPreMealReader;
+      readonly currentDataSource?: CurrentDataSource;
       readonly now?: () => number;
     },
   ) {
     this.key = storageKey(input.scope);
+    this.currentDataSource = input.currentDataSource ?? (input.client === undefined ? undefined : createBrowserCurrentDataSource({
+      client: input.client,
+      ...(input.now === undefined ? {} : {now: input.now}),
+    }));
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -282,6 +269,7 @@ export const createBrowserPreMealAssistanceController = (input: {
   readonly storage: Pick<IndexedDbKeyValueStore, 'getItem' | 'setItem'>;
   readonly scope: JournalWorkspaceScope;
   readonly client?: BrowserPreMealReader;
+  readonly currentDataSource?: CurrentDataSource;
   readonly now?: () => number;
 }): BrowserPreMealAssistanceController =>
   new BrowserPreMealAssistanceController(input);

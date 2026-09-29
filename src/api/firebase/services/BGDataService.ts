@@ -1,63 +1,23 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
-import {bgSortFunction} from 'app/utils/bg.utils';
+import {fetchBgDataForDateRange} from 'app/api/apiRequests';
 import {BgSample} from 'app/types/day_bgs.types';
 import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-const DEFAULT_BG_COUNT = 1000;
-const MAX_BG_COUNT = 50000;
-const EXPECTED_READINGS_PER_DAY = 288; // 5-minute CGM
-
-const estimateBgCountForRange = (startDate: Date, endDate: Date) => {
-  const days = Math.max(
-    1,
-    Math.floor((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1,
-  );
-
-  const estimate = Math.ceil(days * EXPECTED_READINGS_PER_DAY * 1.2);
-  return Math.min(MAX_BG_COUNT, Math.max(DEFAULT_BG_COUNT, estimate));
-};
-
+/** Compatibility entry point; source isolation, decoding and caching have one owner. */
 class BGDataService {
-  static async fetchBgDataForDateRange(
+  static fetchBgDataForDateRange(
     startDate: Date,
     endDate: Date,
   ): Promise<BgSample[]> {
-    const startIso = startDate.toISOString();
-    const endIso = endDate.toISOString();
-    const count = estimateBgCountForRange(startDate, endDate);
-    const cacheKey: string = `bgData-${startIso}-${endIso}-v2-count=${count}`;
-    const cachedData: string | null = await AsyncStorage.getItem(cacheKey);
-
-    if (cachedData) {
-      return JSON.parse(cachedData);
-    }
-    const apiUrl: string = `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=${count}`;
-    try {
-      const response = await nightscoutInstance.get<BgSample[]>(apiUrl);
-      const bgData: BgSample[] = response.data;
-      const sortedBgData: BgSample[] = bgData.sort(bgSortFunction(false));
-
-      await AsyncStorage.setItem(cacheKey, JSON.stringify(sortedBgData));
-      return sortedBgData;
-    } catch (error) {
-      console.error('Error fetching BG data from Nightscout:', error);
-      throw error;
-    }
+    return fetchBgDataForDateRange(startDate, endDate);
   }
 
-  static async fetchBgDataForDate(date: Date): Promise<BgSample[]> {
-    // Use getFormattedStartEndOfDay to ensure localization is respected
+  static fetchBgDataForDate(date: Date): Promise<BgSample[]> {
     const {formattedStartDate, formattedEndDate} =
       getFormattedStartEndOfDay(date);
-
-    // Convert the formatted dates back to Date objects for compatibility
-    const startDate = new Date(formattedStartDate);
-    const endDate = new Date(formattedEndDate);
-
-    // Now, utilize the fetchBgDataForDateRange method
-    return this.fetchBgDataForDateRange(startDate, endDate);
+    return this.fetchBgDataForDateRange(
+      new Date(formattedStartDate),
+      new Date(formattedEndDate),
+    );
   }
 }
 

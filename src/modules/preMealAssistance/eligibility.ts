@@ -33,6 +33,12 @@ const sanitizeFacts = (
   const iobUnits = facts.iobUnits;
   const cobGrams = facts.cobGrams;
   const trend = facts.trend;
+  const freshLoad = (timestampMs: number | undefined): boolean =>
+    timestampMs !== undefined &&
+    Number.isFinite(timestampMs) &&
+    timestampMs > 0 &&
+    timestampMs <= nowMs &&
+    nowMs - timestampMs < CURRENT_FACT_AGE_MS;
   return {
     observedAtMs: facts.observedAtMs,
     ...(glucoseMgDl !== undefined &&
@@ -42,9 +48,16 @@ const sanitizeFacts = (
       ? {glucoseMgDl}
       : {}),
     ...(trend !== undefined && TRENDS.has(trend) ? {trend} : {}),
-    ...(iobUnits !== undefined && Number.isFinite(iobUnits) ? {iobUnits} : {}),
-    ...(cobGrams !== undefined && Number.isFinite(cobGrams) && cobGrams >= 0
-      ? {cobGrams}
+    ...(iobUnits !== undefined &&
+    Number.isFinite(iobUnits) &&
+    freshLoad(facts.iobTimestampMs)
+      ? {iobUnits, iobTimestampMs: facts.iobTimestampMs!}
+      : {}),
+    ...(cobGrams !== undefined &&
+    Number.isFinite(cobGrams) &&
+    cobGrams >= 0 &&
+    freshLoad(facts.cobTimestampMs)
+      ? {cobGrams, cobTimestampMs: facts.cobTimestampMs!}
       : {}),
   };
 };
@@ -101,9 +114,9 @@ export const evaluatePreMealAssistance = (
   const availability =
     input.snapshot.sourceState.kind === 'offline'
       ? 'offline'
-      : ageMs === undefined || ageMs > CURRENT_FACT_AGE_MS
-        ? 'stale'
-        : 'current';
+      : ageMs === undefined || ageMs >= CURRENT_FACT_AGE_MS
+      ? 'stale'
+      : 'current';
 
   return {
     kind: 'visible',

@@ -5,6 +5,7 @@ import {
 import {selectCurrentSnapshotTarget} from '../../src/product/hub';
 import {createCurrentSnapshotViewModel} from '../../src/platform/native/product';
 import type {LatestNightscoutSnapshotState} from '../../src/platform/native/product';
+import {buildCurrentDataSnapshot} from '../../src/modules/currentData';
 
 const NOW_MS = 2_000_000;
 const runtime: DestinationRuntimeContext = {platform: 'android'};
@@ -59,6 +60,24 @@ describe('createCurrentSnapshotViewModel', () => {
   it('formats a fresh reading, trend, age, IOB and COB', () => {
     const result = build(
       state({
+        currentData: buildCurrentDataSnapshot({
+          observedAtMs: NOW_MS,
+          glucose: {
+            records: [{sgv: 116.6, date: NOW_MS - 4 * 60_000}],
+            freshness: {kind: 'fresh', fetchedAtMs: NOW_MS},
+          },
+          deviceStatus: {
+            records: [
+              {
+                loop: {
+                  iob: {iob: 1.234, timestamp: NOW_MS - 2 * 60_000},
+                  cob: {cob: 12, timestamp: NOW_MS - 3 * 60_000},
+                },
+              },
+            ],
+            freshness: {kind: 'fresh', fetchedAtMs: NOW_MS},
+          },
+        }),
         staleLevel: 'fresh',
         enrichedBg: {
           sgv: 116.6,
@@ -139,5 +158,39 @@ describe('createCurrentSnapshotViewModel', () => {
     );
     expect(validReading.status).toBe('ready');
     expect(validReading.trendLabel).toBeUndefined();
+  });
+
+  it('ages each load without a new fetch and does not borrow glucose time', () => {
+    const currentData = buildCurrentDataSnapshot({
+      observedAtMs: NOW_MS - 60_000,
+      glucose: {
+        records: [{sgv: 110, date: NOW_MS - 60_000}],
+        freshness: {kind: 'fresh', fetchedAtMs: NOW_MS - 60_000},
+      },
+      deviceStatus: {
+        records: [
+          {
+            loop: {
+              iob: {iob: -0.2, timestamp: NOW_MS - 15 * 60_000},
+              cob: {cob: 0, timestamp: NOW_MS - 2 * 60_000},
+            },
+          },
+        ],
+        freshness: {kind: 'fresh', fetchedAtMs: NOW_MS - 60_000},
+      },
+    });
+    const result = build(
+      state({
+        currentData,
+        enrichedBg: {sgv: 110, date: NOW_MS - 60_000, iob: -0.2, cob: 0},
+      }),
+    );
+    expect(result.status).toBe('ready');
+    expect(result.iobLabel).toBeUndefined();
+    expect(result.cobLabel).toBe('COB 0 g');
+    expect(
+      build(state({enrichedBg: {sgv: 110, date: NOW_MS, iob: 3, cob: 20}}))
+        .iobLabel,
+    ).toBeUndefined();
   });
 });

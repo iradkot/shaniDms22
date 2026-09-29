@@ -69,6 +69,7 @@ import {
   type SettingsDetailSection,
 } from 'app/product/settings';
 import {useLegacyAiAnalystModuleRuntime} from 'app/platform/native/ai';
+import {NATIVE_RUNTIME_CONFIG} from 'app/platform/native/runtimeConfig';
 import {sha1WorkspaceIdentityDigest} from 'app/modules/workspaces';
 import {useGlucoseRuleNotifications} from 'app/hooks/useGlucoseRuleNotifications';
 import {unregisterDeviceToken} from 'app/services/rebaseService';
@@ -573,6 +574,7 @@ const ProductExperienceScreen = ({
     }
     return {
       dataSource: createNativeSettingsDataSource({
+        ...(NATIVE_RUNTIME_CONFIG.appInfo ? {appInfo: NATIVE_RUNTIME_CONFIG.appInfo} : {}),
         language,
         layout,
         personalization: personalization.preferences,

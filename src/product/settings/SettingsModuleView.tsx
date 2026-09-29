@@ -19,6 +19,7 @@ import type {
   SettingsNightscoutConnectionRuntime,
 } from './runtime';
 import {NightscoutConnectionCard} from './NightscoutConnectionCard';
+import {AppVersionRow} from './AppVersionRow';
 
 const COPY = {
   en: {
@@ -385,6 +386,7 @@ export const SettingsModuleView = ({
         subtitle={copy.subtitle}
         testID="settings-page"
         title={copy.title}>
+        <AppVersionRow locale={locale} {...(overview.appInfo ? {appInfo: overview.appInfo} : {})} />
         <NightscoutConnectionCard
           source={overview.nightscout}
           locale={locale}

@@ -38,6 +38,8 @@ import {t as tr} from 'app/i18n/translations';
 import {addOpacity} from 'app/style/styling.utils';
 import {setAndroidWidgetChartStyle, setAndroidWidgetLiveModeEnabled, setAndroidWidgetRangeHours} from 'app/services/androidGlucoseLiveSurface';
 import {useThemeSettings} from 'app/contexts/ThemeSettingsContext';
+import {NATIVE_RUNTIME_CONFIG} from 'app/platform/native/runtimeConfig';
+import {AppVersionRow} from 'app/product/settings/AppVersionRow';
 
 const UI_STORAGE_KEY = 'settings.ui.v1';
 const WIDGET_STORAGE_KEY = 'settings.widget.v1';
@@ -613,6 +615,7 @@ const Settings: React.FC = () => {
         >
           {tr(language, 'settings.subtitle')}
         </Text>
+        <AppVersionRow locale={language} {...(NATIVE_RUNTIME_CONFIG.appInfo ? {appInfo: NATIVE_RUNTIME_CONFIG.appInfo} : {})} />
       </View>
 
       <View>
@@ -1579,4 +1582,3 @@ const Settings: React.FC = () => {
 };
 
 export default Settings;
-

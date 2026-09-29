@@ -262,9 +262,11 @@ export interface BrowserNightscoutDeviceStatus {
   readonly _id?: string;
   readonly createdAtMs: number;
   readonly iobUnits?: number;
+  readonly iobTimestampMs?: number | null;
   readonly bolusIobUnits?: number;
   readonly basalIobUnits?: number;
   readonly cobGrams?: number;
+  readonly cobTimestampMs?: number | null;
   /** Minimal forecast facts, including their original observation times. */
   readonly forecastStatus?: ForecastDeviceStatus;
 }
@@ -438,8 +440,28 @@ export const decodeBrowserNightscoutDeviceStatus = (
     openaps === undefined ? undefined : nestedRecord(openaps, 'suggested');
   const enacted =
     openaps === undefined ? undefined : nestedRecord(openaps, 'enacted');
+  const openapsMeal = openaps === undefined ? undefined : nestedRecord(openaps, 'meal');
+  const openapsCob = openaps === undefined ? undefined : nestedRecord(openaps, 'cob');
+  // A value and its clock must come from the same payload. Upload time is not a load clock.
+  const iobPayload = value.iobUnits !== undefined || value.iobTimestampMs !== undefined
+    ? {value: value.iobUnits, timestamp: value.iobTimestampMs}
+    : loopIob !== undefined ? {value: loopIob.iob, timestamp: loopIob.timestamp}
+    : {value: openapsIob?.iob, timestamp: openapsIob?.timestamp};
+  const cobPayload = value.cobGrams !== undefined || value.cobTimestampMs !== undefined
+    ? {value: value.cobGrams, timestamp: value.cobTimestampMs}
+    : loopCob !== undefined ? {value: loopCob.cob, timestamp: loopCob.timestamp}
+    : openapsMeal !== undefined ? {value: openapsMeal.cob, timestamp: openapsMeal.timestamp}
+    : openapsCob !== undefined ? {value: openapsCob.cob, timestamp: openapsCob.timestamp}
+    : suggested?.COB !== undefined ? {value: suggested.COB, timestamp: suggested.timestamp}
+    : {value: enacted?.COB, timestamp: enacted?.timestamp};
+  const fieldTimestamp = (raw: unknown): number | undefined => {
+    const parsed = number(raw) ?? (typeof raw === 'string' ? Date.parse(raw) : undefined);
+    return parsed !== undefined && Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+  };
+  const iobTimestampMs = fieldTimestamp(iobPayload.timestamp);
+  const cobTimestampMs = fieldTimestamp(cobPayload.timestamp);
   const iobUnits = bounded(
-    value.iobUnits ?? loopIob?.iob ?? openapsIob?.iob,
+    iobPayload.value,
     -100,
     100,
   );
@@ -454,7 +476,7 @@ export const decodeBrowserNightscoutDeviceStatus = (
     100,
   );
   const cobGrams = bounded(
-    value.cobGrams ?? loopCob?.cob ?? suggested?.COB ?? enacted?.COB,
+    cobPayload.value,
     0,
     1_000,
   );
@@ -464,13 +486,17 @@ export const decodeBrowserNightscoutDeviceStatus = (
   const forecastStatus = decodedForecast && (
     decodedForecast.loopPrediction !== undefined ||
     decodedForecast.iobUnits !== undefined ||
-    decodedForecast.cobGrams !== undefined
+    decodedForecast.cobGrams !== undefined ||
+    decodedForecast.iobTimestampMs !== undefined ||
+    decodedForecast.cobTimestampMs !== undefined
   ) ? decodedForecast : undefined;
   if (
     iobUnits === undefined &&
     bolusIobUnits === undefined &&
     basalIobUnits === undefined &&
     cobGrams === undefined &&
+    iobPayload.timestamp === undefined &&
+    cobPayload.timestamp === undefined &&
     forecastStatus === undefined
   ) {
     return null;
@@ -480,9 +506,11 @@ export const decodeBrowserNightscoutDeviceStatus = (
     createdAtMs,
     ...(id === undefined ? {} : {_id: id}),
     ...(iobUnits === undefined ? {} : {iobUnits}),
+    ...(iobPayload.timestamp === undefined ? {} : {iobTimestampMs: iobTimestampMs ?? null}),
     ...(bolusIobUnits === undefined ? {} : {bolusIobUnits}),
     ...(basalIobUnits === undefined ? {} : {basalIobUnits}),
     ...(cobGrams === undefined ? {} : {cobGrams}),
+    ...(cobPayload.timestamp === undefined ? {} : {cobTimestampMs: cobTimestampMs ?? null}),
     ...(forecastStatus === undefined ? {} : {forecastStatus}),
   };
 };

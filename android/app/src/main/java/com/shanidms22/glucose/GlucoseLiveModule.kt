@@ -9,6 +9,7 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
 
   override fun getName(): String = "GlucoseLiveModule"
+  private var configurationRevision: Double? = null
 
   @ReactMethod
   fun updateLiveSurface(
@@ -27,44 +28,59 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
     projected3: Double,
     low: Double,
     high: Double,
+    iobTimestampMs: Double,
+    cobTimestampMs: Double,
+    sourceBaseUrl: String,
+    sourceRevision: Double,
   ) {
-    val ts = timestampMs.toLong()
-    val iobSafe = iob.takeIf { it.isFinite() && it > -900 }
-    val cobSafe = cob.takeIf { it.isFinite() && it >= 0 }
-    val totalBasalSafe = totalBasal.takeIf { it.isFinite() && it >= 0 }
-    val totalBolusSafe = totalBolus.takeIf { it.isFinite() && it >= 0 }
-    val basalBolusRatioSafe = basalBolusRatio.takeIf { it.isFinite() && it >= 0 }
-    val totalInsulinSafe = totalInsulin.takeIf { it.isFinite() && it >= 0 }
-    val tirInt = tir.takeIf { it.isFinite() && it >= 0 && it <= 100 }?.toInt()
-    val projected1Int = projected1.takeIf { it.isFinite() && it > 0 }?.toInt()
-    val projected2Int = projected2.takeIf { it.isFinite() && it > 0 }?.toInt()
-    val projected3Int = projected3.takeIf { it.isFinite() && it > 0 }?.toInt()
-    val lowInt = low.takeIf { it.isFinite() && it > 0 }?.toInt()
-    val highInt = high.takeIf { it.isFinite() && it > 0 }?.toInt()
-    try {
-      GlucoseWidgetUpdater.save(
-        reactApplicationContext,
-        value,
-        trend,
-        ts,
-        iobSafe,
-        cobSafe,
-        totalBasalSafe,
-        totalBolusSafe,
-        basalBolusRatioSafe,
-        totalInsulinSafe,
-        tirInt,
-        projected1Int,
-        projected2Int,
-        projected3Int,
-        lowInt,
-        highInt,
-      )
-      GlucoseWidgetUpdater.updateWidgets(reactApplicationContext)
-      GlucoseWidgetUpdater.updateNotification(reactApplicationContext)
-      GlucoseWidgetSync.refreshDailyIfNeeded(reactApplicationContext)
-    } catch (_: Throwable) {
-      // Prevent native widget failures from crashing app process.
+    GlucoseWidgetCredentialStore.withConfigurationLock {
+      val active = GlucoseWidgetCredentialStore.readSyncConfiguration(reactApplicationContext)
+      if (sourceRevision != configurationRevision || active !is WidgetSyncConfiguration.Ready ||
+        !widgetForecastAccountMatches(active.baseUrl, sourceBaseUrl)) return@withConfigurationLock
+      val nowMs = System.currentTimeMillis()
+      val ts = timestampMs.toLong()
+      if (ts <= 0L || ts > nowMs || value <= 0) return@withConfigurationLock
+      val iobTime = iobTimestampMs.toLong().takeIf { widgetTimestampIsFresh(it, nowMs) }
+      val cobTime = cobTimestampMs.toLong().takeIf { widgetTimestampIsFresh(it, nowMs) }
+      val iobSafe = iob.takeIf { it.isFinite() && kotlin.math.abs(it) <= 100 && iobTime != null }
+      val cobSafe = cob.takeIf { it.isFinite() && it in 0.0..1000.0 && cobTime != null }
+      val totalBasalSafe = totalBasal.takeIf { it.isFinite() && it >= 0 }
+      val totalBolusSafe = totalBolus.takeIf { it.isFinite() && it >= 0 }
+      val basalBolusRatioSafe = basalBolusRatio.takeIf { it.isFinite() && it >= 0 }
+      val totalInsulinSafe = totalInsulin.takeIf { it.isFinite() && it >= 0 }
+      val tirInt = tir.takeIf { it.isFinite() && it >= 0 && it <= 100 }?.toInt()
+      val projected1Int = projected1.takeIf { it.isFinite() && it > 0 }?.toInt()
+      val projected2Int = projected2.takeIf { it.isFinite() && it > 0 }?.toInt()
+      val projected3Int = projected3.takeIf { it.isFinite() && it > 0 }?.toInt()
+      val lowInt = low.takeIf { it.isFinite() && it > 0 }?.toInt()
+      val highInt = high.takeIf { it.isFinite() && it > 0 }?.toInt()
+      try {
+        GlucoseWidgetUpdater.save(
+          reactApplicationContext,
+          value,
+          trend,
+          ts,
+          iobSafe,
+          cobSafe,
+          totalBasalSafe,
+          totalBolusSafe,
+          basalBolusRatioSafe,
+          totalInsulinSafe,
+          tirInt,
+          projected1Int,
+          projected2Int,
+          projected3Int,
+          lowInt,
+          highInt,
+          iobTimestampMs = iobTime.takeIf { iobSafe != null },
+          cobTimestampMs = cobTime.takeIf { cobSafe != null },
+        )
+        GlucoseWidgetUpdater.updateWidgets(reactApplicationContext)
+        GlucoseWidgetUpdater.updateNotification(reactApplicationContext)
+        GlucoseWidgetSync.refreshDailyIfNeeded(reactApplicationContext)
+      } catch (_: Throwable) {
+        // Prevent native widget failures from crashing app process.
+      }
     }
   }
 
@@ -90,13 +106,16 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun configureBackgroundSync(baseUrl: String?, apiSecretSha1: String?, enabled: Boolean) {
-    GlucoseSyncScheduler.configure(
-      context = reactApplicationContext,
-      baseUrl = baseUrl,
-      apiSecretSha1 = apiSecretSha1,
-      enabled = enabled,
-    )
+  fun configureBackgroundSync(baseUrl: String?, apiSecretSha1: String?, enabled: Boolean, sourceRevision: Double) {
+    GlucoseWidgetCredentialStore.withConfigurationLock {
+      configurationRevision = sourceRevision
+      GlucoseSyncScheduler.configure(
+        context = reactApplicationContext,
+        baseUrl = baseUrl,
+        apiSecretSha1 = apiSecretSha1,
+        enabled = enabled,
+      )
+    }
   }
 
   @ReactMethod

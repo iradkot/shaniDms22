@@ -568,6 +568,23 @@ describe('BrowserNightscoutClient', () => {
     ).toBeNull();
   });
 
+  it('preserves paired OpenAPS field clocks through decoding and cache serialization', async () => {
+    const nowMs = Date.parse('2026-09-29T12:00:00Z');
+    const requestJson = jest.fn().mockResolvedValueOnce({version: 1, data: [{
+      created_at: new Date(nowMs - 60_000).toISOString(),
+      openaps: {
+        iob: {iob: -0.25, timestamp: new Date(nowMs - 20 * 60_000).toISOString()},
+        suggested: {COB: 0, timestamp: new Date(nowMs - 2 * 60_000).toISOString()},
+      },
+    }]}).mockRejectedValueOnce(new Error('offline'));
+    const client = new BrowserNightscoutClient({api: {requestJson}, storage: new MemoryStorage(), sourceId: 'source-1', workspaceId: 'workspace-1', now: () => nowMs});
+    const live = await client.readDeviceStatuses(nowMs - 2 * 60 * 60_000, nowMs);
+    expect(live.records[0]).toMatchObject({iobUnits: -0.25, iobTimestampMs: nowMs - 20 * 60_000, cobGrams: 0, cobTimestampMs: nowMs - 2 * 60_000});
+    const cached = await client.readDeviceStatuses(nowMs - 2 * 60 * 60_000, nowMs);
+    expect(cached.records).toEqual(live.records);
+    expect(cached.freshness.kind).toBe('stale');
+  });
+
   it('preserves signed and split IOB facts from a valid device status', () => {
     expect(
       decodeBrowserNightscoutDeviceStatus({

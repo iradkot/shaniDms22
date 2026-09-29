@@ -6,6 +6,21 @@ import {
   parseWorkspaceId,
 } from '../../../src/modules/journal';
 import type {InsulinContext} from '../../../src/services/insulin/insulinDataSource';
+jest.mock('../../../src/services/currentData/nativeCurrentDataSource', () => {
+  const {
+    buildCurrentDataSnapshot,
+  } = require('../../../src/modules/currentData');
+  return {
+    nativeCurrentDataSource: {
+      loadCurrent: async () =>
+        buildCurrentDataSnapshot({
+          observedAtMs: Date.now(),
+          glucose: null,
+          deviceStatus: null,
+        }),
+    },
+  };
+});
 
 const mockTool = jest.fn(
   async (_scope: unknown, name: string, _args: unknown) => ({
@@ -97,7 +112,7 @@ const portsAndScope = () => {
 };
 const loadSelectedEvidence = async () => {
   const {ports, scope} = portsAndScope();
-  const text = await ports.loadEvidence(
+  const loaded = await ports.loadEvidence(
     {
       locale: 'en',
       request: {kind: 'weekly'},
@@ -105,6 +120,7 @@ const loadSelectedEvidence = async () => {
     },
     new AbortController().signal,
   );
+  const text = typeof loaded === 'string' ? loaded : loaded.text;
   return {
     text,
     evidence: JSON.parse(text.slice(text.indexOf('\n') + 1)),

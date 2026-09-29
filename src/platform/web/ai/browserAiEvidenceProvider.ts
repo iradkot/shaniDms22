@@ -15,10 +15,12 @@ import {
 } from '../nightscout';
 import {buildRecordedInsulinSummary} from '../../../services/insulin/recordedInsulin';
 import {getLocalDayPeriod} from '../../../modules/dailyOverview';
+import type {CurrentDataSource, CurrentObservation, CurrentDataSnapshot} from '../../../modules/currentData';
+import {reobserveCurrentData, currentFactsExpireAtMs} from '../../../modules/currentData';
+import {createBrowserCurrentDataSource} from '../nightscout/browserCurrentDataSource';
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const MAX_RANGE_MS = 14 * DAY_MS;
-const DEVICE_STATUS_RANGE_MS = 2 * 60 * 60 * 1_000;
 const MAX_CONTEXT_CHARS = 8_000;
 const MAX_TREATMENTS = 24;
 
@@ -32,10 +34,18 @@ export interface BrowserAiEvidenceRequest {
 
 export interface BrowserAiEvidenceProvider {
   loadVisibleContext(request: BrowserAiEvidenceRequest): Promise<string>;
+  loadEvidence?(request: BrowserAiEvidenceRequest): Promise<BrowserAiEvidenceBundle>;
+  /** The provider belongs to one source revision, including while a model call is pending. */
+  assertCurrentSource?(): void;
+}
+
+export interface BrowserAiEvidenceBundle {
+  readonly text: string;
+  readonly currentFactsExpireAtMs?: number;
 }
 
 interface EvidenceClient {
-  assertCurrentSource?(): void;
+  readonly assertCurrentSource?: () => void;
   readEntries(
     startMs: number,
     endMs: number,
@@ -87,16 +97,34 @@ const requestedPeriod = (
   };
 };
 
-const ensureFresh = (
-  ranges: readonly BrowserNightscoutRange<unknown>[],
-): void => {
-  if (ranges.some(range => range.freshness.kind !== 'fresh')) {
-    throw new Error('Fresh Nightscout evidence is unavailable.');
-  }
-};
-
 const formatNumber = (value: number, maximumFractionDigits = 1): string =>
   new Intl.NumberFormat('en-US', {maximumFractionDigits}).format(value);
+
+const currentFacts = (current: CurrentDataSnapshot, locale: AiLocale): readonly string[] => {
+  const he = locale === 'he';
+  const fact = (label: string, unit: string, observation: CurrentObservation, showStaleValue = false): string => {
+    const status = observation.status === 'fresh' ? (he ? 'עדכני' : 'fresh')
+      : observation.status === 'stale' ? (he ? 'ישן; אינו מעיד על המצב עכשיו' : 'stale; does not establish the current state')
+      : (he ? 'לא זמין' : 'unavailable');
+    const value = observation.status === 'fresh' || showStaleValue ? observation.value : null;
+    return [
+      `${label}: ${value === null ? status : `${formatNumber(value, 2)} ${unit}; ${status}`}`,
+      observation.sourceTimestampMs === null ? undefined : `${he ? 'זמן המדידה' : 'source timestamp'} ${new Date(observation.sourceTimestampMs).toISOString()}`,
+      observation.ageMs === null ? undefined : `${he ? 'גיל בדקות' : 'age minutes'} ${formatNumber(observation.ageMs / 60_000)}`,
+      observation.fetchedAtMs === null ? undefined : `${he ? 'זמן האחזור' : 'fetched at'} ${new Date(observation.fetchedAtMs).toISOString()}`,
+    ].filter(Boolean).join('; ') + '.';
+  };
+  return [
+    he ? 'נתונים נוכחיים — נטענו בנפרד מההיסטוריה' : 'Current observations — loaded independently of history',
+    fact(he ? 'סוכר נוכחי' : 'Current glucose', 'mg/dL', current.glucose, true),
+    ...(current.glucose.status === 'fresh' && current.glucoseReading?.direction
+      ? [`${he ? 'מגמה נוכחית' : 'Current trend'}: ${current.glucoseReading.direction}.`] : []),
+    fact('IOB', 'U', current.iob),
+    fact('COB', 'g', current.cob),
+    he ? 'כיסוי חלקי בהיסטוריה אינו מבטל מדידה נוכחית עדכנית. כל נתון נבדק לפי זמן המדידה שלו.'
+      : 'Partial historical coverage does not invalidate a fresh current observation. Each measurement uses its own source timestamp.',
+  ];
+};
 
 const treatmentFact = (
   treatment: BrowserNightscoutTreatment,
@@ -170,27 +198,37 @@ const glucoseFacts = (
 export const createBrowserAiEvidenceProvider = (input: {
   readonly client: EvidenceClient;
   readonly sourceId: string;
+  readonly currentDataSource?: CurrentDataSource;
+  readonly getScopeKey?: () => string;
   readonly now?: () => number;
 }): BrowserAiEvidenceProvider => {
   if (!/^[A-Za-z0-9._-]{1,160}$/.test(input.sourceId)) {
     throw new Error('AI evidence source identity is invalid.');
   }
-  const now = input.now ?? Date.now;
-  return {
-    async loadVisibleContext(request) {
+  const now = input.now ?? (() => Date.now());
+  const providerScopeKey = input.getScopeKey?.();
+  const assertCurrentSource = (): void => {
+    input.client.assertCurrentSource?.();
+    if (providerScopeKey !== input.getScopeKey?.()) {
+      throw new Error('AI evidence source changed during loading.');
+    }
+  };
+  const currentDataSource = input.currentDataSource ?? createBrowserCurrentDataSource({
+    client: input.client,
+    now,
+    ...(input.getScopeKey === undefined ? {} : {getScopeKey: input.getScopeKey}),
+  });
+  const loadEvidence = async (request: BrowserAiEvidenceRequest): Promise<BrowserAiEvidenceBundle> => {
       if (request.signal.aborted) {
         const error = new Error('Nightscout evidence request was cancelled.');
         error.name = 'AbortError';
         throw error;
       }
       const nowMs = now();
+      assertCurrentSource();
       const period = requestedPeriod(request, nowMs);
-      const deviceStartMs = Math.max(
-        period.startMs,
-        period.endMs - DEVICE_STATUS_RANGE_MS,
-      );
-      const [entries, treatments, deviceStatuses] = await Promise.all([
-        input.client.readEntries(period.startMs, period.endMs, request.signal),
+      const [entries, treatments, current] = await Promise.all([
+        input.client.readEntries(period.startMs, period.endMs, request.signal).catch(() => undefined),
         // Include a carry-in day for completed delivery intervals crossing start.
         input.client
           .readRecordedTreatments(
@@ -199,19 +237,15 @@ export const createBrowserAiEvidenceProvider = (input: {
             request.signal,
           )
           .catch(() => undefined),
-        input.client.readDeviceStatuses(
-          deviceStartMs,
-          period.endMs,
-          request.signal,
-        ),
+        currentDataSource.loadCurrent({signal: request.signal}),
       ]);
       if (request.signal.aborted) {
         const error = new Error('Nightscout evidence request was cancelled.');
         error.name = 'AbortError';
         throw error;
       }
-      input.client.assertCurrentSource?.();
-      ensureFresh([entries, deviceStatuses]);
+      assertCurrentSource();
+      const currentAtCompletion = reobserveCurrentData(current, now());
       const recordedInsulin =
         treatments?.freshness.kind === 'fresh' && treatments.complete !== false
           ? buildRecordedInsulinSummary(
@@ -267,19 +301,8 @@ export const createBrowserAiEvidenceProvider = (input: {
             ];
 
       const locale = request.locale;
-      const latestDeviceStatus = [...deviceStatuses.records].sort(
-        (left, right) => right.createdAtMs - left.createdAtMs,
-      )[0];
-      const deviceFacts = latestDeviceStatus
-        ? [
-            latestDeviceStatus.iobUnits === undefined
-              ? undefined
-              : `IOB ${formatNumber(latestDeviceStatus.iobUnits)} U`,
-            latestDeviceStatus.cobGrams === undefined
-              ? undefined
-              : `COB ${formatNumber(latestDeviceStatus.cobGrams)} g`,
-          ].filter((value): value is string => value !== undefined)
-        : [];
+      const historicalEntries = entries?.records.filter(entry =>
+        entry.date >= period.startMs && entry.date <= period.endMs) ?? [];
       const visibleTreatments =
         treatments?.freshness.kind === 'fresh' && treatments.complete !== false
           ? treatments.records.flatMap(record => {
@@ -305,6 +328,7 @@ export const createBrowserAiEvidenceProvider = (input: {
           nowMs,
         ).toISOString()}.`,
         `${locale === 'he' ? 'מזהה מקור' : 'Source scope'}: ${input.sourceId}.`,
+        ...currentFacts(currentAtCompletion, locale),
         `${locale === 'he' ? 'טווח' : 'Range'}: ${new Date(
           period.startMs,
         ).toISOString()} – ${new Date(period.endMs).toISOString()}.${
@@ -316,39 +340,18 @@ export const createBrowserAiEvidenceProvider = (input: {
                 } days.`
             : ''
         }`,
-        ...glucoseFacts(entries.records, period.startMs, period.endMs, locale),
-        ...(!entries.records.some(
-          entry => entry.date <= nowMs && entry.date >= nowMs - 15 * 60_000,
-        )
-          ? [
-              locale === 'he'
-                ? 'אין קריאת סוכר עדכנית מ־15 הדקות האחרונות. אין להסיק מהנתונים מה מצב הסוכר עכשיו.'
-                : 'No current glucose reading from the last 15 minutes. Do not infer current glucose from historical data.',
-            ]
-          : []),
-        ...(entries.complete === false
+        ...(entries === undefined ? [locale === 'he' ? 'היסטוריית הסוכר בטווח הנבחר אינה זמינה.' : 'Glucose history for the selected period is unavailable.']
+          : glucoseFacts(historicalEntries, period.startMs, period.endMs, locale)),
+        ...(entries?.freshness.kind === 'stale' ? [locale === 'he'
+          ? 'היסטוריית הסוכר היא עותק שמור לאחר כשל באחזור; היא אינה קריאה נוכחית.'
+          : 'Glucose history is a stale cached copy after a read failure; it is not a current observation.'] : []),
+        ...(entries?.complete === false
           ? [
               locale === 'he'
                 ? 'טווח הסוכר אינו מלא. אין להסיק ממנו מסקנות על כל התקופה.'
                 : 'The glucose range is incomplete. Do not generalize it to the entire period.',
             ]
           : []),
-        ...(deviceFacts.length === 0
-          ? []
-          : [
-              `${
-                locale === 'he' ? 'דגימת מכשיר אחרונה' : 'Latest device sample'
-              }: ${deviceFacts.join(', ')}, ${new Date(
-                latestDeviceStatus!.createdAtMs,
-              ).toISOString()}.`,
-              ...(nowMs - latestDeviceStatus!.createdAtMs > 15 * 60_000
-                ? [
-                    locale === 'he'
-                      ? 'דגימת המכשיר ישנה; IOB ו־COB אינם מעידים על המצב עכשיו.'
-                      : 'Device sample is stale; IOB and COB do not establish the current state.',
-                  ]
-                : []),
-            ]),
         `${
           locale === 'he'
             ? 'אירועי טיפול מוצגים מתוך הטווח'
@@ -360,7 +363,15 @@ export const createBrowserAiEvidenceProvider = (input: {
           ? 'הנתונים תיאוריים בלבד, עשויים להיות חסרים, ואינם הוראה לשינוי טיפול.'
           : 'These facts are descriptive, may be incomplete, and are not an instruction to change therapy.',
       ];
-      return lines.join('\n').slice(0, MAX_CONTEXT_CHARS);
-    },
+      const expiresAtMs = currentFactsExpireAtMs(currentAtCompletion);
+      return {
+        text: lines.join('\n').slice(0, MAX_CONTEXT_CHARS),
+        ...(expiresAtMs === undefined ? {} : {currentFactsExpireAtMs: expiresAtMs}),
+      };
+  };
+  return {
+    assertCurrentSource,
+    loadEvidence,
+    loadVisibleContext: async request => (await loadEvidence(request)).text,
   };
 };

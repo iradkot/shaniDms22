@@ -22,6 +22,8 @@ RCT_EXPORT_MODULE();
   NSString *backendBaseUrl = [bundle objectForInfoDictionaryKey:@"ShaniBackendBaseURL"] ?: @"";
   id rulesSchemaVersion = [bundle objectForInfoDictionaryKey:@"ShaniFirestoreRulesSchemaVersion"] ?: @0;
   return @{
+    @"versionName": [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"",
+    @"buildNumber": [bundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"",
     @"backendBaseUrl": backendBaseUrl,
     @"firestoreRulesSchemaVersion": rulesSchemaVersion,
   };

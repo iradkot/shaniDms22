@@ -518,7 +518,12 @@ export const useBrowserAiAnalystRuntime = (input: {
     scopeId: input.scopeId,
     locale: input.locale,
     storage: input.storage,
-    chat: (chatMessages, signal) => input.service.chat(chatMessages, signal),
+    chat: async (chatMessages, signal) => {
+      input.evidenceProvider?.assertCurrentSource?.();
+      const answer = await input.service.chat(chatMessages, signal);
+      input.evidenceProvider?.assertCurrentSource?.();
+      return answer;
+    },
     loadLegacyHistory: async () =>
       decodeHistory(await input.storage.getItem(historyKey)),
     loadEvidence: async (recommendationStart, signal) => {
@@ -531,7 +536,7 @@ export const useBrowserAiAnalystRuntime = (input: {
       const rangeDays = period.explicitPeriod
         ? 30
         : recommendationRangeDays(recommendationStart.request);
-      return input.evidenceProvider.loadVisibleContext({
+      const evidenceRequest: Parameters<BrowserAiEvidenceProvider['loadVisibleContext']>[0] = {
         specialist:
           recommendationStart.request.kind === 'meal'
             ? 'meal-analysis'
@@ -540,7 +545,10 @@ export const useBrowserAiAnalystRuntime = (input: {
         focus: {kind: 'period', startMs: period.startMs, endMs: period.endMs},
         rangeDays,
         signal,
-      });
+      };
+      return input.evidenceProvider.loadEvidence
+        ? input.evidenceProvider.loadEvidence(evidenceRequest)
+        : input.evidenceProvider.loadVisibleContext(evidenceRequest);
     },
   });
 };

@@ -8,6 +8,8 @@ depend on React, authentication, storage or a running Android application.
 
 | Need | Existing entry point | Meaning |
 | --- | --- | --- |
+| Current glucose, IOB and COB | `nativeCurrentDataSource` in `src/services/currentData` (native); `createBrowserCurrentDataSource` in `src/platform/web/nightscout` (browser) | Independent current reads, shared by the foreground current display and AI; historical coverage cannot invalidate a fresh current observation |
+| Decode or load current facts with another transport | `buildCurrentDataSnapshot`, `createCurrentDataSource` in `src/modules/currentData` | Per-field source/fetch timestamps and fresh, stale or unavailable state; no profile, treatment or history dependency |
 | Daily recorded insulin and same-time comparisons | `recordedInsulinDataSource` in `src/services/insulin/recordedInsulinDataSource.ts` (native) | Shared, source-scoped treatment snapshot; no profile fill |
 | Same recorded loader with a browser/test transport | `createRecordedInsulinDataSource` in `src/services/insulin/createRecordedInsulinDataSource.ts` | Inject transport, source identity and clock; no native runtime dependency |
 | Calculate recorded insulin from already-loaded raw treatments | `buildRecordedInsulinSummary` in `src/services/insulin/recordedInsulin.ts` | Pure calculation; preserve raw delivery, identity and revision fields |
@@ -65,6 +67,60 @@ recorded interval overlap. This assumes uniform delivery within that interval;
 the data does not establish the time of each pump pulse. Instant doses belong to
 their start timestamp. Mutable, invalid, conflicting or unfinished evidence is
 not silently converted into known delivery.
+
+## Current observations are independent of historical coverage
+
+Native current data reads the latest count-bounded entries and device status
+endpoints. The browser uses its authenticated proxy with an independent short
+current window. Do not derive current glucose from a daily/weekly/monthly history
+request: a history index, incomplete range, or failure can hide a valid latest
+reading. The current loader reads glucose and device status independently, so a
+failure in one resource does not erase successful observations from the other.
+
+Historical native glucose queries now use numeric `find[date]` boundaries too.
+The optional `dateString` field is not required to retrieve an otherwise valid
+numeric-date entry. The retained `BGDataService` compatibility class delegates
+to the canonical reader instead of maintaining an unscoped permanent cache.
+This matches Nightscout's numeric date parsing and ordering in its
+[entries source](https://github.com/nightscout/cgm-remote-monitor/blob/master/lib/server/entries.js)
+and [query implementation](https://github.com/nightscout/cgm-remote-monitor/blob/master/lib/server/query.js).
+
+Each of glucose, IOB and COB carries its own `sourceTimestampMs`, `fetchedAtMs`,
+`ageMs`, `status`, and failure/staleness reason. The source timestamp establishes
+the age. A recent upload or fetch does not make an old nested IOB/COB value fresh.
+IOB is allowed to be signed, and confirmed zero COB remains zero. Missing,
+invalid, future-dated or stale load values must not be converted to zero.
+
+Current observations require an age below 15 minutes. Cached-after-failure
+responses remain stale even if their sample is recent. After waiting for other
+evidence, use `reobserveCurrentData(snapshot, nowMs)` to age the original snapshot;
+do not reset its timestamps. AI evidence has separate current and historical
+sections. A sparse historical period does not imply that current glucose is
+missing. Historical recorded insulin is never substituted for current IOB.
+Recommendation evidence also carries the earliest expiry of any fresh current
+fact. The runtime checks it around model calls and before publishing; if a fact
+ages out while the model is working, it asks for a fresh retry and does not
+publish an answer grounded in an expired current observation.
+
+The loader shares concurrent reads, without retaining a completed-value cache.
+Native source identity includes the configuration revision, so switching away
+and back cannot release an old in-flight result. Consumers must also reject a
+changed source after slower historical work and before/after model calls.
+The Android launcher widget retains its native background transport because
+JavaScript may be suspended; its parsing/freshness rules require parity checks.
+`current-load-parity.json` is consumed by TypeScript and Kotlin tests. Foreground
+widget writes carry each load's original clock and the captured source revision;
+both JavaScript and the native bridge reject obsolete source updates. Returning
+from background to the foreground refreshes immediately, including when interval
+polling is disabled. There is no new durable foreground cache: a cold offline
+start can still have less data than the launcher's independently saved snapshot.
+
+The regression `nativeCurrentAiEvidence.integration.test.tsx` exercises actual
+native adapters and synthetic HTTP: latest numeric-date glucose is four minutes
+old while a deliberately stale historical response contains only a 243-minute-old reading.
+It also checks independent read failures and source changes during historical
+loading. This reproduces the reported failure shape; it does not establish which
+server response or installed build caused a particular patient's incident.
 
 ## Time, units and freshness
 

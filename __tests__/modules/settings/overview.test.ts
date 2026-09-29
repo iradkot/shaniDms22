@@ -3,6 +3,12 @@ import {buildSettingsOverview} from 'app/modules/settings';
 describe('buildSettingsOverview', () => {
   it('returns useful connection status without retaining credentials or account IDs', () => {
     const input = {
+      appInfo: {
+        versionName: '1.0.529-preview',
+        buildNumber: '53568000',
+        builtAt: 'invalid',
+        ignoredSecret: 'build-secret',
+      },
       language: 'en' as const,
       layout: 'tablet' as const,
       personalization: {
@@ -41,6 +47,8 @@ describe('buildSettingsOverview', () => {
     const serialized = JSON.stringify(result);
 
     expect(result.layout.columns).toBe(3);
+    expect(result.appInfo).toEqual({versionName: '1.0.529-preview', buildNumber: '53568000'});
+    expect(serialized).not.toContain('build-secret');
     expect(result.nightscout).toEqual({
       status: 'connected',
       displayLabel: 'My Nightscout',

@@ -50,8 +50,8 @@ internal fun parseValidWidgetEntries(arr: JSONArray?): List<WidgetEntryPoint> {
   return out
 }
 
-internal fun latestWidgetBgFromEntries(arr: JSONArray?): WidgetLatestBg? {
-  val latest = parseValidWidgetEntries(arr).maxByOrNull { it.ts } ?: return null
+internal fun latestWidgetBgFromEntries(arr: JSONArray?, nowMs: Long = System.currentTimeMillis()): WidgetLatestBg? {
+  val latest = parseValidWidgetEntries(arr).filter { it.ts <= nowMs }.maxByOrNull { it.ts } ?: return null
   return WidgetLatestBg(sgv = latest.sgv, date = latest.ts, trend = widgetDirectionToSymbol(latest.direction))
 }
 
@@ -87,23 +87,31 @@ internal fun fetchLatestWidgetLoad(baseUrl: String, secret: String?): WidgetLoad
 }
 
 internal fun parseWidgetLoad(arr: JSONArray, nowMs: Long): WidgetLoadData {
-  var iob: Pair<Long, Double>? = null
-  var cob: Pair<Long, Double>? = null
+  var iob: Pair<Long, Double?>? = null
+  var cob: Pair<Long, Double?>? = null
   var forecast: WidgetForecastSeries? = null
   var forecastLoopTimestamp = 0L
   for (index in 0 until arr.length()) {
-    val row = arr.optJSONObject(index) ?: continue
+    val outer = arr.optJSONObject(index) ?: continue
+    val row = outer.optJSONObject("forecastStatus") ?: outer
     val loop = row.optJSONObject("loop")
-    val openaps = row.optJSONObject("openaps")
-    fun readLoad(kind: String): Pair<Long, Double>? {
-      val payload = loop?.optJSONObject(kind) ?: openaps?.optJSONObject(if (kind == "cob") "meal" else kind) ?: return null
-      val ts = widgetForecastTimestamp(payload.opt("timestamp")) ?: return null
-      val value = payload.optDouble(kind, Double.NaN)
-      if (!widgetTimestampIsFresh(ts, nowMs) || !value.isFinite() || (kind == "cob" && value < 0)) return null
-      return Pair(ts, value)
+    fun readLoad(kind: String): Pair<Long, Double?>? {
+      val clockKey = "${kind}TimestampMs"
+      val directPair = outer.has(clockKey)
+      val source = if (directPair) outer else row
+      val openaps = source.optJSONObject("openaps")
+      val payload = if (directPair) null else source.optJSONObject("loop")?.optJSONObject(kind) ?: openaps?.optJSONObject(if (kind == "cob") "meal" else kind)
+        ?: (if (kind == "cob") openaps?.optJSONObject("cob") else null)
+      val ts = widgetForecastTimestamp(if (payload != null) payload.opt("timestamp") else source.opt(clockKey)) ?: return null
+      if (ts <= 0 || ts > nowMs) return null
+      val rawValue = if (payload != null) payload.optDouble(kind, Double.NaN)
+        else source.optDouble(if (kind == "iob") "iobUnits" else "cobGrams", Double.NaN)
+      val valid = rawValue.isFinite() && if (kind == "iob") kotlin.math.abs(rawValue) <= 100 else rawValue in 0.0..1000.0
+      // Keep the newest explicit unknown: do not revive an older value.
+      return Pair(ts, rawValue.takeIf { valid && widgetTimestampIsFresh(ts, nowMs) })
     }
-    readLoad("iob")?.let { if (it.first > (iob?.first ?: 0L)) iob = it }
-    readLoad("cob")?.let { if (it.first > (cob?.first ?: 0L)) cob = it }
+    readLoad("iob")?.let { if (it.first >= (iob?.first ?: 0L)) iob = it }
+    readLoad("cob")?.let { if (it.first >= (cob?.first ?: 0L)) cob = it }
     val loopTs = widgetForecastTimestamp(loop?.opt("timestamp")) ?: continue
     val predicted = loop?.optJSONObject("predicted") ?: continue
     val startMs = widgetForecastTimestamp(predicted.opt("startDate")) ?: continue

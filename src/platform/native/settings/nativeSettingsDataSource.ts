@@ -1,5 +1,6 @@
 import type {
   SettingsAccountStatus,
+  SettingsAppInfo,
   SettingsCommand,
   SettingsDataSource,
   SettingsDataSourceRequest,
@@ -27,6 +28,7 @@ import {
 } from '../../../product/personalization';
 
 export interface NativeSettingsDataSourceInput {
+  readonly appInfo?: SettingsAppInfo;
   readonly language: SettingsLanguage;
   readonly layout: PersonalizationLayout;
   readonly personalization: StoredProductPersonalization;
@@ -131,6 +133,7 @@ export const createNativeSettingsDataSource = (
   const overview = (): SettingsOverview => {
     const profile = selectLayoutProfile(personalization, input.layout);
     return buildSettingsOverview({
+      ...(input.appInfo === undefined ? {} : {appInfo: input.appInfo}),
       language,
       layout: input.layout,
       personalization: {

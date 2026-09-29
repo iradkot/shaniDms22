@@ -25,7 +25,7 @@ describe('browser AI Nightscout evidence provider', () => {
         readDeviceStatuses: jest
           .fn()
           .mockResolvedValue(
-            fresh([{createdAtMs: NOW_MS - 60 * 60_000, iobUnits: 1.5}]),
+            fresh([{createdAtMs: NOW_MS - 60 * 60_000, iobUnits: 1.5, iobTimestampMs: NOW_MS - 60 * 60_000}]),
           ),
       },
       sourceId: 'source-a',
@@ -46,7 +46,8 @@ describe('browser AI Nightscout evidence provider', () => {
     );
     expect(context).not.toContain('14 days');
     expect(context).toContain('glucose range is incomplete');
-    expect(context).toContain('Device sample is stale');
+    expect(context).toContain('IOB: stale');
+    expect(context).not.toContain('1.5 U');
     expect(context).toContain(new Date(NOW_MS - 60 * 60_000).toISOString());
   });
   it('builds bounded visible source-scoped facts without forwarding raw records', async () => {
@@ -92,7 +93,9 @@ describe('browser AI Nightscout evidence provider', () => {
           {
             createdAtMs: NOW_MS - 60_000,
             iobUnits: 1.2,
+            iobTimestampMs: NOW_MS - 60_000,
             cobGrams: 18,
+            cobTimestampMs: NOW_MS - 60_000,
           },
         ]),
       );
@@ -117,8 +120,8 @@ describe('browser AI Nightscout evidence provider', () => {
     expect(context).toContain('Nightscout evidence');
     expect(context).toContain('ns_source_a');
     expect(context).toContain('112 mg/dL');
-    expect(context).toContain('IOB 1.2 U');
-    expect(context).toContain('COB 18 g');
+    expect(context).toContain('IOB: 1.2 U; fresh');
+    expect(context).toContain('COB: 18 g; fresh');
     expect(context).toContain('Meal Bolus');
     expect(context).toContain('limited to the latest 14 days');
     expect(context).not.toContain('private free-form note');
@@ -128,11 +131,8 @@ describe('browser AI Nightscout evidence provider', () => {
         ([startMs, endMs]) => endMs - startMs <= 14 * DAY_MS,
       ),
     ).toBe(true);
-    expect(
-      [readEntries, readRecordedTreatments, readDeviceStatuses].every(mock =>
-        mock.mock.calls.every(call => call[2] === controller.signal),
-      ),
-    ).toBe(true);
+    expect(readEntries).toHaveBeenCalledWith(NOW_MS - 14 * DAY_MS, NOW_MS, controller.signal);
+    expect(readRecordedTreatments.mock.calls.every(call => call[2] === controller.signal)).toBe(true);
   });
 
   it('refuses to describe stale cached evidence as current online evidence', async () => {
@@ -149,13 +149,14 @@ describe('browser AI Nightscout evidence provider', () => {
       now: () => NOW_MS,
     });
 
-    await expect(
-      provider.loadVisibleContext({
+    const context = await provider.loadVisibleContext({
         specialist: 'general-chat',
         locale: 'en',
         signal: new AbortController().signal,
-      }),
-    ).rejects.toThrow('Fresh Nightscout evidence is unavailable');
+      });
+    expect(context).toContain('Current glucose: 101 mg/dL; stale');
+    expect(context).not.toContain('Current glucose: 101 mg/dL; fresh');
+    expect(context).toContain('Glucose history is a stale cached copy');
   });
 });
 

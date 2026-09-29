@@ -3,6 +3,7 @@ import type {ResolvedDestinationTarget} from '../../../product/destinations';
 import type {DestinationLocale} from '../../../product/destinations';
 import type {CurrentSnapshotViewModel} from '../../../product/hub';
 import type {BrowserNightscoutClient} from './browserNightscoutClient';
+import type {CurrentDataSource} from '../../../modules/currentData';
 import {loadBrowserCurrentSnapshot} from './browserNightscoutDataSources';
 
 const DEFAULT_REFRESH_INTERVAL_MS = 60_000;
@@ -15,6 +16,7 @@ interface BrowserVisibilitySource {
 
 /** Refreshes the small current-reading surface without rebuilding the Workspace. */
 export const useBrowserCurrentSnapshot = (input: {
+  readonly currentDataSource?: CurrentDataSource;
   readonly client?: Pick<BrowserNightscoutClient, 'readEntries'> &
     Partial<Pick<BrowserNightscoutClient, 'readDeviceStatuses'>>;
   readonly target: ResolvedDestinationTarget;
@@ -25,6 +27,7 @@ export const useBrowserCurrentSnapshot = (input: {
 }): CurrentSnapshotViewModel | undefined => {
   const {
     client,
+    currentDataSource,
     locale,
     now,
     refreshIntervalMs,
@@ -33,10 +36,10 @@ export const useBrowserCurrentSnapshot = (input: {
   } = input;
   const [snapshot, setSnapshot] = useState<
     CurrentSnapshotViewModel | undefined
-  >(() => (client === undefined ? undefined : {status: 'loading', target}));
+  >(() => (client === undefined && currentDataSource === undefined ? undefined : {status: 'loading', target}));
 
   useEffect(() => {
-    if (client === undefined) {
+    if (client === undefined && currentDataSource === undefined) {
       setSnapshot(undefined);
       return undefined;
     }
@@ -50,7 +53,8 @@ export const useBrowserCurrentSnapshot = (input: {
       inFlight = true;
       try {
         const next = await loadBrowserCurrentSnapshot({
-          client,
+          ...(client === undefined ? {} : {client}),
+          ...(currentDataSource === undefined ? {} : {currentDataSource}),
           locale,
           target,
           ...(now === undefined ? {} : {nowMs: now()}),
@@ -79,7 +83,7 @@ export const useBrowserCurrentSnapshot = (input: {
       clearInterval(interval);
       visibility?.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [client, inputVisibility, locale, now, refreshIntervalMs, target]);
+  }, [client, currentDataSource, inputVisibility, locale, now, refreshIntervalMs, target]);
 
   return snapshot;
 };

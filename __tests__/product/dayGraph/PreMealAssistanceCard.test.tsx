@@ -98,6 +98,8 @@ describe('Day Graph pre-meal assistance', () => {
           trend: 'forty-five-up',
           iobUnits: 1.25,
           cobGrams: 12,
+          iobTimestampMs: nowMs - 2 * 60_000,
+          cobTimestampMs: nowMs - 3 * 60_000,
         },
       }),
     };

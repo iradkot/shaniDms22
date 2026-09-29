@@ -149,6 +149,108 @@ afterEach(() => {
 });
 
 describe('shared recommendation runtime', () => {
+  it.each([
+    ['specialist', 'en'],
+    ['reviewer', 'he'],
+  ] as const)(
+    'discards an answer whose current facts expire during the %s call and allows an explicit fresh retry',
+    async (stage, locale) => {
+      let now = Date.parse('2026-09-29T12:00:00Z');
+      const clock = jest.spyOn(Date, 'now').mockImplementation(() => now);
+      try {
+        const {ports, chat, loadEvidence, storage} = fixtures();
+        loadEvidence.mockImplementation(async () => ({
+          text: 'Current glucose is 123 mg/dL, measured fourteen minutes ago.',
+          currentFactsExpireAtMs: now + 60_000,
+        }));
+        chat.mockImplementation(async messages => {
+          const reviewer = messages[0]?.content.includes(
+            'final reviewer and writer',
+          );
+          if ((stage === 'reviewer') === reviewer) {
+            now += 60_000;
+          }
+          return 'Expired answer must not be shown.';
+        });
+        const harness = await mount({...ports, locale});
+        await act(async () =>
+          harness.runtime.startRecommendation?.({
+            request: {kind: 'meal'},
+            locale,
+          }),
+        );
+        expect(chat).toHaveBeenCalledTimes(stage === 'reviewer' ? 2 : 1);
+        expect(harness.runtime.snapshot.messages).toEqual([]);
+        expect(harness.runtime.snapshot.history).toEqual([]);
+        expect(harness.runtime.snapshot.busy).toBe(false);
+        expect(harness.runtime.snapshot.error).toContain(
+          locale === 'he'
+            ? 'התיישנו בזמן הכנת ההמלצה'
+            : 'became outdated while preparing',
+        );
+        expect([...storage.values.values()].join('')).not.toContain(
+          'Expired answer must not be shown.',
+        );
+        chat.mockImplementation(async () => 'A fresh reviewed recommendation.');
+        await act(async () => harness.runtime.retry());
+        expect(loadEvidence).toHaveBeenCalledTimes(2);
+        expect(harness.runtime.snapshot.messages).toHaveLength(2);
+        expect(harness.runtime.snapshot.messages[1]?.content).toContain(
+          'A fresh reviewed recommendation.',
+        );
+        expect(harness.runtime.snapshot.history).toHaveLength(1);
+        expect(harness.runtime.snapshot.error).toBeUndefined();
+      } finally {
+        clock.mockRestore();
+      }
+    },
+  );
+
+  it('rejects an already-expired evidence envelope before spending a provider call', async () => {
+    const {ports, chat, loadEvidence} = fixtures();
+    loadEvidence.mockResolvedValue({
+      text: 'Current facts.',
+      currentFactsExpireAtMs: Date.now() - 1,
+    });
+    const harness = await mount(ports);
+    await act(async () =>
+      harness.runtime.startRecommendation?.({
+        request: {kind: 'now'},
+        locale: 'en',
+      }),
+    );
+    expect(chat).not.toHaveBeenCalled();
+    expect(harness.runtime.snapshot.error).toContain('became outdated');
+    expect(harness.runtime.snapshot.messages).toEqual([]);
+  });
+
+  it('keeps historical-only weekly evidence usable without an irrelevant current-fact deadline', async () => {
+    let now = Date.parse('2026-09-29T12:00:00Z');
+    const clock = jest.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const {ports, chat, loadEvidence} = fixtures();
+      loadEvidence.mockResolvedValue({
+        text: 'Historical readings from the selected week; no current facts.',
+      });
+      chat.mockImplementation(async () => {
+        now += 60_000;
+        return 'Review the selected week with your care team.';
+      });
+      const harness = await mount(ports);
+      await act(async () =>
+        harness.runtime.startRecommendation?.({
+          request: {kind: 'weekly'},
+          locale: 'en',
+        }),
+      );
+      expect(chat).toHaveBeenCalledTimes(3);
+      expect(harness.runtime.snapshot.messages).toHaveLength(2);
+      expect(harness.runtime.snapshot.error).toBeUndefined();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it.each(['start', 'resumeConversation'] as const)(
     'continues legacy history through recommendations after %s while retaining its transcript and saved focus',
     async entry => {

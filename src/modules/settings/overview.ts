@@ -1,4 +1,4 @@
-import type {SettingsOverview, SettingsOverviewInput} from './types';
+import type {SettingsAppInfo, SettingsOverview, SettingsOverviewInput} from './types';
 
 const safeCount = (value: number): number =>
   Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
@@ -6,6 +6,22 @@ const safeCount = (value: number): number =>
 const optionalLabel = (value: string | undefined): string | undefined => {
   const normalized = value?.trim();
   return normalized ? normalized.slice(0, 120) : undefined;
+};
+
+const appInfo = (input: SettingsAppInfo | undefined): SettingsAppInfo | undefined => {
+  if (!input) {
+    return undefined;
+  }
+  const versionName = optionalLabel(input.versionName);
+  const buildNumber = optionalLabel(input.buildNumber);
+  const revision = optionalLabel(input.revision);
+  const parsedDate = input.builtAt ? Date.parse(input.builtAt) : Number.NaN;
+  return {
+    ...(versionName ? {versionName} : {}),
+    ...(buildNumber ? {buildNumber} : {}),
+    ...(revision ? {revision} : {}),
+    ...(Number.isFinite(parsedDate) ? {builtAt: new Date(parsedDate).toISOString()} : {}),
+  };
 };
 
 /**
@@ -19,8 +35,10 @@ export const buildSettingsOverview = (
 ): SettingsOverview => {
   const accountLabel = optionalLabel(input.account.displayLabel);
   const nightscoutLabel = optionalLabel(input.nightscout.displayLabel);
+  const version = appInfo(input.appInfo);
   return {
     schemaVersion: 1,
+    ...(version === undefined ? {} : {appInfo: version}),
     language: input.language,
     layout: {
       profile: input.layout,

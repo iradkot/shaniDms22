@@ -29,6 +29,8 @@ import {projectNightscoutTherapyContext} from '../../nightscout/therapyContextPr
 import {mapNightscoutTreatmentsToInsulinDataEntries} from '../../../utils/nightscoutTreatments.utils';
 import {createRecordedInsulinDataSource} from '../../../services/insulin/createRecordedInsulinDataSource';
 import {loadCalendarGlucoseRange} from '../../nightscout/loadCalendarGlucoseRange';
+import type {CurrentDataSource} from '../../../modules/currentData';
+import {createBrowserCurrentDataSource, type BrowserCurrentDataClient} from './browserCurrentDataSource';
 import {
   createGlucoseForecastLoader,
   type ForecastContextEvent,
@@ -525,28 +527,25 @@ const TREND_LABELS: Readonly<Record<string, string>> = {
 };
 
 export const loadBrowserCurrentSnapshot = async (input: {
-  readonly client: Pick<BrowserNightscoutClient, 'readEntries'> &
-    Partial<Pick<BrowserNightscoutClient, 'readDeviceStatuses'>>;
+  readonly client?: BrowserCurrentDataClient;
+  readonly currentDataSource?: CurrentDataSource;
   readonly target: ResolvedDestinationTarget;
   readonly locale: DestinationLocale;
   readonly nowMs?: number;
 }): Promise<CurrentSnapshotViewModel> => {
-  const nowMs = input.nowMs ?? Date.now();
   try {
-    const [result, deviceStatuses] = await Promise.all([
-      input.client.readEntries(nowMs - 2 * 60 * 60 * 1_000, nowMs + 1),
-      input.client.readDeviceStatuses === undefined
-        ? Promise.resolve(undefined)
-        : input.client
-            .readDeviceStatuses(nowMs - 2 * 60 * 60 * 1_000, nowMs)
-            .catch(() => undefined),
-    ]);
-    const latest = [...result.records].sort(
-      (left, right) => right.date - left.date,
-    )[0];
-    if (!latest) {
+    const source = input.currentDataSource ?? (input.client && createBrowserCurrentDataSource({
+      client: input.client,
+      ...(input.nowMs === undefined ? {} : {now: () => input.nowMs!}),
+    }));
+    if (!source) {
+      throw new Error('Current data source is unavailable.');
+    }
+    const current = await source.loadCurrent();
+    const latest = current.glucoseReading;
+    if (!latest || current.glucose.value === null) {
       return {
-        status: 'empty',
+        status: current.glucose.reason === 'read-failed' ? 'offline' : 'empty',
         target: input.target,
         message:
           input.locale === 'he'
@@ -554,25 +553,14 @@ export const loadBrowserCurrentSnapshot = async (input: {
             : 'No glucose reading is available yet.',
       };
     }
-    const ageMinutes = Math.max(0, Math.floor((nowMs - latest.date) / 60_000));
-    const latestDeviceStatus = deviceStatuses?.records
-      .filter(
-        record =>
-          record.createdAtMs <= nowMs &&
-          nowMs - record.createdAtMs < 10 * MINUTE_MS &&
-          Math.abs(latest.date - record.createdAtMs) < 10 * MINUTE_MS,
-      )
-      .sort((left, right) => right.createdAtMs - left.createdAtMs)[0];
-    const stale =
-      ageMinutes >= 10 ||
-      result.freshness.kind === 'stale' ||
-      (latestDeviceStatus !== undefined &&
-        deviceStatuses?.freshness.kind === 'stale');
+    const ageMinutes = Math.max(0, Math.floor((current.glucose.ageMs ?? 0) / 60_000));
+    const stale = current.glucose.status !== 'fresh';
+    const offline = current.glucose.reason === 'cached-after-read-failure';
     const measurement = (value: number): string =>
       Number(value.toFixed(2)).toString();
     return {
       status:
-        result.freshness.kind === 'stale'
+        offline
           ? 'offline'
           : stale
           ? 'stale'
@@ -582,12 +570,12 @@ export const loadBrowserCurrentSnapshot = async (input: {
       ...(latest.direction === undefined
         ? {}
         : {trendLabel: TREND_LABELS[latest.direction] ?? latest.direction}),
-      ...(latestDeviceStatus?.iobUnits === undefined
+      ...(current.iob.status !== 'fresh' || current.iob.value === null
         ? {}
-        : {iobLabel: `IOB ${measurement(latestDeviceStatus.iobUnits)} U`}),
-      ...(latestDeviceStatus?.cobGrams === undefined
+        : {iobLabel: `IOB ${measurement(current.iob.value)} U`}),
+      ...(current.cob.status !== 'fresh' || current.cob.value === null
         ? {}
-        : {cobLabel: `COB ${measurement(latestDeviceStatus.cobGrams)} g`}),
+        : {cobLabel: `COB ${measurement(current.cob.value)} g`}),
       dataAgeLabel:
         ageMinutes < 1
           ? input.locale === 'he'
@@ -599,7 +587,7 @@ export const loadBrowserCurrentSnapshot = async (input: {
       ...(stale
         ? {
             message:
-              result.freshness.kind === 'stale'
+              offline
                 ? input.locale === 'he'
                   ? 'אין חיבור כרגע. מוצג הנתון האחרון.'
                   : 'Offline now. Showing the last reading.'
