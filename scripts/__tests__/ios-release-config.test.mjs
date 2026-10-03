@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {readFile} from 'node:fs/promises';
+import {mkdtemp, readFile, rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import test from 'node:test';
 
 const read = path => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
@@ -101,61 +103,73 @@ test('legacy iOS credentials are passed as masked reusable workflow secrets', as
   );
 });
 
-test('App Store private key normalization masks one-line exports and rejects missing keys', {
-  skip: process.platform === 'win32',
-}, async () => {
-  const workflow = await read('.github/workflows/ios-beta-deploy.yml');
-  const preflight = workflow.split(
-    '      - name: Preflight App Store Connect token\n',
-  )[1];
-  const normalization = preflight
-    .split('        run: |\n')[1]
-    .split('          echo "Generating JWT via fastlane/spaceship..."')[0]
-    .replace(/^ {10}/gm, '');
-  const script =
-    normalization +
-    '\nbash -c \'printf "CHILD_PRIVATE_KEY=%s\\n" "$APP_STORE_CONNECT_PRIVATE_KEY"\'\n';
-  const pem = `-----BEGIN PRIVATE KEY-----\n${'A'.repeat(200)}\n-----END PRIVATE KEY-----\n`;
-  const encoded = Buffer.from(pem).toString('base64');
-  const cases = [
-    {base64: '', pem, expected: encoded},
-    {
-      base64: `${encoded.slice(0, 80)}\n${encoded.slice(80)}\n`,
-      pem: '',
-      expected: encoded,
-    },
-    {base64: encoded, pem: 'unused PEM input', expected: encoded},
-  ];
+test(
+  'App Store private key normalization masks exports and rejects missing keys',
+  {skip: process.platform === 'win32'},
+  async t => {
+    const directory = await mkdtemp(join(tmpdir(), 'ios-key-normalization-'));
+    t.after(() => rm(directory, {recursive: true, force: true}));
+    const workflow = await read('.github/workflows/ios-beta-deploy.yml');
+    const preflight = workflow.split(
+      '      - name: Preflight App Store Connect token\n',
+    )[1];
+    const normalization = preflight
+      .split('        run: |\n')[1]
+      .split('          echo "Generating JWT via fastlane/spaceship..."')[0]
+      .replace(/^ {10}/gm, '');
+    const script =
+      normalization +
+      '\nbash -c \'printf "CHILD_PRIVATE_KEY=%s\\n" "$APP_STORE_CONNECT_PRIVATE_KEY"\'\n';
+    const pem = `-----BEGIN PRIVATE KEY-----\n${'A'.repeat(200)}\n-----END PRIVATE KEY-----\n`;
+    const encoded = Buffer.from(pem).toString('base64');
+    const cases = [
+      {base64: '', pem, expected: encoded},
+      {
+        base64: `${encoded.slice(0, 80)}\n${encoded.slice(80)}\n`,
+        pem: '',
+        expected: encoded,
+      },
+      {base64: encoded, pem: 'unused PEM input', expected: encoded},
+    ];
 
-  for (const {base64, pem: plain, expected} of cases) {
-    const result = spawnSync('bash', ['-c', script], {
+    for (const [index, {base64, pem: plain, expected}] of cases.entries()) {
+      const environmentFile = join(directory, `env-${index}`);
+      const result = spawnSync('bash', ['-c', script], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GITHUB_ENV: environmentFile,
+          APP_STORE_CONNECT_PRIVATE_KEY: base64,
+          APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64: plain,
+        },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.ok(
+        result.stdout.endsWith(
+          `::add-mask::${expected}\nCHILD_PRIVATE_KEY=${expected}\n`,
+        ),
+        'The normalized key must be masked and reach same-step subprocesses',
+      );
+      assert.equal(
+        await readFile(environmentFile, 'utf8'),
+        `APP_STORE_CONNECT_PRIVATE_KEY=${expected}\n`,
+        'Later steps must receive exactly one environment-file line',
+      );
+    }
+
+    const missingFile = join(directory, 'missing-env');
+    const missing = spawnSync('bash', ['-c', script], {
       encoding: 'utf8',
       env: {
         ...process.env,
-        GITHUB_ENV: '/dev/stdout',
-        APP_STORE_CONNECT_PRIVATE_KEY: base64,
-        APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64: plain,
+        GITHUB_ENV: missingFile,
+        APP_STORE_CONNECT_PRIVATE_KEY: '',
+        APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64: '',
       },
     });
-    assert.equal(result.status, 0, result.stderr);
-    assert.ok(
-      result.stdout.endsWith(
-        `::add-mask::${expected}\nAPP_STORE_CONNECT_PRIVATE_KEY=${expected}\nCHILD_PRIVATE_KEY=${expected}\n`,
-      ),
-      'The normalized key must be masked before export and reach same-step subprocesses',
-    );
-  }
-
-  const missing = spawnSync('bash', ['-c', script], {
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      GITHUB_ENV: '/dev/stdout',
-      APP_STORE_CONNECT_PRIVATE_KEY: '',
-      APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64: '',
-    },
-  });
-  assert.equal(missing.status, 1);
-  assert.match(missing.stdout, /::error::Missing App Store Connect private key/);
-  assert.doesNotMatch(missing.stdout, /APP_STORE_CONNECT_PRIVATE_KEY=/);
-});
+    assert.equal(missing.status, 1);
+    assert.match(missing.stdout, /::error::Missing App Store Connect private key/);
+    assert.doesNotMatch(missing.stdout, /CHILD_PRIVATE_KEY=/);
+    await assert.rejects(readFile(missingFile), {code: 'ENOENT'});
+  },
+);
