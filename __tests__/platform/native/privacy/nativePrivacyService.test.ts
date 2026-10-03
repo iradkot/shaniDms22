@@ -60,6 +60,142 @@ test('failed withdrawal stays denied after restart and retries the server update
   expect(await AsyncStorage.getItem('privacy.consent.pending:owner-A')).toBeNull();
 });
 
+test('a failed first cloud opt-in can continue locally without pretending the remote choice completed', async () => {
+  mockRequest.mockRejectedValue(new Error('cloud service unavailable'));
+  await expect(nativePrivacyService.save('owner-A', true, true)).rejects.toThrow(
+    'cloud service unavailable',
+  );
+  expect(await AsyncStorage.getItem('privacy.consent.pending:owner-A')).toBe(
+    'requested',
+  );
+
+  await expect(nativePrivacyService.save('owner-A', false, false)).rejects.toThrow(
+    'cloud service unavailable',
+  );
+  const localConsent = await nativePrivacyService.continueLocalOnly('owner-A');
+  expect(localConsent).toMatchObject({
+    policyVersion: PRIVACY_POLICY_VERSION,
+    cloudSync: false,
+    aiProcessing: false,
+  });
+  expect(mockRequest).toHaveBeenCalledTimes(2);
+  expect(await AsyncStorage.getItem('privacy.consent.pending:owner-A')).toBe('requested');
+  expect(JSON.parse((await AsyncStorage.getItem('privacy.consent.v1:owner-A'))!)).toEqual(localConsent);
+  expect(await nativePrivacyService.load('owner-A')).toEqual({consent: localConsent, deleting: false});
+  expect(mockRequest).toHaveBeenCalledTimes(2);
+});
+
+test('explicit local continuation preserves a failed withdrawal until a later server acknowledgement', async () => {
+  await AsyncStorage.setItem('privacy.consent.v1:owner-A', JSON.stringify(cloudConsent));
+  mockRequest.mockRejectedValueOnce(new Error('offline'));
+  await expect(nativePrivacyService.save('owner-A', false, false)).rejects.toThrow('offline');
+  const localConsent = await nativePrivacyService.continueLocalOnly('owner-A');
+  expect(localConsent).toMatchObject({cloudSync: false, aiProcessing: false});
+  expect(await nativePrivacyService.load('owner-A')).toEqual({consent: localConsent, deleting: false});
+  expect(mockRequest).toHaveBeenCalledTimes(1);
+  expect(await AsyncStorage.getItem('privacy.consent.pending:owner-A')).toBe('requested');
+
+  mockRequest.mockResolvedValueOnce({version: 1, consent: {...cloudConsent, cloudSync: false, aiProcessing: false}});
+  await nativePrivacyService.save('owner-A', false, false);
+  expect(mockRequest).toHaveBeenCalledTimes(2);
+  expect(await AsyncStorage.getItem('privacy.consent.pending:owner-A')).toBeNull();
+});
+
+test('a first explicit local choice survives reload without letting unknown server consent override it', async () => {
+  mockRequest.mockResolvedValue({version: 1, consent: cloudConsent});
+  const localConsent = await nativePrivacyService.continueLocalOnly('owner-A');
+  expect(localConsent).toMatchObject({cloudSync: false, aiProcessing: false});
+  expect(await AsyncStorage.getItem('privacy.consent.pending:owner-A')).toBe('requested');
+  expect(await nativePrivacyService.load('owner-A')).toEqual({consent: localConsent, deleting: false});
+  expect(mockRequest).not.toHaveBeenCalled();
+});
+
+test('a pending remote update never restores cached cloud permission', async () => {
+  await AsyncStorage.setItem('privacy.consent.pending:owner-A', 'requested');
+  await AsyncStorage.setItem('privacy.consent.v1:owner-A', JSON.stringify(cloudConsent));
+  expect(await nativePrivacyService.load('owner-A')).toEqual({consent: null, deleting: false});
+  expect(mockRequest).not.toHaveBeenCalled();
+});
+
+test('local continuation cannot bypass an unfinished account deletion', async () => {
+  await storePendingDeletion();
+  await expect(nativePrivacyService.continueLocalOnly('owner-A')).rejects.toThrow();
+  expect(await nativePrivacyService.recoveryOwner()).toBe('owner-A');
+  expect(await AsyncStorage.getItem('privacy.deletion.pending:owner-A')).toBe('requested');
+  expect(await AsyncStorage.getItem('privacy.consent.v1:owner-A')).toBeNull();
+  expect(mockRequest).not.toHaveBeenCalled();
+});
+
+test('local continuation cannot bypass deletion recovery belonging to another owner', async () => {
+  await AsyncStorage.setItem('privacy.deletion.recovery.v1', 'owner-B');
+  await expect(nativePrivacyService.continueLocalOnly('owner-A')).rejects.toThrow();
+  expect(await AsyncStorage.getItem('privacy.deletion.recovery.v1')).toBe('owner-B');
+  expect(await AsyncStorage.getItem('privacy.consent.v1:owner-A')).toBeNull();
+  expect(mockRequest).not.toHaveBeenCalled();
+});
+
+test('local continuation rejects a different signed-in owner before granting any local choice', async () => {
+  mockAuth.currentUser = {uid: 'owner-B'};
+  await expect(nativePrivacyService.continueLocalOnly('owner-A')).rejects.toThrow();
+  expect(await AsyncStorage.getItem('privacy.consent.v1:owner-A')).toBeNull();
+  expect(mockRequest).not.toHaveBeenCalled();
+});
+
+test('local continuation rejects an A to B to A privacy-session change during storage lookup', async () => {
+  const storageRead = jest.mocked(AsyncStorage.getItem);
+  const read = storageRead.getMockImplementation()!;
+  storageRead.mockImplementationOnce(async storageKey => {
+    registerPrivacySession('owner-B', null);
+    registerPrivacySession('owner-A', null);
+    return read(storageKey);
+  });
+  try {
+    await expect(nativePrivacyService.continueLocalOnly('owner-A')).rejects.toThrow();
+    expect(await AsyncStorage.getItem('privacy.consent.v1:owner-A')).toBeNull();
+    expect(mockRequest).not.toHaveBeenCalled();
+  } finally {
+    storageRead.mockReset().mockImplementation(read);
+  }
+});
+
+test.each(['account deletion', 'another owner deletion recovery'] as const)(
+  'local continuation cannot finish when %s begins during its durable write',
+  async recovery => {
+    const storageWrite = jest.mocked(AsyncStorage.setItem);
+    const write = storageWrite.getMockImplementation()!;
+    let releaseWrite!: () => void;
+    let writeStarted!: () => void;
+    const heldWrite = new Promise<void>(resolve => {releaseWrite = resolve;});
+    const started = new Promise<void>(resolve => {writeStarted = resolve;});
+    storageWrite.mockImplementation(async (storageKey, value, callback) => {
+      if (storageKey === 'privacy.consent.v1:owner-A') {
+        writeStarted();
+        await heldWrite;
+      }
+      return write(storageKey, value, callback);
+    });
+    try {
+      const pending = nativePrivacyService.continueLocalOnly('owner-A');
+      await Promise.race([started, pending]);
+      if (recovery === 'account deletion') {
+        await storePendingDeletion();
+      } else {
+        await AsyncStorage.setItem('privacy.deletion.recovery.v1', 'owner-B');
+      }
+      releaseWrite();
+      await expect(pending).rejects.toThrow();
+      expect(await AsyncStorage.getItem('privacy.consent.pending:owner-A')).toBe('requested');
+      expect(await nativePrivacyService.recoveryOwner()).toBe(
+        recovery === 'account deletion' ? 'owner-A' : 'owner-B',
+      );
+      expect(mockRequest).not.toHaveBeenCalled();
+    } finally {
+      releaseWrite();
+      storageWrite.mockReset().mockImplementation(write);
+    }
+  },
+);
+
 test('receipt and cache identities are durable before destructive request, even if response is lost', async () => {
   mockRequest.mockImplementation(async path => {
     if (path === '/v1/account/delete/receipt') {return {version: 1, receipt};}

@@ -78,6 +78,9 @@ export const nativePrivacyService = {
   async recoveryOwner(): Promise<string | null> {
     return AsyncStorage.getItem('privacy.deletion.recovery.v1');
   },
+  async deletionPending(uid: string): Promise<boolean> {
+    return (await AsyncStorage.getItem(`privacy.deletion.pending:${uid}`)) !== null;
+  },
   async resumeNativeDeletion(uid: string): Promise<void> {
     if (!(await AsyncStorage.getItem(`privacy.deletion.pending:${uid}`))) {return;}
     await stopNativeAccountData(uid);
@@ -89,15 +92,19 @@ export const nativePrivacyService = {
     const pending = await AsyncStorage.getItem(
       `privacy.deletion.pending:${uid}`,
     );
-    if (await AsyncStorage.getItem(`privacy.consent.pending:${uid}`)) {
-      return {consent: null, deleting: pending !== null};
-    }
+    const consentPending = await AsyncStorage.getItem(`privacy.consent.pending:${uid}`);
     const raw = await AsyncStorage.getItem(key(uid));
     let cached: PrivacyConsent | null = null;
     try {
       cached = decodePrivacyConsent(raw ? JSON.parse(raw) : null);
     } catch {
       /* fail closed */
+    }
+    if (consentPending !== null) {
+      // An explicit device-only choice can outlive an unavailable server. A
+      // pending remote update can never restore cached permission to share.
+      const localOnly = pending === null && cached?.cloudSync === false && cached.aiProcessing === false;
+      return {consent: localOnly ? cached : null, deleting: pending !== null};
     }
     try {
       const value = await nativeAuthenticatedBackendClient.requestJson(
@@ -116,6 +123,40 @@ export const nativePrivacyService = {
       // current consent; missing or outdated local choices never grant access.
       return {consent: cached, deleting: pending !== null};
     }
+  },
+  async continueLocalOnly(uid: string): Promise<PrivacyConsent> {
+    const capturedRevision = privacySessionRevision();
+    const assertOwner = () => {
+      if (
+        getAuth(getApp()).currentUser?.uid !== uid ||
+        privacySessionRevision() !== capturedRevision
+      ) {
+        throw new Error('Account changed before the local choice was saved.');
+      }
+    };
+    const assertAvailable = async () => {
+      assertOwner();
+      const deleting = await AsyncStorage.getItem(`privacy.deletion.pending:${uid}`);
+      const recovering = await AsyncStorage.getItem('privacy.deletion.recovery.v1');
+      assertOwner();
+      if (deleting !== null || recovering !== null) {
+        throw new Error('Finish account deletion first.');
+      }
+    };
+    await assertAvailable();
+    const consent: PrivacyConsent = {
+      policyVersion: PRIVACY_POLICY_VERSION,
+      cloudSync: false,
+      aiProcessing: false,
+      updatedAtMs: Date.now(),
+    };
+    // Keep the remote restriction pending even when its earlier state is
+    // unknown. Only save() with a confirmed server response can clear it.
+    await AsyncStorage.setItem(`privacy.consent.pending:${uid}`, 'requested');
+    assertOwner();
+    await AsyncStorage.setItem(key(uid), JSON.stringify(consent));
+    await assertAvailable();
+    return consent;
   },
   async save(
     uid: string,
