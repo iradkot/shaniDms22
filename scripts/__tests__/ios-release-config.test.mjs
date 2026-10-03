@@ -101,7 +101,9 @@ test('legacy iOS credentials are passed as masked reusable workflow secrets', as
   );
 });
 
-test('App Store private key normalization masks one-line exports and rejects missing keys', async () => {
+test('App Store private key normalization masks one-line exports and rejects missing keys', {
+  skip: process.platform === 'win32',
+}, async () => {
   const workflow = await read('.github/workflows/ios-beta-deploy.yml');
   const preflight = workflow.split(
     '      - name: Preflight App Store Connect token\n',
@@ -110,6 +112,9 @@ test('App Store private key normalization masks one-line exports and rejects mis
     .split('        run: |\n')[1]
     .split('          echo "Generating JWT via fastlane/spaceship..."')[0]
     .replace(/^ {10}/gm, '');
+  const script =
+    normalization +
+    '\nbash -c \'printf "CHILD_PRIVATE_KEY=%s\\n" "$APP_STORE_CONNECT_PRIVATE_KEY"\'\n';
   const pem = `-----BEGIN PRIVATE KEY-----\n${'A'.repeat(200)}\n-----END PRIVATE KEY-----\n`;
   const encoded = Buffer.from(pem).toString('base64');
   const cases = [
@@ -123,7 +128,7 @@ test('App Store private key normalization masks one-line exports and rejects mis
   ];
 
   for (const {base64, pem: plain, expected} of cases) {
-    const result = spawnSync('bash', ['-c', normalization], {
+    const result = spawnSync('bash', ['-c', script], {
       encoding: 'utf8',
       env: {
         ...process.env,
@@ -135,13 +140,13 @@ test('App Store private key normalization masks one-line exports and rejects mis
     assert.equal(result.status, 0, result.stderr);
     assert.ok(
       result.stdout.endsWith(
-        `::add-mask::${expected}\nAPP_STORE_CONNECT_PRIVATE_KEY=${expected}\n`,
+        `::add-mask::${expected}\nAPP_STORE_CONNECT_PRIVATE_KEY=${expected}\nCHILD_PRIVATE_KEY=${expected}\n`,
       ),
-      'The normalized key must be masked before exporting a single line',
+      'The normalized key must be masked before export and reach same-step subprocesses',
     );
   }
 
-  const missing = spawnSync('bash', ['-c', normalization], {
+  const missing = spawnSync('bash', ['-c', script], {
     encoding: 'utf8',
     env: {
       ...process.env,

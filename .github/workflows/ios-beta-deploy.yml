@@ -127,7 +127,8 @@ jobs:
           # Mask the derived base64 value before subsequent step headers log it.
           printf '::add-mask::%s\n' "${SELECTED_KEY}"
 
-          # Persist normalized key for later steps.
+          # Use the normalized key in this step's Ruby subprocess and later steps.
+          export APP_STORE_CONNECT_PRIVATE_KEY="${SELECTED_KEY}"
           echo "APP_STORE_CONNECT_PRIVATE_KEY=${SELECTED_KEY}" >> "$GITHUB_ENV"
 
           echo "Generating JWT via fastlane/spaceship..."
