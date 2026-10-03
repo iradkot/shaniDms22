@@ -708,22 +708,6 @@ const Settings: React.FC = () => {
             <View style={rowStyle}>
               <View style={iconContainerStyle}>
                 <MaterialIcons
-                  name="insights"
-                  size={theme.typography.size.xl}
-                  color={theme.textColor}
-                />
-              </View>
-              <Text style={labelStyle}>{tr(language, 'settings.tabOracle')}</Text>
-              <Switch
-                testID={E2E_TEST_IDS.settings.toggleOracleTab}
-                value={settings.showOracle}
-                onValueChange={v => setSetting('showOracle', v)}
-              />
-            </View>
-
-            <View style={rowStyle}>
-              <View style={iconContainerStyle}>
-                <MaterialIcons
                   name="fastfood"
                   size={theme.typography.size.xl}
                   color={theme.textColor}
@@ -777,7 +761,9 @@ const Settings: React.FC = () => {
                   color={theme.textColor}
                 />
               </View>
-              <Text style={labelStyle}>{tr(language, 'settings.tabAiAnalyst')}</Text>
+              <Text style={labelStyle}>
+                {language === 'he' ? 'המלצות AI' : 'AI recommendations'}
+              </Text>
               <Switch
                 testID={E2E_TEST_IDS.settings.toggleAiAnalystTab}
                 value={settings.showAiAnalyst}
@@ -785,21 +771,6 @@ const Settings: React.FC = () => {
               />
             </View>
 
-            <View style={rowStyle}>
-              <View style={iconContainerStyle}>
-                <MaterialIcons
-                  name="tune"
-                  size={theme.typography.size.xl}
-                  color={theme.textColor}
-                />
-              </View>
-              <Text style={labelStyle}>{tr(language, 'settings.tabLoopTuner')}</Text>
-              <Switch
-                testID={E2E_TEST_IDS.settings.toggleLoopTunerTab}
-                value={settings.showLoopTuner}
-                onValueChange={v => setSetting('showLoopTuner', v)}
-              />
-            </View>
           </>
         )}
       </View>
@@ -1608,5 +1579,4 @@ const Settings: React.FC = () => {
 };
 
 export default Settings;
-
 

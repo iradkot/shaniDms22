@@ -1,6 +1,7 @@
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import releaseChannel from './release-channel.cjs';
 
 const scriptsDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptsDirectory, '..');
@@ -8,6 +9,9 @@ const androidDirectory = path.join(projectRoot, 'android');
 const requiresReleaseSigning = process.argv.includes(
   '--require-release-signing',
 );
+const buildEnvironment = requiresReleaseSigning
+  ? releaseChannel.productionReleaseEnvironment()
+  : {...process.env, SHANI_RELEASE_CHANNEL: releaseChannel.resolveReleaseChannel()};
 const gradleArguments = process.argv
   .slice(2)
   .filter(argument => argument !== '--require-release-signing');
@@ -17,6 +21,13 @@ if (gradleArguments.length === 0) {
 }
 
 if (requiresReleaseSigning) {
+  const historyCheck = spawnSync(process.execPath, [path.join(scriptsDirectory, 'check-credential-history.mjs')], {
+    cwd: projectRoot,
+    stdio: 'inherit',
+  });
+  if (historyCheck.error || historyCheck.status !== 0) {
+    throw new Error('Public release is blocked until exposed credentials are rotated and Git history cleanup is verified. Internal pilot previews remain available.');
+  }
   const requiredVariables = [
     'ANDROID_KEYSTORE_PATH',
     'ANDROID_KEYSTORE_PASSWORD',
@@ -41,7 +52,7 @@ const wrapper = path.join(
 );
 const result = spawnSync(wrapper, ['--no-daemon', ...gradleArguments], {
   cwd: androidDirectory,
-  env: process.env,
+  env: buildEnvironment,
   shell: process.platform === 'win32',
   stdio: 'inherit',
 });

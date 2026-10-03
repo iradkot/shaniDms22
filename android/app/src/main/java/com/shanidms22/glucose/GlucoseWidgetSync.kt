@@ -1,6 +1,7 @@
 package com.shanidms22.glucose
 
 import android.content.Context
+import com.shanidms22.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -55,8 +56,10 @@ internal object GlucoseWidgetSync {
         iobTimestampMs = load?.iobTimestampMs,
         cobTimestampMs = load?.cobTimestampMs,
       )
-      val snapshot = WidgetForecastSnapshot(nowMs, latest.date, history, listOfNotNull(load?.loopForecast, nightscoutWidgetForecast(history, nowMs)))
-      GlucoseWidgetUpdater.saveForecast(context, baseUrl, widgetForecastSnapshotJson(snapshot), native = true)
+      if (BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED) {
+        val snapshot = WidgetForecastSnapshot(nowMs, latest.date, history, listOfNotNull(load?.loopForecast, nightscoutWidgetForecast(history, nowMs)))
+        GlucoseWidgetUpdater.saveForecast(context, baseUrl, widgetForecastSnapshotJson(snapshot), native = true)
+      }
       GlucoseWidgetUpdater.updateWidgets(context)
       GlucoseWidgetUpdater.updateNotification(context)
       true

@@ -9,9 +9,11 @@ import {
   decodeProviderRequest,
 } from './contracts';
 import type {CredentialVault} from './vault';
+import {decodeAccountConsent, requireAccountConsent, type AccountPrivacyRepository} from './accountPrivacy';
 import type {LlmUpstream} from './openAiUpstream';
 import {UpstreamError} from './openAiUpstream';
 import type {NightscoutCredentialVault} from './nightscoutVault';
+import {normalizeNightscoutAccessToken} from './nightscoutTokenPermissions';
 import {
   createNightscoutSourceId,
   createNightscoutWorkspaceId,
@@ -24,7 +26,9 @@ import {
 } from './nightscoutUpstream';
 
 export interface AuthTokenVerifier {
-  verify(token: string): Promise<{readonly uid: string}>;
+  verify(token: string): Promise<{readonly uid: string; readonly authTimeSeconds?: number}>;
+  /** Only an already locked deletion may resume with the original signed token. */
+  verifyDeletionRetry?(token: string): Promise<{readonly uid: string; readonly authTimeSeconds?: number}>;
 }
 
 export interface ApiRequest {
@@ -77,6 +81,7 @@ export class FixedWindowApiRateLimiter implements ApiRateLimiter {
 }
 
 export interface ShaniApiDependencies {
+  readonly privacy?: AccountPrivacyRepository;
   readonly auth: AuthTokenVerifier;
   readonly vault: CredentialVault;
   readonly nightscoutVault: NightscoutCredentialVault;
@@ -93,6 +98,11 @@ export interface ShaniApiDependencies {
 
 const MAX_BODY_BYTES = 8_500_000;
 const KNOWN_API_PATHS = new Set([
+  '/v1/account/delete/receipt',
+  '/v1/account/delete/finish',
+  '/v1/privacy/status',
+  '/v1/privacy/consent',
+  '/v1/account/delete',
   '/v1/vault/llm/validate',
   '/v1/vault/llm/provision',
   '/v1/vault/llm/status',
@@ -210,12 +220,34 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
       if (jsonBytes(request.body) > MAX_BODY_BYTES) {
         throw new ApiContractError(413, 'request_too_large', 'Request is too large');
       }
+      if (requestPath(request) === '/v1/account/delete/finish') {
+        requireMethod(request, 'POST');
+        const input = request.body as Record<string, unknown> | null;
+        if (typeof input !== 'object' || input === null || Array.isArray(input) ||
+            Object.keys(input).some(key => !['version', 'receipt'].includes(key)) || input.version !== 1 ||
+            typeof input.receipt !== 'string' || !/^[a-f0-9]{64}$/.test(input.receipt)) {
+          throw new ApiContractError(400, 'invalid_request', 'Invalid deletion receipt');
+        }
+        if (!limiter.consume(`delete:${input.receipt}`, '/v1/account/delete/finish', now())) {
+          throw new ApiContractError(429, 'rate_limited', 'Too many requests');
+        }
+        if (!dependencies.privacy) {throw new ApiContractError(503, 'privacy_unavailable', 'Account deletion is unavailable');}
+        await dependencies.privacy.finishDeletion(input.receipt);
+        response.status(200).json({version: 1, deleted: true});
+        return;
+      }
       const token = bearerToken(request);
-      let identity: {readonly uid: string};
+      let identity: {readonly uid: string; readonly authTimeSeconds?: number};
       try {
         identity = await dependencies.auth.verify(token);
       } catch {
-        throw new ApiContractError(401, 'unauthenticated', 'Authentication required');
+        if (requestPath(request) !== '/v1/account/delete' || !dependencies.auth.verifyDeletionRetry || !dependencies.privacy) {
+          throw new ApiContractError(401, 'unauthenticated', 'Authentication required');
+        }
+        try {
+          identity = await dependencies.auth.verifyDeletionRetry(token);
+          if (!await dependencies.privacy.isDeleting(identity.uid)) { throw new Error('No deletion in progress'); }
+        } catch { throw new ApiContractError(401, 'unauthenticated', 'Authentication required'); }
       }
       if (!/^[A-Za-z0-9_-]{1,128}$/.test(identity.uid)) {
         throw new ApiContractError(401, 'unauthenticated', 'Invalid identity');
@@ -224,6 +256,64 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
       const rateLimitRoute = KNOWN_API_PATHS.has(path) ? path : '/unknown';
       if (!limiter.consume(identity.uid, rateLimitRoute, now())) {
         throw new ApiContractError(429, 'rate_limited', 'Too many requests');
+      }
+
+      if (path === '/v1/privacy/status') {
+        requireMethod(request, 'GET');
+        if (!dependencies.privacy) { throw new ApiContractError(503, 'privacy_unavailable', 'Privacy controls are unavailable'); }
+        response.status(200).json({version: 1,
+          consent: await dependencies.privacy.readConsent(identity.uid),
+          deleting: await dependencies.privacy.isDeleting(identity.uid)});
+        return;
+      }
+      if (path === '/v1/privacy/consent') {
+        requireMethod(request, 'POST');
+        if (!dependencies.privacy) { throw new ApiContractError(503, 'privacy_unavailable', 'Privacy controls are unavailable'); }
+        const consent = decodeAccountConsent(request.body, now());
+        await dependencies.privacy.writeConsent(identity.uid, consent);
+        response.status(200).json({version: 1, consent});
+        return;
+      }
+      if (path === '/v1/account/delete/receipt') {
+        requireMethod(request, 'POST');
+        const input = request.body as Record<string, unknown> | null;
+        if (typeof input !== 'object' || input === null || Array.isArray(input) || Object.keys(input).length !== 1 || input.version !== 1) {
+          throw new ApiContractError(400, 'invalid_request', 'Invalid receipt request');
+        }
+        if (identity.authTimeSeconds === undefined || !Number.isFinite(identity.authTimeSeconds) ||
+            now() / 1000 - identity.authTimeSeconds > 10 * 60 || identity.authTimeSeconds > now() / 1000 + 60) {
+          throw new ApiContractError(401, 'recent_auth_required', 'Sign in again before deleting your account');
+        }
+        if (!dependencies.privacy) {throw new ApiContractError(503, 'privacy_unavailable', 'Account deletion is unavailable');}
+        response.status(200).json({version: 1, receipt: await dependencies.privacy.issueDeletionReceipt(identity.uid)});
+        return;
+      }
+      if (path === '/v1/account/delete') {
+        requireMethod(request, 'POST');
+        const input = request.body as Record<string, unknown> | null;
+        if (typeof input !== 'object' || input === null || Array.isArray(input) ||
+            Object.keys(input).some(key => !['version', 'confirmation', 'receipt'].includes(key)) ||
+            input.version !== 1 || input.confirmation !== 'DELETE_MY_SHANIDMS_ACCOUNT' ||
+            typeof input.receipt !== 'string' || !/^[a-f0-9]{64}$/.test(input.receipt)) {
+          throw new ApiContractError(400, 'confirmation_required', 'Confirm permanent account deletion');
+        }
+        const alreadyDeleting = dependencies.privacy && await dependencies.privacy.isDeleting(identity.uid);
+        if (!alreadyDeleting && (identity.authTimeSeconds === undefined || !Number.isFinite(identity.authTimeSeconds) ||
+            now() / 1000 - identity.authTimeSeconds > 10 * 60 || identity.authTimeSeconds > now() / 1000 + 60)) {
+          throw new ApiContractError(401, 'recent_auth_required', 'Sign in again before deleting your account');
+        }
+        if (!dependencies.privacy) { throw new ApiContractError(503, 'privacy_unavailable', 'Account deletion is unavailable'); }
+        await dependencies.privacy.deleteAccount(identity.uid, input.receipt);
+        response.status(200).json({version: 1, deleted: true});
+        return;
+      }
+      if (dependencies.privacy && await dependencies.privacy.isDeleting(identity.uid)) {
+        throw new ApiContractError(403, 'account_deletion_pending', 'Finish account deletion before continuing');
+      }
+      if (['/v1/vault/llm/validate', '/v1/vault/llm/provision', '/v1/vault/llm/test',
+          '/v1/vault/nightscout/provision', '/v1/nightscout/range', '/v1/llm/chat', '/v1/llm/meal-image'].includes(path)) {
+        await requireAccountConsent(dependencies.privacy, identity.uid,
+          path.startsWith('/v1/llm/') ? 'ai' : 'cloud');
       }
 
       if (path === '/v1/vault/llm/validate') {
@@ -291,6 +381,7 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
             'Configure an AI credential first',
           );
         }
+        await requireAccountConsent(dependencies.privacy, identity.uid, 'cloud');
         await dependencies.upstream.testConnection(credential, input.model);
         response.status(200).json({
           version: 1,
@@ -304,15 +395,26 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
       if (path === '/v1/vault/nightscout/provision') {
         requireMethod(request, 'POST');
         const input = decodeNightscoutCredentialRequest(request.body);
-        const credential = {
-          url: normalizeNightscoutBaseUrl(input.url),
-          apiSecretSha1: normalizeNightscoutApiSecret(input.apiKey),
-        };
+        const url = normalizeNightscoutBaseUrl(input.url);
+        const accessToken = normalizeNightscoutAccessToken(input.apiKey);
+        if (input.authType === 'access-token' && accessToken === null) {
+          throw new ApiContractError(400, 'nightscout_read_only_required', 'Enter a Nightscout subject token with only readable permissions');
+        }
+        const credential = input.authType === 'access-token'
+          ? {url, apiSecretSha1: '', accessToken: accessToken!}
+          : {url, apiSecretSha1: normalizeNightscoutApiSecret(input.apiKey)};
+        if (input.authType === 'legacy-api-secret') {
+          const saved = await dependencies.nightscoutVault.get(identity.uid);
+          if (!saved || saved.accessToken || saved.url !== url || saved.apiSecretSha1 !== credential.apiSecretSha1) {
+            throw new ApiContractError(409, 'nightscout_read_only_required', 'Reconnect using a Nightscout subject token with only readable permissions');
+          }
+        }
         await dependencies.nightscoutUpstream.validateCredential(credential);
         await dependencies.nightscoutVault.put(identity.uid, credential);
         response.status(200).json({
           version: 1,
           configured: true,
+          authType: credential.accessToken ? 'access-token' : 'legacy-api-secret',
           sourceId: createNightscoutSourceId(credential.url),
           workspaceId: createNightscoutWorkspaceId(
             identity.uid,
@@ -336,6 +438,7 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
                   identity.uid,
                   credential.url,
                 ),
+                authType: credential.accessToken ? 'access-token' : 'legacy-api-secret',
               }),
         });
         return;
@@ -384,6 +487,7 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
             'Nightscout Workspace changed; refresh before reading data',
           );
         }
+        await requireAccountConsent(dependencies.privacy, identity.uid, 'cloud');
         const data = await dependencies.nightscoutUpstream.range(
           credential,
           {
@@ -408,7 +512,9 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
             'Configure an AI credential first',
           );
         }
+        await requireAccountConsent(dependencies.privacy, identity.uid, 'ai');
         const content = await dependencies.upstream.chat(credential, input);
+        await requireAccountConsent(dependencies.privacy, identity.uid, 'ai');
         response.status(200).json({
           version: 1,
           provider: input.provider,
@@ -432,10 +538,12 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
             'Configure an AI credential first',
           );
         }
+        await requireAccountConsent(dependencies.privacy, identity.uid, 'ai');
         const content = await dependencies.upstream.analyzeMealImage(
           credential,
           input,
         );
+        await requireAccountConsent(dependencies.privacy, identity.uid, 'ai');
         response.status(200).json({
           version: 1,
           provider: input.provider,

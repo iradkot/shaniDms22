@@ -20,6 +20,7 @@ import {
 import {BgSample} from 'app/types/day_bgs.types';
 import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
 import {futureLoopPoints} from '../modules/glucoseForecast';
+import {getReleaseSafetyPolicy} from '../modules/releaseSafety/policy';
 import {
   extractLoad,
   getDeviceStatusTimestampMs,
@@ -167,6 +168,7 @@ export function useLatestNightscoutSnapshot(params: {
       };
 
       const shouldHidePredictions =
+        !getReleaseSafetyPolicy().experimentalGlucoseForecasts ||
         staleLevel === 'very-stale' ||
         (() => {
           const deviceTs = deviceStatus ? getDeviceStatusTimestampMs(deviceStatus) : undefined;
@@ -225,7 +227,8 @@ export function useLatestNightscoutSnapshot(params: {
 
   return useMemo(
     () => ({
-      snapshot,
+      snapshot: snapshot && !getReleaseSafetyPolicy().experimentalGlucoseForecasts
+        ? {...snapshot, predictions: []} : snapshot,
       isLoading,
       error,
       refresh,

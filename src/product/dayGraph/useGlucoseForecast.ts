@@ -2,6 +2,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {AppState} from 'react-native';
 import type {DayGraphDataSource} from '../../modules/dayGraph';
 import type {GlucoseForecastSnapshot} from '../../modules/glucoseForecast';
+import {getReleaseSafetyPolicy} from '../../modules/releaseSafety/policy';
 
 const MINUTE_MS = 60_000;
 const MAX_AGE_MS = 15 * MINUTE_MS;
@@ -18,6 +19,7 @@ export const visibleGlucoseForecast = (
   snapshot: GlucoseForecastSnapshot | undefined,
   nowMs: number,
 ): GlucoseForecastSnapshot | undefined => {
+  if (!getReleaseSafetyPolicy().experimentalGlucoseForecasts) {return undefined;}
   if (!snapshot || !Number.isFinite(snapshot.glucoseTimestampMs) ||
     !Number.isFinite(snapshot.generatedAtMs) ||
     nowMs - snapshot.glucoseTimestampMs >= MAX_AGE_MS ||
@@ -50,18 +52,19 @@ export const useGlucoseForecast = ({
   readonly nowMs: number;
   readonly glucoseTimestampMs?: number | undefined;
 }) => {
+  const allowed = getReleaseSafetyPolicy().experimentalGlucoseForecasts;
   const [state, setState] = useState<ForecastState>();
   const [revision, setRevision] = useState(0);
   const busy = useRef(false);
   const forceRefreshNext = useRef(false);
   const refresh = useCallback((forceRefresh = true) => {
-    if (!busy.current) {
+    if (getReleaseSafetyPolicy().experimentalGlucoseForecasts && !busy.current) {
       forceRefreshNext.current = forceRefresh;
       setRevision(value => value + 1);
     }
   }, []);
   useEffect(() => {
-    if (!live || !source.loadGlucoseForecast) {
+    if (!allowed || !live || !source.loadGlucoseForecast) {
       setState(undefined);
       return undefined;
     }
@@ -78,7 +81,7 @@ export const useGlucoseForecast = ({
     Promise.resolve()
       .then(() => source.loadGlucoseForecast!({forceRefresh}))
       .then(snapshot => {
-        if (active) {
+        if (active && getReleaseSafetyPolicy().experimentalGlucoseForecasts) {
           setState({source, snapshot, loading: false, failed: false});
         }
       })
@@ -96,9 +99,9 @@ export const useGlucoseForecast = ({
       active = false;
       busy.current = false;
     };
-  }, [source, live, glucoseTimestampMs, revision]);
+  }, [source, live, allowed, glucoseTimestampMs, revision]);
   useEffect(() => {
-    if (!live || !source.loadGlucoseForecast) {
+    if (!allowed || !live || !source.loadGlucoseForecast) {
       return undefined;
     }
     const timer = setInterval(() => {
@@ -115,12 +118,12 @@ export const useGlucoseForecast = ({
       clearInterval(timer);
       subscription.remove();
     };
-  }, [source, live, refresh]);
-  const current = live && state?.source === source ? state : undefined;
+  }, [source, live, allowed, refresh]);
+  const current = allowed && live && state?.source === source ? state : undefined;
   const snapshot = visibleGlucoseForecast(current?.snapshot, nowMs);
   return {
     snapshot,
-    supported: live && !!source.loadGlucoseForecast,
+    supported: allowed && live && !!source.loadGlucoseForecast,
     status: !current || current.loading ? 'loading' as const :
       current.failed ? 'error' as const : !snapshot ? 'stale' as const : 'ready' as const,
     refresh,

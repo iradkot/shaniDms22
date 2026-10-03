@@ -25,6 +25,7 @@ import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.shanidms22.MainActivity
+import com.shanidms22.BuildConfig
 import com.shanidms22.R
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -62,6 +63,30 @@ object GlucoseWidgetUpdater {
 
   private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+  private fun clearExperimentalForecasts(context: Context) {
+    val p = prefs(context)
+    val activeUrl = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
+      .getString(GlucoseSyncWorker.KEY_BASE_URL, "").orEmpty().trim().trimEnd('/')
+    val measuredHistory = if (widgetForecastAccountMatches(activeUrl, p.getString(KEY_FORECAST_ACCOUNT, ""))) {
+      parseWidgetForecastSnapshot(p.getString(KEY_FORECAST, null))?.history.orEmpty() +
+        parseWidgetForecastSnapshot(p.getString(KEY_NATIVE_FORECAST, null))?.history.orEmpty()
+    } else emptyList()
+    val e = p.edit().remove(KEY_FORECAST).remove(KEY_NATIVE_FORECAST).remove(KEY_FORECAST_ACCOUNT)
+      .remove(KEY_PROJECTED1).remove(KEY_PROJECTED2).remove(KEY_PROJECTED3)
+    if (measuredHistory.isNotEmpty()) {
+      // Keep recorded readings on upgrade; only future series and projections are discarded.
+      val stored = p.getString(KEY_TIMED_HISTORY, "").orEmpty().split(',').mapNotNull {
+        val parts = it.split(':')
+        val ts = parts.getOrNull(0)?.toLongOrNull()
+        val sgv = parts.getOrNull(1)?.toIntOrNull()
+        if (ts == null || sgv == null) null else WidgetEntryPoint(ts, sgv, null)
+      }
+      e.putString(KEY_TIMED_HISTORY, (stored + measuredHistory).distinctBy { it.ts }.sortedBy { it.ts }
+        .takeLast(180).joinToString(",") { "${it.ts}:${it.sgv}" })
+    }
+    e.apply()
+  }
+
   internal fun save(
     context: Context,
     value: Int,
@@ -85,6 +110,7 @@ object GlucoseWidgetUpdater {
     iobTimestampMs: Long? = null,
     cobTimestampMs: Long? = null,
   ) {
+    if (!BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED) clearExperimentalForecasts(context)
     if (timestamp < prefs(context).getLong(KEY_TIMESTAMP, 0)) return
     val e = prefs(context)
       .edit()
@@ -101,9 +127,12 @@ object GlucoseWidgetUpdater {
     if (basalBolusRatio != null && basalBolusRatio.isFinite()) e.putString(KEY_BASAL_BOLUS_RATIO, String.format("%.0f", basalBolusRatio * 100.0)) else if (!preserveInsulinStats) e.remove(KEY_BASAL_BOLUS_RATIO)
     if (totalInsulin != null && totalInsulin.isFinite()) e.putString(KEY_TOTAL_INSULIN, String.format("%.1f", totalInsulin)) else if (!preserveInsulinStats) e.remove(KEY_TOTAL_INSULIN)
     if (tir != null && tir in 0..100) e.putString(KEY_TIR, tir.toString()) else e.remove(KEY_TIR)
-    if (projected1 != null) e.putInt(KEY_PROJECTED1, projected1) else e.remove(KEY_PROJECTED1)
-    if (projected2 != null) e.putInt(KEY_PROJECTED2, projected2) else e.remove(KEY_PROJECTED2)
-    if (projected3 != null) e.putInt(KEY_PROJECTED3, projected3) else e.remove(KEY_PROJECTED3)
+    if (BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED && projected1 != null) e.putInt(KEY_PROJECTED1, projected1) else e.remove(KEY_PROJECTED1)
+    if (BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED && projected2 != null) e.putInt(KEY_PROJECTED2, projected2) else e.remove(KEY_PROJECTED2)
+    if (BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED && projected3 != null) e.putInt(KEY_PROJECTED3, projected3) else e.remove(KEY_PROJECTED3)
+    if (!BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED) {
+      e.remove(KEY_FORECAST).remove(KEY_NATIVE_FORECAST).remove(KEY_FORECAST_ACCOUNT)
+    }
     if (low != null) e.putInt(KEY_LOW, low)
     if (high != null) e.putInt(KEY_HIGH, high)
     if (sparklinePoints != null && sparklinePoints.isNotEmpty()) {
@@ -117,6 +146,10 @@ object GlucoseWidgetUpdater {
   }
 
   internal fun saveForecast(context: Context, accountBaseUrl: String, raw: String, native: Boolean = false) {
+    if (!BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED) {
+      clearExperimentalForecasts(context)
+      return
+    }
     GlucoseWidgetCredentialStore.withConfigurationLock {
       val syncPrefs = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
       val activeUrl = syncPrefs.getString(GlucoseSyncWorker.KEY_BASE_URL, "").orEmpty().trim().trimEnd('/')
@@ -184,6 +217,10 @@ object GlucoseWidgetUpdater {
 
   private fun read(context: Context): WidgetState {
     val p = prefs(context)
+    // An upgrade can retain development snapshots before any foreground JS runs.
+    if (!BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED) {
+      clearExperimentalForecasts(context)
+    }
     val has = p.contains(KEY_VALUE)
     val value = if (has) p.getInt(KEY_VALUE, 0) else null
     val trend = p.getString(KEY_TREND, "") ?: ""
@@ -196,14 +233,14 @@ object GlucoseWidgetUpdater {
     val basalBolusRatio = p.getString(KEY_BASAL_BOLUS_RATIO, "--") ?: "--"
     val totalInsulin = p.getString(KEY_TOTAL_INSULIN, "--") ?: "--"
     val tir = p.getString(KEY_TIR, "--") ?: "--"
-    val projected1 = if (p.contains(KEY_PROJECTED1)) p.getInt(KEY_PROJECTED1, 0) else null
-    val projected2 = if (p.contains(KEY_PROJECTED2)) p.getInt(KEY_PROJECTED2, 0) else null
-    val projected3 = if (p.contains(KEY_PROJECTED3)) p.getInt(KEY_PROJECTED3, 0) else null
+    val projected1 = if (BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED && p.contains(KEY_PROJECTED1)) p.getInt(KEY_PROJECTED1, 0) else null
+    val projected2 = if (BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED && p.contains(KEY_PROJECTED2)) p.getInt(KEY_PROJECTED2, 0) else null
+    val projected3 = if (BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED && p.contains(KEY_PROJECTED3)) p.getInt(KEY_PROJECTED3, 0) else null
     val low = if (p.contains(KEY_LOW)) p.getInt(KEY_LOW, 70) else null
     val high = if (p.contains(KEY_HIGH)) p.getInt(KEY_HIGH, 180) else null
     val activeUrl = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
       .getString(GlucoseSyncWorker.KEY_BASE_URL, "").orEmpty().trim().trimEnd('/')
-    val accountMatches = widgetForecastAccountMatches(activeUrl, p.getString(KEY_FORECAST_ACCOUNT, ""))
+    val accountMatches = BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED && widgetForecastAccountMatches(activeUrl, p.getString(KEY_FORECAST_ACCOUNT, ""))
     val shared = if (accountMatches) parseWidgetForecastSnapshot(p.getString(KEY_FORECAST, null)) else null
     val native = if (accountMatches) parseWidgetForecastSnapshot(p.getString(KEY_NATIVE_FORECAST, null)) else null
     shared?.load?.let { load ->
@@ -270,6 +307,7 @@ object GlucoseWidgetUpdater {
     views.setTextViewText(R.id.glucose_graph_load, buildLoadText(state))
     val summary = widgetForecastSummary(state.forecast, System.currentTimeMillis())
     views.setTextViewText(R.id.glucose_graph_forecast, if (compact) buildForecastLine(summary) else buildForecastText(summary, compact = false))
+    views.setViewVisibility(R.id.glucose_graph_forecast, if (BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED) View.VISIBLE else View.GONE)
     val legend = SpannableStringBuilder()
     state.forecast.forEachIndexed { index, series ->
       if (index > 0) legend.append(" · ")

@@ -1,3 +1,6 @@
+import {configureExperimentalBuildForTests} from '../../mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
 import {AppState} from 'react-native';
@@ -45,6 +48,29 @@ describe('live glucose forecast presentation', () => {
       act(() => tree!.unmount());
       tree = undefined;
     }
+  });
+
+  it('does not load, poll or expose a supplied retained forecast in a pilot build', async () => {
+    globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
+    const load = jest.fn(async () => fixture());
+    await act(async () => {tree = renderer.create(<Probe source={sourceFor(load)} />);});
+    expect(latest.supported).toBe(false);
+    expect(latest.snapshot).toBeUndefined();
+    await act(async () => latest.refresh());
+    expect(load).not.toHaveBeenCalled();
+    expect(visibleGlucoseForecast(fixture(), NOW)).toBeUndefined();
+    const model = buildDayGraph({
+      period: {dayStartMs: 0, dayEndMs: DAY}, expectedSampleIntervalMs: 5 * MINUTE,
+      glucoseSamples: [{identity: {sourceId: 'patient', recordId: 'reading'}, timestampMs: NOW, valueMgDl: 120}],
+      timelineItems: [],
+    });
+    await act(async () => {tree!.update(withTheme(<RichDayGraphChart locale="en" model={model} forecast={fixture()} forecastStatus="ready" />));});
+    expect(tree!.root.findAllByProps({testID: 'glucose-forecast-card'})).toHaveLength(0);
+    expect(tree!.root.findAllByProps({testID: 'glucose-forecast-layer'})).toHaveLength(0);
+    expect(tree!.root.findAllByProps({testID: 'day-graph-show-forecast'})).toHaveLength(0);
+    const chart = tree!.root.findByType(StackedHomeCharts).props;
+    expect(chart.forecast).toBeUndefined();
+    expect(chart.bgSamples).toHaveLength(1);
   });
 
   it('hides stale glucose and removes a stale prediction source independently', () => {

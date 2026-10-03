@@ -5,6 +5,7 @@ import {
 } from '../app';
 import {
   CORE_DESTINATIONS,
+  CORE_SAVED_TARGET_REDIRECTS,
   DestinationDefinition,
   DestinationRegistry,
   destinationId,
@@ -63,10 +64,10 @@ export const createRuntimeProductRegistries = (
     implementationKeys.has(item.implementationKey),
   );
   return {
-    destinations: new DestinationRegistry([
-      ...CORE_DESTINATIONS,
-      ...contributions,
-    ]),
+    destinations: new DestinationRegistry(
+      [...CORE_DESTINATIONS, ...contributions],
+      CORE_SAVED_TARGET_REDIRECTS,
+    ),
     implementations:
       registrations.length === 0
         ? coreProductImplementationRegistry

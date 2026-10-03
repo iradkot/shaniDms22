@@ -40,10 +40,12 @@ describe('Hub selectors', () => {
       [],
     );
     const today = model.groups.find(group => group.id === 'today');
-    expect(allItems).toHaveLength(22);
+    expect(allItems).toHaveLength(17);
     expect(allItems.map(item => item.key)).toEqual(
       expect.arrayContaining(
-        CORE_DESTINATIONS.map(destination => destination.id),
+        CORE_DESTINATIONS.filter(destination =>
+          destination.kind === 'module' || destination.targetPolicy.shortcut,
+        ).map(destination => destination.id),
       ),
     );
     expect(today).toBeDefined();
@@ -61,7 +63,7 @@ describe('Hub selectors', () => {
       model.groups
         .find(group => group.id === 'ask')
         ?.items.map(item => item.key),
-    ).toContain(CORE_DESTINATION_IDS.aiGeneralChat);
+    ).toEqual([CORE_DESTINATION_IDS.aiAnalyst]);
   });
 
   it('keeps unavailable favorites in their saved order and removes duplicates', () => {

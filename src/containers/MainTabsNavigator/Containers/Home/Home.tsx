@@ -48,6 +48,7 @@ import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {createLlmProvider} from 'app/services/llm/llmClient';
 import {withSharedAiContext} from 'app/services/llm/sharedAiContext';
 import {t as tr} from 'app/i18n/translations';
+import {getReleaseSafetyPolicy} from 'app/modules/releaseSafety/policy';
 import {
   addMemoryEntry,
   buildCompactPatientMemory,
@@ -626,7 +627,7 @@ const Home: React.FC = () => {
   const todayYmd = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
 
   const todayRecommendation = useMemo(() => {
-    if (!isShowingToday) {return null;}
+    if (!isShowingToday || !getReleaseSafetyPolicy().currentRecommendations) {return null;}
 
     const bg = liveBgSample?.sgv;
     const dir = liveBgSample?.direction;
@@ -742,7 +743,7 @@ const Home: React.FC = () => {
     setAiRecommendationBody(null);
     setRecommendationGeneratedAt(Date.now());
     setHasLoadedSavedRecommendation(false);
-    if (!aiWorkspaceScope) {
+    if (!aiWorkspaceScope || !getReleaseSafetyPolicy().currentRecommendations) {
       setHasLoadedSavedRecommendation(true);
       return () => {
         mounted = false;
@@ -752,7 +753,7 @@ const Home: React.FC = () => {
     (async () => {
       try {
         const saved = await loadAiHomeRecommendation(aiWorkspaceScope);
-        if (!mounted) {return;}
+        if (!mounted || !getReleaseSafetyPolicy().currentRecommendations) {return;}
         if (!saved) {
           setHasLoadedSavedRecommendation(true);
           return;
@@ -864,7 +865,7 @@ const Home: React.FC = () => {
   }, [language, recommendationGeneratedAt]);
 
   const handleRefreshRecommendation = useCallback(async () => {
-    if (!todayRecommendation || isRefreshingRecommendation) {return;}
+    if (!getReleaseSafetyPolicy().currentRecommendations || !todayRecommendation || isRefreshingRecommendation) {return;}
     setIsRefreshingRecommendation(true);
     const requestedWorkspaceIdentity = activeAiWorkspaceIdentity;
     recommendationAbortRef.current?.abort();
@@ -893,13 +894,13 @@ const Home: React.FC = () => {
         .reduce((sum, e) => sum + (e.amount ?? 0), 0);
 
       const patientMemory = await buildCompactPatientMemory(aiWorkspaceScope);
-      if (currentAiWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) {return;}
+      if (!getReleaseSafetyPolicy().currentRecommendations || currentAiWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) {return;}
 
       await upsertProfileSnapshot(aiWorkspaceScope, {
         communicationStyle: language === 'he' ? 'hebrew-concise-practical' : 'english-concise-practical',
         notes: ['prefers concise practical recommendations', 'prefers context-aware guidance over generic bolus focus'],
       });
-      if (currentAiWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) {return;}
+      if (!getReleaseSafetyPolicy().currentRecommendations || currentAiWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) {return;}
 
       const model = (aiSettings.openAiModel ?? 'gpt-5.5').trim() || 'gpt-5.5';
       const provider = createLlmProvider({
@@ -953,7 +954,7 @@ const Home: React.FC = () => {
           },
         ],
       });
-      if (currentAiWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) {return;}
+      if (!getReleaseSafetyPolicy().currentRecommendations || currentAiWorkspaceIdentityRef.current !== requestedWorkspaceIdentity) {return;}
 
       const rawText = (response.content ?? '').trim();
       const text = normalizeRecommendationText(rawText);
@@ -1102,6 +1103,10 @@ const Home: React.FC = () => {
     let mounted = true;
 
     const loadLoopAssistStatus = async () => {
+      if (!getReleaseSafetyPolicy().currentRecommendations) {
+        setLoopAssistStatus(null);
+        return;
+      }
       try {
         const raw = await AsyncStorage.getItem(LOOP_ASSIST_STATUS_KEY);
         if (!mounted) {return;}

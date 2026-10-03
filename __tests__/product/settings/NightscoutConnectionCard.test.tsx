@@ -44,6 +44,34 @@ describe('Nightscout connection controls', () => {
     act(() => tree?.unmount());
   });
 
+  it('marks a preserved master-secret connection for token reconnection', () => {
+    act(() => {
+      tree = renderer.create(
+        content(
+          {...connection(jest.fn()), credentialKind: 'legacy-api-secret'},
+          'he',
+        ),
+      );
+    });
+    expect(
+      tree.root.findByProps({testID: 'settings-nightscout-legacy-reconnect'})
+        .props.children,
+    ).toContain('סוד הראשי');
+    act(() =>
+      tree.update(
+        content(
+          {...connection(jest.fn()), credentialKind: 'access-token'},
+          'he',
+        ),
+      ),
+    );
+    expect(
+      tree.root.findAllByProps({
+        testID: 'settings-nightscout-legacy-reconnect',
+      }),
+    ).toHaveLength(0);
+  });
+
   it('coalesces taps and ignores results from a previous source', async () => {
     let finish: (result: SettingsNightscoutTestResult) => void = () =>
       undefined;

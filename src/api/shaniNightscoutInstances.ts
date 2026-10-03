@@ -4,6 +4,7 @@ import {getNightscoutRequestAuthentication} from './nightscoutAuthentication';
 export type NightscoutAxiosConfig = {
   baseUrl: string;
   apiSecretSha1?: string | null;
+  accessToken?: string | null;
   /** Account owning this configured source; used only for opaque cache scope. */
   ownerUserId?: string | null;
 };
@@ -19,6 +20,7 @@ type NightscoutConfigurationListener = () => void;
 const configurationListeners = new Set<NightscoutConfigurationListener>();
 let configuredOwnerUserId: string | null = null;
 let configuredApiSecretSha1: string | null = null;
+let configuredAccessToken: string | null = null;
 let configurationRevision = 0;
 
 const emitNightscoutConfigurationChange = () => {
@@ -30,16 +32,20 @@ export const configureNightscoutInstance = (config: NightscoutAxiosConfig) => {
   const previousBaseUrl = nightscoutInstance.defaults.baseURL;
   const previousOwnerUserId = configuredOwnerUserId;
   const previousApiSecretSha1 = configuredApiSecretSha1;
+  const previousAccessToken = configuredAccessToken;
   nightscoutInstance.defaults.baseURL = config.baseUrl;
   configuredOwnerUserId = config.ownerUserId?.trim() || null;
   configuredApiSecretSha1 = config.apiSecretSha1 || null;
+  configuredAccessToken = config.accessToken || null;
 
   const nextParams = {...(nightscoutInstance.defaults.params ?? {})};
   delete nextParams.api_secret;
   delete nextParams.secret;
+  delete nextParams.token;
   delete nightscoutInstance.defaults.headers.common['api-secret'];
   const authentication = getNightscoutRequestAuthentication(
     configuredApiSecretSha1 ?? undefined,
+    configuredAccessToken ?? undefined,
   );
   Object.assign(
     nightscoutInstance.defaults.headers.common,
@@ -53,7 +59,8 @@ export const configureNightscoutInstance = (config: NightscoutAxiosConfig) => {
   if (
     previousBaseUrl !== config.baseUrl ||
     previousOwnerUserId !== configuredOwnerUserId ||
-    previousApiSecretSha1 !== configuredApiSecretSha1
+    previousApiSecretSha1 !== configuredApiSecretSha1 ||
+    previousAccessToken !== configuredAccessToken
   ) {
     emitNightscoutConfigurationChange();
   }
@@ -63,13 +70,15 @@ export const configureNightscoutInstance = (config: NightscoutAxiosConfig) => {
 export const clearNightscoutInstance = () => {
   const hadBaseUrl = !!nightscoutInstance.defaults.baseURL;
   const hadOwner = configuredOwnerUserId !== null;
-  const hadCredential = configuredApiSecretSha1 !== null;
+  const hadCredential = configuredApiSecretSha1 !== null || configuredAccessToken !== null;
   configuredOwnerUserId = null;
   configuredApiSecretSha1 = null;
+  configuredAccessToken = null;
   delete nightscoutInstance.defaults.baseURL;
   const nextParams = {...(nightscoutInstance.defaults.params ?? {})};
   delete nextParams.api_secret;
   delete nextParams.secret;
+  delete nextParams.token;
   nightscoutInstance.defaults.params = nextParams;
   delete nightscoutInstance.defaults.headers.common['api-secret'];
   if (hadBaseUrl || hadOwner || hadCredential) {

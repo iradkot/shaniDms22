@@ -20,6 +20,65 @@ describe('Nightscout connection check uses the data request contract', () => {
     Platform.OS = originalOS;
   });
 
+  it('verifies effective permissions and sends the raw subject token in native requests', async () => {
+    const accessToken = 'shani-0123456789abcdef';
+    mockedAxios.get
+      .mockResolvedValueOnce({data: {permissionGroups: [['*:*:read']]}})
+      .mockResolvedValueOnce({data: [{date: 1700000000000, sgv: 123}]});
+    await expect(
+      testNightscoutConnection({...source, apiSecretSha1: '', accessToken}),
+    ).resolves.toMatchObject({readOnlyVerified: true});
+    expect(mockedAxios.get.mock.calls[0][0]).toBe(
+      `/api/v2/authorization/request/${accessToken}`,
+    );
+    expect(mockedAxios.get.mock.calls[1][1]?.headers).toEqual({
+      Accept: 'application/json',
+      'api-secret': accessToken,
+    });
+  });
+
+  it('uses token query authentication for the browser compatibility path', async () => {
+    Platform.OS = 'web';
+    const accessToken = 'shani-0123456789abcdef';
+    mockedAxios.get
+      .mockResolvedValueOnce({data: {permissionGroups: [['*:*:read']]}})
+      .mockResolvedValueOnce({data: []});
+    await testNightscoutConnection({baseUrl: source.baseUrl, accessToken});
+    expect(mockedAxios.get.mock.calls[1][1]?.params).toEqual({
+      count: 1,
+      token: accessToken,
+    });
+  });
+
+  it('rejects a revoked token even when the source allows public reads', async () => {
+    mockedAxios.get
+      .mockRejectedValueOnce({
+        response: {status: 401},
+        config: {url: 'private-token'},
+      })
+      .mockResolvedValueOnce({data: []});
+    await expect(
+      testNightscoutConnection({
+        baseUrl: source.baseUrl,
+        accessToken: 'revoked-0123456789abcdef',
+      }),
+    ).rejects.toMatchObject({code: 'authentication'});
+    expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a token whose default roles add write access before requesting glucose', async () => {
+    mockedAxios.get.mockResolvedValueOnce({
+      data: {permissionGroups: [['*:*:read'], ['api:treatments:create']]},
+    });
+    await expect(
+      testNightscoutConnection({
+        baseUrl: source.baseUrl,
+        accessToken: 'shani-0123456789abcdef',
+      }),
+    ).rejects.toMatchObject({code: 'permissions'});
+    expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+  });
+
   it('checks native header authentication and preserves a sub-path installation', async () => {
     mockedAxios.get.mockResolvedValueOnce({
       data: [{date: 1700000000000, sgv: 123}],

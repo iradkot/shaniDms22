@@ -92,6 +92,16 @@ describe('glucose rule occurrence retention', () => {
         data: expect.objectContaining({occurrenceId: 'occurrence-1'}),
       }),
     );
+    expect(notifee.createChannel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'glucose-rule-alerts-sound-v2',
+        sound: 'default',
+        vibration: true,
+      }),
+    );
+    expect(notifee.displayNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ios: {sound: 'default'}}),
+    );
 
     act(() => tree!.unmount());
   });
@@ -239,6 +249,191 @@ describe('glucose rule occurrence retention', () => {
           actions: expect.arrayContaining([
             expect.objectContaining({title: 'נודניק 10 דקות'}),
           ]),
+        }),
+      }),
+    );
+    act(() => tree!.unmount());
+  });
+
+  it('uses a separate silent channel when the device-local delivery mode is silent', async () => {
+    const scopeId = 'workspace_silent';
+    await addNotificationRule(
+      {
+        name: 'Silent low',
+        enabled: true,
+        range_start: 70,
+        range_end: 180,
+        hour_from_in_minutes: 0,
+        hour_to_in_minutes: 1_439,
+        trend: 'SingleDown',
+      },
+      {scopeId},
+    );
+    const Harness = () => {
+      useGlucoseRuleNotifications(
+        {
+          enrichedBg: {
+            sgv: 64,
+            date: Date.now() - 10_000,
+            direction: 'SingleDown',
+          },
+        },
+        scopeId,
+        undefined,
+        'en',
+        'silent',
+      );
+      return null;
+    };
+
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(<Harness />);
+      await flushPromises();
+      await flushPromises();
+    });
+
+    expect(notifee.createChannel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'glucose-rule-alerts-silent-v2',
+        vibration: false,
+      }),
+    );
+    expect(notifee.displayNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        android: expect.objectContaining({
+          channelId: 'glucose-rule-alerts-silent-v2',
+        }),
+      }),
+    );
+    const notification = (notifee.displayNotification as jest.Mock).mock
+      .calls[0]?.[0];
+    expect(notification.android.sound).toBeUndefined();
+    expect(notification.ios).toBeUndefined();
+    act(() => tree!.unmount());
+  });
+
+  it('uses vibration without sound for the Android vibration-only mode', async () => {
+    const scopeId = 'workspace_vibrate';
+    await addNotificationRule(
+      {
+        name: 'Vibrating low',
+        enabled: true,
+        range_start: 70,
+        range_end: 180,
+        hour_from_in_minutes: 0,
+        hour_to_in_minutes: 1_439,
+        trend: 'SingleDown',
+      },
+      {scopeId},
+    );
+    const Harness = () => {
+      useGlucoseRuleNotifications(
+        {
+          enrichedBg: {
+            sgv: 64,
+            date: Date.now() - 10_000,
+            direction: 'SingleDown',
+          },
+        },
+        scopeId,
+        undefined,
+        'en',
+        'vibrate-only',
+      );
+      return null;
+    };
+
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(<Harness />);
+      await flushPromises();
+      await flushPromises();
+    });
+
+    expect(notifee.createChannel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'glucose-rule-alerts-vibrate-v2',
+        vibration: true,
+        vibrationPattern: [300, 500],
+      }),
+    );
+    const channel = (notifee.createChannel as jest.Mock).mock.calls[0]?.[0];
+    expect(channel.sound).toBeUndefined();
+    const notification = (notifee.displayNotification as jest.Mock).mock
+      .calls[0]?.[0];
+    expect(notification.android).toEqual(
+      expect.objectContaining({channelId: 'glucose-rule-alerts-vibrate-v2'}),
+    );
+    expect(notification.android.sound).toBeUndefined();
+    expect(notification.ios).toBeUndefined();
+    act(() => tree!.unmount());
+  });
+
+  it('uses the latest delivery mode when it changes during evaluation', async () => {
+    const scopeId = 'workspace_mode_change';
+    await addNotificationRule(
+      {
+        name: 'Low glucose',
+        enabled: true,
+        range_start: 70,
+        range_end: 180,
+        hour_from_in_minutes: 0,
+        hour_to_in_minutes: 1_439,
+        trend: 'SingleDown',
+      },
+      {scopeId},
+    );
+    let releaseSnooze!: (value: boolean) => void;
+    mockIsRuleSnoozed.mockReturnValueOnce(
+      new Promise(resolve => {
+        releaseSnooze = resolve;
+      }),
+    );
+    const snapshot = {
+      enrichedBg: {
+        sgv: 64,
+        date: Date.now() - 10_000,
+        direction: 'SingleDown',
+      },
+    };
+    const Harness = ({
+      mode,
+    }: {
+      readonly mode: 'sound-and-vibrate' | 'silent';
+    }) => {
+      useGlucoseRuleNotifications(snapshot, scopeId, undefined, 'en', mode);
+      return null;
+    };
+
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(<Harness mode="sound-and-vibrate" />);
+      await flushPromises();
+      await flushPromises();
+    });
+    expect(mockIsRuleSnoozed).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      tree!.update(<Harness mode="silent" />);
+    });
+    await act(async () => {
+      releaseSnooze(false);
+      await flushPromises();
+      await flushPromises();
+    });
+
+    expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
+    expect(notifee.createChannel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'glucose-rule-alerts-silent-v2',
+        vibration: false,
+      }),
+    );
+    expect(notifee.displayNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        android: expect.objectContaining({
+          channelId: 'glucose-rule-alerts-silent-v2',
         }),
       }),
     );

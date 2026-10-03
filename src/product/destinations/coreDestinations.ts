@@ -30,6 +30,14 @@ const MANAGEMENT_TARGETS: DestinationTargetPolicy = {
   shortcut: true,
 };
 
+// Retain old destination IDs for links and history without offering separate
+// AI modes in the catalogue or new personalization choices.
+const COMPATIBILITY_TARGETS: DestinationTargetPolicy = {
+  favorite: false,
+  start: false,
+  shortcut: false,
+};
+
 export const CORE_DESTINATION_IDS = {
   dayGraph: destinationId('core.day-graph'),
   dailyOverview: destinationId('core.daily-overview'),
@@ -291,12 +299,12 @@ export const CORE_DESTINATIONS = [
     order: 10,
     copy: {
       en: {
-        title: 'AI analyst',
-        description: 'Chat about your data or open a focused investigation.',
+        title: 'AI recommendations',
+        description: 'Practical recommendations for now, meals, and the week or month ahead.',
       },
       he: {
-        title: 'AI Analyst',
-        description: 'שיחה על הנתונים או פתיחת חקירה ממוקדת.',
+        title: 'המלצות AI',
+        description: 'המלצות פשוטות לעכשיו, לארוחה ולשבוע או לחודש הקרוב.',
       },
     },
     targetPolicy: STANDARD_TARGETS,
@@ -318,7 +326,7 @@ export const CORE_DESTINATIONS = [
         description: 'שאלה פשוטה על הנתונים וההקשר שלהם.',
       },
     },
-    targetPolicy: STANDARD_TARGETS,
+    targetPolicy: COMPATIBILITY_TARGETS,
     availability: UNIVERSAL_PLATFORMS,
   },
   {
@@ -337,7 +345,7 @@ export const CORE_DESTINATIONS = [
         description: 'בדיקת אירועי סוכר נמוך חוזרים, התזמון וההקשר הסמוך.',
       },
     },
-    targetPolicy: STANDARD_TARGETS,
+    targetPolicy: COMPATIBILITY_TARGETS,
     availability: UNIVERSAL_PLATFORMS,
   },
   {
@@ -356,7 +364,7 @@ export const CORE_DESTINATIONS = [
         description: 'חקירת תצפיות שחוזרות סביב ההתנהלות היומית.',
       },
     },
-    targetPolicy: STANDARD_TARGETS,
+    targetPolicy: COMPATIBILITY_TARGETS,
     availability: UNIVERSAL_PLATFORMS,
   },
   {
@@ -376,7 +384,7 @@ export const CORE_DESTINATIONS = [
         description: 'סקירת ראיות והצעות בלבד, ללא שינוי ישיר של ההגדרות.',
       },
     },
-    targetPolicy: STANDARD_TARGETS,
+    targetPolicy: COMPATIBILITY_TARGETS,
     availability: UNIVERSAL_PLATFORMS,
   },
   {
@@ -395,7 +403,7 @@ export const CORE_DESTINATIONS = [
         description: 'שיחה על תצפיות סוכר שחוזרות סביב ארוחות.',
       },
     },
-    targetPolicy: STANDARD_TARGETS,
+    targetPolicy: COMPATIBILITY_TARGETS,
     availability: UNIVERSAL_PLATFORMS,
   },
   {

@@ -3,7 +3,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isOwner(uid) {
-      return request.auth != null && request.auth.uid == uid;
+      return request.auth != null && request.auth.uid == uid
+        && !exists(/databases/$(database)/documents/privateAccountState/$(uid))
+        && hasCloudConsent(uid);
+    }
+
+    function hasCloudConsent(uid) {
+      let consent = get(/databases/$(database)/documents/users/$(uid)/privacy/consent).data;
+      return consent.policyVersion == '2026-10-03.1' && consent.cloudSync == true;
     }
 
     function validScope(scope, uid, workspaceId) {
@@ -61,14 +68,14 @@ service cloud.firestore {
     function validTags(tags) {
       return tags is list
         && tags.size() <= 8
-        && validTagAt(tags, 0)
+        && (tags.size() == 0 || (validTagAt(tags, 0)
         && validTagAt(tags, 1)
         && validTagAt(tags, 2)
         && validTagAt(tags, 3)
         && validTagAt(tags, 4)
         && validTagAt(tags, 5)
         && validTagAt(tags, 6)
-        && validTagAt(tags, 7);
+        && validTagAt(tags, 7)));
     }
 
     function validExternalIdentity(identity, nightscoutSourceId) {
@@ -536,11 +543,31 @@ service cloud.firestore {
         && value.cardOrder.hasAll(['ranges', 'mean', 'glucose', 'insulin', 'coverage']);
     }
 
+    function validHomePreferences(value) {
+      let widgetIds = [
+        'glucose-graph', 'time-in-range', 'daily-insulin',
+        'weekly-glucose', 'weekly-insulin', 'chat'
+      ];
+      return value is map
+        && value.keys().hasOnly([
+          'schemaVersion', 'mode', 'widgetOrder', 'hiddenWidgets', 'glucoseWindowHours'
+        ])
+        && value.schemaVersion == 1
+        && value.mode in ['personal', 'modules']
+        && value.widgetOrder is list
+        && value.widgetOrder.size() == 6
+        && value.widgetOrder.hasAll(widgetIds)
+        && value.hiddenWidgets is list
+        && value.hiddenWidgets.hasOnly(widgetIds)
+        && value.hiddenWidgets.toSet().size() == value.hiddenWidgets.size()
+        && value.glucoseWindowHours in [6, 12, 'full-day'];
+    }
+
     function validLayoutPersonalization(value, layout) {
       return value is map
         && value.keys().hasOnly([
           'schemaVersion', 'layout', 'showCurrentSnapshot', 'showRecents',
-          'showGri', 'shell', 'dayGraph', 'dailyOverview'
+          'showGri', 'shell', 'dayGraph', 'dailyOverview', 'home'
         ])
         && value.schemaVersion == 1
         && value.layout == layout
@@ -550,7 +577,8 @@ service cloud.firestore {
         && validShell(value.shell)
         && (!('dayGraph' in value) || validDayGraphPreferences(value.dayGraph))
         && (!('dailyOverview' in value)
-          || validDailyOverviewPreferences(value.dailyOverview));
+          || validDailyOverviewPreferences(value.dailyOverview))
+        && (!('home' in value) || validHomePreferences(value.home));
     }
 
     function validAccountPersonalizationDocument(document, uid) {

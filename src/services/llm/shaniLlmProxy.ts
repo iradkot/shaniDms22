@@ -1,5 +1,6 @@
 import {getApp} from '@react-native-firebase/app';
 import {getAuth} from '@react-native-firebase/auth';
+import {capturePrivacyAuthorization} from '../../modules/privacy';
 
 import {NATIVE_RUNTIME_CONFIG} from 'app/platform/native/runtimeConfig';
 import {isE2E} from 'app/utils/e2e';
@@ -232,6 +233,7 @@ const proxyRequest = async (
   } = {},
 ): Promise<Record<string, unknown>> => {
   const runtime = currentRuntime();
+  const authorize = !path.endsWith('/remove') ? capturePrivacyAuthorization(path.startsWith('/v1/llm/') ? 'ai' : 'cloud') : () => undefined;
   const serialized = body === undefined ? undefined : JSON.stringify(body);
   if (
     serialized &&
@@ -274,6 +276,7 @@ const proxyRequest = async (
       );
     }
 
+    authorize();
     const response = await runtime.fetch(`${runtime.baseUrl}${path}`, {
       method: body === undefined ? 'GET' : 'POST',
       headers: {
@@ -287,6 +290,7 @@ const proxyRequest = async (
     });
     abortScope.throwIfAborted();
     const responseText = await response.text();
+    authorize();
     abortScope.throwIfAborted();
     let decoded: Record<string, unknown>;
     try {

@@ -1,6 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type {NightscoutCacheScope} from './nightscoutCacheScope';
+import {
+  isNightscoutCacheSourceDeleted,
+  withNightscoutCacheWrite,
+  type NightscoutCacheScope,
+} from './nightscoutCacheScope';
 
 export const NIGHTSCOUT_RANGE_CACHE_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 export const NIGHTSCOUT_RANGE_CACHE_MAX_BYTES = 25 * 1024 * 1024;
@@ -466,161 +470,188 @@ const makeRoomAndStore = async (
 export const readNightscoutRangeCache = <T>(
   input: NightscoutRangeCacheReadInput<T>,
 ): Promise<NightscoutRangeCacheRead<T> | null> =>
-  enqueueCacheOperation(async () => {
-    assertScope(input.scope);
-    assertResource(input.resource);
-    assertRange(input.startMs, input.endMs);
-    const {now, retentionMs} = resolvePolicy(input.policy);
-    const nowMs = now();
-    const cutoffMs = nowMs - retentionMs;
-    const obsoleteKeys = legacyCacheKeys(await AsyncStorage.getAllKeys());
-    if (obsoleteKeys.length > 0) {
-      await AsyncStorage.multiRemove(obsoleteKeys);
-    }
-    if (input.startMs < cutoffMs) {
-      return null;
-    }
-    const key = cacheKey(input.scope, input.resource);
-    const serialized = await AsyncStorage.getItem(key);
-    if (serialized === null) {
-      knownCacheMetadata.delete(key);
-      return null;
-    }
-    const decoded = decodeEnvelope(serialized, {
-      scope: input.scope,
-      resource: input.resource,
-    });
-    if (!decoded) {
-      await AsyncStorage.removeItem(key);
-      knownCacheMetadata.delete(key);
-      return null;
-    }
-    const envelope = trimEnvelope(decoded, cutoffMs);
-    const fetchedAtMs = windowsCoverRange(
-      envelope.windows,
-      input.startMs,
-      input.endMs,
-    );
-    if (fetchedAtMs === null) {
-      return null;
-    }
-    const records: T[] = [];
-    for (const stored of envelope.records) {
-      if (
-        stored.timestampMs < input.startMs ||
-        stored.timestampMs > input.endMs
-      ) {
-        continue;
-      }
-      const record = input.decodeRecord(stored.value);
-      const timestampMs =
-        record === null ? undefined : input.getTimestampMs(record);
-      if (
-        record === null ||
-        timestampMs === undefined ||
-        !Number.isFinite(timestampMs) ||
-        timestampMs !== stored.timestampMs
-      ) {
-        await AsyncStorage.removeItem(key);
-        knownCacheMetadata.delete(key);
-        return null;
-      }
-      records.push(record);
-    }
-    const accessed: StoredEnvelope = {
-      ...envelope,
-      lastAccessedAtMs: nowMs,
-    };
-    const accessedSerialized = JSON.stringify(accessed);
-    await AsyncStorage.setItem(key, accessedSerialized);
-    knownCacheMetadata.set(
-      key,
-      envelopeMetadata(key, accessedSerialized, accessed),
-    );
-    return {records, fetchedAtMs};
-  });
+  isNightscoutCacheSourceDeleted(input.scope.sourceIdentity)
+    ? Promise.resolve(null)
+    : withNightscoutCacheWrite(input.scope, () =>
+        enqueueCacheOperation(async () => {
+          if (isNightscoutCacheSourceDeleted(input.scope.sourceIdentity)) {
+            return null;
+          }
+          assertScope(input.scope);
+          assertResource(input.resource);
+          assertRange(input.startMs, input.endMs);
+          const {now, retentionMs} = resolvePolicy(input.policy);
+          const nowMs = now();
+          const cutoffMs = nowMs - retentionMs;
+          const obsoleteKeys = legacyCacheKeys(await AsyncStorage.getAllKeys());
+          if (obsoleteKeys.length > 0) {
+            await AsyncStorage.multiRemove(obsoleteKeys);
+          }
+          if (input.startMs < cutoffMs) {
+            return null;
+          }
+          const key = cacheKey(input.scope, input.resource);
+          const serialized = await AsyncStorage.getItem(key);
+          if (serialized === null) {
+            knownCacheMetadata.delete(key);
+            return null;
+          }
+          const decoded = decodeEnvelope(serialized, {
+            scope: input.scope,
+            resource: input.resource,
+          });
+          if (!decoded) {
+            await AsyncStorage.removeItem(key);
+            knownCacheMetadata.delete(key);
+            return null;
+          }
+          const envelope = trimEnvelope(decoded, cutoffMs);
+          const fetchedAtMs = windowsCoverRange(
+            envelope.windows,
+            input.startMs,
+            input.endMs,
+          );
+          if (fetchedAtMs === null) {
+            return null;
+          }
+          const records: T[] = [];
+          for (const stored of envelope.records) {
+            if (
+              stored.timestampMs < input.startMs ||
+              stored.timestampMs > input.endMs
+            ) {
+              continue;
+            }
+            const record = input.decodeRecord(stored.value);
+            const timestampMs =
+              record === null ? undefined : input.getTimestampMs(record);
+            if (
+              record === null ||
+              timestampMs === undefined ||
+              !Number.isFinite(timestampMs) ||
+              timestampMs !== stored.timestampMs
+            ) {
+              await AsyncStorage.removeItem(key);
+              knownCacheMetadata.delete(key);
+              return null;
+            }
+            records.push(record);
+          }
+          const accessed: StoredEnvelope = {
+            ...envelope,
+            lastAccessedAtMs: nowMs,
+          };
+          const accessedSerialized = JSON.stringify(accessed);
+          await AsyncStorage.setItem(key, accessedSerialized);
+          if (isNightscoutCacheSourceDeleted(input.scope.sourceIdentity)) {
+            return null;
+          }
+          knownCacheMetadata.set(
+            key,
+            envelopeMetadata(key, accessedSerialized, accessed),
+          );
+          return {records, fetchedAtMs};
+        }),
+      );
 
 export const writeNightscoutRangeCache = <T>(
   input: NightscoutRangeCacheWriteInput<T>,
 ): Promise<void> =>
-  enqueueCacheOperation(async () => {
-    assertScope(input.scope);
-    assertResource(input.resource);
-    assertRange(input.startMs, input.endMs);
-    const {now, retentionMs, maxBytes} = resolvePolicy(input.policy);
-    const nowMs = now();
-    const cutoffMs = nowMs - retentionMs;
-    const effectiveStartMs = Math.max(input.startMs, cutoffMs);
-    if (input.endMs < effectiveStartMs) {
-      return;
-    }
-    const key = cacheKey(input.scope, input.resource);
-    const existingSerialized = await AsyncStorage.getItem(key);
-    const existing = existingSerialized
-      ? decodeEnvelope(existingSerialized, {
-          scope: input.scope,
-          resource: input.resource,
-        })
-      : null;
-    const trimmed = existing
-      ? trimEnvelope(existing, cutoffMs)
-      : {
-          version: 1 as const,
-          sourceIdentity: input.scope.sourceIdentity,
-          resource: input.resource,
-          updatedAtMs: nowMs,
-          lastAccessedAtMs: nowMs,
-          windows: [] as readonly StoredWindow[],
-          records: [] as readonly StoredRecord[],
-        };
-    const recordsOutsideRange = trimmed.records.filter(
-      record =>
-        record.timestampMs < effectiveStartMs ||
-        record.timestampMs > input.endMs,
-    );
-    const replacementRecords: StoredRecord[] = [];
-    input.records.forEach(value => {
-      const timestampMs = input.getTimestampMs(value);
-      if (
-        timestampMs !== undefined &&
-        Number.isFinite(timestampMs) &&
-        timestampMs >= effectiveStartMs &&
-        timestampMs <= input.endMs
-      ) {
-        replacementRecords.push({timestampMs, value});
+  withNightscoutCacheWrite(input.scope, () =>
+    enqueueCacheOperation(async () => {
+      assertScope(input.scope);
+      assertResource(input.resource);
+      assertRange(input.startMs, input.endMs);
+      const {now, retentionMs, maxBytes} = resolvePolicy(input.policy);
+      const nowMs = now();
+      const cutoffMs = nowMs - retentionMs;
+      const effectiveStartMs = Math.max(input.startMs, cutoffMs);
+      if (input.endMs < effectiveStartMs) {
+        return;
       }
-    });
-    const windows = removeOverlappingWindows(
-      trimmed.windows,
-      effectiveStartMs,
-      input.endMs,
+      const key = cacheKey(input.scope, input.resource);
+      const existingSerialized = await AsyncStorage.getItem(key);
+      const existing = existingSerialized
+        ? decodeEnvelope(existingSerialized, {
+            scope: input.scope,
+            resource: input.resource,
+          })
+        : null;
+      const trimmed = existing
+        ? trimEnvelope(existing, cutoffMs)
+        : {
+            version: 1 as const,
+            sourceIdentity: input.scope.sourceIdentity,
+            resource: input.resource,
+            updatedAtMs: nowMs,
+            lastAccessedAtMs: nowMs,
+            windows: [] as readonly StoredWindow[],
+            records: [] as readonly StoredRecord[],
+          };
+      const recordsOutsideRange = trimmed.records.filter(
+        record =>
+          record.timestampMs < effectiveStartMs ||
+          record.timestampMs > input.endMs,
+      );
+      const replacementRecords: StoredRecord[] = [];
+      input.records.forEach(value => {
+        const timestampMs = input.getTimestampMs(value);
+        if (
+          timestampMs !== undefined &&
+          Number.isFinite(timestampMs) &&
+          timestampMs >= effectiveStartMs &&
+          timestampMs <= input.endMs
+        ) {
+          replacementRecords.push({timestampMs, value});
+        }
+      });
+      const windows = removeOverlappingWindows(
+        trimmed.windows,
+        effectiveStartMs,
+        input.endMs,
+      );
+      windows.push({
+        startMs: effectiveStartMs,
+        endMs: input.endMs,
+        fetchedAtMs: input.fetchedAtMs,
+      });
+      const envelope: StoredEnvelope = {
+        version: CACHE_VERSION,
+        sourceIdentity: input.scope.sourceIdentity,
+        resource: input.resource,
+        updatedAtMs: nowMs,
+        lastAccessedAtMs: nowMs,
+        windows: windows
+          .sort((left, right) => left.startMs - right.startMs)
+          .slice(-MAX_STORED_WINDOWS),
+        records: [...recordsOutsideRange, ...replacementRecords]
+          .sort((left, right) => left.timestampMs - right.timestampMs)
+          .slice(-MAX_STORED_RECORDS),
+      };
+      await makeRoomAndStore(
+        key,
+        JSON.stringify(envelope),
+        envelope,
+        nowMs,
+        retentionMs,
+        maxBytes,
+      );
+    }),
+  );
+
+/** Must follow the source write barrier; removes only the captured account's sources. */
+export const purgeNightscoutRangeCaches = (
+  sourceIdentities: readonly string[],
+): Promise<void> =>
+  enqueueCacheOperation(async () => {
+    const owned = new Set(sourceIdentities);
+    const keys = (await AsyncStorage.getAllKeys()).filter(
+      key =>
+        key.startsWith(`${CACHE_PREFIX}:`) &&
+        owned.has(key.split(':')[1] ?? ''),
     );
-    windows.push({
-      startMs: effectiveStartMs,
-      endMs: input.endMs,
-      fetchedAtMs: input.fetchedAtMs,
-    });
-    const envelope: StoredEnvelope = {
-      version: CACHE_VERSION,
-      sourceIdentity: input.scope.sourceIdentity,
-      resource: input.resource,
-      updatedAtMs: nowMs,
-      lastAccessedAtMs: nowMs,
-      windows: windows
-        .sort((left, right) => left.startMs - right.startMs)
-        .slice(-MAX_STORED_WINDOWS),
-      records: [...recordsOutsideRange, ...replacementRecords]
-        .sort((left, right) => left.timestampMs - right.timestampMs)
-        .slice(-MAX_STORED_RECORDS),
-    };
-    await makeRoomAndStore(
-      key,
-      JSON.stringify(envelope),
-      envelope,
-      nowMs,
-      retentionMs,
-      maxBytes,
-    );
+    await AsyncStorage.multiRemove(keys);
+    keys.forEach(key => knownCacheMetadata.delete(key));
   });
 
 export const isNightscoutRangeCacheStorageKey = (key: string): boolean =>

@@ -1,6 +1,7 @@
 import {getApp} from '@react-native-firebase/app';
 import {getAuth} from '@react-native-firebase/auth';
 import {utf8ByteLength} from '../../utils/utf8ByteLength';
+import {capturePrivacyAuthorization} from '../../modules/privacy';
 
 import {NATIVE_RUNTIME_CONFIG} from 'app/platform/native/runtimeConfig';
 import {
@@ -48,7 +49,10 @@ export type NativeAuthenticatedBackendErrorCode =
   | 'timeout'
   | 'network'
   | 'upstream'
-  | 'invalid_response';
+  | 'invalid_response'
+  | 'recent_auth_required'
+  | 'invalid_deletion_receipt';
+// Account deletion needs trusted, actionable reauthentication feedback.
 
 export class NativeAuthenticatedBackendError extends Error {
   constructor(
@@ -175,6 +179,12 @@ export const createNativeAuthenticatedBackendClient = (
   runtime: NativeAuthenticatedBackendRuntime,
 ): NativeAuthenticatedBackendClient => ({
   async requestJson(path, request) {
+    const authorize =
+      !path.startsWith('/v1/privacy/') &&
+      !path.startsWith('/v1/account/delete') &&
+      !path.endsWith('/remove')
+        ? capturePrivacyAuthorization('cloud', request.expectedUserId)
+        : () => undefined;
     validatePath(path);
     const serialized =
       request.body === undefined ? undefined : JSON.stringify(request.body);
@@ -202,14 +212,18 @@ export const createNativeAuthenticatedBackendClient = (
     try {
       abortScope.throwIfAborted();
       const expectedUserId = request.expectedUserId.trim();
-      const session = await runtime.getSession();
+      const anonymousDeletionFinish = path === '/v1/account/delete/finish';
+      const session = anonymousDeletionFinish
+        ? null
+        : await runtime.getSession();
       abortScope.throwIfAborted();
       if (
-        !expectedUserId ||
-        session === null ||
-        session.userId !== expectedUserId ||
-        !session.idToken ||
-        session.idToken.length > 16_384
+        !anonymousDeletionFinish &&
+        (!expectedUserId ||
+          session === null ||
+          session.userId !== expectedUserId ||
+          !session.idToken ||
+          session.idToken.length > 16_384)
       ) {
         throw new NativeAuthenticatedBackendError(
           'unauthenticated',
@@ -218,11 +232,14 @@ export const createNativeAuthenticatedBackendClient = (
         );
       }
 
+      authorize();
       const response = await runtime.fetch(`${baseUrl}${path}`, {
         method: request.method ?? (serialized === undefined ? 'GET' : 'POST'),
         headers: {
           Accept: 'application/json',
-          Authorization: `Bearer ${session.idToken}`,
+          ...(session === null
+            ? {}
+            : {Authorization: `Bearer ${session.idToken}`}),
           'Cache-Control': 'no-store',
           ...(serialized === undefined
             ? {}
@@ -235,7 +252,18 @@ export const createNativeAuthenticatedBackendClient = (
       const responseText = await response.text();
       abortScope.throwIfAborted();
       const decoded = decodeJsonObject(responseText);
+      authorize();
       if (!response.ok) {
+        if (
+          decoded.code === 'recent_auth_required' ||
+          decoded.code === 'invalid_deletion_receipt'
+        ) {
+          throw new NativeAuthenticatedBackendError(
+            decoded.code,
+            'The account deletion request could not be completed.',
+            response.status,
+          );
+        }
         throw new NativeAuthenticatedBackendError(
           errorCodeForStatus(response.status),
           typeof decoded.message === 'string'
@@ -257,7 +285,10 @@ export const createNativeAuthenticatedBackendClient = (
           'Backend request timed out',
         );
       }
-      if (error instanceof NativeAuthenticatedBackendError) {
+      if (
+        error instanceof NativeAuthenticatedBackendError ||
+        (error as {code?: string})?.code === 'recent_auth_required'
+      ) {
         throw error;
       }
       throw new NativeAuthenticatedBackendError(

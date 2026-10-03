@@ -20,7 +20,11 @@ const messagingBG = getMessaging(getApp());
 
 notifee.onBackgroundEvent(async ({type, detail}) => {
   if (type !== EventType.ACTION_PRESS) return;
-  await handleSnoozeAction(detail?.pressAction?.id, detail?.notification?.data?.ruleId);
+  await handleSnoozeAction(
+    detail?.pressAction?.id,
+    detail?.notification?.data?.ruleId,
+    detail?.notification?.data?.workspaceScopeId,
+  );
 });
 
 messagingBG.setBackgroundMessageHandler(remoteMessage => {

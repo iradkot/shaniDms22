@@ -18,6 +18,7 @@ const MAX_CONTEXT_CHARS = 8_000;
 const MAX_TREATMENTS = 24;
 
 export interface BrowserAiEvidenceRequest {
+  readonly rangeDays?: 1 | 7 | 30;
   readonly specialist: AiSpecialistId;
   readonly locale: AiLocale;
   readonly focus?: AiConversationFocus;
@@ -49,9 +50,15 @@ interface EvidenceClient {
 const requestedPeriod = (
   request: BrowserAiEvidenceRequest,
   nowMs: number,
-): {readonly startMs: number; readonly endMs: number; readonly clamped: boolean} => {
+): {
+  readonly startMs: number;
+  readonly endMs: number;
+  readonly clamped: boolean;
+} => {
   const focus = request.focus;
-  let requestedStart = nowMs - MAX_RANGE_MS;
+  const maxRangeMs =
+    request.rangeDays === undefined ? MAX_RANGE_MS : request.rangeDays * DAY_MS;
+  let requestedStart = nowMs - maxRangeMs;
   let requestedEnd = nowMs;
   if (focus?.kind === 'day' && Number.isSafeInteger(focus.dayStartMs)) {
     requestedStart = focus.dayStartMs;
@@ -66,7 +73,7 @@ const requestedPeriod = (
     requestedEnd = Math.min(nowMs, focus.endMs);
   }
   const endMs = Math.max(1, Math.min(nowMs, requestedEnd));
-  const startMs = Math.max(0, requestedStart, endMs - MAX_RANGE_MS);
+  const startMs = Math.max(0, requestedStart, endMs - maxRangeMs);
   return {
     startMs: Math.min(startMs, endMs - 1),
     endMs,
@@ -122,20 +129,27 @@ const glucoseFacts = (
 ): readonly string[] => {
   const sorted = [...entries].sort((left, right) => left.date - right.date);
   if (sorted.length === 0) {
-    return [locale === 'he' ? 'אין דגימות סוכר בטווח.' : 'No glucose samples in range.'];
+    return [
+      locale === 'he'
+        ? 'אין דגימות סוכר בטווח.'
+        : 'No glucose samples in range.',
+    ];
   }
   const latest = sorted[sorted.length - 1];
   if (!latest) {
     return [];
   }
-  const mean = sorted.reduce((sum, entry) => sum + entry.sgv, 0) / sorted.length;
+  const mean =
+    sorted.reduce((sum, entry) => sum + entry.sgv, 0) / sorted.length;
   const low = sorted.filter(entry => entry.sgv < 70).length;
-  const inRange = sorted.filter(entry => entry.sgv >= 70 && entry.sgv <= 180).length;
+  const inRange = sorted.filter(
+    entry => entry.sgv >= 70 && entry.sgv <= 180,
+  ).length;
   const high = sorted.length - low - inRange;
   const expected = Math.max(1, Math.round((endMs - startMs) / (5 * 60_000)));
   const coverage = Math.min(100, (sorted.length / expected) * 100);
   return [
-    `${locale === 'he' ? 'דגימה אחרונה' : 'Current snapshot'}: ${formatNumber(
+    `${locale === 'he' ? 'דגימה אחרונה בטווח שנבחר' : 'Latest sample in selected range'}: ${formatNumber(
       latest.sgv,
       0,
     )} mg/dL${latest.direction ? ` (${latest.direction})` : ''}, ${new Date(
@@ -143,10 +157,12 @@ const glucoseFacts = (
     ).toISOString()}.`,
     `${locale === 'he' ? 'דגימות' : 'Samples'}: ${sorted.length}; ${
       locale === 'he' ? 'כיסוי משוער' : 'estimated coverage'
-    }: ${formatNumber(coverage)}%; ${locale === 'he' ? 'ממוצע' : 'mean'}: ${formatNumber(
-      mean,
-    )} mg/dL.`,
-    `${locale === 'he' ? 'חלוקה' : 'Observed bands'}: <70 ${low}, 70–180 ${inRange}, >180 ${high}.`,
+    }: ${formatNumber(coverage)}%; ${
+      locale === 'he' ? 'ממוצע' : 'mean'
+    }: ${formatNumber(mean)} mg/dL.`,
+    `${
+      locale === 'he' ? 'חלוקה' : 'Observed bands'
+    }: <70 ${low}, 70–180 ${inRange}, >180 ${high}.`,
   ];
 };
 
@@ -168,10 +184,17 @@ export const createBrowserAiEvidenceProvider = (input: {
       }
       const nowMs = now();
       const period = requestedPeriod(request, nowMs);
-      const deviceStartMs = Math.max(period.startMs, period.endMs - DEVICE_STATUS_RANGE_MS);
+      const deviceStartMs = Math.max(
+        period.startMs,
+        period.endMs - DEVICE_STATUS_RANGE_MS,
+      );
       const [entries, treatments, deviceStatuses] = await Promise.all([
         input.client.readEntries(period.startMs, period.endMs, request.signal),
-        input.client.readTreatments(period.startMs, period.endMs, request.signal),
+        input.client.readTreatments(
+          period.startMs,
+          period.endMs,
+          request.signal,
+        ),
         input.client.readDeviceStatuses(
           deviceStartMs,
           period.endMs,
@@ -206,21 +229,59 @@ export const createBrowserAiEvidenceProvider = (input: {
         .slice(-MAX_TREATMENTS);
       const lines = [
         locale === 'he' ? 'ראיות Nightscout גלויות' : 'Nightscout evidence',
+        `${locale === 'he' ? 'נבדק בתאריך' : 'Checked at'}: ${new Date(
+          nowMs,
+        ).toISOString()}.`,
         `${locale === 'he' ? 'מזהה מקור' : 'Source scope'}: ${input.sourceId}.`,
         `${locale === 'he' ? 'טווח' : 'Range'}: ${new Date(
           period.startMs,
         ).toISOString()} – ${new Date(period.endMs).toISOString()}.${
-          period.clamped || period.endMs - period.startMs >= MAX_RANGE_MS - 1
+          period.clamped
             ? locale === 'he'
-              ? ' הטווח הוגבל ל־14 הימים האחרונים.'
-              : ' The range was limited to the latest 14 days.'
+              ? ` הטווח הוגבל ל־${request.rangeDays ?? 14} הימים האחרונים.`
+              : ` The range was limited to the latest ${
+                  request.rangeDays ?? 14
+                } days.`
             : ''
         }`,
         ...glucoseFacts(entries.records, period.startMs, period.endMs, locale),
+        ...(!entries.records.some(
+          entry => entry.date <= nowMs && entry.date >= nowMs - 15 * 60_000,
+        )
+          ? [
+              locale === 'he'
+                ? 'אין קריאת סוכר עדכנית מ־15 הדקות האחרונות. אין להסיק מהנתונים מה מצב הסוכר עכשיו.'
+                : 'No current glucose reading from the last 15 minutes. Do not infer current glucose from historical data.',
+            ]
+          : []),
+        ...(entries.complete === false
+          ? [
+              locale === 'he'
+                ? 'טווח הסוכר אינו מלא. אין להסיק ממנו מסקנות על כל התקופה.'
+                : 'The glucose range is incomplete. Do not generalize it to the entire period.',
+            ]
+          : []),
         ...(deviceFacts.length === 0
           ? []
-          : [`${locale === 'he' ? 'מצב נוכחי' : 'Current device status'}: ${deviceFacts.join(', ')}.`]),
-        `${locale === 'he' ? 'אירועי טיפול בטווח' : 'Treatment events in range'}: ${treatmentFacts.length}.`,
+          : [
+              `${
+                locale === 'he' ? 'דגימת מכשיר אחרונה' : 'Latest device sample'
+              }: ${deviceFacts.join(', ')}, ${new Date(
+                latestDeviceStatus!.createdAtMs,
+              ).toISOString()}.`,
+              ...(nowMs - latestDeviceStatus!.createdAtMs > 15 * 60_000
+                ? [
+                    locale === 'he'
+                      ? 'דגימת המכשיר ישנה; IOB ו־COB אינם מעידים על המצב עכשיו.'
+                      : 'Device sample is stale; IOB and COB do not establish the current state.',
+                  ]
+                : []),
+            ]),
+        `${
+          locale === 'he'
+            ? 'אירועי טיפול מוצגים מתוך הטווח'
+            : 'Displayed treatment events from the range'
+        }: ${treatmentFacts.length} / ${treatments.records.length}.`,
         ...treatmentFacts.map(fact => `- ${fact}`),
         locale === 'he'
           ? 'הנתונים תיאוריים בלבד, עשויים להיות חסרים, ואינם הוראה לשינוי טיפול.'

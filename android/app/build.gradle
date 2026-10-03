@@ -76,6 +76,13 @@ def enableProguardInReleaseBuilds = false
  * this variant is about 6MiB larger per architecture than default.
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
+def configuredReleaseChannel = ((System.getenv("SHANI_RELEASE_CHANNEL") ?: project.findProperty("SHANI_RELEASE_CHANNEL")) ?: "pilot").toString().trim()
+
+tasks.configureEach { task ->
+    if (task.name.startsWith("createBundle") && task.name.endsWith("JsAndAssets")) {
+        task.inputs.property("shaniReleaseChannel", configuredReleaseChannel)
+    }
+}
 
 android {
     ndkVersion rootProject.ext.ndkVersion
@@ -97,6 +104,12 @@ android {
     def configuredVersionName = ((System.getenv("ANDROID_VERSION_NAME") ?: project.findProperty("VERSION_NAME")) ?: "1.0").toString().trim()
     def configuredBackendBaseUrl = ((System.getenv("SHANI_BACKEND_BASE_URL") ?: project.findProperty("SHANI_BACKEND_BASE_URL")) ?: "").toString().trim()
     def configuredFirestoreRulesSchemaVersion = ((System.getenv("FIRESTORE_RULES_SCHEMA_VERSION") ?: project.findProperty("FIRESTORE_RULES_SCHEMA_VERSION")) ?: "0").toString().trim()
+    if (!(configuredReleaseChannel in ["development", "pilot", "production"])) {
+        throw new GradleException("SHANI_RELEASE_CHANNEL must be development, pilot, or production.")
+    }
+    if (hasReleaseSigning && configuredReleaseChannel == "development") {
+        throw new GradleException("Production signing cannot enable experimental features.")
+    }
     if (!(configuredVersionCode ==~ /[1-9][0-9]*/)) {
         throw new GradleException("Android VERSION_CODE must be a positive integer.")
     }
@@ -111,6 +124,7 @@ android {
     }
 
     namespace "com.shanidms22"
+    testBuildType project.findProperty("TEST_BUILD_TYPE")?.toString() ?: "debug"
     def targetAbi = project.findProperty("TARGET_ABI")?.toString()?.trim()
 
     defaultConfig {
@@ -125,6 +139,8 @@ android {
         buildConfigField "boolean", "E2E", e2eEnabled ? "true" : "false"
         buildConfigField "String", "SHANI_BACKEND_BASE_URL", JsonOutput.toJson(configuredBackendBaseUrl)
         buildConfigField "int", "FIRESTORE_RULES_SCHEMA_VERSION", configuredFirestoreRulesSchemaVersion
+        buildConfigField "String", "SHANI_RELEASE_CHANNEL", JsonOutput.toJson(configuredReleaseChannel)
+        buildConfigField "boolean", "SHANI_EXPERIMENTAL_FEATURES_ENABLED", configuredReleaseChannel == "development" ? "true" : "false"
     }
 
     splits {

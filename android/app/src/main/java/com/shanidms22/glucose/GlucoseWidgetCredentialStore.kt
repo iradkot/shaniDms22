@@ -19,6 +19,8 @@ internal data class EncryptedWidgetCredential(
 )
 
 internal sealed class WidgetCredentialAccess {
+  // The historic field name also carries raw Nightscout subject access tokens.
+  // The bridge and GET transport must never hash these values.
   data class Available(val apiSecretSha1: String) : WidgetCredentialAccess()
   data object NotConfigured : WidgetCredentialAccess()
   data object Unavailable : WidgetCredentialAccess()
@@ -27,12 +29,31 @@ internal sealed class WidgetCredentialAccess {
 internal sealed class WidgetSyncConfiguration {
   data class Ready(
     val baseUrl: String,
-    val apiSecretSha1: String?,
+    val apiSecretSha1: String,
     val liveMode: Boolean,
   ) : WidgetSyncConfiguration()
 
   data object Disabled : WidgetSyncConfiguration()
   data object CredentialUnavailable : WidgetSyncConfiguration()
+}
+
+/** Old enabled preferences must never turn a missing credential into an anonymous request. */
+internal fun resolveWidgetSyncConfiguration(
+  enabled: Boolean,
+  baseUrl: String,
+  credential: WidgetCredentialAccess,
+  liveMode: Boolean,
+): WidgetSyncConfiguration {
+  if (!enabled || baseUrl.isBlank()) return WidgetSyncConfiguration.Disabled
+  return when (credential) {
+    is WidgetCredentialAccess.Available -> if (credential.apiSecretSha1.isNotBlank()) {
+      WidgetSyncConfiguration.Ready(baseUrl, credential.apiSecretSha1, liveMode)
+    } else {
+      WidgetSyncConfiguration.CredentialUnavailable
+    }
+    WidgetCredentialAccess.NotConfigured, WidgetCredentialAccess.Unavailable ->
+      WidgetSyncConfiguration.CredentialUnavailable
+  }
 }
 
 internal data class WidgetSyncConfigurationWriteResult(
@@ -218,7 +239,7 @@ internal object GlucoseWidgetCredentialStore {
       // Account removal and explicit disable must not leave a usable background credential.
       credentialVault.clear()
     }
-    var effectiveEnabled = enabled && credentialStored
+    var effectiveEnabled = enabled && !apiSecretSha1.isNullOrBlank() && credentialStored
 
     val editor = prefs.edit()
       .putString(GlucoseSyncWorker.KEY_BASE_URL, normalizedBaseUrl)
@@ -240,19 +261,12 @@ internal object GlucoseWidgetCredentialStore {
     val baseUrl = prefs.getString(GlucoseSyncWorker.KEY_BASE_URL, null)?.trim().orEmpty()
     if (!enabled || baseUrl.isBlank()) return@synchronized WidgetSyncConfiguration.Disabled
 
-    when (val credential = vault(prefs).read()) {
-      is WidgetCredentialAccess.Available -> WidgetSyncConfiguration.Ready(
-        baseUrl = baseUrl,
-        apiSecretSha1 = credential.apiSecretSha1,
-        liveMode = prefs.getBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, true),
-      )
-      WidgetCredentialAccess.NotConfigured -> WidgetSyncConfiguration.Ready(
-        baseUrl = baseUrl,
-        apiSecretSha1 = null,
-        liveMode = prefs.getBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, true),
-      )
-      WidgetCredentialAccess.Unavailable -> WidgetSyncConfiguration.CredentialUnavailable
-    }
+    resolveWidgetSyncConfiguration(
+      enabled = enabled,
+      baseUrl = baseUrl,
+      credential = vault(prefs).read(),
+      liveMode = prefs.getBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, true),
+    )
   }
 
   private fun preferences(context: Context): SharedPreferences =

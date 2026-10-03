@@ -10,7 +10,6 @@ import type {
   MatchedPeriodComparison,
   TrendsDataSource,
   TrendsPeriod,
-  TrendsRangeDistribution,
   TrendsRangeThresholds,
 } from '../../modules/trends';
 import {
@@ -19,104 +18,31 @@ import {
   previousMatchedPeriod,
 } from '../../modules/trends';
 import type {DestinationLocale} from '../destinations';
-import {
-  ProductPage,
-  ProductSection,
-  ResponsiveGrid,
-  productUiTokens,
-} from '../ui';
+import {ProductPage, ProductSection, productUiTokens} from '../ui';
 import {TrendsEvidenceMetadataView} from './TrendsEvidenceMetadataView';
+import {buildDailyTrends, type TrendsDaySummary} from './buildDailyTrends';
+import {
+  TrendsComparisonCard,
+  TrendsDailyCard,
+  TrendsRangeCard,
+  formatTrendValue,
+  trendsDateLabel,
+} from './TrendsOverviewCards';
+import {TRENDS_OVERVIEW_COPY} from './trendsOverviewCopy';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SAMPLE_INTERVAL_MS = 5 * 60 * 1000;
 const RANGE_DAYS = [7, 14, 30] as const;
 type RangeDays = (typeof RANGE_DAYS)[number];
 
-const COPY = {
-  en: {
-    title: 'Trends overview',
-    subtitle: 'A factual multi-day view with visible data quality.',
-    range: 'Period',
-    days: 'days',
-    loading: 'Loading the selected period and its matched comparison…',
-    failed: 'The Trends data could not be loaded.',
-    retry: 'Try again',
-    coverage: 'Data coverage',
-    adequateCoverage: 'Duration and coverage support this comparison',
-    lowCoverage: 'Low data coverage — interpret with care',
-    shortPeriod:
-      'Short view — representative GMI, GRI, and comparisons need at least 14 days.',
-    samples: 'readings',
-    excluded: 'excluded',
-    duplicates: 'duplicates removed',
-    localTime: 'Local time',
-    glucoseRanges: 'Glucose ranges',
-    veryLow: 'Very low',
-    low: 'Low',
-    target: 'In range',
-    high: 'High',
-    veryHigh: 'Very high',
-    metrics: 'Key metrics',
-    mean: 'Mean glucose',
-    gmi: 'GMI',
-    cv: 'CV',
-    gri: 'GRI',
-    griHypo: 'Low-glucose component',
-    griHyper: 'High-glucose component',
-    gmiNote: 'GMI comes from CGM data and is not a laboratory A1C.',
-    comparison: 'Matched previous period',
-    comparisonUnavailable:
-      'Deltas are withheld until both equal periods have adequate coverage.',
-    meanDelta: 'Mean difference',
-    targetDelta: 'In-range difference',
-    cvDelta: 'CV difference',
-    investigateLow: 'Investigate low-glucose events in this period',
-  },
-  he: {
-    title: 'סקירת מגמות',
-    subtitle: 'מבט עובדתי על כמה ימים, עם איכות נתונים גלויה.',
-    range: 'תקופה',
-    days: 'ימים',
-    loading: 'טוען את התקופה שנבחרה ואת תקופת ההשוואה…',
-    failed: 'לא הצלחנו לטעון את נתוני המגמות.',
-    retry: 'ניסיון נוסף',
-    coverage: 'כיסוי נתונים',
-    adequateCoverage: 'המשך והכיסוי מספיקים להשוואה הזו',
-    lowCoverage: 'כיסוי נתונים נמוך — יש לפרש בזהירות',
-    shortPeriod:
-      'זהו מבט קצר — GMI, GRI והשוואה מייצגת דורשים לפחות 14 ימים.',
-    samples: 'קריאות',
-    excluded: 'הוחרגו',
-    duplicates: 'כפילויות הוסרו',
-    localTime: 'זמן מקומי',
-    glucoseRanges: 'טווחי סוכר',
-    veryLow: 'נמוך מאוד',
-    low: 'נמוך',
-    target: 'בטווח',
-    high: 'גבוה',
-    veryHigh: 'גבוה מאוד',
-    metrics: 'מדדים מרכזיים',
-    mean: 'סוכר ממוצע',
-    gmi: 'GMI',
-    cv: 'CV',
-    gri: 'GRI',
-    griHypo: 'רכיב סוכר נמוך',
-    griHyper: 'רכיב סוכר גבוה',
-    gmiNote: 'GMI מחושב מנתוני CGM ואינו בדיקת A1C במעבדה.',
-    comparison: 'התקופה הקודמת התואמת',
-    comparisonUnavailable:
-      'ההפרשים מוסתרים עד שלשתי התקופות השוות יהיה כיסוי מספיק.',
-    meanDelta: 'הפרש בממוצע',
-    targetDelta: 'הפרש בזמן בטווח',
-    cvDelta: 'הפרש ב־CV',
-    investigateLow: 'חקירת אירועי סוכר נמוך בתקופה הזו',
-  },
-} as const;
-
 type LoadState =
   | {readonly kind: 'loading'}
   | {readonly kind: 'error'; readonly message: string}
-  | {readonly kind: 'ready'; readonly comparison: MatchedPeriodComparison};
+  | {
+      readonly kind: 'ready';
+      readonly comparison: MatchedPeriodComparison;
+      readonly days: readonly TrendsDaySummary[];
+    };
 
 export interface TrendsOverviewModuleViewProps {
   readonly locale: DestinationLocale;
@@ -132,38 +58,6 @@ export interface TrendsOverviewModuleViewProps {
 const systemNow = (): number => Date.now();
 const systemTimeZoneOffsetMinutes = (): number =>
   -new Date().getTimezoneOffset();
-const signed = (value: number, suffix: string): string =>
-  `${value > 0 ? '+' : ''}${value}${suffix}`;
-
-const MetricCard = ({
-  label,
-  value,
-  testID,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly testID: string;
-}) => (
-  <View style={styles.metricCard}>
-    <Text style={styles.metricLabel}>{label}</Text>
-    <Text style={styles.metricValue} testID={testID}>
-      {value}
-    </Text>
-  </View>
-);
-
-const RANGE_PRESENTATION: readonly {
-  readonly key: keyof TrendsRangeDistribution;
-  readonly copyKey: 'veryLow' | 'low' | 'target' | 'high' | 'veryHigh';
-  readonly color: string;
-}[] = [
-  {key: 'veryLowPercent', copyKey: 'veryLow', color: '#B91C1C'},
-  {key: 'lowPercent', copyKey: 'low', color: '#F97316'},
-  {key: 'targetPercent', copyKey: 'target', color: '#16A34A'},
-  {key: 'highPercent', copyKey: 'high', color: '#EAB308'},
-  {key: 'veryHighPercent', copyKey: 'veryHigh', color: '#7C3AED'},
-];
-
 export const TrendsOverviewModuleView = ({
   locale,
   dataSource,
@@ -174,7 +68,7 @@ export const TrendsOverviewModuleView = ({
   showGri = false,
   timeZoneOffsetMinutes = systemTimeZoneOffsetMinutes(),
 }: TrendsOverviewModuleViewProps) => {
-  const copy = COPY[locale];
+  const copy = TRENDS_OVERVIEW_COPY[locale];
   const rtl = locale === 'he';
   const [rangeDays, setRangeDays] = useState<RangeDays>(14);
   const [reload, setReload] = useState(0);
@@ -201,6 +95,13 @@ export const TrendsOverviewModuleView = ({
         }
         setState({
           kind: 'ready',
+          days: buildDailyTrends({
+            period: currentPeriod,
+            expectedSampleIntervalMs,
+            thresholds,
+            samples: currentSamples,
+            timeZoneOffsetMinutes,
+          }),
           comparison: buildMatchedPeriodComparison({
             current: {
               period: currentPeriod,
@@ -244,17 +145,28 @@ export const TrendsOverviewModuleView = ({
     timeZoneOffsetMinutes,
   ]);
 
+  const current = state.kind === 'ready' ? state.comparison.current : undefined;
+  const qualityMessage =
+    current?.coverageQuality === 'no-data'
+      ? copy.noData
+      : current?.interpretationQuality === 'representative'
+      ? copy.adequateCoverage
+      : current?.durationQuality === 'short'
+      ? copy.shortPeriod
+      : copy.lowCoverage;
+
   return (
     <ProductPage
       locale={locale}
       subtitle={copy.subtitle}
       testID="trends-overview-view"
       title={copy.title}>
-      <ProductSection locale={locale} title={copy.range}>
+      <View style={styles.periodCard}>
         <View style={[styles.rangeSelector, rtl && styles.rowReverse]}>
           {RANGE_DAYS.map(days => (
             <Pressable
               accessibilityRole="tab"
+              aria-selected={days === rangeDays}
               accessibilityState={{selected: days === rangeDays}}
               key={days}
               onPress={() => setRangeDays(days)}
@@ -274,7 +186,16 @@ export const TrendsOverviewModuleView = ({
             </Pressable>
           ))}
         </View>
-      </ProductSection>
+        <Text style={[styles.periodDates, rtl && styles.rtlText]}>
+          {trendsDateLabel(
+            currentPeriod.startMs,
+            locale,
+            timeZoneOffsetMinutes,
+          )}{' '}
+          –{' '}
+          {trendsDateLabel(currentPeriod.endMs, locale, timeZoneOffsetMinutes)}
+        </Text>
+      </View>
 
       {state.kind === 'loading' ? (
         <View style={styles.stateCard} testID="trends-overview-loading">
@@ -303,7 +224,179 @@ export const TrendsOverviewModuleView = ({
         </View>
       ) : (
         <>
-          <ProductSection locale={locale} title={copy.coverage}>
+          <View style={styles.coverageCard}>
+            <View style={[styles.row, rtl && styles.rowReverse]}>
+              <Text style={[styles.coverageTitle, rtl && styles.rtlText]}>
+                {copy.coverage}
+              </Text>
+              <Text
+                style={[
+                  styles.coverageValue,
+                  state.comparison.current.coverageQuality !== 'adequate' &&
+                    styles.warningText,
+                ]}
+                testID="trends-overview-coverage">
+                {state.comparison.current.coveragePercent}%
+              </Text>
+            </View>
+            <View
+              style={styles.coverageTrack}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants">
+              <View
+                style={[
+                  styles.coverageFill,
+                  {width: `${state.comparison.current.coveragePercent}%`},
+                  state.comparison.current.coverageQuality !== 'adequate' &&
+                    styles.warningFill,
+                ]}
+              />
+            </View>
+            <View style={[styles.row, rtl && styles.rowReverse]}>
+              <Text style={[styles.coverageDetail, rtl && styles.rtlText]}>
+                {copy.samples}
+              </Text>
+              <Text style={[styles.coverageDetail, styles.ltrText]}>
+                {state.comparison.current.validSampleCount} /{' '}
+                {state.comparison.current.expectedSampleCount}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.coverageMessage,
+                state.comparison.current.interpretationQuality !==
+                  'representative' && styles.warningText,
+                rtl && styles.rtlText,
+              ]}>
+              {qualityMessage}
+            </Text>
+          </View>
+
+          {state.comparison.current.ranges ? (
+            <View style={styles.cardSpacing}>
+              <TrendsRangeCard
+                ranges={state.comparison.current.ranges}
+                thresholds={thresholds}
+                locale={locale}
+              />
+            </View>
+          ) : null}
+
+          {state.comparison.current.meanGlucoseMgDl !== undefined &&
+          state.comparison.current.coefficientOfVariationPercent !==
+            undefined ? (
+            <ProductSection locale={locale} title={copy.metrics}>
+              <View testID="trends-overview-metrics">
+                <View style={styles.meanCard}>
+                  <Text style={[styles.metricLabel, rtl && styles.rtlText]}>
+                    {copy.mean}
+                  </Text>
+                  <Text style={styles.meanValue} testID="trends-overview-mean">
+                    {formatTrendValue(state.comparison.current.meanGlucoseMgDl)}{' '}
+                    mg/dL
+                  </Text>
+                  <Text style={[styles.metricNote, rtl && styles.rtlText]}>
+                    {copy.basedOnReadings}
+                  </Text>
+                </View>
+                <View style={[styles.metricsRow, rtl && styles.rowReverse]}>
+                  {state.comparison.current.gmiPercent !== undefined ? (
+                    <View style={styles.metricCard}>
+                      <Text
+                        style={[styles.metricLabel, rtl && styles.alignRight]}>
+                        {copy.gmi}
+                      </Text>
+                      <Text
+                        style={styles.metricValue}
+                        testID="trends-overview-gmi">
+                        {formatTrendValue(state.comparison.current.gmiPercent)}%
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.metricCard}>
+                    <Text
+                      style={[styles.metricLabel, rtl && styles.alignRight]}>
+                      {copy.cv}
+                    </Text>
+                    <Text
+                      style={styles.metricValue}
+                      testID="trends-overview-cv">
+                      {formatTrendValue(
+                        state.comparison.current.coefficientOfVariationPercent,
+                      )}
+                      %
+                    </Text>
+                    <Text style={[styles.metricNote, rtl && styles.rtlText]}>
+                      {copy.cvNote}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              {state.comparison.current.gmiPercent !== undefined ? (
+                <Text style={[styles.metricNote, rtl && styles.rtlText]}>
+                  {copy.gmiNote}
+                </Text>
+              ) : null}
+            </ProductSection>
+          ) : null}
+
+          {state.comparison.current.ranges ? (
+            <View style={styles.cardSpacing}>
+              <TrendsDailyCard
+                key={`${currentPeriod.startMs}-${currentPeriod.endMs}`}
+                days={state.days}
+                locale={locale}
+                thresholds={thresholds}
+              />
+            </View>
+          ) : null}
+
+          {(state.comparison.current.ranges?.veryLowPercent ?? 0) +
+            (state.comparison.current.ranges?.lowPercent ?? 0) >
+          0 ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => onOpenHypoInvestigation(currentPeriod)}
+              style={({pressed}) => [
+                styles.hypoButton,
+                pressed && styles.pressed,
+              ]}
+              testID="trends-open-hypo-investigation">
+              <Text style={[styles.hypoButtonText, rtl && styles.rtlText]}>
+                {copy.investigateLow}
+              </Text>
+              <Text style={styles.hypoArrow}>{rtl ? '‹' : '›'}</Text>
+            </Pressable>
+          ) : null}
+
+          <ProductSection locale={locale} title={copy.comparison}>
+            <TrendsComparisonCard
+              comparison={state.comparison}
+              locale={locale}
+            />
+          </ProductSection>
+
+          {showGri && state.comparison.current.gri ? (
+            <ProductSection locale={locale} title={copy.gri}>
+              <View style={styles.griCard} testID="trends-overview-gri">
+                <Text
+                  style={styles.griScore}
+                  testID="trends-overview-gri-score">
+                  {state.comparison.current.gri.score}
+                </Text>
+                <Text style={[styles.stateText, rtl && styles.rtlText]}>
+                  {copy.griHypo}:{' '}
+                  {state.comparison.current.gri.hypoglycemiaComponent}
+                </Text>
+                <Text style={[styles.stateText, rtl && styles.rtlText]}>
+                  {copy.griHyper}:{' '}
+                  {state.comparison.current.gri.hyperglycemiaComponent}
+                </Text>
+              </View>
+            </ProductSection>
+          ) : null}
+
+          <ProductSection locale={locale} title={copy.evidence}>
             <TrendsEvidenceMetadataView
               locale={locale}
               metadata={buildTrendsEvidenceMetadata({
@@ -322,168 +415,14 @@ export const TrendsOverviewModuleView = ({
                   state.comparison.current.timeZoneOffsetMinutes,
               })}
             />
-            <View style={styles.coverageCard}>
-              <Text style={styles.coverageValue}>
-                {state.comparison.current.coveragePercent}%
+            {state.comparison.current.excludedSampleCount > 0 ||
+            state.comparison.current.duplicateSampleCount > 0 ? (
+              <Text style={[styles.metricNote, rtl && styles.rtlText]}>
+                {state.comparison.current.excludedSampleCount} {copy.excluded} ·{' '}
+                {state.comparison.current.duplicateSampleCount}{' '}
+                {copy.duplicates}
               </Text>
-              <Text style={[styles.coverageDetail, rtl && styles.rtlText]}>
-                {state.comparison.current.validSampleCount} /{' '}
-                {state.comparison.current.expectedSampleCount} {copy.samples}
-              </Text>
-              <Text style={[styles.coverageDetail, rtl && styles.rtlText]}>
-                {new Date(currentPeriod.startMs).toLocaleDateString(
-                  locale === 'he' ? 'he-IL' : 'en-US',
-                )}{' '}
-                –{' '}
-                {new Date(currentPeriod.endMs).toLocaleDateString(
-                  locale === 'he' ? 'he-IL' : 'en-US',
-                )}{' '}
-                · {copy.localTime}
-              </Text>
-              {state.comparison.current.excludedSampleCount > 0 ||
-              state.comparison.current.duplicateSampleCount > 0 ? (
-                <Text style={[styles.coverageDetail, rtl && styles.rtlText]}>
-                  {state.comparison.current.excludedSampleCount} {copy.excluded}
-                  {' · '}
-                  {state.comparison.current.duplicateSampleCount}{' '}
-                  {copy.duplicates}
-                </Text>
-              ) : null}
-              <Text
-                style={[
-                  styles.coverageMessage,
-                  state.comparison.current.coverageQuality !== 'adequate' &&
-                    styles.warningText,
-                  rtl && styles.rtlText,
-                ]}>
-                {state.comparison.current.interpretationQuality ===
-                'representative'
-                  ? copy.adequateCoverage
-                  : state.comparison.current.durationQuality === 'short'
-                  ? copy.shortPeriod
-                  : copy.lowCoverage}
-              </Text>
-            </View>
-          </ProductSection>
-
-          {state.comparison.current.ranges ? (
-            <ProductSection locale={locale} title={copy.glucoseRanges}>
-              <View style={styles.rangeCard} testID="trends-overview-ranges">
-                {RANGE_PRESENTATION.map(item => (
-                  <View
-                    key={item.key}
-                    style={[styles.rangeRow, rtl && styles.rowReverse]}>
-                    <View
-                      style={[styles.rangeDot, {backgroundColor: item.color}]}
-                    />
-                    <Text style={[styles.rangeLabel, rtl && styles.rtlText]}>
-                      {copy[item.copyKey]}
-                    </Text>
-                    <Text style={styles.rangeValue}>
-                      {state.comparison.current.ranges?.[item.key]}%
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </ProductSection>
-          ) : null}
-
-          {state.comparison.current.meanGlucoseMgDl !== undefined &&
-          state.comparison.current.coefficientOfVariationPercent !== undefined ? (
-            <ProductSection locale={locale} title={copy.metrics}>
-              <ResponsiveGrid locale={locale} testID="trends-overview-metrics">
-                <MetricCard
-                  label={copy.mean}
-                  testID="trends-overview-mean"
-                  value={`${state.comparison.current.meanGlucoseMgDl} mg/dL`}
-                />
-                {state.comparison.current.gmiPercent !== undefined ? (
-                  <MetricCard
-                    label={copy.gmi}
-                    testID="trends-overview-gmi"
-                    value={`${state.comparison.current.gmiPercent}%`}
-                  />
-                ) : null}
-                <MetricCard
-                  label={copy.cv}
-                  testID="trends-overview-cv"
-                  value={`${state.comparison.current.coefficientOfVariationPercent}%`}
-                />
-              </ResponsiveGrid>
-              {state.comparison.current.gmiPercent !== undefined ? (
-                <Text style={[styles.metricNote, rtl && styles.rtlText]}>
-                  {copy.gmiNote}
-                </Text>
-              ) : null}
-            </ProductSection>
-          ) : null}
-
-          {showGri && state.comparison.current.gri ? (
-            <ProductSection locale={locale} title={copy.gri}>
-              <View style={styles.griCard} testID="trends-overview-gri">
-                <Text style={styles.griScore} testID="trends-overview-gri-score">
-                  {state.comparison.current.gri.score}
-                </Text>
-                <Text style={[styles.deltaText, rtl && styles.rtlText]}>
-                  {copy.griHypo}:{' '}
-                  {state.comparison.current.gri.hypoglycemiaComponent}
-                </Text>
-                <Text style={[styles.deltaText, rtl && styles.rtlText]}>
-                  {copy.griHyper}:{' '}
-                  {state.comparison.current.gri.hyperglycemiaComponent}
-                </Text>
-              </View>
-            </ProductSection>
-          ) : null}
-
-          {(state.comparison.current.ranges?.veryLowPercent ?? 0) +
-            (state.comparison.current.ranges?.lowPercent ?? 0) >
-          0 ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => onOpenHypoInvestigation(currentPeriod)}
-              style={({pressed}) => [
-                styles.hypoButton,
-                pressed && styles.pressed,
-              ]}
-              testID="trends-open-hypo-investigation">
-              <Text style={styles.hypoButtonText}>{copy.investigateLow}</Text>
-            </Pressable>
-          ) : null}
-
-          <ProductSection locale={locale} title={copy.comparison}>
-            <View style={styles.comparisonCard}>
-              <Text style={[styles.comparisonCoverage, rtl && styles.rtlText]}>
-                {copy.coverage}: {state.comparison.previous.coveragePercent}%
-              </Text>
-              {state.comparison.deltas ? (
-                <>
-                  <Text style={[styles.deltaText, rtl && styles.rtlText]}>
-                    {copy.meanDelta}:{' '}
-                    {signed(state.comparison.deltas.meanGlucoseMgDl, ' mg/dL')}
-                  </Text>
-                  <Text style={[styles.deltaText, rtl && styles.rtlText]}>
-                    {copy.targetDelta}:{' '}
-                    {signed(
-                      state.comparison.deltas.targetRangePercentagePoints,
-                      ' pp',
-                    )}
-                  </Text>
-                  <Text style={[styles.deltaText, rtl && styles.rtlText]}>
-                    {copy.cvDelta}:{' '}
-                    {signed(
-                      state.comparison.deltas
-                        .coefficientOfVariationPercentagePoints,
-                      ' pp',
-                    )}
-                  </Text>
-                </>
-              ) : (
-                <Text style={[styles.stateText, rtl && styles.rtlText]}>
-                  {copy.comparisonUnavailable}
-                </Text>
-              )}
-            </View>
+            ) : null}
           </ProductSection>
         </>
       )}
@@ -492,119 +431,159 @@ export const TrendsOverviewModuleView = ({
 };
 
 const styles = StyleSheet.create({
+  row: {flexDirection: 'row', alignItems: 'center', gap: 8},
   rowReverse: {flexDirection: 'row-reverse'},
   rtlText: {textAlign: 'right', writingDirection: 'rtl'},
+  alignRight: {textAlign: 'right'},
+  ltrText: {writingDirection: 'ltr'},
   pressed: {opacity: productUiTokens.opacity.pressed},
-  rangeSelector: {flexDirection: 'row', flexWrap: 'wrap'},
+  periodCard: {marginTop: 22},
+  rangeSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#EAF0F4',
+    borderRadius: 16,
+    padding: 4,
+    gap: 4,
+  },
   rangeButton: {
     alignItems: 'center',
-    borderColor: productUiTokens.colors.border,
-    borderRadius: productUiTokens.radii.pill,
-    borderWidth: 1,
+    borderRadius: 12,
     justifyContent: 'center',
-    marginEnd: productUiTokens.spacing.sm,
-    marginBottom: productUiTokens.spacing.sm,
-    minHeight: 42,
-    paddingHorizontal: productUiTokens.spacing.lg,
+    flex: 1,
+    minHeight: 46,
+    paddingHorizontal: 8,
   },
-  rangeButtonSelected: {backgroundColor: productUiTokens.colors.action},
-  rangeButtonText: {color: productUiTokens.colors.text, fontWeight: '700'},
-  rangeButtonTextSelected: {color: productUiTokens.colors.actionText},
+  rangeButtonSelected: {backgroundColor: '#255E7F'},
+  rangeButtonText: {color: '#536C7D', fontWeight: '700', fontSize: 14},
+  rangeButtonTextSelected: {color: '#FFFFFF'},
+  periodDates: {color: '#536C7D', fontSize: 12, marginTop: 12},
   stateCard: {
     alignItems: 'center',
-    backgroundColor: productUiTokens.colors.surface,
-    borderRadius: productUiTokens.radii.card,
-    marginTop: productUiTokens.spacing.lg,
-    padding: productUiTokens.spacing.xl,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    marginTop: 16,
+    padding: 24,
   },
   stateText: {
     color: productUiTokens.colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
-    marginTop: productUiTokens.spacing.sm,
+    marginTop: 8,
   },
   errorText: {color: productUiTokens.colors.danger, fontWeight: '700'},
   retryButton: {
     backgroundColor: productUiTokens.colors.action,
-    borderRadius: productUiTokens.radii.pill,
-    marginTop: productUiTokens.spacing.md,
-    paddingHorizontal: productUiTokens.spacing.lg,
-    paddingVertical: productUiTokens.spacing.md,
+    borderRadius: 16,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 44,
   },
   retryText: {color: productUiTokens.colors.actionText, fontWeight: '700'},
   coverageCard: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#A7F3D0',
-    borderRadius: productUiTokens.radii.card,
+    backgroundColor: '#F2F7F5',
+    borderColor: '#DFEAE4',
+    borderRadius: 18,
     borderWidth: 1,
-    marginTop: productUiTokens.spacing.md,
-    padding: productUiTokens.spacing.lg,
+    marginTop: 16,
+    padding: 15,
   },
-  coverageValue: {color: '#047857', fontSize: 30, fontWeight: '800'},
-  coverageDetail: {color: productUiTokens.colors.textMuted, marginTop: 2},
-  coverageMessage: {color: '#047857', fontWeight: '700', marginTop: 8},
-  warningText: {color: '#9A3412'},
-  rangeCard: {
-    backgroundColor: productUiTokens.colors.surface,
-    borderRadius: productUiTokens.radii.card,
-    padding: productUiTokens.spacing.md,
-  },
-  rangeRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    minHeight: 36,
-    paddingVertical: 4,
-  },
-  rangeDot: {borderRadius: 6, height: 12, marginHorizontal: 8, width: 12},
-  rangeLabel: {color: productUiTokens.colors.text, flex: 1, fontSize: 14},
-  rangeValue: {color: productUiTokens.colors.text, fontWeight: '800'},
-  metricCard: {
-    backgroundColor: productUiTokens.colors.surface,
-    borderColor: productUiTokens.colors.border,
-    borderRadius: productUiTokens.radii.card,
-    borderWidth: 1,
-    minHeight: 92,
-    padding: productUiTokens.spacing.md,
-    width: '100%',
-  },
-  metricLabel: {color: productUiTokens.colors.textMuted, fontSize: 13},
-  metricValue: {
-    color: productUiTokens.colors.text,
-    fontSize: 20,
+  coverageTitle: {flex: 1, fontSize: 13, color: '#496859', fontWeight: '700'},
+  coverageValue: {
+    color: '#426C5D',
+    fontSize: 23,
     fontWeight: '800',
-    marginTop: 8,
+    writingDirection: 'ltr',
   },
-  metricNote: {
-    color: productUiTokens.colors.textMuted,
+  coverageTrack: {
+    height: 5,
+    backgroundColor: '#DAE6DF',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginVertical: 10,
+  },
+  coverageFill: {height: '100%', backgroundColor: '#448A78', borderRadius: 3},
+  warningFill: {backgroundColor: '#A96B25'},
+  coverageDetail: {color: '#647785', fontSize: 11},
+  coverageMessage: {
+    color: '#426C5D',
     fontSize: 12,
     lineHeight: 18,
-    marginTop: productUiTokens.spacing.sm,
+    marginTop: 7,
   },
+  warningText: {color: '#925615'},
+  cardSpacing: {marginTop: 16},
+  meanCard: {
+    backgroundColor: '#EEF5FC',
+    borderColor: '#D8E7F5',
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+  },
+  metricLabel: {color: '#536C7D', fontSize: 13, fontWeight: '600'},
+  meanValue: {
+    color: '#225F8C',
+    fontSize: 30,
+    fontWeight: '800',
+    marginTop: 9,
+    writingDirection: 'ltr',
+    fontVariant: ['tabular-nums'],
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 12,
+    marginTop: 12,
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E1E9EE',
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+  },
+  metricValue: {
+    color: '#344F62',
+    fontSize: 27,
+    fontWeight: '800',
+    marginTop: 8,
+    writingDirection: 'ltr',
+    fontVariant: ['tabular-nums'],
+  },
+  metricNote: {color: '#647785', fontSize: 12, lineHeight: 18, marginTop: 8},
   griCard: {
-    backgroundColor: '#F5F3FF',
-    borderColor: '#C4B5FD',
-    borderRadius: productUiTokens.radii.card,
+    backgroundColor: '#F6F3FA',
+    borderColor: '#E2D9F0',
+    borderRadius: 22,
     borderWidth: 1,
-    padding: productUiTokens.spacing.lg,
+    padding: 18,
   },
-  griScore: {color: '#6D28D9', fontSize: 32, fontWeight: '800'},
+  griScore: {
+    color: '#685388',
+    fontSize: 32,
+    fontWeight: '800',
+    writingDirection: 'ltr',
+  },
   hypoButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
     backgroundColor: '#FFF7ED',
-    borderColor: '#FDBA74',
-    borderRadius: productUiTokens.radii.card,
+    borderColor: '#F4DEC0',
+    borderRadius: 16,
     borderWidth: 1,
-    marginTop: productUiTokens.spacing.lg,
-    minHeight: 48,
-    justifyContent: 'center',
-    paddingHorizontal: productUiTokens.spacing.lg,
+    marginTop: 16,
+    minHeight: 52,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  hypoButtonText: {color: '#9A3412', fontWeight: '800', textAlign: 'center'},
-  comparisonCard: {
-    backgroundColor: productUiTokens.colors.surfaceInfo,
-    borderRadius: productUiTokens.radii.card,
-    padding: productUiTokens.spacing.lg,
+  hypoButtonText: {
+    flex: 1,
+    color: '#986227',
+    fontWeight: '700',
+    fontSize: 13,
+    lineHeight: 20,
   },
-  comparisonCoverage: {color: productUiTokens.colors.text, fontWeight: '800'},
-  deltaText: {color: productUiTokens.colors.text, marginTop: 8},
+  hypoArrow: {color: '#986227', fontSize: 24},
 });

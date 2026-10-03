@@ -67,6 +67,38 @@ to browser code.
 
 ## Android
 
+### Restricted pilot channel
+
+`SHANI_RELEASE_CHANNEL` accepts `pilot`, `production`, or `development`.
+Omitting it builds the restricted pilot experience. Only explicitly selected
+`development` builds allow current/pre-meal AI recommendations and experimental
+glucose forecasts. Native and Web bundles embed the value at compilation; a
+remote setting cannot turn the experiments on. Android also gates forecast
+storage and background/native widget rendering in the binary. Production
+signing rejects the development channel.
+
+After `yarn verify:all`, build an internal pilot preview with:
+
+```powershell
+$env:SHANI_RELEASE_CHANNEL = 'pilot'
+yarn build:android:preview
+```
+
+Run Android smoke checks against a dedicated emulator and the exact built APK:
+
+```powershell
+yarn verify:pilot:android --serial emulator-5580 --apk C:\absolute\pilot.apk --baseline C:\absolute\previous.apk
+```
+
+The runner never clears application data and refuses physical-phone serials.
+It records installation/upgrade, notification permission denial, offline
+launch, process restart, and reboot. Its screenshots/JSON report are under
+`artifacts/pilot-qa/android-smoke`. The native `PilotReadinessTest` additionally
+checks retained forecast removal, old refresh ordering, missing insulin, and
+the real stale-reading widget view. These are emulator/synthetic checks; real
+Google sign-in, live sensor uploads and overnight alerts still need a physical
+test phone before patient distribution.
+
 ```sh
 # Development APKs, signed with the Android debug certificate
 yarn build:android:debug
@@ -87,7 +119,7 @@ Set these non-secret build values only after the matching backend is deployed:
 
 ```text
 SHANI_BACKEND_BASE_URL=https://us-central1-PROJECT_ID.cloudfunctions.net/shaniApi
-FIRESTORE_RULES_SCHEMA_VERSION=1
+FIRESTORE_RULES_SCHEMA_VERSION=2
 ```
 
 The backend URL can be omitted for the default Firebase project derivation. A

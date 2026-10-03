@@ -97,7 +97,7 @@ describe('NightscoutConfigContext', () => {
       // `ctx` will be updated on re-render by the Consumer.
       await (ctx as NightscoutConfigContextValue).addProfile({
         urlInput: 'example.com/',
-        secretInput: 'jvA4cWn9c7zxgTyZ',
+        secretInput: 'jvA4cWn9c7zxgTyZ-0123456789abcdef',
       });
     });
 
@@ -115,7 +115,9 @@ describe('NightscoutConfigContext', () => {
     const call = mockConfigureNightscoutInstance.mock.calls[0][0];
     expect(call.baseUrl).toBe('https://example.com');
     expect(typeof call.apiSecretSha1).toBe('string');
-    expect(call.apiSecretSha1).toHaveLength(40);
+    expect(call.apiSecretSha1).toBe('');
+    expect(call.accessToken).toBe('jvA4cWn9c7zxgTyZ-0123456789abcdef');
+    expect(ctx.activeProfile?.authType).toBe('access-token');
 
     // Verify it persisted.
     const stored = await loadNightscoutProfiles(null);
@@ -148,7 +150,7 @@ describe('NightscoutConfigContext', () => {
       act(async () => {
         await (ctx as unknown as NightscoutConfigContextValue).addProfile({
           urlInput: 'example.com',
-          secretInput: 'wrong-secret',
+          secretInput: 'wrongsecret-0123456789abcdef',
         });
       }),
     ).rejects.toThrow('Invalid Nightscout secret');
@@ -185,7 +187,7 @@ describe('NightscoutConfigContext', () => {
     await act(async () => {
       await (ctx as NightscoutConfigContextValue).addProfile({
         urlInput: 'https://example.com/',
-        secretInput: 'my-secret',
+        secretInput: 'mysecret-0123456789abcdef',
       });
     });
 
@@ -208,7 +210,7 @@ describe('NightscoutConfigContext', () => {
     }
 
     expect(ctx.activeProfile.baseUrl).toBe('https://example.org');
-    expect(ctx.activeProfile.apiSecretSha1).toBe(before.apiSecretSha1);
+    expect(ctx.activeProfile.accessToken).toBe(before.accessToken);
   });
 
   it('deletes the last profile and clears axios configuration', async () => {
@@ -236,7 +238,7 @@ describe('NightscoutConfigContext', () => {
     await act(async () => {
       await (ctx as NightscoutConfigContextValue).addProfile({
         urlInput: 'example.com',
-        secretInput: 'my-secret',
+        secretInput: 'mysecret-0123456789abcdef',
       });
     });
 
@@ -289,6 +291,7 @@ describe('NightscoutConfigContext', () => {
             ? {
                 baseUrl: active.baseUrl,
                 apiSecretSha1: active.apiSecretSha1,
+                accessToken: active.accessToken,
               }
             : null;
         },
@@ -321,7 +324,7 @@ describe('NightscoutConfigContext', () => {
     await act(async () => {
       await (ctx as NightscoutConfigContextValue).addProfile({
         urlInput: 'https://private.example',
-        secretInput: 'plain-secret',
+        secretInput: 'plainsecret-0123456789abcdef',
       });
       localSaveFinished = true;
     });
@@ -365,7 +368,7 @@ describe('NightscoutConfigContext', () => {
     await act(async () => {
       await (ctx as unknown as NightscoutConfigContextValue).addProfile({
         urlInput: 'https://a.example',
-        secretInput: 'secret-a',
+        secretInput: 'secreta-0123456789abcdef',
       });
     });
     const firstId = (ctx as unknown as NightscoutConfigContextValue)
@@ -377,7 +380,7 @@ describe('NightscoutConfigContext', () => {
     await act(async () => {
       await (ctx as unknown as NightscoutConfigContextValue).addProfile({
         urlInput: 'https://b.example',
-        secretInput: 'secret-b',
+        secretInput: 'secretb-0123456789abcdef',
       });
     });
     const secondId = (ctx as unknown as NightscoutConfigContextValue)
@@ -415,9 +418,82 @@ describe('NightscoutConfigContext', () => {
     ]);
   });
 
-  it('does not apply a successful connection test after the account changes', async () => {
-    const auth = new MutableAuthSession('firebase-user-a');
-    let ctx: NightscoutConfigContextValue | null = null;
+  it.each([false, true])(
+    'does not save a token after an account change, including return to the same UID (%s)',
+    async returnToOriginal => {
+      const auth = new MutableAuthSession('firebase-user-a');
+      let ctx: NightscoutConfigContextValue | null = null;
+      const Consumer = () => {
+        ctx = useNightscoutConfig();
+        return null;
+      };
+      let tree: renderer.ReactTestRenderer;
+      await act(async () => {
+        tree = renderer.create(
+          <NightscoutConfigProvider
+            authSession={auth}
+            vaultSynchronizer={noopVaultSynchronizer}>
+            <Consumer />
+          </NightscoutConfigProvider>,
+        );
+      });
+      let finishConnection: (() => void) | undefined;
+      mockTestNightscoutConnection.mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finishConnection = () =>
+              resolve({ok: true, entriesCount: 1, authMethod: 'query'});
+          }),
+      );
+      let result: Promise<unknown> | undefined;
+      await act(async () => {
+        result = (ctx as unknown as NightscoutConfigContextValue)
+          .addProfile({
+            urlInput: 'https://a.example',
+            secretInput: 'secreta-0123456789abcdef',
+          })
+          .catch(error => error);
+        await Promise.resolve();
+      });
+      expect(finishConnection).toBeDefined();
+      await act(async () => {
+        auth.switchTo('firebase-user-b');
+        if (returnToOriginal) {
+          auth.switchTo('firebase-user-a');
+        }
+      });
+      await act(async () => {
+        finishConnection!();
+        await result;
+      });
+      expect(await result).toEqual(
+        new Error('The signed-in account changed before saving.'),
+      );
+      expect((ctx as unknown as NightscoutConfigContextValue).profiles).toEqual(
+        [],
+      );
+      expect(
+        (await loadNightscoutProfiles('firebase-user-a')).profiles,
+      ).toEqual([]);
+      expect(
+        (await loadNightscoutProfiles('firebase-user-b')).profiles,
+      ).toEqual([]);
+      expect(mockConfigureNightscoutInstance).not.toHaveBeenCalled();
+      act(() => tree!.unmount());
+    },
+  );
+
+  it('rejects master-secret onboarding without replacing a saved owned legacy profile', async () => {
+    const owner = 'legacy-owner';
+    const profile = {
+      id: 'owned_legacy',
+      label: 'Saved',
+      baseUrl: 'https://saved.example',
+      apiSecretSha1: 'a'.repeat(40),
+      createdAt: 1,
+    };
+    await persistNightscoutProfiles([profile], profile.id, owner);
+    let ctx: NightscoutConfigContextValue;
     const Consumer = () => {
       ctx = useNightscoutConfig();
       return null;
@@ -426,48 +502,21 @@ describe('NightscoutConfigContext', () => {
     await act(async () => {
       tree = renderer.create(
         <NightscoutConfigProvider
-          authSession={auth}
+          authSession={new MutableAuthSession(owner)}
           vaultSynchronizer={noopVaultSynchronizer}>
           <Consumer />
         </NightscoutConfigProvider>,
       );
     });
-    let finishConnection: (() => void) | undefined;
-    mockTestNightscoutConnection.mockImplementationOnce(
-      () =>
-        new Promise(resolve => {
-          finishConnection = () =>
-            resolve({ok: true, entriesCount: 1, authMethod: 'query'});
-        }),
-    );
-    let result: Promise<unknown> | undefined;
-    await act(async () => {
-      result = (ctx as unknown as NightscoutConfigContextValue)
-        .addProfile({urlInput: 'https://a.example', secretInput: 'secret-a'})
-        .catch(error => error);
-      await Promise.resolve();
-    });
-    expect(finishConnection).toBeDefined();
-    await act(async () => {
-      auth.switchTo('firebase-user-b');
-    });
-    await act(async () => {
-      finishConnection!();
-      await result;
-    });
-    expect(await result).toEqual(
-      new Error('The signed-in account changed before saving.'),
-    );
-    expect((ctx as unknown as NightscoutConfigContextValue).profiles).toEqual(
-      [],
-    );
-    expect((await loadNightscoutProfiles('firebase-user-a')).profiles).toEqual(
-      [],
-    );
-    expect((await loadNightscoutProfiles('firebase-user-b')).profiles).toEqual(
-      [],
-    );
-    expect(mockConfigureNightscoutInstance).not.toHaveBeenCalled();
+    await expect(
+      ctx!.addProfile({
+        urlInput: 'https://new.example',
+        secretInput: 'master-secret',
+      }),
+    ).rejects.toThrow('readable');
+    expect(mockTestNightscoutConnection).not.toHaveBeenCalled();
+    expect((await loadNightscoutProfiles(owner)).profiles).toEqual([profile]);
+    expect(ctx!.activeProfile?.authType).toBeUndefined();
     act(() => tree!.unmount());
   });
 

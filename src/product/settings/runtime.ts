@@ -16,6 +16,7 @@ export interface SettingsModuleRuntime {
 
 export type SettingsNightscoutFailure =
   | 'authentication'
+  | 'permissions'
   | 'not-found'
   | 'timeout'
   | 'network'
@@ -40,6 +41,7 @@ export interface SettingsNightscoutConnectionRuntime {
     | 'connected'
     | 'failed';
   readonly latestEntryDate?: number;
+  readonly credentialKind?: 'access-token' | 'legacy-api-secret';
   readonly testConnection: () => Promise<SettingsNightscoutTestResult>;
   readonly recovery?: {
     readonly count: number;

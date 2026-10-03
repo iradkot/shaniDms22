@@ -9,6 +9,7 @@ import type {
   StoredLayoutProfile,
   StoredDayGraphPreferences,
   StoredDailyOverviewPreferences,
+  StoredHomePreferences,
   StoredProductPersonalization,
 } from './types';
 import {MAX_PERSISTED_RECENT_MODULES} from './types';
@@ -217,6 +218,17 @@ export const updateDailyOverviewPreferences = (
   updateLayoutProfile(current, {
     ...selectLayoutProfile(current, layout),
     dailyOverview,
+  });
+
+/** Merge into the latest profile so designing Home preserves other edits and visits. */
+export const updateHomePreferences = (
+  current: StoredProductPersonalization,
+  layout: PersonalizationLayout,
+  home: StoredHomePreferences,
+): StoredProductPersonalization =>
+  updateLayoutProfile(current, {
+    ...selectLayoutProfile(current, layout),
+    home,
   });
 
 export const recordRecentModule = (

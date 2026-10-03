@@ -93,6 +93,14 @@ before(async () => {
 
 beforeEach(async () => {
   await environment.clearFirestore();
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'users/owner-1/privacy/consent'), {
+      policyVersion: '2026-10-03.1',
+      cloudSync: true,
+      aiProcessing: true,
+      updatedAtMs: 1,
+    });
+  });
 });
 
 after(async () => {
@@ -201,6 +209,72 @@ test('Daily Overview preferences allow every presentation and require all cards 
   ]) {
     const invalid = layout({revision, savedAt: revision});
     invalid.value.dailyOverview = dailyOverview;
+    await assertFails(setDoc(reference, invalid));
+  }
+});
+
+test('Home preferences preserve ordered widgets and accept only presentation fields', async () => {
+  const database = environment.authenticatedContext('owner-1').firestore();
+  const reference = doc(
+    database,
+    'users/owner-1/productPersonalization/layout_phone',
+  );
+  const widgetOrder = [
+    'chat',
+    'daily-insulin',
+    'weekly-insulin',
+    'glucose-graph',
+    'time-in-range',
+    'weekly-glucose',
+  ];
+  const home = {
+    schemaVersion: 1,
+    mode: 'personal',
+    widgetOrder,
+    hiddenWidgets: ['time-in-range'],
+    glucoseWindowHours: 6,
+  };
+  let revision = 1;
+  for (const mode of ['personal', 'modules']) {
+    for (const glucoseWindowHours of [6, 12, 'full-day']) {
+      for (const hiddenWidgets of [[], ['chat'], widgetOrder]) {
+        const valid = layout({revision, savedAt: revision});
+        valid.value.home = {...home, mode, glucoseWindowHours, hiddenWidgets};
+        await assertSucceeds(setDoc(reference, valid));
+        revision += 1;
+      }
+    }
+  }
+  for (const invalidHome of [
+    null,
+    [],
+    {...home, schemaVersion: 2},
+    {...home, mode: 'unknown'},
+    {...home, widgetOrder: []},
+    {...home, widgetOrder: widgetOrder.slice(1)},
+    {...home, widgetOrder: [...widgetOrder.slice(1), 'daily-insulin']},
+    {...home, widgetOrder: [...widgetOrder.slice(1), 'unknown']},
+    {...home, widgetOrder: [...widgetOrder, 'chat']},
+    {...home, hiddenWidgets: null},
+    {...home, hiddenWidgets: 'chat'},
+    {...home, hiddenWidgets: ['chat', 'chat']},
+    {...home, hiddenWidgets: ['unknown']},
+    {...home, hiddenWidgets: [null]},
+    {...home, glucoseWindowHours: 3},
+    {...home, glucoseWindowHours: 24},
+    {...home, glucoseWindowHours: '6'},
+    {...home, dayStartMs: 123},
+    {...home, glucose: 120},
+    {...home, chat: {message: 'private'}},
+    {...home, apiKey: 'not-allowed'},
+    ...Object.keys(home).map(key =>
+      Object.fromEntries(
+        Object.entries(home).filter(([field]) => field !== key),
+      ),
+    ),
+  ]) {
+    const invalid = layout({revision, savedAt: revision});
+    invalid.value.home = invalidHome;
     await assertFails(setDoc(reference, invalid));
   }
 });

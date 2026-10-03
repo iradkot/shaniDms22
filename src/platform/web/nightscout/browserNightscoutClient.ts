@@ -25,6 +25,7 @@ export interface BrowserNightscoutStatus {
   readonly sourceId?: string;
   readonly workspaceId?: string;
   readonly displayLabel?: string;
+  readonly authType?: 'access-token' | 'legacy-api-secret';
 }
 
 export interface BrowserNightscoutRange<T> {
@@ -145,7 +146,8 @@ const sameNightscoutIdentity = (
 ): boolean =>
   left.configured === right.configured &&
   left.sourceId === right.sourceId &&
-  left.workspaceId === right.workspaceId;
+  left.workspaceId === right.workspaceId &&
+  left.authType === right.authType;
 
 export const activateBrowserNightscoutStatusMonitor = (
   options: BrowserNightscoutStatusMonitorOptions,
@@ -581,6 +583,7 @@ const decodeStatus = (value: unknown): BrowserNightscoutStatus => {
   const displayLabel = text(value.displayLabel, 160);
   return {
     configured: value.configured,
+    ...(value.authType === 'access-token' || value.authType === 'legacy-api-secret' ? {authType: value.authType} : {}),
     ...(sourceId === undefined ? {} : {sourceId}),
     ...(workspaceId === undefined ? {} : {workspaceId}),
     ...(displayLabel === undefined ? {} : {displayLabel}),
@@ -623,7 +626,7 @@ export class BrowserNightscoutClient {
     return decodeStatus(
       await api.requestJson('/v1/vault/nightscout/provision', {
         method: 'POST',
-        body: {version: 1, url: input.url, apiKey: input.apiKey},
+        body: {version: 1, url: input.url, apiKey: input.apiKey, authType: 'access-token'},
       }),
     );
   }

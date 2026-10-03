@@ -7,11 +7,15 @@ import {
   View,
 } from 'react-native';
 import type {
+  AlertRuleBounds,
   UpdateCenterItem,
   UpdateCenterRepository,
   UpdateDeepLinkDescriptor,
 } from '../../modules/alerts';
-import {isUpdateDeepLinkDescriptor} from '../../modules/alerts';
+import {
+  inferAlertRuleCondition,
+  isUpdateDeepLinkDescriptor,
+} from '../../modules/alerts';
 import type {DestinationLocale} from '../destinations';
 import {ProductPage, ProductSection, productUiTokens} from '../ui';
 
@@ -35,7 +39,11 @@ const COPY = {
     generated: 'Update',
     triggerFact:
       'The rule was recorded as triggered. Its glucose value and original notification text were not retained.',
-    occurrence: (value: number, low: number, high: number) =>
+    occurrenceBelow: (value: number, threshold: number) =>
+      `Observed ${value} mg/dL, below the configured ${threshold} mg/dL threshold.`,
+    occurrenceAbove: (value: number, threshold: number) =>
+      `Observed ${value} mg/dL, above the configured ${threshold} mg/dL threshold.`,
+    occurrenceRange: (value: number, low: number, high: number) =>
       `Observed ${value} mg/dL outside the configured ${low}–${high} mg/dL range.`,
     actionFailed: 'The read status could not be saved.',
   },
@@ -55,9 +63,12 @@ const COPY = {
     alert: 'התראה',
     reminder: 'תזכורת',
     generated: 'עדכון',
-    triggerFact:
-      'נשמר רק שהכלל הופעל. ערך הסוכר ותוכן ההתראה המקורי לא נשמרו.',
-    occurrence: (value: number, low: number, high: number) =>
+    triggerFact: 'נשמר רק שהכלל הופעל. ערך הסוכר ותוכן ההתראה המקורי לא נשמרו.',
+    occurrenceBelow: (value: number, threshold: number) =>
+      `נמדד ${value} mg/dL, מתחת לסף שהוגדר: ${threshold} mg/dL.`,
+    occurrenceAbove: (value: number, threshold: number) =>
+      `נמדד ${value} mg/dL, מעל לסף שהוגדר: ${threshold} mg/dL.`,
+    occurrenceRange: (value: number, low: number, high: number) =>
       `נמדד ${value} mg/dL מחוץ לטווח שהוגדר, ${low}–${high} mg/dL.`,
     actionFailed: 'לא הצלחנו לשמור את סטטוס הקריאה.',
   },
@@ -74,6 +85,26 @@ const defaultTimestampFormatter = (
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(timestampMs));
+
+const occurrenceBody = (
+  locale: DestinationLocale,
+  valueMgDl: number,
+  rule: AlertRuleBounds,
+): string => {
+  const copy = COPY[locale];
+  const condition = inferAlertRuleCondition(rule);
+  if (condition === 'below') {
+    return copy.occurrenceBelow(valueMgDl, rule.lowerBoundMgDl);
+  }
+  if (condition === 'above') {
+    return copy.occurrenceAbove(valueMgDl, rule.upperBoundMgDl);
+  }
+  return copy.occurrenceRange(
+    valueMgDl,
+    rule.lowerBoundMgDl,
+    rule.upperBoundMgDl,
+  );
+};
 
 export interface UpdateCenterViewProps {
   readonly locale: DestinationLocale;
@@ -93,10 +124,10 @@ const itemText = (
   if (item.content.kind === 'alert-rule-occurrence') {
     return {
       title: item.content.rule.name,
-      body: COPY[locale].occurrence(
+      body: occurrenceBody(
+        locale,
         item.content.observation.valueMgDl,
-        item.content.rule.lowerBoundMgDl,
-        item.content.rule.upperBoundMgDl,
+        item.content.rule,
       ),
     };
   }

@@ -1,3 +1,6 @@
+import {configureExperimentalBuildForTests} from './mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
@@ -44,5 +47,14 @@ describe('AI Home recommendation Workspace isolation', () => {
       text: 'Private recommendation for the first Workspace',
       generatedAt: 1_777_777,
     });
+  });
+
+  it('hides retained current advice on upgrade to pilot and blocks new writes', async () => {
+    const scope = scopeFor('https://first.example.com');
+    await saveAiHomeRecommendation(scope, {date: '2026-10-03', text: 'Previously saved current advice', generatedAt: 1_800_000});
+    globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
+    expect(await loadAiHomeRecommendation(scope)).toBeNull();
+    await expect(saveAiHomeRecommendation(scope, {date: '2026-10-03', text: 'New current advice', generatedAt: 1_800_001}))
+      .rejects.toMatchObject({name: 'ReleaseSafetyError'});
   });
 });

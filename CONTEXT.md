@@ -143,12 +143,20 @@ Another meal, carbohydrate treatment, rescue treatment, correction, activity, or
 _Avoid_: Invalid Event, Deleted Event
 
 **Hub**:
-The navigation surface from which a Product User opens Modules and directly launchable stable destinations through All Tools, with an optional Current Snapshot below the catalogue. It may be replaced as the normal start destination by user preference.
-_Avoid_: Home screen, Dashboard
+The home surface from which a Product User views their Personal Home or opens focused Modules through All Tools. The Product User can choose which home view opens by default or select a Module as their start destination.
+_Avoid_: Fixed dashboard
 
 **All Tools**:
 The app-style catalogue of Modules and directly launchable stable destinations, ordered alphabetically by their displayed names, with up to eight recently used destinations above it. Action categories and Favorites are optional filters; closing the filter returns to the full catalogue.
 _Avoid_: Mandatory category navigation, Dashboard
+
+**Personal Home**:
+A user-arranged collection of Home Widgets with live preview, optional cards, and a saved order for each Layout Profile. It keeps All Tools available and uses the active Workspace's data.
+_Avoid_: Medical record, Module Tile grid
+
+**Home Widget**:
+A compact factual view or entry point chosen for Personal Home, such as a glucose graph, daily insulin, weekly trends, or chat. It retains source coverage and missing-data distinctions and opens the owning Module for more detail.
+_Avoid_: Module Tile, Independent medical calculation
 
 **Current Snapshot**:
 An optional compact Hub preview containing current glucose, trend arrow, data age, IOB and COB when available, and a clear stale or offline state. It is hidden by default when onboarding is skipped and opens the Day Graph Module at the current point in time. It is not a mandatory or universally critical header and does not contain a mini-chart or AI recommendation.
@@ -179,12 +187,12 @@ Explicit permission for one Product User and Workspace to let one versioned Runt
 _Avoid_: Account permission, Credential delegation
 
 **Module Tile**:
-The compact All Tools control that opens a Module or directly launchable stable destination, showing only its icon and name, with an optional operational status dot. Its explanation and status remain available to assistive readers; it is distinct from a data preview.
+The compact All Tools control that opens a Module or directly launchable stable destination, showing only its icon and name, with an optional operational status dot. Its explanation and status remain available to assistive readers; it is distinct from a Home Widget containing factual data.
 _Avoid_: Widget, Dashboard card
 
 **Hub Customisation**:
-The discoverable V1 surface opened from a visible Hub action or by long-pressing a Module Tile. It edits the current Layout Profile, supports preview and reset, and does not require visiting Settings.
-_Avoid_: Hidden settings, Free-form dashboard builder
+The visible controls for selecting, arranging, previewing, and resetting Home Widgets, alongside the existing navigation and presentation preferences. Saving updates the current Layout Profile without storing medical data in presentation preferences.
+_Avoid_: Hidden settings
 
 **Diagnostics**:
 A developer-oriented Settings area that preserves technical exports and debugging information without exposing them in normal data, summary, or AI flows.

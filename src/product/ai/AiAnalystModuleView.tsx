@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,18 +8,25 @@ import {
   View,
 } from 'react-native';
 import {
-  AI_SPECIALIST_DEFINITIONS,
   getAiSpecialistDefinition,
   type AiConversationFocus,
   type AiConversationMessage,
   type AiConversationSummary,
   type AiLocale,
-  type AiSpecialistCategory,
-  type AiSpecialistDefinition,
   type AiSpecialistId,
 } from '../../modules/ai';
-import {ProductPage, ProductSection, productUiTokens} from '../ui';
+import {ProductPage, productUiTokens} from '../ui';
 import type {AiAnalystModuleRuntime} from './runtime';
+import {RecommendationLanding} from './RecommendationLanding';
+import {getReleaseSafetyPolicy, pilotAiNotice} from '../../modules/releaseSafety/policy';
+import {
+  RecommendationButton as ActionButton,
+  recommendationColors,
+} from './RecommendationControls';
+import {
+  PatientMemoryControl,
+  RecommendationFeedbackControl,
+} from './RecommendationPersonalization';
 
 const COPY = {
   en: {
@@ -39,8 +46,9 @@ const COPY = {
     disabledTitle: 'AI is turned off',
     disabledBody: 'You can enable it in Settings when you want to use it.',
     openSettings: 'Open AI settings',
-    context: 'Context in this conversation',
-    newConversation: 'AI menu',
+    context: 'What this recommendation is based on',
+    recommendationTitle: 'Your recommendation',
+    newConversation: 'Recommendations',
     placeholder: 'Ask about your data…',
     send: 'Send',
     attach: 'Add meal photo',
@@ -76,8 +84,9 @@ const COPY = {
     disabledTitle: 'ה־AI כבוי',
     disabledBody: 'אפשר להפעיל אותו בהגדרות כשרוצים להשתמש בו.',
     openSettings: 'פתיחת הגדרות AI',
-    context: 'ההקשר בשיחה הזו',
-    newConversation: 'תפריט AI',
+    context: 'על מה ההמלצה מבוססת',
+    recommendationTitle: 'ההמלצה שלכם',
+    newConversation: 'המלצות',
     placeholder: 'אפשר לשאול על הנתונים…',
     send: 'שליחה',
     attach: 'הוספת תמונת ארוחה',
@@ -99,13 +108,6 @@ const COPY = {
   },
 } as const;
 
-const group = (
-  category: AiSpecialistCategory,
-): readonly AiSpecialistDefinition[] =>
-  AI_SPECIALIST_DEFINITIONS.filter(
-    definition => definition.category === category,
-  );
-
 const focusKey = (focus: AiConversationFocus | undefined): string =>
   focus === undefined ? 'none' : JSON.stringify(focus);
 
@@ -123,195 +125,16 @@ const formatHistoryDate = (timestamp: number, locale: AiLocale): string =>
     minute: '2-digit',
   }).format(new Date(timestamp));
 
-const ActionButton = ({
-  label,
-  onPress,
-  testID,
-  secondary = false,
-  disabled = false,
-}: {
-  readonly label: string;
-  readonly onPress: () => void;
-  readonly testID?: string;
-  readonly secondary?: boolean;
-  readonly disabled?: boolean;
-}) => (
-  <Pressable
-    accessibilityRole="button"
-    accessibilityState={{disabled}}
-    disabled={disabled}
-    onPress={onPress}
-    style={({pressed}) => [
-      styles.actionButton,
-      secondary && styles.secondaryButton,
-      disabled && styles.disabled,
-      pressed && styles.pressed,
-    ]}
-    {...(testID === undefined ? {} : {testID})}>
-    <Text
-      style={[
-        styles.actionButtonText,
-        secondary && styles.secondaryButtonText,
-      ]}>
-      {label}
-    </Text>
-  </Pressable>
-);
-
-const SpecialistCard = ({
-  definition,
-  locale,
-  onPress,
-}: {
-  readonly definition: AiSpecialistDefinition;
-  readonly locale: AiLocale;
-  readonly onPress: () => void;
-}) => {
-  const rtl = locale === 'he';
-  const copy = definition.copy[locale];
-  const accent =
-    definition.id === 'hypo-investigation'
-      ? styles.accentRed
-      : definition.id === 'behavior-analysis'
-        ? styles.accentTeal
-        : definition.id === 'meal-analysis'
-          ? styles.accentOrange
-          : styles.accentBlue;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({pressed}) => [
-        styles.specialistCard,
-        accent,
-        pressed && styles.pressed,
-      ]}
-      testID={`ai-start-${definition.id}`}>
-      <Text style={[styles.specialistIcon, rtl && styles.rtlText]}>
-        {definition.id === 'hypo-investigation'
-          ? '↘'
-          : definition.id === 'behavior-analysis'
-            ? '◌'
-            : definition.id === 'meal-analysis'
-              ? '◒'
-              : '⌁'}
-      </Text>
-      <Text style={[styles.specialistTitle, rtl && styles.rtlText]}>
-        {copy.title}
-      </Text>
-      <Text style={[styles.specialistDescription, rtl && styles.rtlText]}>
-        {copy.description}
-      </Text>
-    </Pressable>
-  );
-};
-
-const Landing = ({
-  locale,
-  runtime,
-  focus,
-}: {
-  readonly locale: AiLocale;
-  readonly runtime: AiAnalystModuleRuntime;
-  readonly focus?: AiConversationFocus;
-}) => {
-  const copy = COPY[locale];
-  const rtl = locale === 'he';
-  const start = (specialist: AiSpecialistId): void =>
-    runRuntimeAction(() =>
-      runtime.start({
-        specialist,
-        locale,
-        ...(focus === undefined ? {} : {focus}),
-      }),
-    );
-  const general = getAiSpecialistDefinition('general-chat').copy[locale];
-  return (
-    <ProductPage
-      locale={locale}
-      subtitle={copy.subtitle}
-      testID="ai-analyst-module"
-      title={copy.title}>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => start('general-chat')}
-        style={({pressed}) => [
-          styles.generalCard,
-          pressed && styles.pressed,
-        ]}
-        testID="ai-start-general-chat">
-        <Text style={[styles.generalEyebrow, rtl && styles.rtlText]}>
-          {copy.chatEyebrow}
-        </Text>
-        <Text style={[styles.generalTitle, rtl && styles.rtlText]}>
-          ✦ {general.title}
-        </Text>
-        <Text style={[styles.generalDescription, rtl && styles.rtlText]}>
-          {general.description}
-        </Text>
-      </Pressable>
-
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => runRuntimeAction(runtime.openHistory)}
-        style={({pressed}) => [styles.historyCard, pressed && styles.pressed]}
-        testID="ai-open-history">
-        <Text style={[styles.historyTitle, rtl && styles.rtlText]}>
-          ◷ {copy.history}
-        </Text>
-        <Text style={[styles.historyDescription, rtl && styles.rtlText]}>
-          {copy.historyDescription}
-        </Text>
-      </Pressable>
-
-      <ActionButton
-        label={copy.settings}
-        onPress={runtime.openSettings}
-        secondary
-        testID="ai-open-settings-from-landing"
-      />
-
-      <ProductSection locale={locale} title={copy.investigations}>
-        <View
-          style={[styles.specialistGrid, rtl && styles.rowReverse]}
-          testID="ai-specialist-investigation-grid">
-          {group('investigation').map(definition => (
-            <SpecialistCard
-              definition={definition}
-              key={definition.id}
-              locale={locale}
-              onPress={() => start(definition.id)}
-            />
-          ))}
-        </View>
-      </ProductSection>
-
-      <ProductSection locale={locale} title={copy.improvements}>
-        <View style={[styles.specialistGrid, rtl && styles.rowReverse]}>
-          {group('improvement').map(definition => (
-            <SpecialistCard
-              definition={definition}
-              key={definition.id}
-              locale={locale}
-              onPress={() => start(definition.id)}
-            />
-          ))}
-        </View>
-      </ProductSection>
-
-      <Text style={[styles.advisory, rtl && styles.rtlText]}>
-        {copy.advisory}
-      </Text>
-    </ProductPage>
-  );
-};
-
 const MessageBubble = ({
   locale,
   message,
+  runtime,
+  messageIndex,
 }: {
   readonly locale: AiLocale;
   readonly message: AiConversationMessage;
+  readonly runtime?: AiAnalystModuleRuntime;
+  readonly messageIndex?: number;
 }) => {
   const rtl = locale === 'he';
   const copy = COPY[locale];
@@ -319,9 +142,7 @@ const MessageBubble = ({
     <View
       style={[
         styles.messageBubble,
-        message.role === 'user'
-          ? styles.userMessage
-          : styles.assistantMessage,
+        message.role === 'user' ? styles.userMessage : styles.assistantMessage,
       ]}>
       <Text style={[styles.messageRole, rtl && styles.rtlText]}>
         {message.role === 'user' ? copy.you : copy.assistant}
@@ -329,6 +150,14 @@ const MessageBubble = ({
       <Text selectable style={[styles.messageText, rtl && styles.rtlText]}>
         {message.content}
       </Text>
+      {message.role === 'assistant' && runtime && messageIndex !== undefined ? (
+        <RecommendationFeedbackControl
+          key={runtime.snapshot.recommendationContextKey}
+          locale={locale}
+          runtime={runtime}
+          messageIndex={messageIndex}
+        />
+      ) : null}
     </View>
   );
 };
@@ -343,15 +172,14 @@ const Conversation = ({
   const {snapshot} = runtime;
   const copy = COPY[locale];
   const rtl = locale === 'he';
-  const title = getAiSpecialistDefinition(snapshot.activeSpecialist).copy[
-    locale
-  ].title;
+  const [contextExpanded, setContextExpanded] = useState(false);
   return (
     <ProductPage
       locale={locale}
-      subtitle={copy.advisory}
+      subtitle={getReleaseSafetyPolicy().currentRecommendations ? copy.advisory : pilotAiNotice(locale)}
       testID="ai-conversation"
-      title={title}>
+      style={styles.page}
+      title={getReleaseSafetyPolicy().currentRecommendations ? copy.recommendationTitle : locale === 'he' ? 'ניתוח נתוני העבר' : 'Analysis of past data'}>
       <ActionButton
         label={copy.newConversation}
         onPress={runtime.openLanding}
@@ -360,12 +188,24 @@ const Conversation = ({
       />
       {snapshot.visibleContext ? (
         <View style={styles.contextCard} testID="ai-visible-context">
-          <Text style={[styles.contextLabel, rtl && styles.rtlText]}>
-            {copy.context}
-          </Text>
-          <Text style={[styles.contextText, rtl && styles.rtlText]}>
-            {snapshot.visibleContext}
-          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{expanded: contextExpanded}}
+            aria-expanded={contextExpanded}
+            onPress={() => setContextExpanded(!contextExpanded)}
+            style={styles.contextToggle}
+            testID="ai-context-toggle">
+            <Text style={[styles.contextLabel, rtl && styles.rtlText]}>
+              {copy.context} {contextExpanded ? '−' : '+'}
+            </Text>
+          </Pressable>
+          {contextExpanded ? (
+            <Text
+              selectable
+              style={[styles.contextText, rtl && styles.rtlText]}>
+              {snapshot.visibleContext}
+            </Text>
+          ) : null}
         </View>
       ) : null}
 
@@ -380,6 +220,8 @@ const Conversation = ({
             key={`${message.role}-${index}`}
             locale={locale}
             message={message}
+            runtime={runtime}
+            messageIndex={index}
           />
         ))}
       </View>
@@ -415,6 +257,8 @@ const Conversation = ({
       ) : null}
 
       <TextInput
+        accessibilityLabel={copy.placeholder}
+        testID="ai-composer-input"
         editable={!snapshot.busy}
         multiline
         onChangeText={runtime.setDraft}
@@ -445,6 +289,14 @@ const Conversation = ({
           />
         ) : null}
       </View>
+      {snapshot.memoryError ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={[styles.errorText, rtl && styles.rtlText]}>
+          {snapshot.memoryError}
+        </Text>
+      ) : null}
+      <PatientMemoryControl locale={locale} runtime={runtime} />
     </ProductPage>
   );
 };
@@ -535,10 +387,7 @@ const HistoryCard = ({
           onPress={onView}
           secondary
         />
-        <ActionButton
-          label={copy.continueConversation}
-          onPress={onContinue}
-        />
+        <ActionButton label={copy.continueConversation} onPress={onContinue} />
       </View>
     </View>
   );
@@ -575,9 +424,7 @@ const HistoryDetail = ({
         <ActionButton
           label={copy.continueConversation}
           onPress={() =>
-            runRuntimeAction(() =>
-              runtime.resumeConversation(conversation.id),
-            )
+            runRuntimeAction(() => runtime.resumeConversation(conversation.id))
           }
           testID="ai-history-resume"
         />
@@ -589,9 +436,7 @@ const HistoryDetail = ({
         <ActionButton
           label={copy.deleteConversation}
           onPress={() =>
-            runRuntimeAction(() =>
-              runtime.deleteConversation(conversation.id),
-            )
+            runRuntimeAction(() => runtime.deleteConversation(conversation.id))
           }
           secondary
           testID="ai-history-delete"
@@ -689,7 +534,7 @@ export const AiAnalystModuleView = ({
   switch (runtime.snapshot.surface.kind) {
     case 'landing':
       return (
-        <Landing
+        <RecommendationLanding
           locale={locale}
           runtime={runtime}
           {...(focus === undefined ? {} : {focus})}
@@ -715,124 +560,47 @@ export const AiAnalystModuleView = ({
 };
 
 const styles = StyleSheet.create({
+  page: {backgroundColor: recommendationColors.page},
   rtlText: {textAlign: 'right', writingDirection: 'rtl'},
   rtlInput: {textAlign: 'right', writingDirection: 'rtl'},
   rowReverse: {flexDirection: 'row-reverse'},
   pressed: {opacity: productUiTokens.opacity.pressed},
   disabled: {opacity: productUiTokens.opacity.disabled},
-  generalCard: {
-    backgroundColor: '#5B4BE0',
-    borderRadius: productUiTokens.radii.featuredCard,
-    marginTop: productUiTokens.spacing.lg,
-    padding: productUiTokens.spacing.xl,
-  },
-  generalEyebrow: {
-    color: '#DCD8FF',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  generalTitle: {
-    color: '#FFFFFF',
-    fontSize: 23,
-    fontWeight: '800',
-    marginTop: productUiTokens.spacing.sm,
-  },
-  generalDescription: {
-    color: '#F0EEFF',
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: productUiTokens.spacing.sm,
-  },
-  historyCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D9D4FF',
-    borderRadius: productUiTokens.radii.card,
-    borderWidth: 1,
-    marginTop: productUiTokens.spacing.md,
-    padding: productUiTokens.spacing.lg,
-  },
-  historyTitle: {color: '#4637B9', fontSize: 16, fontWeight: '800'},
-  historyDescription: {
-    color: productUiTokens.colors.textMuted,
-    fontSize: 12,
-    marginTop: productUiTokens.spacing.xs,
-  },
-  specialistGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: productUiTokens.spacing.md,
-  },
-  specialistCard: {
-    borderRadius: productUiTokens.radii.card,
-    borderStartWidth: 4,
-    minHeight: 142,
-    padding: productUiTokens.spacing.lg,
-    width: productUiTokens.layout.twoColumnItemWidth,
-  },
-  accentRed: {backgroundColor: '#FCEBEF', borderStartColor: '#C84D6B'},
-  accentTeal: {backgroundColor: '#E6F6F3', borderStartColor: '#278F82'},
-  accentOrange: {backgroundColor: '#FFF1E3', borderStartColor: '#D97828'},
-  accentBlue: {backgroundColor: '#E7F1FA', borderStartColor: '#1769AA'},
-  specialistIcon: {color: productUiTokens.colors.text, fontSize: 24},
-  specialistTitle: {
-    color: productUiTokens.colors.text,
-    fontSize: 15,
-    fontWeight: '800',
-    marginTop: productUiTokens.spacing.sm,
-  },
-  specialistDescription: {
-    color: productUiTokens.colors.textMuted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: productUiTokens.spacing.xs,
-  },
   advisory: {
     color: productUiTokens.colors.textMuted,
     fontSize: 12,
     lineHeight: 18,
     marginTop: productUiTokens.spacing.lg,
   },
-  actionButton: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: productUiTokens.colors.action,
-    borderColor: productUiTokens.colors.action,
-    borderRadius: productUiTokens.radii.pill,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 42,
-    paddingHorizontal: productUiTokens.spacing.lg,
-    paddingVertical: productUiTokens.spacing.sm,
-  },
-  actionButtonText: {
-    color: productUiTokens.colors.actionText,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  secondaryButton: {backgroundColor: 'transparent'},
-  secondaryButtonText: {color: productUiTokens.colors.action},
   contextCard: {
-    backgroundColor: '#EEEAFE',
+    backgroundColor: '#E7F0E7',
     borderRadius: productUiTokens.radii.card,
     marginTop: productUiTokens.spacing.lg,
     padding: productUiTokens.spacing.lg,
   },
-  contextLabel: {color: '#4637B9', fontSize: 12, fontWeight: '800'},
+  contextToggle: {minHeight: 44, justifyContent: 'center'},
+  contextLabel: {color: '#116B60', fontSize: 13, fontWeight: '700'},
   contextText: {
     color: productUiTokens.colors.text,
     lineHeight: 20,
     marginTop: productUiTokens.spacing.xs,
   },
-  messages: {gap: productUiTokens.spacing.md, marginTop: productUiTokens.spacing.lg},
+  messages: {
+    gap: productUiTokens.spacing.md,
+    marginTop: productUiTokens.spacing.lg,
+  },
   messageBubble: {
     borderRadius: productUiTokens.radii.card,
     padding: productUiTokens.spacing.lg,
   },
-  userMessage: {backgroundColor: '#E7F1FA', marginStart: '12%'},
-  assistantMessage: {backgroundColor: '#FFFFFF', marginEnd: '6%'},
+  userMessage: {backgroundColor: '#E7F0E7', marginStart: '8%'},
+  assistantMessage: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D5E5DF',
+    borderWidth: 1,
+  },
   messageRole: {
-    color: productUiTokens.colors.action,
+    color: recommendationColors.teal,
     fontSize: 11,
     fontWeight: '800',
   },
@@ -900,7 +668,11 @@ const styles = StyleSheet.create({
     marginTop: productUiTokens.spacing.md,
     padding: productUiTokens.spacing.lg,
   },
-  savedTitle: {color: productUiTokens.colors.text, fontSize: 16, fontWeight: '800'},
+  savedTitle: {
+    color: productUiTokens.colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+  },
   savedMeta: {
     color: productUiTokens.colors.textMuted,
     fontSize: 12,

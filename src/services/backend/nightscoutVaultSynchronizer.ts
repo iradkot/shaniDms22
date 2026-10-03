@@ -12,6 +12,7 @@ export interface NightscoutVaultAuthSession {
 export interface NightscoutVaultProfileSecret {
   readonly baseUrl: string;
   readonly apiSecretSha1: string;
+  readonly accessToken?: string;
 }
 
 export interface NightscoutVaultActiveProfileReader {

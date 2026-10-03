@@ -1,3 +1,4 @@
+import {guardPrivacyCloudGateway} from '../../../modules/privacy/cloudGateway';
 import {getApp} from '@react-native-firebase/app';
 import {
   doc,
@@ -11,7 +12,7 @@ import type {PersonalizationFirestoreGateway} from './firebaseProductPersonaliza
 export const createReactNativeFirebasePersonalizationGateway =
   (): PersonalizationFirestoreGateway => {
     const firestore = getFirestore(getApp());
-    return {
+    return guardPrivacyCloudGateway({
       async get(documentPath) {
         const snapshot = await getDoc(doc(firestore, documentPath));
         const data = snapshot.data();
@@ -36,5 +37,5 @@ export const createReactNativeFirebasePersonalizationGateway =
             },
           }),
         ),
-    };
+    });
   };

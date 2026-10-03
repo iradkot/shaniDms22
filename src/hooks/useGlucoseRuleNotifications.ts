@@ -1,17 +1,20 @@
 import {useEffect, useRef} from 'react';
 import notifee, {AndroidImportance} from '@notifee/react-native';
 
-import {getNotificationRules, markNotificationRuleCalled} from 'app/services/notifications/localNotificationsStore';
+import {
+  getNotificationRules,
+  markNotificationRuleCalled,
+} from 'app/services/notifications/localNotificationsStore';
 import {isRuleSnoozed} from 'app/services/notifications/snoozeStore';
 import type {NotificationStoreScope} from 'app/services/notifications/localNotificationsStore';
 import {evaluateAlertRule} from 'app/modules/alerts';
 import type {AlertRule, AlertRuleTrend} from 'app/modules/alerts';
+import type {AlertDeliveryMode} from 'app/modules/alerts';
 import {
   decodeLegacyAlertRule,
   type NativeUpdateCenterRepository,
 } from 'app/platform/native/alerts/localNotificationRepositories';
 
-const CHANNEL_ID = 'glucose-rule-alerts';
 const RULE_COOLDOWN_MS = 20 * 60 * 1000;
 const MAX_ALERT_SAMPLE_AGE_MS = 10 * 60 * 1000;
 const MAX_ALERT_SAMPLE_FUTURE_SKEW_MS = 2 * 60 * 1000;
@@ -50,14 +53,15 @@ const extractNotificationSample = (
   };
 };
 
-const OBSERVATION_TRENDS: Readonly<Record<string, AlertRuleTrend | undefined>> = {
-  DoubleDown: 'double-down',
-  SingleDown: 'single-down',
-  FortyFiveDown: 'forty-five-down',
-  FortyFiveUp: 'forty-five-up',
-  SingleUp: 'single-up',
-  DoubleUp: 'double-up',
-};
+const OBSERVATION_TRENDS: Readonly<Record<string, AlertRuleTrend | undefined>> =
+  {
+    DoubleDown: 'double-down',
+    SingleDown: 'single-down',
+    FortyFiveDown: 'forty-five-down',
+    FortyFiveUp: 'forty-five-up',
+    SingleUp: 'single-up',
+    DoubleUp: 'double-up',
+  };
 
 const DIRECTION_SYMBOLS: Readonly<Record<string, string>> = {
   DoubleDown: '↓↓',
@@ -71,23 +75,46 @@ const DIRECTION_SYMBOLS: Readonly<Record<string, string>> = {
 
 const NOTIFICATION_COPY = {
   en: {
-    channel: 'Glucose alerts',
+    channels: {
+      'sound-and-vibrate': 'Glucose alerts · sound and vibration',
+      'vibrate-only': 'Glucose alerts · vibration only',
+      silent: 'Glucose alerts · silent',
+    },
     title: 'Glucose alert',
     snooze: (minutes: number) => `Snooze ${minutes}m`,
   },
   he: {
-    channel: 'התראות סוכר',
+    channels: {
+      'sound-and-vibrate': 'התראות סוכר · צליל ורטט',
+      'vibrate-only': 'התראות סוכר · רטט בלבד',
+      silent: 'התראות סוכר · שקט',
+    },
     title: 'התראת סוכר',
     snooze: (minutes: number) => `נודניק ${minutes} דקות`,
   },
 } as const;
 
-async function ensureChannel(locale: 'en' | 'he') {
+const CHANNEL_IDS: Readonly<Record<AlertDeliveryMode, string>> = {
+  'sound-and-vibrate': 'glucose-rule-alerts-sound-v2',
+  'vibrate-only': 'glucose-rule-alerts-vibrate-v2',
+  silent: 'glucose-rule-alerts-silent-v2',
+};
+
+async function ensureChannel(
+  locale: 'en' | 'he',
+  deliveryMode: AlertDeliveryMode,
+) {
+  const audible = deliveryMode === 'sound-and-vibrate';
+  const vibrates = deliveryMode !== 'silent';
   await notifee.createChannel({
-    id: CHANNEL_ID,
-    name: NOTIFICATION_COPY[locale].channel,
+    id: CHANNEL_IDS[deliveryMode],
+    name: NOTIFICATION_COPY[locale].channels[deliveryMode],
     importance: AndroidImportance.HIGH,
+    vibration: vibrates,
+    ...(vibrates ? {vibrationPattern: [300, 500]} : {}),
+    ...(audible ? {sound: 'default'} : {}),
   });
+  return CHANNEL_IDS[deliveryMode];
 }
 
 export function useGlucoseRuleNotifications(
@@ -95,11 +122,18 @@ export function useGlucoseRuleNotifications(
   workspaceScopeId?: string,
   updateCenterRepository?: Pick<NativeUpdateCenterRepository, 'append'>,
   locale: 'en' | 'he' = 'en',
+  deliveryMode: AlertDeliveryMode = 'sound-and-vibrate',
 ) {
   const lastSampleRef = useRef<string | null>(null);
+  const deliveryModeRef = useRef(deliveryMode);
+  const localeRef = useRef(locale);
+  deliveryModeRef.current = deliveryMode;
+  localeRef.current = locale;
 
   useEffect(() => {
     let active = true;
+    let claimedSampleIdentity: string | undefined;
+    let completed = false;
     const run = async () => {
       const sample = extractNotificationSample(latestSnapshot);
       if (
@@ -123,15 +157,15 @@ export function useGlucoseRuleNotifications(
         return;
       }
       lastSampleRef.current = sampleIdentity;
+      claimedSampleIdentity = sampleIdentity;
 
       const scope: NotificationStoreScope = {scopeId: workspaceScopeId};
       const rules = await getNotificationRules(scope);
-      if (!active || !rules.length) {
+      if (!active) {
         return;
       }
-
-      await ensureChannel(locale);
-      if (!active) {
+      if (!rules.length) {
+        completed = true;
         return;
       }
 
@@ -212,7 +246,14 @@ export function useGlucoseRuleNotifications(
           return;
         }
 
-        const copy = NOTIFICATION_COPY[locale];
+        const activeDeliveryMode = deliveryModeRef.current;
+        const activeLocale = localeRef.current;
+        const channelId = await ensureChannel(activeLocale, activeDeliveryMode);
+        if (!active) {
+          return;
+        }
+
+        const copy = NOTIFICATION_COPY[activeLocale];
         const direction =
           sample.direction === undefined
             ? '—'
@@ -224,9 +265,12 @@ export function useGlucoseRuleNotifications(
           title: copy.title,
           body,
           android: {
-            channelId: CHANNEL_ID,
+            channelId,
             smallIcon: 'ic_launcher',
             importance: AndroidImportance.HIGH,
+            ...(activeDeliveryMode === 'sound-and-vibrate'
+              ? {sound: 'default'}
+              : {}),
             pressAction: {id: 'default'},
             actions: [
               {title: copy.snooze(10), pressAction: {id: 'snooze_10'}},
@@ -234,6 +278,9 @@ export function useGlucoseRuleNotifications(
               {title: copy.snooze(30), pressAction: {id: 'snooze_30'}},
             ],
           },
+          ...(activeDeliveryMode === 'sound-and-vibrate'
+            ? {ios: {sound: 'default'}}
+            : {}),
           data: {
             source: 'rule_based',
             ruleId,
@@ -247,6 +294,7 @@ export function useGlucoseRuleNotifications(
         }
         await markNotificationRuleCalled(ruleId, nowMs, scope);
       }
+      completed = true;
     };
 
     run().catch(err => {
@@ -254,6 +302,13 @@ export function useGlucoseRuleNotifications(
     });
     return () => {
       active = false;
+      if (
+        !completed &&
+        claimedSampleIdentity !== undefined &&
+        lastSampleRef.current === claimedSampleIdentity
+      ) {
+        lastSampleRef.current = null;
+      }
     };
-  }, [latestSnapshot, locale, updateCenterRepository, workspaceScopeId]);
+  }, [latestSnapshot, updateCenterRepository, workspaceScopeId]);
 }

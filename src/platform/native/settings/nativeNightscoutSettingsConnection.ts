@@ -12,7 +12,7 @@ export const createNativeNightscoutSettingsConnection = ({
   recovery,
 }: {
   readonly sourceKey: string;
-  readonly profile: {readonly id: string; readonly baseUrl: string} | null;
+  readonly profile: {readonly id: string; readonly baseUrl: string; readonly authType?: 'access-token'} | null;
   readonly isLoaded: boolean;
   readonly snapshot: LatestNightscoutSnapshotState;
   readonly testProfileConnection: NightscoutConfigContextValue['testProfileConnection'];
@@ -39,6 +39,7 @@ export const createNativeNightscoutSettingsConnection = ({
       : undefined;
   return {
     sourceKey,
+    ...(profile ? {credentialKind: profile.authType === 'access-token' ? 'access-token' as const : 'legacy-api-secret' as const} : {}),
     status: !profile
       ? 'not-configured'
       : !isLoaded

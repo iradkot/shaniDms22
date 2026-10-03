@@ -8,6 +8,32 @@ const USER_ID = 'firebase-user-a';
 const SECRET = 'a'.repeat(40);
 
 describe('native Nightscout vault client', () => {
+  it('provisions a raw subject token without SHA1 conversion', async () => {
+    const requestJson = jest
+      .fn()
+      .mockResolvedValue({
+        version: 1,
+        configured: true,
+        sourceId: 'source',
+        workspaceId: 'workspace',
+      });
+    const accessToken = 'shani-0123456789abcdef';
+    await createNativeNightscoutVaultClient({api: {requestJson}}).provision(
+      {baseUrl: 'https://ns.example', apiSecretSha1: '', accessToken},
+      USER_ID,
+    );
+    expect(requestJson).toHaveBeenCalledWith(
+      '/v1/vault/nightscout/provision',
+      expect.objectContaining({
+        body: {
+          version: 1,
+          url: 'https://ns.example',
+          apiKey: accessToken,
+          authType: 'access-token',
+        },
+      }),
+    );
+  });
   it('sends the credential only in the authenticated provision request body', async () => {
     const requestJson = jest.fn().mockResolvedValue({
       version: 1,
@@ -22,18 +48,16 @@ describe('native Nightscout vault client', () => {
       USER_ID,
     );
 
-    expect(requestJson).toHaveBeenCalledWith(
-      '/v1/vault/nightscout/provision',
-      {
-        method: 'POST',
-        expectedUserId: USER_ID,
-        body: {
-          version: 1,
-          url: 'https://nightscout.example',
-          apiKey: SECRET,
-        },
+    expect(requestJson).toHaveBeenCalledWith('/v1/vault/nightscout/provision', {
+      method: 'POST',
+      expectedUserId: USER_ID,
+      body: {
+        version: 1,
+        url: 'https://nightscout.example',
+        apiKey: SECRET,
+        authType: 'legacy-api-secret',
       },
-    );
+    });
   });
 
   it('removes through the owner-bound endpoint and rejects malformed confirmation', async () => {
@@ -46,14 +70,11 @@ describe('native Nightscout vault client', () => {
     await expect(client.remove(USER_ID)).rejects.toThrow(
       'did not confirm credential removal',
     );
-    expect(requestJson).toHaveBeenCalledWith(
-      '/v1/vault/nightscout/remove',
-      {
-        method: 'POST',
-        expectedUserId: USER_ID,
-        body: {version: 1},
-      },
-    );
+    expect(requestJson).toHaveBeenCalledWith('/v1/vault/nightscout/remove', {
+      method: 'POST',
+      expectedUserId: USER_ID,
+      body: {version: 1},
+    });
   });
 
   it('rejects an absent or changed Firebase session before network I/O', async () => {

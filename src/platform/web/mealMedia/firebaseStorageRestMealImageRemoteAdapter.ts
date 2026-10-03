@@ -1,3 +1,4 @@
+import {capturePrivacyAuthorization} from '../../../modules/privacy';
 import {
   MEAL_IMAGE_MAX_BYTES,
   type MealImageRemoteAdapter,
@@ -173,6 +174,10 @@ export const createFirebaseStorageRestMealImageRemoteAdapter = (input: {
     url: string,
     init: RequestInit = {},
   ): Promise<Response> => {
+    const authorize = capturePrivacyAuthorization(
+      'cloud',
+      input.scope.productUserId,
+    );
     const token = await input.auth.getIdToken();
     const controller = new AbortController();
     const timeout = setTimeout(
@@ -180,7 +185,8 @@ export const createFirebaseStorageRestMealImageRemoteAdapter = (input: {
       input.timeoutMs ?? 30_000,
     );
     try {
-      return await request(url, {
+      authorize();
+      const response = await request(url, {
         ...init,
         headers: {
           Authorization: `Firebase ${token}`,
@@ -188,6 +194,8 @@ export const createFirebaseStorageRestMealImageRemoteAdapter = (input: {
         },
         signal: controller.signal,
       });
+      authorize();
+      return response;
     } catch (error) {
       throw new BrowserStorageError(
         controller.signal.aborted ? 408 : 0,

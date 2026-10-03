@@ -4,6 +4,7 @@ export interface WebRuntimeConfigInput {
   readonly firebaseStorageBucket?: unknown;
   readonly googleClientId?: unknown;
   readonly apiBaseUrl?: unknown;
+  readonly firestoreRulesSchemaVersion?: unknown;
 }
 
 export interface WebRuntimeConfig {
@@ -12,6 +13,7 @@ export interface WebRuntimeConfig {
   readonly firebaseStorageBucket: string;
   readonly googleClientId: string;
   readonly apiBaseUrl: string;
+  readonly firestoreRulesSchemaVersion?: number;
 }
 
 const requiredText = (
@@ -88,6 +90,15 @@ export const parseWebRuntimeConfig = (
     throw new Error('Google web client ID is invalid.');
   }
   return {
+    ...(input.firestoreRulesSchemaVersion === undefined
+      ? {}
+      : {
+          firestoreRulesSchemaVersion:
+            Number.isSafeInteger(Number(input.firestoreRulesSchemaVersion)) &&
+            Number(input.firestoreRulesSchemaVersion) >= 0
+              ? Number(input.firestoreRulesSchemaVersion)
+              : 0,
+        }),
     firebaseApiKey: requiredText(
       input.firebaseApiKey,
       'Firebase web API key',

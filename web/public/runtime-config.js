@@ -10,4 +10,5 @@ globalThis.__SHANI_WEB_CONFIG__ = {
   // firebaseStorageBucket: 'public Firebase Storage bucket',
   // googleClientId: 'public Google OAuth Web client ID',
   // apiBaseUrl: 'https://public-api-origin.example/shaniApi',
+  // firestoreRulesSchemaVersion: 2, // Only after deployed privacy rules pass verification.
 };

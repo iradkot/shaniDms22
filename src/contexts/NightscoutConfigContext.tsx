@@ -1,3 +1,4 @@
+import {normalizeNightscoutAccessToken} from 'app/services/nightscoutTokenPermissions';
 import React, {
   createContext,
   useCallback,
@@ -12,7 +13,6 @@ import {
   countRecoverableLegacyNightscoutProfiles,
   labelFromNightscoutBaseUrl,
   loadNightscoutProfiles,
-  normalizeNightscoutApiSecretToSha1,
   normalizeNightscoutUrl,
   persistNightscoutProfiles,
   recoverLegacyNightscoutProfiles,
@@ -20,7 +20,8 @@ import {
 } from 'app/services/nightscoutProfiles';
 import {
   clearNightscoutInstance,
-  configureNightscoutInstance,
+  configureNightscoutInstance as configureNightscoutTransport,
+  type NightscoutAxiosConfig,
 } from 'app/api/shaniNightscoutInstances';
 import {configureAndroidWidgetBackgroundSync} from 'app/services/androidGlucoseLiveSurface';
 import {
@@ -36,6 +37,15 @@ import type {
   NightscoutVaultSyncSnapshot,
   NightscoutVaultSynchronizer,
 } from 'app/services/backend/nightscoutVaultSynchronizer';
+
+const configureNightscoutInstance = (config: NightscoutAxiosConfig) => {
+  if (!config.accessToken && !config.apiSecretSha1) {
+    // A missing secure credential must not fall back to a publicly readable source.
+    clearNightscoutInstance();
+    return;
+  }
+  configureNightscoutTransport(config);
+};
 
 export type NightscoutConfigContextValue = {
   profiles: NightscoutProfile[];
@@ -203,11 +213,13 @@ export const NightscoutConfigProvider = ({
             configureNightscoutInstance({
               baseUrl: active.baseUrl,
               apiSecretSha1: active.apiSecretSha1,
+              ...(active.accessToken ? {accessToken: active.accessToken} : {}),
               ownerUserId,
             });
             configureAndroidWidgetBackgroundSync({
               baseUrl: active.baseUrl,
               apiSecretSha1: active.apiSecretSha1,
+              ...(active.accessToken ? {accessToken: active.accessToken} : {}),
               enabled: true,
             });
           }
@@ -285,13 +297,14 @@ export const NightscoutConfigProvider = ({
         ? profilesRef.current.find(profile => profile.id === params.profileId)
         : null;
       const secretTrimmed = (params.secretInput ?? '').trim();
-      const apiSecretSha1 = secretTrimmed
-        ? normalizeNightscoutApiSecretToSha1(secretTrimmed)
-        : existingProfile?.apiSecretSha1 ?? null;
-      if (!apiSecretSha1) {
-        throw new Error('Please enter your Nightscout API secret/token.');
+      const accessToken = secretTrimmed
+        ? normalizeNightscoutAccessToken(secretTrimmed)
+        : existingProfile?.accessToken;
+      const apiSecretSha1 = secretTrimmed ? '' : existingProfile?.apiSecretSha1 ?? '';
+      if (!accessToken && (!apiSecretSha1 || normalizedUrl !== existingProfile?.baseUrl)) {
+        throw new Error('Enter a Nightscout access token with only the readable role. Do not enter the master API_SECRET.');
       }
-      return {normalizedUrl, apiSecretSha1};
+      return {normalizedUrl, apiSecretSha1, ...(accessToken ? {accessToken} : {})};
     },
     [],
   );
@@ -305,8 +318,13 @@ export const NightscoutConfigProvider = ({
       if (ownerUserIdRef.current !== ownerUserId) {
         throw new Error('The signed-in account changed before testing.');
       }
-      const {normalizedUrl, apiSecretSha1} = resolveConnectionInputs(params);
-      return testNightscoutConnection({baseUrl: normalizedUrl, apiSecretSha1});
+      const testRevision = ownerSessionRevisionRef.current;
+      const {normalizedUrl, ...credential} = resolveConnectionInputs(params);
+      const result = await testNightscoutConnection({baseUrl: normalizedUrl, ...credential});
+      if (ownerUserIdRef.current !== ownerUserId || ownerSessionRevisionRef.current !== testRevision) {
+        throw new Error('The signed-in account changed before testing completed.');
+      }
+      return result;
     },
     [ownerUserId, resolveConnectionInputs],
   );
@@ -314,19 +332,20 @@ export const NightscoutConfigProvider = ({
   const addProfile = useCallback(
     (params: {urlInput: string; secretInput: string}) => {
       const mutationOwnerUserId = ownerUserId;
+      const mutationSessionRevision = ownerSessionRevisionRef.current;
       return serializeMutation(async () => {
-        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+        if (ownerUserIdRef.current !== mutationOwnerUserId || ownerSessionRevisionRef.current !== mutationSessionRevision) {
           throw new Error('The signed-in account changed before saving.');
         }
-        const {normalizedUrl, apiSecretSha1} = resolveConnectionInputs(params);
-        await testNightscoutConnection({baseUrl: normalizedUrl, apiSecretSha1});
-        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+        const {normalizedUrl, ...credential} = resolveConnectionInputs(params);
+        await testNightscoutConnection({baseUrl: normalizedUrl, ...credential});
+        if (ownerUserIdRef.current !== mutationOwnerUserId || ownerSessionRevisionRef.current !== mutationSessionRevision) {
           throw new Error('The signed-in account changed before saving.');
         }
 
         const profile = createNightscoutProfile({
           baseUrl: normalizedUrl,
-          apiSecretSha1,
+          ...credential,
         });
 
         const nextProfiles = [profile, ...profilesRef.current];
@@ -338,11 +357,13 @@ export const NightscoutConfigProvider = ({
         configureNightscoutInstance({
           baseUrl: profile.baseUrl,
           apiSecretSha1: profile.apiSecretSha1,
+          ...(profile.accessToken ? {accessToken: profile.accessToken} : {}),
           ownerUserId: mutationOwnerUserId,
         });
         configureAndroidWidgetBackgroundSync({
           baseUrl: profile.baseUrl,
           apiSecretSha1: profile.apiSecretSha1,
+          ...(profile.accessToken ? {accessToken: profile.accessToken} : {}),
           enabled: true,
         });
         await persistNightscoutProfiles(
@@ -350,7 +371,7 @@ export const NightscoutConfigProvider = ({
           profile.id,
           mutationOwnerUserId,
         );
-        if (ownerUserIdRef.current === mutationOwnerUserId) {
+        if (ownerUserIdRef.current === mutationOwnerUserId && ownerSessionRevisionRef.current === mutationSessionRevision) {
           await vaultSynchronizer.requestReconciliation('provision');
         }
       });
@@ -366,8 +387,9 @@ export const NightscoutConfigProvider = ({
   const setActiveProfileId = useCallback(
     (id: string) => {
       const mutationOwnerUserId = ownerUserId;
+      const mutationSessionRevision = ownerSessionRevisionRef.current;
       return serializeMutation(async () => {
-        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+        if (ownerUserIdRef.current !== mutationOwnerUserId || ownerSessionRevisionRef.current !== mutationSessionRevision) {
           throw new Error('The signed-in account changed before saving.');
         }
         const currentProfiles = profilesRef.current;
@@ -381,11 +403,13 @@ export const NightscoutConfigProvider = ({
         configureNightscoutInstance({
           baseUrl: nextActive.baseUrl,
           apiSecretSha1: nextActive.apiSecretSha1,
+          ...(nextActive.accessToken ? {accessToken: nextActive.accessToken} : {}),
           ownerUserId: mutationOwnerUserId,
         });
         configureAndroidWidgetBackgroundSync({
           baseUrl: nextActive.baseUrl,
           apiSecretSha1: nextActive.apiSecretSha1,
+          ...(nextActive.accessToken ? {accessToken: nextActive.accessToken} : {}),
           enabled: true,
         });
         await persistNightscoutProfiles(
@@ -393,7 +417,7 @@ export const NightscoutConfigProvider = ({
           id,
           mutationOwnerUserId,
         );
-        if (ownerUserIdRef.current === mutationOwnerUserId) {
+        if (ownerUserIdRef.current === mutationOwnerUserId && ownerSessionRevisionRef.current === mutationSessionRevision) {
           await vaultSynchronizer.requestReconciliation('provision');
         }
       });
@@ -404,15 +428,15 @@ export const NightscoutConfigProvider = ({
   const updateProfile = useCallback(
     (params: {profileId: string; urlInput: string; secretInput?: string}) => {
       const mutationOwnerUserId = ownerUserId;
+      const mutationSessionRevision = ownerSessionRevisionRef.current;
       return serializeMutation(async () => {
-        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+        if (ownerUserIdRef.current !== mutationOwnerUserId || ownerSessionRevisionRef.current !== mutationSessionRevision) {
           throw new Error('The signed-in account changed before saving.');
         }
-        const {normalizedUrl, apiSecretSha1} = resolveConnectionInputs(params);
+        const {normalizedUrl, ...credential} = resolveConnectionInputs(params);
         const secretTrimmed = (params.secretInput ?? '').trim();
-        const nextSecretSha1 = secretTrimmed ? apiSecretSha1 : null;
-        await testNightscoutConnection({baseUrl: normalizedUrl, apiSecretSha1});
-        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+        await testNightscoutConnection({baseUrl: normalizedUrl, ...credential});
+        if (ownerUserIdRef.current !== mutationOwnerUserId || ownerSessionRevisionRef.current !== mutationSessionRevision) {
           throw new Error('The signed-in account changed before saving.');
         }
 
@@ -431,7 +455,11 @@ export const NightscoutConfigProvider = ({
             ...p,
             baseUrl: normalizedUrl,
             label,
-            apiSecretSha1: nextSecretSha1 ?? p.apiSecretSha1,
+            ...(secretTrimmed ? {
+              apiSecretSha1: '',
+              accessToken: credential.accessToken,
+              authType: 'access-token' as const,
+            } : {}),
           };
         });
 
@@ -446,11 +474,13 @@ export const NightscoutConfigProvider = ({
           configureNightscoutInstance({
             baseUrl: updatedActive.baseUrl,
             apiSecretSha1: updatedActive.apiSecretSha1,
+            ...(updatedActive.accessToken ? {accessToken: updatedActive.accessToken} : {}),
             ownerUserId: mutationOwnerUserId,
           });
           configureAndroidWidgetBackgroundSync({
             baseUrl: updatedActive.baseUrl,
             apiSecretSha1: updatedActive.apiSecretSha1,
+            ...(updatedActive.accessToken ? {accessToken: updatedActive.accessToken} : {}),
             enabled: true,
           });
         }
@@ -460,7 +490,7 @@ export const NightscoutConfigProvider = ({
           currentActiveProfileId,
           mutationOwnerUserId,
         );
-        if (ownerUserIdRef.current === mutationOwnerUserId) {
+        if (ownerUserIdRef.current === mutationOwnerUserId && ownerSessionRevisionRef.current === mutationSessionRevision) {
           await vaultSynchronizer.requestReconciliation('provision');
         }
       });
@@ -476,8 +506,9 @@ export const NightscoutConfigProvider = ({
   const deleteProfile = useCallback(
     (profileId: string) => {
       const mutationOwnerUserId = ownerUserId;
+      const mutationSessionRevision = ownerSessionRevisionRef.current;
       return serializeMutation(async () => {
-        if (ownerUserIdRef.current !== mutationOwnerUserId) {
+        if (ownerUserIdRef.current !== mutationOwnerUserId || ownerSessionRevisionRef.current !== mutationSessionRevision) {
           throw new Error('The signed-in account changed before saving.');
         }
         const nextProfiles = profilesRef.current.filter(
@@ -500,11 +531,13 @@ export const NightscoutConfigProvider = ({
             configureNightscoutInstance({
               baseUrl: active.baseUrl,
               apiSecretSha1: active.apiSecretSha1,
+              ...(active.accessToken ? {accessToken: active.accessToken} : {}),
               ownerUserId: mutationOwnerUserId,
             });
             configureAndroidWidgetBackgroundSync({
               baseUrl: active.baseUrl,
               apiSecretSha1: active.apiSecretSha1,
+              ...(active.accessToken ? {accessToken: active.accessToken} : {}),
               enabled: true,
             });
           }
@@ -518,7 +551,7 @@ export const NightscoutConfigProvider = ({
           nextActiveId,
           mutationOwnerUserId,
         );
-        if (ownerUserIdRef.current === mutationOwnerUserId) {
+        if (ownerUserIdRef.current === mutationOwnerUserId && ownerSessionRevisionRef.current === mutationSessionRevision) {
           await vaultSynchronizer.requestReconciliation(
             nextActiveId ? 'provision' : 'remove',
           );
@@ -551,6 +584,7 @@ export const NightscoutConfigProvider = ({
           await testNightscoutConnection({
             baseUrl: profile.baseUrl,
             apiSecretSha1: profile.apiSecretSha1,
+            ...(profile.accessToken ? {accessToken: profile.accessToken} : {}),
           });
         },
       });
@@ -571,11 +605,13 @@ export const NightscoutConfigProvider = ({
         configureNightscoutInstance({
           baseUrl: active.baseUrl,
           apiSecretSha1: active.apiSecretSha1,
+          ...(active.accessToken ? {accessToken: active.accessToken} : {}),
           ownerUserId: recoveryOwner,
         });
         configureAndroidWidgetBackgroundSync({
           baseUrl: active.baseUrl,
           apiSecretSha1: active.apiSecretSha1,
+          ...(active.accessToken ? {accessToken: active.accessToken} : {}),
           enabled: true,
         });
         await vaultSynchronizer.requestReconciliation('provision');

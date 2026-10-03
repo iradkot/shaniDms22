@@ -1,3 +1,6 @@
+import {configureExperimentalBuildForTests} from './mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import {
   buildAndroidGlucoseWidgetUpdateArgs,
   calculateWidgetTir,
@@ -8,6 +11,17 @@ const bg = (sgv: number, date = 1, extra: Partial<BgSample> = {}) =>
   ({sgv, date, ...extra} as BgSample);
 
 describe('androidGlucoseLiveSurface widget payload', () => {
+  it('keeps measured glucose, insulin and TIR but strips forecast projections in the pilot', () => {
+    globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
+    const args = buildAndroidGlucoseWidgetUpdateArgs({
+      enrichedBg: bg(101, 12345, {iob: 0.5, cob: 4}),
+      predictions: [{sgv: 110}, {sgv: 120}, {sgv: 130}],
+      recentBgSamples: [bg(80), bg(100)],
+    }, {low: 70, high: 180});
+    expect(args?.slice(0, 5)).toEqual([101, '•', 12345, 0.5, 4]);
+    expect(args?.[9]).toBe(100);
+    expect(args?.slice(10, 13)).toEqual([-1, -1, -1]);
+  });
   it('calculates TIR with inclusive range boundaries and ignores invalid samples', () => {
     const samples = [
       bg(69),

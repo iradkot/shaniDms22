@@ -13,5 +13,6 @@ class ShaniDmsRuntimeConfigModule(reactContext: ReactApplicationContext) :
     hashMapOf(
       "backendBaseUrl" to BuildConfig.SHANI_BACKEND_BASE_URL,
       "firestoreRulesSchemaVersion" to BuildConfig.FIRESTORE_RULES_SCHEMA_VERSION,
+      "releaseChannel" to BuildConfig.SHANI_RELEASE_CHANNEL,
     )
 }

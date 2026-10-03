@@ -20,6 +20,9 @@ import type {IndexedDbKeyValueStore} from '../storage';
 import {createOpaqueBrowserId} from '../identity';
 import {BrowserAiService, browserAiMessages} from './browserAiService';
 import type {BrowserAiEvidenceProvider} from './browserAiEvidenceProvider';
+import {useRecommendationRuntime} from '../../../product/ai/useRecommendationRuntime';
+import {recommendationRangeDays} from '../../../services/aiRecommendations/recommendationOrchestrator';
+import {recommendationEvidenceRange} from '../../../services/aiRecommendations/recommendationEvidenceRange';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -431,7 +434,7 @@ export const useBrowserAiAnalystRuntime = (input: {
     input.service,
   ]);
 
-  return useMemo(
+  const legacyRuntime = useMemo<AiAnalystModuleRuntime>(
     () => ({
       snapshot: {
         availability: !input.enabled
@@ -511,4 +514,33 @@ export const useBrowserAiAnalystRuntime = (input: {
       visibleContext,
     ],
   );
+  return useRecommendationRuntime(legacyRuntime, {
+    scopeId: input.scopeId,
+    locale: input.locale,
+    storage: input.storage,
+    chat: (chatMessages, signal) => input.service.chat(chatMessages, signal),
+    loadLegacyHistory: async () =>
+      decodeHistory(await input.storage.getItem(historyKey)),
+    loadEvidence: async (recommendationStart, signal) => {
+      if (!input.evidenceProvider) {
+        return recommendationStart.locale === 'he'
+          ? 'אין מקור נתונים מחובר. אין להסיק מה מצב הסוכר עכשיו או להמליץ על שינוי טיפול.'
+          : 'No evidence source is connected. Current glucose is unknown; do not advise therapy changes.';
+      }
+      const period = recommendationEvidenceRange(recommendationStart, Date.now());
+      const rangeDays = period.explicitPeriod
+        ? 30
+        : recommendationRangeDays(recommendationStart.request);
+      return input.evidenceProvider.loadVisibleContext({
+        specialist:
+          recommendationStart.request.kind === 'meal'
+            ? 'meal-analysis'
+            : 'general-chat',
+        locale: recommendationStart.locale,
+        focus: {kind: 'period', startMs: period.startMs, endMs: period.endMs},
+        rangeDays,
+        signal,
+      });
+    },
+  });
 };

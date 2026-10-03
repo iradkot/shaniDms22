@@ -4,6 +4,26 @@ The current tree removes and ignores credential files. Git history still
 contains credential-shaped filenames, so deleting the working files is not
 sufficient.
 
+## Current review inventory (2026-10-03)
+
+`yarn security:exposure-audit` inspects all local history refs in memory and
+prints file paths and field names only. It never prints secret values. The
+current findings are Google OAuth client secrets (`client_secret` /
+`CLIENT_SECRET`) and Apple Fastlane account/application-specific passwords.
+The old `.env` contains a public Firebase web API identifier; its presence alone
+does not establish a secret leak or require rotation. This inventory is not a
+complete content scan, and no provider-side rotation has been verified.
+
+Do not invalidate an active OAuth client or Apple credentials blindly. Confirm
+which deployment/CI still uses them, replace dependent configuration, test the
+replacement, and then revoke the exposed value at its provider. Provider account
+actions and shared-history rewriting remain outstanding. Neither a new APK nor
+the filename scanner proves those actions happened.
+
+Production Android wrapper builds and signed iOS Fastlane builds now run the
+history gate. Production Android CI also checks it before decoding a signing
+key. Internal restricted pilot previews can be built while that work remains.
+
 ## Required order
 
 1. Rotate every affected Google OAuth, Firebase/service, Apple/Fastlane, LLM,

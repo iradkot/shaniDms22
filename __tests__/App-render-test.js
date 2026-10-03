@@ -15,6 +15,11 @@ const consoleErrorSpy = jest
   .spyOn(console, 'error')
   .mockImplementation(() => {});
 
+// Consent behavior has dedicated tests; this suite isolates shell rendering.
+jest.mock('app/platform/native/privacy/NativePrivacyBoundary', () => ({
+  NativePrivacyBoundary: ({children}) => children,
+}));
+
 jest.mock('app/components/ErrorBoundary', () => {
   const React = require('react');
   return ({children}) => React.createElement(React.Fragment, null, children);

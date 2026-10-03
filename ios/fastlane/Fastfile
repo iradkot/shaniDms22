@@ -11,8 +11,13 @@ XCWORKSPACE_PATH = File.join(PROJECT_ROOT, "shaniDms22.xcworkspace")
 DEFAULT_TEAM_ID = "8KHU9V3DTQ"
 
 def runtime_build_xcargs
+  history_checker = File.expand_path("../../scripts/check-credential-history.mjs", __dir__)
+  UI.user_error!("Public release is blocked until credential history cleanup is verified") unless system("node", history_checker)
   backend_base_url = ENV.fetch("SHANI_BACKEND_BASE_URL", "").to_s.strip
   rules_schema_version = ENV.fetch("FIRESTORE_RULES_SCHEMA_VERSION", "0").to_s.strip
+  release_channel = ENV.fetch("SHANI_RELEASE_CHANNEL", "production").to_s.strip
+  UI.user_error!("Signed iOS releases require the production or pilot release channel") unless ["pilot", "production"].include?(release_channel)
+  ENV["SHANI_RELEASE_CHANNEL"] = release_channel
 
   unless backend_base_url.empty?
     uri = URI.parse(backend_base_url)
@@ -22,7 +27,8 @@ def runtime_build_xcargs
 
   [
     "SHANI_BACKEND_BASE_URL=#{Shellwords.escape(backend_base_url)}",
-    "FIRESTORE_RULES_SCHEMA_VERSION=#{rules_schema_version}"
+    "FIRESTORE_RULES_SCHEMA_VERSION=#{rules_schema_version}",
+    "SHANI_RELEASE_CHANNEL=#{release_channel}"
   ].join(" ")
 rescue URI::InvalidURIError
   UI.user_error!("SHANI_BACKEND_BASE_URL must be a valid HTTPS origin")

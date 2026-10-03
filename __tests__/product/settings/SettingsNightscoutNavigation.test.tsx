@@ -83,6 +83,8 @@ describe('Nightscout access from Product Settings', () => {
           ),
         );
       });
+      expect(tree!.root.findByProps({testID: 'personal-home-view'})).toBeTruthy();
+      act(() => button(tree!, 'home-tab-modules').props.onPress());
       await act(async () => {
         button(tree!, 'hub-grid-all-tile-core.settings').props.onPress();
       });

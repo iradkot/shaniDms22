@@ -1,11 +1,13 @@
 import {createHash} from 'node:crypto';
 
 import type {EncryptedEnvelope, EnvelopeCipher} from './vault';
+import {normalizeNightscoutAccessToken} from './nightscoutTokenPermissions';
 
 export interface NightscoutCredential {
   readonly url: string;
-  /** Usable SHA1 credential sent as the Nightscout `api-secret` header. */
+  /** Legacy master-secret SHA1; empty when a raw subject accessToken is present. */
   readonly apiSecretSha1: string;
+  readonly accessToken?: string;
 }
 
 export interface NightscoutVaultDocument {
@@ -28,8 +30,7 @@ export interface NightscoutCredentialVault {
   remove(uid: string): Promise<void>;
 }
 
-const associatedData = (uid: string): string =>
-  `shanidms:v1:${uid}:nightscout`;
+const associatedData = (uid: string): string => `shanidms:v1:${uid}:nightscout`;
 
 const isSha1Hex = (value: string): boolean => /^[a-f0-9]{40}$/i.test(value);
 
@@ -71,9 +72,7 @@ export const canonicalizeNightscoutIdentityUrl = (url: string): string => {
 };
 
 const identityDigest = (namespace: string, value: string): string =>
-  createHash('sha1')
-    .update(`${namespace}:v1\n${value}`, 'utf8')
-    .digest('hex');
+  createHash('sha1').update(`${namespace}:v1\n${value}`, 'utf8').digest('hex');
 
 /** Stable for one Nightscout source across the Product User's devices. */
 export const createNightscoutSourceId = (url: string): string => {
@@ -105,18 +104,28 @@ const decodeCredential = (plaintext: string): NightscoutCredential => {
   }
   const record = value as Record<string, unknown>;
   if (
-    Object.keys(record).some(key => !['url', 'apiSecretSha1'].includes(key)) ||
+    Object.keys(record).some(
+      key => !['url', 'apiSecretSha1', 'accessToken'].includes(key),
+    ) ||
     typeof record.url !== 'string' ||
     record.url.length === 0 ||
     record.url.length > 2_048 ||
     typeof record.apiSecretSha1 !== 'string' ||
-    !isSha1Hex(record.apiSecretSha1)
+    (record.accessToken === undefined
+      ? !isSha1Hex(record.apiSecretSha1)
+      : typeof record.accessToken !== 'string' ||
+        normalizeNightscoutAccessToken(record.accessToken) !==
+          record.accessToken ||
+        record.apiSecretSha1 !== '')
   ) {
     throw new Error('Invalid encrypted Nightscout credential');
   }
   return {
     url: record.url,
     apiSecretSha1: record.apiSecretSha1.toLowerCase(),
+    ...(typeof record.accessToken === 'string'
+      ? {accessToken: record.accessToken}
+      : {}),
   };
 };
 
@@ -134,7 +143,9 @@ export class EncryptedNightscoutCredentialVault
   }
 
   async put(uid: string, credential: NightscoutCredential): Promise<void> {
-    const plaintext = JSON.stringify(credential);
+    const plaintext = JSON.stringify(
+      decodeCredential(JSON.stringify(credential)),
+    );
     const envelope = await this.cipher.encrypt(plaintext, associatedData(uid));
     await this.repository.write(uid, {
       version: 1,

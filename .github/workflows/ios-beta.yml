@@ -53,6 +53,7 @@ jobs:
       APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 }}
       SHANI_BACKEND_BASE_URL: ${{ vars.SHANI_BACKEND_BASE_URL }}
       FIRESTORE_RULES_SCHEMA_VERSION: ${{ vars.FIRESTORE_RULES_SCHEMA_VERSION }}
+      SHANI_RELEASE_CHANNEL: production
     steps:
       - name: Checkout
         uses: actions/checkout@v4

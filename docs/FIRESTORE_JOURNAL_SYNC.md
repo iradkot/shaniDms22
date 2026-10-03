@@ -27,7 +27,7 @@ enforce authenticated owner/Workspace paths, top-level document allowlists,
 atomic head-operation pairing, immutable operations, and default deny.
 
 Deploy `firestore.rules` before distributing a sync-enabled build. Only then
-set `FIRESTORE_RULES_SCHEMA_VERSION=1` for Android or iOS. An absent, malformed,
+set `FIRESTORE_RULES_SCHEMA_VERSION=2` for Android or iOS. An absent, malformed,
 or older value keeps remote writes disabled while local Journal capture remains
 available. If rules change incompatibly, increment the required schema version,
 deploy and verify the rules first, and update the build value last.

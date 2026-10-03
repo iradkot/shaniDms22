@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {PRIVACY_POLICY_VERSION, type AccountPrivacyRepository} from './accountPrivacy';
+
+const grantedPrivacy = (): AccountPrivacyRepository => ({
+ readConsent: async () => ({policyVersion: PRIVACY_POLICY_VERSION, cloudSync: true, aiProcessing: true, updatedAtMs: 1}),
+ writeConsent: async () => {}, isDeleting: async () => false, deleteAccount: async () => {},
+ issueDeletionReceipt: async () => 'a'.repeat(64), finishDeletion: async () => {},
+});
 
 import {
   createShaniApiHandler,
@@ -19,6 +26,7 @@ import {
   createNightscoutWorkspaceId,
 } from './nightscoutVault';
 import type {NightscoutRangeRequest} from './contracts';
+import {NightscoutUpstreamError} from './nightscoutUpstream';
 
 const TOKEN = 'test-token-that-is-long-enough';
 
@@ -171,6 +179,7 @@ const dependencies = () => {
     nightscoutUpstream,
     upstream,
     handler: createShaniApiHandler({
+      privacy: grantedPrivacy(),
       auth: {
         verify: async token => {
           assert.equal(token, TOKEN);
@@ -268,6 +277,7 @@ test('connection test rejects missing credentials, extra context, unsupported mo
 test('expired or revoked app sessions return a sign-in error without exposing verifier details', async () => {
   const setup = dependencies();
   const handler = createShaniApiHandler({
+      privacy: grantedPrivacy(),
     ...setup,
     auth: {verify: async () => { throw new Error('private Firebase token details'); }},
     allowedModels: new Set(['gpt-5-mini']),
@@ -362,6 +372,7 @@ test('enforces exact CORS origins and request rate limits', async () => {
   const limiter = new FixedWindowApiRateLimiter(1, 60_000);
   let nowMs = 1_000;
   const handler = createShaniApiHandler({
+      privacy: grantedPrivacy(),
     auth: {verify: async () => ({uid: 'user-1'})},
     vault: setup.vault,
     nightscoutVault: setup.nightscoutVault,
@@ -407,6 +418,7 @@ test('unknown paths share one bounded rate-limit bucket', async () => {
   const setup = dependencies();
   const limiter = new FixedWindowApiRateLimiter(1, 60_000);
   const handler = createShaniApiHandler({
+      privacy: grantedPrivacy(),
     auth: {verify: async () => ({uid: 'user-1'})},
     vault: setup.vault,
     nightscoutVault: setup.nightscoutVault,
@@ -448,10 +460,10 @@ test('rejects oversized meal images before the provider call', async () => {
   assert.deepEqual(setup.upstream.imageCalls, []);
 });
 
-test('validates and stores only a normalized Nightscout credential', async () => {
+test('validates and stores a raw read-only Nightscout subject token', async () => {
   const setup = dependencies();
   const response = new CapturedResponse();
-  const rawSecret = 'nightscout-private-secret';
+  const rawSecret = 'shani-0123456789abcdef';
 
   await setup.handler(
     request('/v1/vault/nightscout/provision', {
@@ -468,13 +480,58 @@ test('validates and stores only a normalized Nightscout credential', async () =>
     configured: true,
     sourceId: 'nightscout_9e111107e040418357de5d4866416ccbd1977d9d',
     workspaceId: 'workspace_d40a4b9197ce10672c75d4d7b4097c2e5a26ff00',
+    authType: 'access-token',
   });
   const stored = await setup.nightscoutVault.get('user-1');
   assert.equal(stored?.url, 'https://nightscout.example/base/');
-  assert.match(stored?.apiSecretSha1 ?? '', /^[a-f0-9]{40}$/);
-  assert.notEqual(stored?.apiSecretSha1, rawSecret);
+  assert.equal(stored?.apiSecretSha1, '');
+  assert.equal(stored?.accessToken, rawSecret);
   assert.deepEqual(setup.nightscoutCalls.validate, [stored]);
   assert.equal(JSON.stringify(response.body).includes(rawSecret), false);
+});
+
+test('rejects new master-secret onboarding and preserves the existing vault value', async () => {
+  const setup = dependencies();
+  const saved = {url: 'https://nightscout.example/', apiSecretSha1: 'a'.repeat(40)};
+  await setup.nightscoutVault.put('user-1', saved);
+  for (const body of [
+    {version: 1, url: saved.url, apiKey: 'master-secret'},
+    {version: 1, url: saved.url, apiKey: 'b'.repeat(40), authType: 'legacy-api-secret'},
+    {version: 1, url: 'https://other.example/', apiKey: saved.apiSecretSha1, authType: 'legacy-api-secret'},
+  ]) {
+    const response = new CapturedResponse();
+    await setup.handler(request('/v1/vault/nightscout/provision', body), response);
+    assert.equal((response.body as {code: string}).code, 'nightscout_read_only_required');
+    assert.deepEqual(await setup.nightscoutVault.get('user-1'), saved);
+  }
+  assert.equal(setup.nightscoutCalls.validate.length, 0);
+});
+
+test('does not replace an owned credential when the supplied subject token is revoked or writable', async () => {
+  const setup = dependencies();
+  const saved = {url: 'https://nightscout.example/', apiSecretSha1: 'a'.repeat(40)};
+  await setup.nightscoutVault.put('user-1', saved);
+  for (const code of ['nightscout_credential_rejected', 'nightscout_read_only_required']) {
+    setup.nightscoutUpstream.validateCredential = async () => {
+      throw new NightscoutUpstreamError(code === 'nightscout_credential_rejected' ? 401 : 403, code, 'The credential was rejected');
+    };
+    const response = new CapturedResponse();
+    await setup.handler(request('/v1/vault/nightscout/provision', {version: 1, url: saved.url, apiKey: 'shani-0123456789abcdef'}), response);
+    assert.equal((response.body as {code: string}).code, code);
+    assert.deepEqual(await setup.nightscoutVault.get('user-1'), saved);
+    assert.equal(JSON.stringify(response.body).includes('0123456789abcdef'), false);
+  }
+});
+
+test('keeps explicitly re-provisioned owned legacy secrets distinct from read-only tokens', async () => {
+  const setup = dependencies();
+  const saved = {url: 'https://nightscout.example/', apiSecretSha1: 'a'.repeat(40)};
+  await setup.nightscoutVault.put('user-1', saved);
+  const response = new CapturedResponse();
+  await setup.handler(request('/v1/vault/nightscout/provision', {version: 1, url: saved.url, apiKey: saved.apiSecretSha1, authType: 'legacy-api-secret'}), response);
+  assert.equal(response.statusCode, 200);
+  assert.equal((response.body as {authType: string}).authType, 'legacy-api-secret');
+  assert.deepEqual(await setup.nightscoutVault.get('user-1'), saved);
 });
 
 test('proxies a bounded Nightscout range without exposing its credential', async () => {

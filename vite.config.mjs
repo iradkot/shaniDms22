@@ -3,8 +3,11 @@ import {fileURLToPath, URL} from 'node:url';
 import react from '@vitejs/plugin-react';
 import {defineConfig, transformWithEsbuild} from 'vite';
 import {assertBrowserSafeAreaBoundary} from './scripts/web-platform-boundary.mjs';
+import releaseChannel from './scripts/release-channel.cjs';
+import {webReleaseManifestPlugin} from './scripts/web-release-manifest.mjs';
 
 const projectPath = path => fileURLToPath(new URL(path, import.meta.url));
+const buildReleaseChannel = releaseChannel.resolveReleaseChannel();
 
 const reactNativeDependencyJsxPlugin = () => ({
   name: 'react-native-dependency-jsx',
@@ -48,6 +51,7 @@ const offlineBundlePlugin = () => ({
         fileName =>
           fileName !== 'service-worker.js' &&
           fileName !== 'runtime-config.js' &&
+          !fileName.startsWith('.') &&
           !fileName.endsWith('.map'),
       )
       .sort();
@@ -105,6 +109,7 @@ export default defineConfig({
     reactNativeDependencyJsxPlugin(),
     styledComponentsNativeWebPlugin(),
     react(),
+    webReleaseManifestPlugin(buildReleaseChannel),
     offlineBundlePlugin(),
   ],
   // The prebuilt native entry cannot emit browser safe-area measurements.
@@ -168,5 +173,6 @@ export default defineConfig({
   },
   define: {
     global: 'globalThis',
+    __SHANI_RELEASE_CHANNEL__: JSON.stringify(buildReleaseChannel),
   },
 });

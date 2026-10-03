@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {PRIVACY_POLICY_VERSION, registerPrivacySession} from '../src/modules/privacy';
 
 const mockFcmToken = 'fcm-token-super-secret-123456789';
 const mockOtherServerToken = 'another-private-device-token';
@@ -49,6 +50,8 @@ describe('device-token log privacy', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await AsyncStorage.clear();
+    registerPrivacySession(mockUid, {policyVersion: PRIVACY_POLICY_VERSION,
+      cloudSync: true, aiProcessing: false, updatedAtMs: 1});
   });
 
   it('never writes FCM tokens or Firebase UIDs while syncing the public token lifecycle', async () => {

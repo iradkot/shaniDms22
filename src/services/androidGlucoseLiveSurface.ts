@@ -2,6 +2,7 @@ import {NativeModules, Platform} from 'react-native';
 
 import {BgSample} from 'app/types/day_bgs.types';
 import type {GlucoseForecastSnapshot} from '../modules/glucoseForecast';
+import {getReleaseSafetyPolicy} from '../modules/releaseSafety/policy';
 
 type GlucoseNativeModule = {
   updateForecastSnapshot?: (accountBaseUrl: string, snapshotJson: string) => void;
@@ -70,6 +71,7 @@ const nativeModule: GlucoseNativeModule | undefined =
 
 /** Native independently checks account identity, source timestamps and freshness. */
 export function publishAndroidGlucoseForecast(baseUrl: string, snapshot: GlucoseForecastSnapshot): void {
+  if (!getReleaseSafetyPolicy().experimentalGlucoseForecasts) {return;}
   if (!nativeModule?.updateForecastSnapshot) {return;}
   try {
     nativeModule.updateForecastSnapshot(baseUrl, JSON.stringify(snapshot));
@@ -152,9 +154,10 @@ export function buildAndroidGlucoseWidgetUpdateArgs(
   const basalBolusRatio = finiteNumber(snapshot?.insulinStats?.basalBolusRatio);
   const totalInsulin = finiteNumber(snapshot?.insulinStats?.totalInsulin);
   const tir = calculateWidgetTir(snapshot?.recentBgSamples, thresholds);
-  const p1Raw = snapshot?.predictions?.[0]?.sgv;
-  const p2Raw = snapshot?.predictions?.[1]?.sgv;
-  const p3Raw = snapshot?.predictions?.[2]?.sgv;
+  const predictions = getReleaseSafetyPolicy().experimentalGlucoseForecasts ? snapshot?.predictions : undefined;
+  const p1Raw = predictions?.[0]?.sgv;
+  const p2Raw = predictions?.[1]?.sgv;
+  const p3Raw = predictions?.[2]?.sgv;
   const projected1 = typeof p1Raw === 'number' && Number.isFinite(p1Raw) ? Math.round(p1Raw) : undefined;
   const projected2 = typeof p2Raw === 'number' && Number.isFinite(p2Raw) ? Math.round(p2Raw) : undefined;
   const projected3 = typeof p3Raw === 'number' && Number.isFinite(p3Raw) ? Math.round(p3Raw) : undefined;
@@ -229,6 +232,7 @@ export function setAndroidWidgetThresholds(low?: number, high?: number): void {
 export function configureAndroidWidgetBackgroundSync(params: {
   baseUrl?: string;
   apiSecretSha1?: string;
+  accessToken?: string;
   enabled: boolean;
 }): void {
   if (!nativeModule?.configureBackgroundSync) {
@@ -237,8 +241,9 @@ export function configureAndroidWidgetBackgroundSync(params: {
   try {
     nativeModule.configureBackgroundSync(
       params.baseUrl,
-      params.apiSecretSha1,
-      params.enabled,
+      // Nightscout also accepts a raw subject token in api-secret. Never hash it.
+      params.accessToken ?? params.apiSecretSha1,
+      params.enabled && Boolean(params.accessToken || params.apiSecretSha1),
     );
   } catch (err) {
     console.warn('androidGlucoseLiveSurface: configureBackgroundSync failed', err);

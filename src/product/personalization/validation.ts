@@ -10,6 +10,7 @@ import {
 import {
   MAX_PERSISTED_RECENT_MODULES,
   DAILY_OVERVIEW_CARD_IDS,
+  HOME_WIDGET_IDS,
   PERSONALIZATION_LAYOUTS,
   PERSONALIZATION_QUESTIONNAIRE_STAGES,
   RELATIONSHIPS_TO_DATA_SUBJECT,
@@ -21,6 +22,7 @@ import {
   type StoredDevicePersonalization,
   type StoredDayGraphPreferences,
   type StoredDailyOverviewPreferences,
+  type StoredHomePreferences,
   type StoredLayoutPersonalization,
   type StoredLayoutProfile,
   type StoredProductPersonalization,
@@ -394,6 +396,72 @@ const parseDailyOverviewPreferencesAt = (
   return {schemaVersion: 1, rangeStyle, cardOrder: [...cardOrder]};
 };
 
+const parseHomePreferencesAt = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): StoredHomePreferences | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isPlainObject(value)) {
+    issues.push({path, message: 'Expected Home preferences'});
+    return undefined;
+  }
+  rejectUnknownKeys(
+    value,
+    ['schemaVersion', 'mode', 'widgetOrder', 'hiddenWidgets', 'glucoseWindowHours'],
+    path,
+    issues,
+  );
+  requireSchemaVersion(value, path, issues);
+  const {mode, widgetOrder, hiddenWidgets, glucoseWindowHours} = value;
+  if (mode !== 'personal' && mode !== 'modules') {
+    issues.push({path: `${path}.mode`, message: 'Unknown Home mode'});
+    return undefined;
+  }
+  if (
+    !Array.isArray(widgetOrder) ||
+    widgetOrder.length !== HOME_WIDGET_IDS.length ||
+    !HOME_WIDGET_IDS.every(id => widgetOrder.includes(id))
+  ) {
+    issues.push({
+      path: `${path}.widgetOrder`,
+      message: 'Expected every Home widget exactly once',
+    });
+    return undefined;
+  }
+  if (
+    !Array.isArray(hiddenWidgets) ||
+    !hiddenWidgets.every(id => isOneOf(id, HOME_WIDGET_IDS)) ||
+    new Set(hiddenWidgets).size !== hiddenWidgets.length
+  ) {
+    issues.push({
+      path: `${path}.hiddenWidgets`,
+      message: 'Expected unique Home widget IDs',
+    });
+    return undefined;
+  }
+  if (
+    glucoseWindowHours !== 6 &&
+    glucoseWindowHours !== 12 &&
+    glucoseWindowHours !== 'full-day'
+  ) {
+    issues.push({
+      path: `${path}.glucoseWindowHours`,
+      message: 'Unsupported Home chart window',
+    });
+    return undefined;
+  }
+  return {
+    schemaVersion: 1,
+    mode,
+    widgetOrder: [...widgetOrder],
+    hiddenWidgets: [...hiddenWidgets],
+    glucoseWindowHours,
+  };
+};
+
 const parseLayoutProfileAt = (
   value: unknown,
   path: string,
@@ -414,6 +482,7 @@ const parseLayoutProfileAt = (
       'shell',
       'dayGraph',
       'dailyOverview',
+      'home',
     ],
     path,
     issues,
@@ -431,6 +500,7 @@ const parseLayoutProfileAt = (
     `${path}.dailyOverview`,
     issues,
   );
+  const home = parseHomePreferencesAt(value.home, `${path}.home`, issues);
   if (!layout || !shell) {
     return undefined;
   }
@@ -447,6 +517,7 @@ const parseLayoutProfileAt = (
     shell,
     ...(dayGraph === undefined ? {} : {dayGraph}),
     ...(dailyOverview === undefined ? {} : {dailyOverview}),
+    ...(home === undefined ? {} : {home}),
   };
 };
 

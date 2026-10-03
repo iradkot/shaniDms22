@@ -4,6 +4,7 @@ import {getAuth} from '@react-native-firebase/auth';
 import {AppState} from 'react-native';
 
 import {loadNightscoutProfiles} from 'app/services/nightscoutProfiles';
+import {normalizeNightscoutAccessToken} from 'app/services/nightscoutTokenPermissions';
 import {isE2E} from 'app/utils/e2e';
 
 import {nativeNightscoutVaultClient} from './nativeNightscoutVaultClient';
@@ -43,7 +44,9 @@ export const nativeNightscoutVaultActiveProfileReader: NightscoutVaultActiveProf
     if (
       !active ||
       !/^https?:\/\//i.test(active.baseUrl) ||
-      !/^[a-f0-9]{40}$/i.test(active.apiSecretSha1)
+      !(active.accessToken
+        ? normalizeNightscoutAccessToken(active.accessToken) === active.accessToken
+        : /^[a-f0-9]{40}$/i.test(active.apiSecretSha1))
     ) {
       const error = new Error(
         'The active Nightscout credential is unavailable in secure storage',
@@ -54,6 +57,7 @@ export const nativeNightscoutVaultActiveProfileReader: NightscoutVaultActiveProf
     return {
       baseUrl: active.baseUrl,
       apiSecretSha1: active.apiSecretSha1,
+      ...(active.accessToken ? {accessToken: active.accessToken} : {}),
     };
   },
 };

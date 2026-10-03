@@ -26,6 +26,7 @@ import CombinedBgBolusTooltip from 'app/components/charts/CgmGraph/components/To
 import CombinedBgMultiBolusTooltip from 'app/components/charts/CgmGraph/components/Tooltips/CombinedBgMultiBolusTooltip';
 import {addOpacity} from 'app/style/styling.utils';
 import {MAX_LOAD_CURSOR_DISTANCE_MS} from 'app/utils/chartLoadSeries.utils';
+import {getReleaseSafetyPolicy} from 'app/modules/releaseSafety/policy';
 
 import type {
   CgmGraphProps,
@@ -68,7 +69,7 @@ const NavigationFullScreenButton = ({
 
 const CGMGraph: React.FC<CgmGraphProps> = ({
   bgSamples,
-  forecast,
+  forecast: suppliedForecast,
   width,
   height,
   foodItems,
@@ -91,6 +92,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
   onTooltipChange,
   cursorTimeMs,
 }) => {
+  const forecast = getReleaseSafetyPolicy().experimentalGlucoseForecasts ? suppliedForecast : undefined;
   const hasSamples = !!bgSamples?.length;
 
   const containerRef = useRef<View>(null);

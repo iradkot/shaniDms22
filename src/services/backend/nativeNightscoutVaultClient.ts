@@ -1,4 +1,5 @@
 import {isE2E} from 'app/utils/e2e';
+import {normalizeNightscoutAccessToken} from 'app/services/nightscoutTokenPermissions';
 
 import {
   NativeAuthenticatedBackendError,
@@ -19,7 +20,9 @@ const validProfile = (profile: NightscoutVaultProfileSecret): boolean =>
   profile.baseUrl.length > 0 &&
   profile.baseUrl.length <= 2_048 &&
   /^https?:\/\//i.test(profile.baseUrl) &&
-  /^[a-f0-9]{40}$/i.test(profile.apiSecretSha1);
+  (profile.accessToken
+    ? normalizeNightscoutAccessToken(profile.accessToken) === profile.accessToken
+    : /^[a-f0-9]{40}$/i.test(profile.apiSecretSha1));
 
 /** Narrow adapter for the backend's encrypted Nightscout credential vault. */
 export const createNativeNightscoutVaultClient = (
@@ -46,7 +49,8 @@ export const createNativeNightscoutVaultClient = (
           body: {
             version: 1,
             url: profile.baseUrl,
-            apiKey: profile.apiSecretSha1,
+            authType: profile.accessToken ? 'access-token' : 'legacy-api-secret',
+            apiKey: profile.accessToken ?? profile.apiSecretSha1,
           },
         },
       );

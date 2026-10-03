@@ -16,6 +16,7 @@ import {isE2E} from 'app/utils/e2e';
 import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {determineBgColorByGlucoseValue, pickReadableTextColor} from 'app/style/styling.utils';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
+import {getReleaseSafetyPolicy} from 'app/modules/releaseSafety/policy';
 
 const CONSTANTS = {
   minDeltaForGlow: 10,
@@ -159,6 +160,7 @@ const SmartExpandableHeader: React.FC<{
 
     return {
       ...effectiveSnapshot,
+      predictions: getReleaseSafetyPolicy().experimentalGlucoseForecasts ? effectiveSnapshot.predictions : [],
       endColor,
       delta,
       deltaAbs,

@@ -264,6 +264,7 @@ const initialPresentation = (
     ...(profile.dailyOverview === undefined
       ? {}
       : {dailyOverview: profile.dailyOverview}),
+    ...(profile.home === undefined ? {} : {home: profile.home}),
   };
 };
 
@@ -387,6 +388,7 @@ export const PersonalizationQuestionnaireView = ({
         ...(current.dailyOverview === undefined
           ? {}
           : {dailyOverview: current.dailyOverview}),
+        ...(current.home === undefined ? {} : {home: current.home}),
       }));
     }
   };

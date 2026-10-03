@@ -15,8 +15,7 @@ const host = emulatorAddress.slice(0, separator);
 const port = Number(emulatorAddress.slice(separator + 1));
 let environment;
 
-const rulePath =
-  'users/owner-1/workspaces/workspace-1/alertRules/morning-rule';
+const rulePath = 'users/owner-1/workspaces/workspace-1/alertRules/morning-rule';
 const updatePath =
   'users/owner-1/workspaces/workspace-1/updateCenterRecords/update-1';
 const readPath =
@@ -85,8 +84,8 @@ const updateRecord = ({
   ...(deepLink === undefined
     ? {deepLink: {kind: 'alert-occurrence', occurrenceId: recordId}}
     : deepLink === null
-      ? {}
-      : {deepLink}),
+    ? {}
+    : {deepLink}),
 });
 
 const readRecord = ({readAtMs = 1_700_000_000_200} = {}) => ({
@@ -115,6 +114,14 @@ before(async () => {
 
 beforeEach(async () => {
   await environment.clearFirestore();
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'users/owner-1/privacy/consent'), {
+      policyVersion: '2026-10-03.1',
+      cloudSync: true,
+      aiProcessing: true,
+      updatedAtMs: 1,
+    });
+  });
 });
 
 after(async () => {
@@ -264,10 +271,7 @@ test('strict update schemas reject scope mismatches and credential or raw-data f
     ),
   );
   await assertFails(
-    setDoc(
-      doc(database, updatePath),
-      updateRecord({recordId: 'different-id'}),
-    ),
+    setDoc(doc(database, updatePath), updateRecord({recordId: 'different-id'})),
   );
 });
 

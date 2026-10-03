@@ -144,6 +144,9 @@ describe('Product Experience activity slice', () => {
         ),
       );
     });
+    act(() =>
+      tree!.root.findByProps({testID: 'home-tab-modules'}).props.onPress(),
+    );
     const trendsTile = tree!.root
       .findAllByProps({testID: 'hub-grid-all-tile-core.trends'})
       .find(node => node.type === Pressable);
@@ -211,6 +214,9 @@ describe('Product Experience activity slice', () => {
       );
     });
 
+    act(() =>
+      tree!.root.findByProps({testID: 'home-tab-modules'}).props.onPress(),
+    );
     const activityTiles = tree!.root
       .findAllByProps({testID: 'hub-grid-all-tile-core.activity'})
       .filter(node => node.type === Pressable);

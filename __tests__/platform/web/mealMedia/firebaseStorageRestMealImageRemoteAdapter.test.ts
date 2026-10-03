@@ -1,4 +1,8 @@
 import {
+  registerPrivacySession,
+  PRIVACY_POLICY_VERSION,
+} from '../../../../src/modules/privacy';
+import {
   createAuthenticatedBrowserWorkspaceScope,
   createFirebaseStorageRestMealImageRemoteAdapter,
   type BrowserMealImageBlobRepository,
@@ -12,6 +16,15 @@ const scope = createAuthenticatedBrowserWorkspaceScope({
   uid: 'user-1',
   workspaceId: 'primary',
   nightscoutSourceId: 'ns-source-1',
+});
+
+beforeEach(() => {
+  registerPrivacySession('user-1', {
+    policyVersion: PRIVACY_POLICY_VERSION,
+    cloudSync: true,
+    aiProcessing: false,
+    updatedAtMs: 1,
+  });
 });
 
 class MemoryBlobs implements BrowserMealImageBlobRepository {

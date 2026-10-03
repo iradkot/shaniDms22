@@ -1,6 +1,8 @@
 import {initializeApp} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
+import {getStorage} from 'firebase-admin/storage';
+import {FirestoreAccountPrivacyRepository} from './firestoreAccountPrivacyRepository';
 import {KeyManagementServiceClient} from '@google-cloud/kms';
 import {onRequest} from 'firebase-functions/v2/https';
 
@@ -48,11 +50,16 @@ const nightscoutVault = new EncryptedNightscoutCredentialVault(
 
 const handler = createShaniApiHandler({
   auth: {
+    verifyDeletionRetry: async token => {
+      const decoded = await getAuth(app).verifyIdToken(token, false);
+      return {uid: decoded.uid, authTimeSeconds: decoded.auth_time};
+    },
     verify: async token => {
       const decoded = await getAuth(app).verifyIdToken(token, true);
-      return {uid: decoded.uid};
+      return {uid: decoded.uid, authTimeSeconds: decoded.auth_time};
     },
   },
+  privacy: new FirestoreAccountPrivacyRepository(firestore, getStorage(app).bucket(), getAuth(app)),
   vault,
   nightscoutVault,
   nightscoutUpstream: new NightscoutUpstream(),

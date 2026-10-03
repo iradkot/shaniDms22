@@ -10,6 +10,50 @@ export const ALERT_RULE_TRENDS = [
 
 export type AlertRuleTrend = (typeof ALERT_RULE_TRENDS)[number];
 
+export const ALERT_RULE_CONDITIONS = [
+  'below',
+  'above',
+  'outside-range',
+] as const;
+
+export type AlertRuleCondition = (typeof ALERT_RULE_CONDITIONS)[number];
+
+export interface AlertRuleBounds {
+  readonly lowerBoundMgDl: number;
+  readonly upperBoundMgDl: number;
+}
+
+/**
+ * Encodes a one-sided condition without changing the persisted v1 rule shape.
+ * The domain limits (1 and 1000 mg/dL) act as inactive sentinels.
+ */
+export const encodeAlertRuleConditionBounds = (
+  condition: AlertRuleCondition,
+  bounds: AlertRuleBounds,
+): AlertRuleBounds => {
+  switch (condition) {
+    case 'below':
+      return {lowerBoundMgDl: bounds.lowerBoundMgDl, upperBoundMgDl: 1000};
+    case 'above':
+      return {lowerBoundMgDl: 1, upperBoundMgDl: bounds.upperBoundMgDl};
+    case 'outside-range':
+      return {...bounds};
+  }
+};
+
+/** Infers the display condition used to encode a persisted v1 rule. */
+export const inferAlertRuleCondition = (
+  bounds: AlertRuleBounds,
+): AlertRuleCondition => {
+  if (bounds.upperBoundMgDl === 1000 && bounds.lowerBoundMgDl > 1) {
+    return 'below';
+  }
+  if (bounds.lowerBoundMgDl === 1 && bounds.upperBoundMgDl < 1000) {
+    return 'above';
+  }
+  return 'outside-range';
+};
+
 export interface AlertRuleInput {
   readonly name: string;
   readonly enabled: boolean;
@@ -51,11 +95,7 @@ const localMinuteOfDay = (timestampMs: number): number => {
   return date.getHours() * 60 + date.getMinutes();
 };
 
-const isMinuteInWindow = (
-  minute: number,
-  from: number,
-  to: number,
-): boolean =>
+const isMinuteInWindow = (minute: number, from: number, to: number): boolean =>
   from <= to ? minute >= from && minute <= to : minute >= from || minute <= to;
 
 /**
@@ -73,6 +113,8 @@ export const evaluateAlertRule = (
   }
   if (
     !Number.isFinite(observation.valueMgDl) ||
+    observation.valueMgDl < 1 ||
+    observation.valueMgDl > 1000 ||
     !Number.isSafeInteger(evaluatedAtMs) ||
     evaluatedAtMs <= 0
   ) {
@@ -87,10 +129,15 @@ export const evaluateAlertRule = (
   ) {
     return {trigger: false, reason: 'inactive-window'};
   }
-  if (
-    observation.valueMgDl >= rule.lowerBoundMgDl &&
-    observation.valueMgDl <= rule.upperBoundMgDl
-  ) {
+  const condition = inferAlertRuleCondition(rule);
+  const thresholdCrossed =
+    condition === 'below'
+      ? observation.valueMgDl < rule.lowerBoundMgDl
+      : condition === 'above'
+      ? observation.valueMgDl > rule.upperBoundMgDl
+      : observation.valueMgDl < rule.lowerBoundMgDl ||
+        observation.valueMgDl > rule.upperBoundMgDl;
+  if (!thresholdCrossed) {
     return {trigger: false, reason: 'inside-range'};
   }
   if (rule.trend !== 'any' && observation.trend !== rule.trend) {

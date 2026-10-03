@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const {test} = require('node:test');
 const path = require('node:path');
+const {execFileSync} = require('node:child_process');
 const config = require('../../metro.config');
 const root = path.resolve(__dirname, '../..');
 const blocked = file =>
@@ -38,4 +39,16 @@ test('the exclusion is rooted and never hides source or similarly named modules'
 
 test('Metro keeps its default exclusions', () => {
   assert.ok(blocked(path.join(root, '__tests__', 'test.ts')));
+});
+
+test('Metro persisted transformations cannot cross release channels', () => {
+  const cacheVersions = ['development', 'pilot', 'production'].map(channel =>
+    execFileSync(process.execPath, ['-e', 'process.stdout.write(require("./metro.config").cacheVersion)'], {
+      cwd: root,
+      env: {...process.env, SHANI_RELEASE_CHANNEL: channel},
+      encoding: 'utf8',
+    }),
+  );
+  assert.equal(new Set(cacheVersions).size, 3);
+  assert.ok(cacheVersions[1].includes('pilot'));
 });

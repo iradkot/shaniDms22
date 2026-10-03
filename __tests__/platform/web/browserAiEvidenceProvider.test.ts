@@ -14,6 +14,44 @@ const fresh = <T>(records: readonly T[]): BrowserNightscoutRange<T> => ({
 });
 
 describe('browser AI Nightscout evidence provider', () => {
+  it('loads the full requested month and exposes stale device timestamps and incomplete coverage', async () => {
+    const readEntries = jest
+      .fn()
+      .mockResolvedValue({
+        ...fresh([{date: NOW_MS - 60_000, sgv: 110}]),
+        complete: false,
+      });
+    const provider = createBrowserAiEvidenceProvider({
+      client: {
+        readEntries,
+        readTreatments: jest.fn().mockResolvedValue(fresh([])),
+        readDeviceStatuses: jest
+          .fn()
+          .mockResolvedValue(
+            fresh([{createdAtMs: NOW_MS - 60 * 60_000, iobUnits: 1.5}]),
+          ),
+      },
+      sourceId: 'source-a',
+      now: () => NOW_MS,
+    });
+    const signal = new AbortController().signal;
+    const context = await provider.loadVisibleContext({
+      specialist: 'general-chat',
+      locale: 'en',
+      rangeDays: 30,
+      focus: {kind: 'period', startMs: NOW_MS - 30 * DAY_MS, endMs: NOW_MS},
+      signal,
+    });
+    expect(readEntries).toHaveBeenCalledWith(
+      NOW_MS - 30 * DAY_MS,
+      NOW_MS,
+      signal,
+    );
+    expect(context).not.toContain('14 days');
+    expect(context).toContain('glucose range is incomplete');
+    expect(context).toContain('Device sample is stale');
+    expect(context).toContain(new Date(NOW_MS - 60 * 60_000).toISOString());
+  });
   it('builds bounded visible source-scoped facts without forwarding raw records', async () => {
     const readEntries = jest
       .fn<

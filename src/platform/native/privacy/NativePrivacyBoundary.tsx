@@ -1,0 +1,189 @@
+import React, {useEffect, useRef, useState} from 'react';
+import {ActivityIndicator, View} from 'react-native';
+import {getApp} from '@react-native-firebase/app';
+import {getAuth, signOut} from '@react-native-firebase/auth';
+import {
+  getMessaging,
+  setAutoInitEnabled,
+} from '@react-native-firebase/messaging';
+import {useAppLanguage} from '../../../contexts/AppLanguageContext';
+import {isE2E} from '../../../utils/e2e';
+import {
+  clearPrivacySession,
+  registerPrivacySession,
+  type PrivacyConsent,
+} from '../../../modules/privacy';
+import {PrivacyView} from '../../../product/privacy/PrivacyView';
+import {PrivacyControlsContext} from '../../../product/privacy/PrivacyControlsContext';
+import {nativePrivacyService} from './nativePrivacyService';
+import GoogleSignIn from '../../../api/GoogleSignIn';
+
+export const NativePrivacyBoundary = ({
+  children,
+}: {
+  readonly children: React.ReactNode;
+}) => {
+  const {language} = useAppLanguage();
+  const [uid, setUid] = useState<string | null>(() =>
+    isE2E ? null : getAuth(getApp()).currentUser?.uid ?? null,
+  );
+  const [consent, setConsent] = useState<PrivacyConsent | null>(null);
+  const [loading, setLoading] = useState(!isE2E && uid !== null);
+  const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [generation, setGeneration] = useState(0);
+  const [recoveryOwner, setRecoveryOwner] = useState<string | null>(null);
+  const [recoveryLoading, setRecoveryLoading] = useState(!isE2E);
+  const sequence = useRef(0);
+  useEffect(() => {
+    if (isE2E) {
+      return;
+    }
+    setAutoInitEnabled(
+      getMessaging(getApp()),
+      !!uid && !!consent?.cloudSync && !deleting && !recoveryOwner,
+    ).catch(() => undefined);
+  }, [uid, consent, deleting, recoveryOwner]);
+  useEffect(() => {
+    if (isE2E) {
+      clearPrivacySession();
+      return;
+    }
+    nativePrivacyService
+      .recoveryOwner()
+      .then(setRecoveryOwner)
+      .finally(() => setRecoveryLoading(false));
+    return getAuth(getApp()).onAuthStateChanged(user => {
+      clearPrivacySession();
+      sequence.current += 1;
+      setConsent(null);
+      setLoading(user !== null);
+      setUid(user?.uid ?? null);
+      setDeleting(false);
+      setOpen(false);
+    });
+  }, []);
+  useEffect(() => {
+    if (!uid || isE2E) {
+      setLoading(false);
+      return;
+    }
+    const current = ++sequence.current;
+    setLoading(true);
+    nativePrivacyService.load(uid).then(
+      result => {
+        if (sequence.current !== current) {
+          return;
+        }
+        setConsent(result.consent);
+        setDeleting(result.deleting);
+        registerPrivacySession(uid, result.deleting ? null : result.consent);
+        setLoading(false);
+      },
+      () => {
+        if (sequence.current === current) {
+          registerPrivacySession(uid, null);
+          setLoading(false);
+        }
+      },
+    );
+    return () => {
+      sequence.current += 1;
+      clearPrivacySession();
+    };
+  }, [uid]);
+  const runtime = {
+    consent,
+    saveConsent: async (cloudSync: boolean, aiProcessing: boolean) => {
+      if (!uid) {
+        throw new Error('Sign in first.');
+      }
+      // Deny immediately while saving/withdrawing, and unmount all async owners.
+      registerPrivacySession(uid, null);
+      setConsent(null);
+      setOpen(true);
+      const capturedSequence = sequence.current;
+      try {
+        const next = await nativePrivacyService.save(
+          uid,
+          cloudSync,
+          aiProcessing,
+        );
+        if (
+          getAuth(getApp()).currentUser?.uid !== uid ||
+          sequence.current !== capturedSequence
+        ) {
+          throw new Error('Account changed.');
+        }
+        registerPrivacySession(uid, next);
+        setConsent(next);
+        setOpen(false);
+        setGeneration(value => value + 1);
+      } finally {
+        /* The Privacy view keeps errors and retries visible. */
+      }
+    },
+    deleteAccount: async () => {
+      const owner = recoveryOwner ?? uid;
+      if (!owner) {
+        throw new Error('Sign in first.');
+      }
+      registerPrivacySession(owner, null);
+      setDeleting(true);
+      try {
+        await nativePrivacyService.deleteAccount(owner);
+        setRecoveryOwner(null);
+      } catch (error) {
+        setRecoveryOwner(await nativePrivacyService.recoveryOwner());
+        throw error;
+      }
+    },
+    reauthenticate: async () => {
+      if (
+        recoveryOwner &&
+        getAuth(getApp()).currentUser?.uid &&
+        getAuth(getApp()).currentUser?.uid !== recoveryOwner
+      ) {
+        await signOut(getAuth(getApp()));
+        return;
+      }
+      const result = await new GoogleSignIn().signIn();
+      if (result.error) {
+        throw result.error;
+      }
+    },
+  };
+  if (isE2E) {
+    return <>{children}</>;
+  }
+  if (loading || recoveryLoading) {
+    return (
+      <View style={{flex: 1, justifyContent: 'center'}}>
+        <ActivityIndicator testID="privacy-loading" />
+      </View>
+    );
+  }
+  if (recoveryOwner || (uid && (consent === null || deleting || open))) {
+    return (
+      <PrivacyView
+        locale={language}
+        runtime={{
+          ...runtime,
+          ...(uid && consent !== null && !deleting && !recoveryOwner
+            ? {
+                onClose: () => {
+                  registerPrivacySession(uid, consent);
+                  setOpen(false);
+                },
+              }
+            : {}),
+        }}
+      />
+    );
+  }
+  return (
+    <PrivacyControlsContext.Provider value={{openPrivacy: () => setOpen(true)}}>
+      <React.Fragment key={generation}>{children}</React.Fragment>
+    </PrivacyControlsContext.Provider>
+  );
+};

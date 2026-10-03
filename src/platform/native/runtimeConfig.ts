@@ -1,6 +1,6 @@
 import {NativeModules} from 'react-native';
 
-export const REQUIRED_FIRESTORE_RULES_SCHEMA_VERSION = 1;
+export const REQUIRED_FIRESTORE_RULES_SCHEMA_VERSION = 2;
 
 interface ShaniDmsRuntimeConfigModule {
   readonly backendBaseUrl?: unknown;
