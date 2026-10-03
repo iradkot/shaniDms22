@@ -20,6 +20,12 @@ import type {IndexedDbKeyValueStore} from '../storage';
 import {createOpaqueBrowserId} from '../identity';
 import {BrowserAiService, browserAiMessages} from './browserAiService';
 import type {BrowserAiEvidenceProvider} from './browserAiEvidenceProvider';
+import {
+  assertLocalAccountActive,
+  readProvenLegacyAccountStore,
+  withLocalAccountWrite,
+  type LocalAccountWorkspaceScope,
+} from '../../../modules/privacy/localAccountCleanup';
 import {useRecommendationRuntime} from '../../../product/ai/useRecommendationRuntime';
 import {recommendationRangeDays} from '../../../services/aiRecommendations/recommendationOrchestrator';
 import {recommendationEvidenceRange} from '../../../services/aiRecommendations/recommendationEvidenceRange';
@@ -108,15 +114,35 @@ type StartInput = Parameters<AiAnalystModuleRuntime['start']>[0];
 
 export const useBrowserAiAnalystRuntime = (input: {
   readonly service: BrowserAiService;
-  readonly storage: Pick<IndexedDbKeyValueStore, 'getItem' | 'setItem'>;
+  readonly storage: Pick<IndexedDbKeyValueStore, 'getItem' | 'setItem'> & Partial<Pick<IndexedDbKeyValueStore, 'getAllKeys'>>;
   readonly scopeId: string;
+  readonly accountScope?: LocalAccountWorkspaceScope;
   readonly locale: AiLocale;
   readonly enabled: boolean;
   readonly credentialConfigured: boolean;
   readonly evidenceProvider?: BrowserAiEvidenceProvider;
   readonly onOpenSettings: () => void;
 }): AiAnalystModuleRuntime => {
-  const historyKey = `shani.web.ai-history.v1:${input.scopeId}`;
+  const accountOwner = input.accountScope?.productUserId;
+  const accountWorkspace = input.accountScope?.workspaceId;
+  const accountScope = useMemo(() => accountOwner === undefined || accountWorkspace === undefined
+    ? undefined : {productUserId: accountOwner, workspaceId: accountWorkspace}, [accountOwner, accountWorkspace]);
+  const historyKey = accountScope === undefined ? `shani.web.ai-history.v1:${input.scopeId}`
+    : `shani.web.ai-history.v2:${encodeURIComponent(accountScope.productUserId)}:${encodeURIComponent(accountScope.workspaceId)}`;
+  const readHistory = useCallback(async () => {
+    if (accountScope) {
+      await assertLocalAccountActive(input.storage, accountScope.productUserId);
+    }
+    let raw = await input.storage.getItem(historyKey);
+    if (raw === null && accountScope) {
+      raw = await readProvenLegacyAccountStore(input.storage,
+        `shani.web.ai-history.v1:${accountScope.productUserId}-${accountScope.workspaceId}`, accountScope);
+    }
+    if (accountScope) {
+      await assertLocalAccountActive(input.storage, accountScope.productUserId);
+    }
+    return decodeHistory(raw);
+  }, [accountScope, historyKey, input.storage]);
   const [surface, setSurface] = useState<AiAnalystSurface>({kind: 'landing'});
   const [activeSpecialist, setActiveSpecialist] =
     useState<AiSpecialistId>('general-chat');
@@ -164,22 +190,26 @@ export const useBrowserAiAnalystRuntime = (input: {
       const sorted = [...items]
         .sort((left, right) => right.updatedAt - left.updatedAt)
         .slice(0, 100);
-      await input.storage.setItem(
+      await withLocalAccountWrite(input.storage, accountScope?.productUserId, () => input.storage.setItem(
         historyKey,
-        JSON.stringify({schemaVersion: 1, items: sorted}),
-      );
+        JSON.stringify({schemaVersion: 1, items: sorted,
+          ...(accountScope === undefined ? {} : {
+            ownerProductUserId: accountScope.productUserId, workspaceId: accountScope.workspaceId,
+          }),
+        }),
+      ));
       if (previousScope.current === requestScope) {
         setHistory(sorted);
       }
     },
-    [historyKey, input.scopeId, input.storage],
+    [accountScope, historyKey, input.scopeId, input.storage],
   );
 
   const loadHistory = useCallback(async () => {
     const requestScope = input.scopeId;
     setHistoryBusy(true);
     try {
-      const decoded = decodeHistory(await input.storage.getItem(historyKey));
+      const decoded = await readHistory();
       if (previousScope.current !== requestScope) {
         return [];
       }
@@ -190,7 +220,7 @@ export const useBrowserAiAnalystRuntime = (input: {
         setHistoryBusy(false);
       }
     }
-  }, [historyKey, input.scopeId, input.storage]);
+  }, [input.scopeId, readHistory]);
 
   const start = useCallback(
     async (request: StartInput) => {
@@ -518,14 +548,15 @@ export const useBrowserAiAnalystRuntime = (input: {
     scopeId: input.scopeId,
     locale: input.locale,
     storage: input.storage,
+    ...(accountScope === undefined ? {} : {accountScope,
+      legacyScopeId: `${accountScope.productUserId}-${accountScope.workspaceId}`}),
     chat: async (chatMessages, signal) => {
       input.evidenceProvider?.assertCurrentSource?.();
       const answer = await input.service.chat(chatMessages, signal);
       input.evidenceProvider?.assertCurrentSource?.();
       return answer;
     },
-    loadLegacyHistory: async () =>
-      decodeHistory(await input.storage.getItem(historyKey)),
+    loadLegacyHistory: readHistory,
     loadEvidence: async (recommendationStart, signal) => {
       if (!input.evidenceProvider) {
         return recommendationStart.locale === 'he'

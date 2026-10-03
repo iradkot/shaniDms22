@@ -14,6 +14,17 @@ The old `.env` contains a public Firebase web API identifier; its presence alone
 does not establish a secret leak or require rotation. This inventory is not a
 complete content scan, and no provider-side rotation has been verified.
 
+The merge review also found sensitive Apple CI material stored as repository
+Actions **Variables**, which are not an encrypted secret store:
+`APP_STORE_CONNECT_PRIVATE_KEY`, `APPLE_CERTIFICATE_P12`,
+`APPLE_CERTIFICATE_PASSWORD`, and `CI_KEYCHAIN_PASSWORD`. A metadata inspection
+accidentally printed their values to the local review transcript. Treat these
+values as exposed too. Replace/revoke the App Store Connect key, review and
+replace the signing certificate/private key as appropriate, change the affected
+passwords, and update dependent encrypted GitHub Secrets before removing the
+obsolete Variables. Do not put replacement values in Variables or review logs.
+This review did not rotate credentials or alter GitHub configuration.
+
 Do not invalidate an active OAuth client or Apple credentials blindly. Confirm
 which deployment/CI still uses them, replace dependent configuration, test the
 replacement, and then revoke the exposed value at its provider. Provider account

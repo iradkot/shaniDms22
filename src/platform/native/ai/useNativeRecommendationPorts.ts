@@ -50,6 +50,7 @@ export function useNativeRecommendationPorts(
       ? aiWorkspaceStorageKey('recommendations', workspace)
       : null,
     storage: AsyncStorage,
+    ...(workspace === null ? {} : {accountScope: workspace}),
     chat: async (messages, signal) => {
       assertCurrentSource();
       if (!workspace || !settings.enabled) {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createShaniApiHandler,
+  FixedWindowApiRateLimiter,
   type ApiResponse,
   type ShaniApiDependencies,
 } from './api';
@@ -23,7 +24,7 @@ class Response implements ApiResponse {
   }
   end() {}
 }
-const fixture = () => {
+const fixture = (overrides: Partial<ShaniApiDependencies> = {}) => {
   let consent = false;
   let ai = false;
   let deleting = false;
@@ -95,6 +96,7 @@ const fixture = () => {
     allowedModels: new Set(['test-model']),
     allowedOrigins: new Set<string>(),
     now: () => 1_000_000,
+    ...overrides,
   } satisfies ShaniApiDependencies;
   const handler = createShaniApiHandler(dependencies);
   const request = async (
@@ -209,4 +211,26 @@ test('arbitrary receipts cannot start unauthenticated deletions', async () => {
   );
   assert.equal(result.code, 500);
   assert.deepEqual(f.calls, []);
+});
+
+test('rotating anonymous receipts cannot bypass the recovery budget', async () => {
+  let lookups = 0;
+  let nowMs = 1_000;
+  const f = fixture({
+    rateLimiter: new FixedWindowApiRateLimiter(2, 60_000),
+    now: () => nowMs,
+  });
+  f.privacy.finishDeletion = async () => { lookups += 1; };
+  for (let index = 0; index < 100; index += 1) {
+    const result = await f.request('/v1/account/delete/finish', {
+      version: 1, receipt: index.toString(16).padStart(64, '0'),
+    }, false);
+    assert.equal(result.code, index < 2 ? 200 : 429);
+  }
+  assert.equal(lookups, 2);
+  nowMs += 60_000;
+  assert.equal((await f.request('/v1/account/delete/finish', {
+    version: 1, receipt: 'a'.repeat(64),
+  }, false)).code, 200);
+  assert.equal(lookups, 3);
 });

@@ -18,6 +18,7 @@ export interface AlertDeliveryModeState {
 
 export const useAlertDeliveryMode = (
   scopeId?: string,
+  ownerProductUserId?: string,
 ): AlertDeliveryModeState => {
   const [loaded, setLoaded] = useState<{
     readonly scopeId: string | undefined;
@@ -60,7 +61,7 @@ export const useAlertDeliveryMode = (
               : stored;
           setLoaded({scopeId, mode: supported, ready: true, error: false});
           if (supported !== stored) {
-            setAlertDeliveryMode(scopeId, supported).catch(() => undefined);
+            setAlertDeliveryMode(scopeId, supported, ownerProductUserId).catch(() => undefined);
           }
         }
       })
@@ -77,7 +78,7 @@ export const useAlertDeliveryMode = (
     return () => {
       active = false;
     };
-  }, [reloadKey, scopeId]);
+  }, [ownerProductUserId, reloadKey, scopeId]);
 
   const retry = useCallback(() => {
     setReloadKey(current => current + 1);
@@ -95,7 +96,7 @@ export const useAlertDeliveryMode = (
       const previous = mode;
       setLoaded({scopeId, mode: supportedNext, ready: true, error: false});
       try {
-        await setAlertDeliveryMode(scopeId, supportedNext);
+        await setAlertDeliveryMode(scopeId, supportedNext, ownerProductUserId);
       } catch (cause) {
         if (revision.current === run) {
           setLoaded({scopeId, mode: previous, ready: true, error: false});
@@ -103,7 +104,7 @@ export const useAlertDeliveryMode = (
         throw cause;
       }
     },
-    [mode, scopeId],
+    [mode, ownerProductUserId, scopeId],
   );
 
   return {mode, ready, error, retry, setMode};

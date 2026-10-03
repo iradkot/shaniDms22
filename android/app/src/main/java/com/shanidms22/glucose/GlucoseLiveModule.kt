@@ -4,6 +4,8 @@ import android.content.Context
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReadableArray
 
 class GlucoseLiveModule(reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -106,16 +108,38 @@ class GlucoseLiveModule(reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun configureBackgroundSync(baseUrl: String?, apiSecretSha1: String?, enabled: Boolean, sourceRevision: Double) {
+  fun configureBackgroundSync(baseUrl: String?, apiSecretSha1: String?, enabled: Boolean, sourceRevision: Double, ownerUserId: String?, sourceIdentity: String?) {
     GlucoseWidgetCredentialStore.withConfigurationLock {
+      if (GlucoseWidgetCredentialStore.isOwnerDeleted(reactApplicationContext, ownerUserId)) return@withConfigurationLock
+      if (!sourceRevision.isFinite() || sourceRevision < 0 ||
+        configurationRevision?.let { sourceRevision < it } == true) return@withConfigurationLock
       configurationRevision = sourceRevision
       GlucoseSyncScheduler.configure(
         context = reactApplicationContext,
         baseUrl = baseUrl,
         apiSecretSha1 = apiSecretSha1,
         enabled = enabled,
+        ownerUserId = ownerUserId,
+        sourceIdentity = sourceIdentity,
       )
     }
+  }
+
+  @ReactMethod
+  fun deleteAccountData(ownerUserId: String, sourceIdentities: ReadableArray, promise: Promise) {
+    val sources = (0 until sourceIdentities.size()).mapNotNull { sourceIdentities.getString(it) }.toSet()
+    Thread {
+      try {
+        GlucoseWidgetCredentialStore.withConfigurationLock {
+          if (GlucoseWidgetCredentialStore.deleteAccount(reactApplicationContext, ownerUserId, sources)) {
+            configurationRevision = null
+          }
+        }
+        promise.resolve(null)
+      } catch (error: Throwable) {
+        promise.reject("native_account_cleanup_failed", "Native account cleanup must be retried.", error)
+      }
+    }.start()
   }
 
   @ReactMethod

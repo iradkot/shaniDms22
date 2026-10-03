@@ -67,12 +67,32 @@ IndexedDB records, and signs out. Success is not reported until both server and
 local steps finish. A different active native account blocks the global cache
 wipe until sign-out; its data is not silently erased.
 
+The additional merge review added exact owner stamps/unambiguous workspace
+scopes for recommendation memory and browser history/alert stores. Legacy
+hyphenated scopes are removed only when retained workspace metadata proves a
+single owner. Local Journal, AI, alert, and preference writes register with an
+owner barrier; deletion blocks new writes and waits for already-started writes
+before purging, including parallel writes that fail independently.
+
+Android deletion also explicitly awaits background teardown before the cloud
+request and during startup recovery. It persists a deleted-owner fence, removes
+that owner's native credential and widget health state, and cancels scheduled
+and active sync. Failures remain visible for retry. An explicit stored owner is
+required to enable/read background sync. Historical native configuration with
+no owner stamp is disabled until the signed-in provider writes a verified
+owner; its unassignable credential/widget data is preserved. A matching server
+URL alone never permits deletion of another account's data.
+
 Old unscoped files/caches whose owner cannot be proved are preserved. The policy
 explains this and the optional device/site storage reset, which clears every
 account's local copies. Other offline devices and third-party logs/backups may
 retain prior copies. Nightscout, the user's Google account, and sensor/pump
 records are not deleted. Device tests must still verify deletion recovery and
 Firebase persistence cleanup with a disposable account.
+
+Anonymous receipt recovery has a shared instance request budget before receipt
+lookup. The limiter bounds retained active identities and reclaims only expired
+budgets. Provider/edge throttling still needs deployment verification.
 
 ## Deployment prerequisites (pending)
 

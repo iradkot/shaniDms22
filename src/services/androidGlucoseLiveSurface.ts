@@ -7,7 +7,8 @@ import {
   reobserveCurrentData,
   type CurrentDataSnapshot,
 } from '../modules/currentData';
-import {getNightscoutConfigurationRevision} from '../api/shaniNightscoutInstances';
+import {getNightscoutConfigurationRevision, getNightscoutOwnerUserId, getNightscoutBaseUrl} from '../api/shaniNightscoutInstances';
+import {createNightscoutCacheScope} from './nightscoutCacheScope';
 
 type GlucoseNativeModule = {
   updateForecastSnapshot?: (
@@ -35,6 +36,7 @@ type GlucoseNativeModule = {
     sourceBaseUrl: string,
     configurationRevision: number,
   ) => void;
+  deleteAccountData?: (ownerUserId: string, sourceIdentities: readonly string[]) => Promise<void>;
   clearLiveSurface: () => void;
   setWidgetThresholds: (low: number, high: number) => void;
   configureBackgroundSync: (
@@ -42,6 +44,8 @@ type GlucoseNativeModule = {
     apiSecretSha1: string | undefined,
     enabled: boolean,
     configurationRevision: number,
+    ownerUserId: string | null,
+    sourceIdentity: string | null,
   ) => void;
   setLiveModeEnabled: (enabled: boolean) => void;
   setWidgetRangeHours?: (hours: number) => void;
@@ -336,6 +340,8 @@ export function configureAndroidWidgetBackgroundSync(params: {
       params.accessToken ?? params.apiSecretSha1,
       params.enabled && Boolean(params.accessToken || params.apiSecretSha1),
       getNightscoutConfigurationRevision(),
+      getNightscoutOwnerUserId(),
+      createNightscoutCacheScope(params.baseUrl)?.sourceIdentity ?? null,
     );
   } catch (err) {
     console.warn(
@@ -343,6 +349,18 @@ export function configureAndroidWidgetBackgroundSync(params: {
       err,
     );
   }
+}
+
+/** Deletion uses an acknowledged native operation, including signed-out restart recovery. */
+export async function deleteAndroidGlucoseAccountData(ownerUserId: string, sourceIdentities: readonly string[]): Promise<void> {
+  if (Platform.OS !== 'android') {return;}
+  if (!nativeModule?.deleteAccountData) {
+    throw new Error('Native account cleanup is unavailable.');
+  }
+  const active = getNightscoutOwnerUserId() === ownerUserId
+    ? createNightscoutCacheScope(getNightscoutBaseUrl(), ownerUserId)?.sourceIdentity
+    : undefined;
+  await nativeModule.deleteAccountData(ownerUserId, [...new Set([...sourceIdentities, ...(active ? [active] : [])])]);
 }
 
 export function setAndroidWidgetLiveModeEnabled(enabled: boolean): void {

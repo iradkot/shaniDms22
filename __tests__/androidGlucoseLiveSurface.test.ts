@@ -5,6 +5,7 @@ import {
   buildAndroidGlucoseWidgetUpdateArgs,
   calculateWidgetTir,
   updateAndroidGlucoseLiveSurface,
+  deleteAndroidGlucoseAccountData,
 } from 'app/services/androidGlucoseLiveSurface';
 import {BgSample} from 'app/types/day_bgs.types';
 import {buildCurrentDataSnapshot} from 'app/modules/currentData';
@@ -15,7 +16,7 @@ import {
 } from 'app/api/shaniNightscoutInstances';
 
 jest.mock('react-native', () => ({
-  NativeModules: {GlucoseLiveModule: {updateLiveSurface: jest.fn()}},
+  NativeModules: {GlucoseLiveModule: {updateLiveSurface: jest.fn(), deleteAccountData: jest.fn(async () => {})}},
   Platform: {OS: 'android'},
 }));
 
@@ -222,5 +223,14 @@ describe('androidGlucoseLiveSurface widget payload', () => {
       'https://source-a.example',
       getNightscoutConfigurationRevision(),
     ]);
+  });
+
+  it('awaits native deletion failures and never appends another account source to the deletion manifest', async () => {
+    const cleanup = NativeModules.GlucoseLiveModule.deleteAccountData as jest.Mock;
+    configureNightscoutInstance({baseUrl: 'https://source-b.example', ownerUserId: 'owner-B'});
+    cleanup.mockRejectedValueOnce(new Error('native teardown failed'));
+    await expect(deleteAndroidGlucoseAccountData('owner-A', ['a'.repeat(40)])).rejects.toThrow('native teardown failed');
+    expect(cleanup).toHaveBeenLastCalledWith('owner-A', ['a'.repeat(40)]);
+    await deleteAndroidGlucoseAccountData('owner-A', ['a'.repeat(40)]);
   });
 });

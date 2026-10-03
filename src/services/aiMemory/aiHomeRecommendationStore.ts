@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {withLocalAccountWrite} from '../../modules/privacy/localAccountCleanup';
 import {assertRecommendationAllowed, getReleaseSafetyPolicy} from '../../modules/releaseSafety/policy';
 
 import {
@@ -60,8 +61,8 @@ export const saveAiHomeRecommendation = async (
 ): Promise<void> => {
   assertRecommendationAllowed({kind: 'now'});
   await purgeLegacyUnscopedRecommendation();
-  await AsyncStorage.setItem(
+  await withLocalAccountWrite(AsyncStorage, scope.productUserId, () => AsyncStorage.setItem(
     storageKey(scope),
     JSON.stringify(recommendation),
-  );
+  ));
 };

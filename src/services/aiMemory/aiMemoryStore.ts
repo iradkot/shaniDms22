@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {withLocalAccountWrite} from '../../modules/privacy/localAccountCleanup';
 import {aiWorkspaceStorageKey, type AiWorkspaceScope} from './aiWorkspaceScope';
 
 import {
@@ -156,7 +157,8 @@ async function readEntries(scope: AiWorkspaceScope): Promise<MemoryEntry[]> {
 }
 
 async function writeEntries(scope: AiWorkspaceScope, entries: MemoryEntry[]) {
-  await AsyncStorage.setItem(memoryKey(scope), JSON.stringify(entries));
+  await withLocalAccountWrite(AsyncStorage, scope.productUserId,
+    () => AsyncStorage.setItem(memoryKey(scope), JSON.stringify(entries)));
 }
 
 function pruneEntries(entries: MemoryEntry[]): MemoryEntry[] {
@@ -394,7 +396,8 @@ export async function upsertProfileSnapshot(
     notes: uniq([...(prev.notes ?? []), ...(patch.notes ?? [])]),
     updatedAt: nowMs(),
   };
-  await AsyncStorage.setItem(profileKey(scope), JSON.stringify(next));
+  await withLocalAccountWrite(AsyncStorage, scope.productUserId,
+    () => AsyncStorage.setItem(profileKey(scope), JSON.stringify(next)));
   return next;
 }
 
@@ -457,7 +460,8 @@ export async function markEpisodeKeyIfNew(
     const prev = raw ? (JSON.parse(raw) as string[]) : [];
     if (prev.includes(key)) return false;
     const next = [key, ...prev].slice(0, 600);
-    await AsyncStorage.setItem(storageKey, JSON.stringify(next));
+    await withLocalAccountWrite(AsyncStorage, scope.productUserId,
+      () => AsyncStorage.setItem(storageKey, JSON.stringify(next)));
     return true;
   } catch {
     return false;

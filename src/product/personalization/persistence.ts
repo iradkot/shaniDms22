@@ -7,6 +7,7 @@ import {
   parseStoredProductPersonalization,
   safeParseStoredProductPersonalization,
 } from './validation';
+import {withLocalAccountWrite} from '../../modules/privacy/localAccountCleanup';
 
 export interface ProductPersonalizationKeyValueStore {
   getItem(key: string): Promise<string | null>;
@@ -31,7 +32,7 @@ export const serializePersonalizationStorageAccess = async <T>(
   }
   const key = safeKeyPart(productUserId, 'Product User ID');
   const previous = queues.get(key) ?? Promise.resolve();
-  const run = previous.catch(() => undefined).then(operation);
+  const run = previous.catch(() => undefined).then(() => withLocalAccountWrite(storage, productUserId, operation));
   queues.set(key, run);
   try {
     return await run;
@@ -172,12 +173,16 @@ export class KeyValueProductPersonalizationStore {
     value: StoredProductPersonalization,
   ): Promise<void> {
     const keys = productPersonalizationStorageKeys(scope);
-    await Promise.all([
+    const results = await Promise.allSettled([
       this.storage.setItem(keys.account, JSON.stringify(value.account)),
       this.storage.setItem(keys.workspace, JSON.stringify(value.workspace)),
       this.storage.setItem(keys.layout, JSON.stringify(value.layout)),
       this.storage.setItem(keys.device, JSON.stringify(value.device)),
     ]);
+    const failed = results.find(result => result.status === 'rejected');
+    if (failed?.status === 'rejected') {
+      throw failed.reason;
+    }
   }
 
   private async recoverPending(productUserId: string): Promise<void> {

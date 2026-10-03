@@ -123,6 +123,7 @@ export function useGlucoseRuleNotifications(
   updateCenterRepository?: Pick<NativeUpdateCenterRepository, 'append'>,
   locale: 'en' | 'he' = 'en',
   deliveryMode: AlertDeliveryMode = 'sound-and-vibrate',
+  ownerProductUserId?: string,
 ) {
   const lastSampleRef = useRef<string | null>(null);
   const deliveryModeRef = useRef(deliveryMode);
@@ -159,7 +160,8 @@ export function useGlucoseRuleNotifications(
       lastSampleRef.current = sampleIdentity;
       claimedSampleIdentity = sampleIdentity;
 
-      const scope: NotificationStoreScope = {scopeId: workspaceScopeId};
+      const scope: NotificationStoreScope = {scopeId: workspaceScopeId,
+        ...(ownerProductUserId === undefined ? {} : {ownerProductUserId})};
       const rules = await getNotificationRules(scope);
       if (!active) {
         return;
@@ -310,5 +312,5 @@ export function useGlucoseRuleNotifications(
         lastSampleRef.current = null;
       }
     };
-  }, [latestSnapshot, updateCenterRepository, workspaceScopeId]);
+  }, [latestSnapshot, ownerProductUserId, updateCenterRepository, workspaceScopeId]);
 }

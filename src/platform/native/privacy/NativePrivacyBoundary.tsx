@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, View} from 'react-native';
+import {ActivityIndicator, View, Text} from 'react-native';
 import {getApp} from '@react-native-firebase/app';
 import {getAuth, signOut} from '@react-native-firebase/auth';
 import {
@@ -34,6 +34,7 @@ export const NativePrivacyBoundary = ({
   const [generation, setGeneration] = useState(0);
   const [recoveryOwner, setRecoveryOwner] = useState<string | null>(null);
   const [recoveryLoading, setRecoveryLoading] = useState(!isE2E);
+  const [nativeRecoveryFailed, setNativeRecoveryFailed] = useState(false);
   const sequence = useRef(0);
   useEffect(() => {
     if (isE2E) {
@@ -51,7 +52,13 @@ export const NativePrivacyBoundary = ({
     }
     nativePrivacyService
       .recoveryOwner()
-      .then(setRecoveryOwner)
+      .then(async owner => {
+        setRecoveryOwner(owner);
+        if (owner) {
+          try { await nativePrivacyService.resumeNativeDeletion(owner); }
+          catch { setNativeRecoveryFailed(true); }
+        }
+      })
       .finally(() => setRecoveryLoading(false));
     return getAuth(getApp()).onAuthStateChanged(user => {
       clearPrivacySession();
@@ -132,6 +139,7 @@ export const NativePrivacyBoundary = ({
       setDeleting(true);
       try {
         await nativePrivacyService.deleteAccount(owner);
+        setNativeRecoveryFailed(false);
         setRecoveryOwner(null);
       } catch (error) {
         setRecoveryOwner(await nativePrivacyService.recoveryOwner());
@@ -165,6 +173,10 @@ export const NativePrivacyBoundary = ({
   }
   if (recoveryOwner || (uid && (consent === null || deleting || open))) {
     return (
+      <View style={{flex: 1}}>
+      {nativeRecoveryFailed ? <Text testID="privacy-native-recovery-error" accessibilityRole="alert">
+        {language === 'he' ? 'ניקוי הנתונים במכשיר לא הושלם. נסו שוב את מחיקת החשבון.' : 'Device cleanup is incomplete. Retry account deletion.'}
+      </Text> : null}
       <PrivacyView
         locale={language}
         runtime={{
@@ -179,6 +191,7 @@ export const NativePrivacyBoundary = ({
             : {}),
         }}
       />
+      </View>
     );
   }
   return (

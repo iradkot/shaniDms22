@@ -13,6 +13,9 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.await
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.TimeUnit
 
 object GlucoseSyncScheduler {
@@ -26,14 +29,17 @@ object GlucoseSyncScheduler {
     .setRequiredNetworkType(NetworkType.CONNECTED)
     .build()
 
-  fun configure(context: Context, baseUrl: String?, apiSecretSha1: String?, enabled: Boolean) {
+  fun configure(context: Context, baseUrl: String?, apiSecretSha1: String?, enabled: Boolean, ownerUserId: String? = null, sourceIdentity: String? = null) {
     GlucoseWidgetCredentialStore.withConfigurationLock {
+      if (GlucoseWidgetCredentialStore.isOwnerDeleted(context, ownerUserId)) return@withConfigurationLock
       val previous = GlucoseWidgetCredentialStore.readSyncConfiguration(context)
       val result = GlucoseWidgetCredentialStore.writeSyncConfiguration(
         context = context,
         baseUrl = baseUrl,
         apiSecretSha1 = apiSecretSha1,
         enabled = enabled,
+        ownerUserId = ownerUserId,
+        sourceIdentity = sourceIdentity,
       )
       val next = GlucoseWidgetCredentialStore.readSyncConfiguration(context)
       if (previous != next || !result.effectiveEnabled) {
@@ -132,6 +138,18 @@ object GlucoseSyncScheduler {
     cancelWork(context)
     cancelRefreshAlarm(context)
     GlucoseLiveForegroundService.stop(context)
+  }
+
+  /** Wait for WorkManager's durable cancellation; attempt alarms/service even on failure. */
+  fun cancelForAccountDeletion(context: Context) {
+    val failures = mutableListOf<Throwable>()
+    fun attempt(action: () -> Unit) { try { action() } catch (error: Throwable) { failures.add(error) } }
+    val wm = WorkManager.getInstance(context)
+    attempt { runBlocking { withTimeout(10_000L) { wm.cancelUniqueWork(SYNC_WORK_NAME).await() } } }
+    attempt { runBlocking { withTimeout(10_000L) { wm.cancelUniqueWork(IMMEDIATE_SYNC_WORK_NAME).await() } } }
+    attempt { cancelRefreshAlarm(context) }
+    attempt { GlucoseLiveForegroundService.stop(context) }
+    if (failures.isNotEmpty()) throw IllegalStateException("Background sync cancellation must be retried.", failures.first())
   }
 
   private fun cancelWork(context: Context) {

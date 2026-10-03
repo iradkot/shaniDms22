@@ -46,6 +46,7 @@ jest.mock(
       load: jest.fn(),
       save: jest.fn(),
       recoveryOwner: jest.fn(),
+      resumeNativeDeletion: jest.fn(),
       deleteAccount: jest.fn(),
     },
   }),
@@ -85,6 +86,7 @@ beforeEach(() => {
   service.save.mockReset().mockResolvedValue({...consent, cloudSync: false});
   service.recoveryOwner.mockReset().mockResolvedValue(null);
   service.deleteAccount.mockReset().mockResolvedValue(undefined);
+  service.resumeNativeDeletion.mockReset().mockResolvedValue(undefined);
 });
 test('first sign-in cannot mount data runtimes before a privacy choice', async () => {
   const tree = await mount();
@@ -165,4 +167,17 @@ test('A to B to A rejects an earlier consent completion', async () => {
     resolve(consent);
     await expect(pending).rejects.toThrow('Account changed');
   });
+});
+
+test('failed signed-out native recovery stays visible and retries deletion before mounting data runtimes', async () => {
+  mockAuth.currentUser = null;
+  service.recoveryOwner.mockResolvedValue('owner-A');
+  service.resumeNativeDeletion.mockRejectedValueOnce(new Error('native teardown failure'));
+  const tree = await mount();
+  expect(service.resumeNativeDeletion).toHaveBeenCalledWith('owner-A');
+  expect(tree.root.findByProps({testID: 'privacy-native-recovery-error'})).toBeDefined();
+  expect(tree.root.findAllByProps({testID: 'product-child'})).toHaveLength(0);
+  await act(async () => {await tree.root.findByType(PrivacyView).props.runtime.deleteAccount();});
+  expect(service.deleteAccount).toHaveBeenCalledWith('owner-A');
+  expect(tree.root.findAllByProps({testID: 'privacy-native-recovery-error'})).toHaveLength(0);
 });

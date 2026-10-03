@@ -170,6 +170,12 @@ object GlucoseWidgetUpdater {
     updateWidgets(context)
   }
 
+  internal fun clearForAccountDeletion(context: Context) {
+    val cleared = prefs(context).edit().clear().commit()
+    try { cancelNotification(context) } finally { updateWidgets(context) }
+    check(cleared) { "Widget health data removal must be retried." }
+  }
+
   fun setThresholds(context: Context, low: Int?, high: Int?) {
     val e = prefs(context).edit()
     if (low != null) e.putInt(KEY_LOW, low) else e.remove(KEY_LOW)

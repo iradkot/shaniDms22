@@ -59,16 +59,34 @@ interface RateBucket {
 /** Instance-local defence in depth. Production should also enable Cloud Armor. */
 export class FixedWindowApiRateLimiter implements ApiRateLimiter {
   private readonly buckets = new Map<string, RateBucket>();
+  private lastPrunedAtMs = Number.NEGATIVE_INFINITY;
 
   constructor(
     private readonly maximumRequests = 40,
     private readonly windowMs = 60_000,
-  ) {}
+    private readonly maximumBuckets = 10_000,
+  ) {
+    if (![maximumRequests, windowMs, maximumBuckets].every(value => Number.isSafeInteger(value) && value > 0)) {
+      throw new Error('Rate limiter limits must be positive integers');
+    }
+  }
 
   consume(uid: string, route: string, nowMs: number): boolean {
+    if (nowMs - this.lastPrunedAtMs >= this.windowMs) {
+      for (const [bucketKey, bucket] of this.buckets) {
+        if (nowMs - bucket.startedAtMs >= this.windowMs) {
+          this.buckets.delete(bucketKey);
+        }
+      }
+      this.lastPrunedAtMs = nowMs;
+    }
     const key = `${uid}:${route}`;
     const current = this.buckets.get(key);
     if (current === undefined || nowMs - current.startedAtMs >= this.windowMs) {
+      // Never evict an active budget to admit another identity.
+      if (current === undefined && this.buckets.size >= this.maximumBuckets) {
+        return false;
+      }
       this.buckets.set(key, {startedAtMs: nowMs, count: 1});
       return true;
     }
@@ -222,14 +240,16 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
       }
       if (requestPath(request) === '/v1/account/delete/finish') {
         requireMethod(request, 'POST');
+        // Receipt strings are attacker-controlled until the repository verifies
+        // them. Share one instance budget before validation or storage lookup.
+        if (!limiter.consume('anonymous-deletion-recovery', '/v1/account/delete/finish', now())) {
+          throw new ApiContractError(429, 'rate_limited', 'Too many requests');
+        }
         const input = request.body as Record<string, unknown> | null;
         if (typeof input !== 'object' || input === null || Array.isArray(input) ||
             Object.keys(input).some(key => !['version', 'receipt'].includes(key)) || input.version !== 1 ||
             typeof input.receipt !== 'string' || !/^[a-f0-9]{64}$/.test(input.receipt)) {
           throw new ApiContractError(400, 'invalid_request', 'Invalid deletion receipt');
-        }
-        if (!limiter.consume(`delete:${input.receipt}`, '/v1/account/delete/finish', now())) {
-          throw new ApiContractError(429, 'rate_limited', 'Too many requests');
         }
         if (!dependencies.privacy) {throw new ApiContractError(503, 'privacy_unavailable', 'Account deletion is unavailable');}
         await dependencies.privacy.finishDeletion(input.receipt);

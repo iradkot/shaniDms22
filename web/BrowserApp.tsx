@@ -81,6 +81,7 @@ import {
   registerPrivacySession,
   type PrivacyConsent,
 } from '../src/modules/privacy';
+import {accountWorkspaceScopeId} from '../src/modules/privacy/localAccountCleanup';
 import {readCachedConnections} from './connectionStatus';
 
 const ProductExperience = React.lazy(() =>
@@ -353,7 +354,8 @@ const BrowserProduct = (props: {
   const aiRuntime = useBrowserAiAnalystRuntime({
     service: resources.aiService,
     storage: resources.keyValueStore,
-    scopeId: `${resources.scope.productUserId}-${resources.scope.workspaceId}`,
+    scopeId: accountWorkspaceScopeId(resources.scope),
+    accountScope: resources.scope,
     locale,
     enabled: resources.aiEnabled,
     credentialConfigured: resources.aiConfigured,
@@ -889,12 +891,14 @@ export const BrowserApp = () => {
             };
       const alertRules = createBrowserAlertRulesRepository({
         storage: keyValueStore,
-        scopeId: `${scope.productUserId}-${scope.workspaceId}`,
+        scopeId: accountWorkspaceScopeId(scope),
+        accountScope: scope,
         ...(alertsSync === undefined ? {} : {sync: alertsSync}),
       });
       const updateCenter = createBrowserUpdateCenterRepository({
         storage: keyValueStore,
-        scopeId: `${scope.productUserId}-${scope.workspaceId}`,
+        scopeId: accountWorkspaceScopeId(scope),
+        accountScope: scope,
         ...(alertsSync === undefined ? {} : {sync: alertsSync}),
       });
       await Promise.all([alertRules.refresh(), updateCenter.refresh()]);

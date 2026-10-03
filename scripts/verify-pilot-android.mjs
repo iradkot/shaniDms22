@@ -1,5 +1,5 @@
 // Uses only a named, dedicated emulator. Never clears an app's data or touches a personal phone.
-// node scripts/verify-pilot-android.mjs --serial emulator-5580 --apk ABSOLUTE_APK [--baseline ABSOLUTE_OLDER_APK]
+// node scripts/verify-pilot-android.mjs --serial emulator-5580 --apk ABSOLUTE_APK [--baseline ABSOLUTE_OLDER_APK] [--output ABSOLUTE_DIRECTORY]
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
@@ -15,7 +15,10 @@ const baseline = args.includes('--baseline') ? value('--baseline') : undefined;
 if (!args.includes('--serial') || !args.includes('--apk') || !/^emulator-\d+$/.test(serial || '') || !path.isAbsolute(apk || '')) {
   throw new Error('Choose a dedicated emulator serial and an absolute APK path.');
 }
-const output = path.join(root, 'artifacts', 'pilot-qa', 'android-smoke');
+const output = args.includes('--output') ? value('--output') : path.join(root, 'artifacts', 'pilot-qa', 'android-smoke');
+if (!path.isAbsolute(output || '')) {
+  throw new Error('Choose an absolute smoke report directory.');
+}
 mkdirSync(output, {recursive: true});
 const reportFile = path.join(output, 'report.json');
 const report = {

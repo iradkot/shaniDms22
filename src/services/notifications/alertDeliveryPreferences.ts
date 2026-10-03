@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {withLocalAccountWrite} from '../../modules/privacy/localAccountCleanup';
 
 import {
   ALERT_DELIVERY_MODES,
@@ -33,9 +34,11 @@ export const getAlertDeliveryMode = async (
 export const setAlertDeliveryMode = async (
   scopeId: string,
   mode: AlertDeliveryMode,
+  ownerProductUserId?: string,
 ): Promise<void> => {
   if (!isDeliveryMode(mode)) {
     throw new Error('Alert delivery mode is invalid.');
   }
-  await AsyncStorage.setItem(storageKey(scopeId), mode);
+  await withLocalAccountWrite(AsyncStorage, ownerProductUserId,
+    () => AsyncStorage.setItem(storageKey(scopeId), mode));
 };

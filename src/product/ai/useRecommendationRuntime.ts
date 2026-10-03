@@ -30,6 +30,7 @@ import {
   isAiConversationAllowed,
   isRecommendationAllowed,
 } from '../../modules/releaseSafety/policy';
+import type {LocalAccountWorkspaceScope} from '../../modules/privacy/localAccountCleanup';
 
 type Chat = Parameters<typeof runRecommendation>[0]['chat'];
 export type RecommendationEvidence =
@@ -41,10 +42,13 @@ export type RecommendationEvidence =
     };
 export interface RecommendationRuntimePorts {
   readonly scopeId: string | null;
+  readonly accountScope?: LocalAccountWorkspaceScope;
+  readonly legacyScopeId?: string;
   readonly locale: AiLocale;
   readonly storage: {
     getItem(key: string): Promise<string | null>;
     setItem(key: string, value: string): Promise<void>;
+    getAllKeys?(): Promise<readonly string[]>;
   };
   readonly chat: Chat;
   readonly loadEvidence: (
@@ -134,6 +138,8 @@ export function useRecommendationRuntime(
   ports: RecommendationRuntimePorts,
 ): AiAnalystModuleRuntime {
   const currentRecommendations = getReleaseSafetyPolicy().currentRecommendations;
+  const accountOwner = ports.accountScope?.productUserId;
+  const accountWorkspace = ports.accountScope?.workspaceId;
   const store = useMemo(
     () =>
       ports.scopeId === null
@@ -141,8 +147,12 @@ export function useRecommendationRuntime(
         : createRecommendationMemoryStore({
             storage: ports.storage,
             scopeId: ports.scopeId,
+            ...(accountOwner === undefined || accountWorkspace === undefined ? {} : {
+              accountScope: {productUserId: accountOwner, workspaceId: accountWorkspace},
+            }),
+            ...(ports.legacyScopeId === undefined ? {} : {legacyScopeId: ports.legacyScopeId}),
           }),
-    [ports.scopeId, ports.storage],
+    [ports.scopeId, ports.storage, accountOwner, accountWorkspace, ports.legacyScopeId],
   );
   const [memory, setMemory] = useState<RecommendationMemory>();
   const [memoryBusy, setMemoryBusy] = useState(false);

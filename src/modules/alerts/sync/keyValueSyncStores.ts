@@ -11,6 +11,7 @@ import {
   type RemoteAlertRuleRecord,
   type UpdateReadRecord,
 } from './model';
+import {assertLocalAccountActive, withLocalAccountWrite} from '../../privacy/localAccountCleanup';
 
 export interface AlertSyncKeyValueStore {
   getItem(key: string): Promise<string | null>;
@@ -232,7 +233,10 @@ export class KeyValueAlertRuleSyncStore {
   }
 
   private async readDirect(): Promise<RuleSyncState> {
-    return parseRuleState(await this.storage.getItem(this.key), this.scope);
+    await assertLocalAccountActive(this.storage, this.scope.ownerProductUserId);
+    const state = parseRuleState(await this.storage.getItem(this.key), this.scope);
+    await assertLocalAccountActive(this.storage, this.scope.ownerProductUserId);
+    return state;
   }
 
   private async change(
@@ -240,7 +244,8 @@ export class KeyValueAlertRuleSyncStore {
   ): Promise<RuleSyncState> {
     return serialize(this.storage, this.key, async () => {
       const next = update(await this.readDirect());
-      await this.storage.setItem(this.key, JSON.stringify(next));
+      await withLocalAccountWrite(this.storage, this.scope.ownerProductUserId,
+        () => this.storage.setItem(this.key, JSON.stringify(next)));
       return next;
     });
   }
@@ -326,7 +331,10 @@ export class KeyValueUpdateCenterSyncStore {
   }
 
   private async readDirect(): Promise<UpdateSyncState> {
-    return parseUpdateState(await this.storage.getItem(this.key), this.scope);
+    await assertLocalAccountActive(this.storage, this.scope.ownerProductUserId);
+    const state = parseUpdateState(await this.storage.getItem(this.key), this.scope);
+    await assertLocalAccountActive(this.storage, this.scope.ownerProductUserId);
+    return state;
   }
 
   private async change(
@@ -334,7 +342,8 @@ export class KeyValueUpdateCenterSyncStore {
   ): Promise<UpdateSyncState> {
     return serialize(this.storage, this.key, async () => {
       const next = update(await this.readDirect());
-      await this.storage.setItem(this.key, JSON.stringify(next));
+      await withLocalAccountWrite(this.storage, this.scope.ownerProductUserId,
+        () => this.storage.setItem(this.key, JSON.stringify(next)));
       return next;
     });
   }

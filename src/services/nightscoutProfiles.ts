@@ -486,6 +486,7 @@ const migrateOrQuarantineLegacyProfiles = async (
       // after the owner frees capacity. No part of this migration is written.
       return;
     }
+    await indexOwnedProfiles(normalizedOwner, migrated);
     await settleAll(
       migrated
         .filter(profile => isSha1Hex(profile.credential))
@@ -723,6 +724,7 @@ export const recoverLegacyNightscoutProfiles = async (params: {
       if (verified.length === 0) {
         return {profiles, activeProfileId};
       }
+      await indexOwnedProfiles(ownerUserId, profiles);
       for (const profile of profiles) {
         assertOwnerCurrent();
         await nativeSecureCredentialStore.write(

@@ -439,6 +439,19 @@ test('unknown paths share one bounded rate-limit bucket', async () => {
   assert.equal(second.statusCode, 429);
 });
 
+test('rate limiter bounds identities without evicting an active budget', () => {
+  const limiter = new FixedWindowApiRateLimiter(1, 60_000, 2);
+  assert.equal(limiter.consume('A', '/route', 1_000), true);
+  assert.equal(limiter.consume('B', '/route', 1_000), true);
+  for (let index = 0; index < 100; index += 1) {
+    assert.equal(limiter.consume(`new-${index}`, '/route', 1_000), false);
+  }
+  assert.equal(limiter.consume('A', '/route', 1_000), false);
+  assert.equal(limiter.consume('C', '/route', 61_000), true);
+  assert.equal(limiter.consume('D', '/route', 61_000), true);
+  assert.equal(limiter.consume('A', '/route', 61_000), false);
+});
+
 test('rejects oversized meal images before the provider call', async () => {
   const setup = dependencies();
   await setup.vault.put('user-1', 'openai', 'vault-only-secret');

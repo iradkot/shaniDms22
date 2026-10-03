@@ -6,10 +6,13 @@ import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineStart
 import org.json.JSONArray
 
 internal object GlucoseWidgetSync {
   private val foregroundRefresh = WidgetDailyRefreshThrottle()
+  private val asyncJobs = mutableSetOf<Job>()
 
   /** A launcher summary must also recover while foreground glucose is updating. */
   fun refreshDailyIfNeeded(context: Context, requestRefresh: (Context) -> Unit = ::syncAsync) {
@@ -32,13 +35,16 @@ internal object GlucoseWidgetSync {
       }
     }
     val prefs = context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE)
+    val guardedFetch: (String, String?) -> JSONArray? = { url, credential ->
+      if (GlucoseWidgetCredentialStore.readSyncConfiguration(context) != configuration) null else fetch(url, credential)
+    }
     val baseUrl = configuration.baseUrl
     val secret = configuration.apiSecretSha1
     val sparklineHours = prefs.getInt(GlucoseSyncWorker.KEY_SPARKLINE_HOURS, 3).coerceIn(1, 12)
-    val entries = fetchRecentEntries(baseUrl, secret, sparklineHours, fetch)
+    val entries = fetchRecentEntries(baseUrl, secret, sparklineHours, guardedFetch)
     val latest = latestWidgetBgFromEntries(entries) ?: return false
     val load = runCatching {
-      fetch("${baseUrl.trimEnd('/')}/api/v1/devicestatus.json?count=12", secret)?.let {
+      guardedFetch("${baseUrl.trimEnd('/')}/api/v1/devicestatus.json?count=12", secret)?.let {
         parseWidgetLoad(it, System.currentTimeMillis())
       }
     }.getOrNull()
@@ -92,7 +98,7 @@ internal object GlucoseWidgetSync {
       }
     }
     val daily = runCatching {
-      WidgetDailySummaryStore.fetch(context, configuration, low, high, fetch = fetch, onProgress = ::publishDaily)
+      WidgetDailySummaryStore.fetch(context, configuration, low, high, fetch = guardedFetch, onProgress = ::publishDaily)
     }.getOrNull()
     if (daily != null) publishDaily(daily)
     return true
@@ -100,9 +106,16 @@ internal object GlucoseWidgetSync {
 
   fun syncAsync(context: Context) {
     val appContext = context.applicationContext
-    CoroutineScope(Dispatchers.IO).launch {
+    val job = CoroutineScope(Dispatchers.IO).launch(start = CoroutineStart.LAZY) {
       runCatching { syncOnce(appContext) }
     }
+    synchronized(asyncJobs) { asyncJobs.add(job) }
+    job.invokeOnCompletion { synchronized(asyncJobs) { asyncJobs.remove(job) } }
+    job.start()
+  }
+
+  fun cancelAsync() {
+    synchronized(asyncJobs) { asyncJobs.toList().forEach { it.cancel() } }
   }
 
   private fun fetchRecentEntries(baseUrl: String, secret: String?, sparklineHours: Int, fetch: (String, String?) -> JSONArray?): JSONArray? {

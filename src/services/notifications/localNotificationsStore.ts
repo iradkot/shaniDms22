@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {withLocalAccountWrite} from '../../modules/privacy/localAccountCleanup';
 
 import {NotificationRequest, NotificationResponse} from 'app/types/notifications';
 
@@ -7,6 +8,7 @@ const LEGACY_STORAGE_KEY = 'notifications:rules:v1';
 export interface NotificationStoreScope {
   /** Opaque product Workspace ID. Never pass a URL, email, or API token. */
   readonly scopeId: string;
+  readonly ownerProductUserId?: string;
 }
 
 const storageKey = (scope?: NotificationStoreScope): string => {
@@ -61,7 +63,10 @@ async function writeAll(
   items: NotificationResponse[],
   scope?: NotificationStoreScope,
 ): Promise<void> {
-  await AsyncStorage.setItem(storageKey(scope), JSON.stringify(items));
+  await withLocalAccountWrite(AsyncStorage, scope?.ownerProductUserId,
+    () => AsyncStorage.setItem(storageKey(scope), JSON.stringify(items.map(item => ({...item,
+      ...(scope?.ownerProductUserId === undefined ? {} : {ownerProductUserId: scope.ownerProductUserId}),
+    })))));
 }
 
 export async function getNotificationRules(

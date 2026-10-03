@@ -7,7 +7,7 @@ import {
   PRIVACY_POLICY_VERSION,
   type PrivacyConsent,
 } from '../../../modules/privacy';
-import {purgeLocalAccountData} from '../../../modules/privacy/localAccountCleanup';
+import {blockAndDrainLocalAccountWrites, purgeLocalAccountData} from '../../../modules/privacy/localAccountCleanup';
 
 const key = (uid: string) => `privacy.consent.v1:${uid}`;
 export const createBrowserPrivacyService = (input: {
@@ -152,6 +152,7 @@ export const createBrowserPrivacyService = (input: {
       }
       await input.storage.setItem('privacy.deletion.recovery.v1', uid);
       await input.storage.setItem(pendingKey, 'requested');
+      await blockAndDrainLocalAccountWrites(uid);
       let value: {version?: unknown; deleted?: unknown};
       if (resumed) {
         try {
@@ -174,6 +175,7 @@ export const createBrowserPrivacyService = (input: {
       }
       await input.storage.setItem(pendingKey, 'cloud-complete');
     }
+    await blockAndDrainLocalAccountWrites(uid);
     const blobs = new IndexedDbMealImageBlobRepository(globalThis.indexedDB);
     await blobs.removeAccount(uid);
     await purgeLocalAccountData(input.storage, uid, uri => blobs.remove(uri));

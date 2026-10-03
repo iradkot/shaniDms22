@@ -11,6 +11,7 @@ import {
   persistNightscoutProfiles,
   prepareAccountNightscoutDeletionCacheSources,
   purgeAccountNightscoutCredentials,
+  recoverLegacyNightscoutProfiles,
 } from '../src/services/nightscoutProfiles';
 
 describe('nightscoutProfiles', () => {
@@ -223,6 +224,35 @@ describe('nightscoutProfiles', () => {
       ),
     ).toBeUndefined();
   });
+
+  it.each(['confirmed-recovery', 'durable-owner-migration'] as const)(
+    'indexes an attributable credential before %s can fail its metadata commit', async mode => {
+      const owner = `deleted-interrupted-${mode}`;
+      const legacy = {id: `legacy-${mode}`, label: 'Synthetic legacy', baseUrl: 'https://legacy-synthetic.example', apiSecretSha1: 'f'.repeat(40), createdAt: 1};
+      await AsyncStorage.setItem('nightscout.profiles.v1', JSON.stringify([legacy]));
+      if (mode === 'durable-owner-migration') {
+        await AsyncStorage.setItem('nightscout.legacyOwnerUid.v1', owner);
+      }
+      const originalSet = jest.mocked(AsyncStorage.setItem).getMockImplementation()!;
+      jest.spyOn(AsyncStorage, 'setItem').mockImplementation(async (key, value) => {
+        if (key === `nightscout.profiles.v2:u${sha1(owner)}`) {throw new Error('interrupted metadata commit');}
+        await originalSet(key, value);
+      });
+      try {
+        const attempt = mode === 'confirmed-recovery'
+          ? recoverLegacyNightscoutProfiles({ownerUserId: owner, verifyConnection: async () => {}, isOwnerCurrent: () => true})
+          : loadNightscoutProfiles(owner);
+        await expect(attempt).rejects.toThrow('interrupted metadata commit');
+      } finally {jest.mocked(AsyncStorage.setItem).mockImplementation(originalSet);}
+      const service = `shani.nightscout.v2.u${sha1(owner)}.${legacy.id}`;
+      expect(await nativeSecureCredentialStore.read(service)).toBe(legacy.apiSecretSha1);
+      expect(JSON.parse((await AsyncStorage.getItem(`nightscout.credentialIndex.v1:u${sha1(owner)}`))!)).toContain(service);
+      const sources = await prepareAccountNightscoutDeletionCacheSources(owner);
+      expect(sources).toContain(createNightscoutCacheScope(legacy.baseUrl, owner)!.sourceIdentity);
+      await purgeAccountNightscoutCredentials(owner);
+      expect(await nativeSecureCredentialStore.read(service)).toBeUndefined();
+    },
+  );
 
   describe('normalizeNightscoutUrl', () => {
     it('defaults to https when scheme is missing', () => {

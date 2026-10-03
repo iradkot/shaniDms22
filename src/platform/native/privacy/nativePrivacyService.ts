@@ -19,8 +19,21 @@ import {
 } from '../../../modules/privacy';
 import {privacySessionRevision} from '../../../modules/privacy';
 import {purgeLocalAccountData} from '../../../modules/privacy/localAccountCleanup';
+import {blockAndDrainLocalAccountWrites} from '../../../modules/privacy/localAccountCleanup';
+import {deleteAndroidGlucoseAccountData} from '../../../services/androidGlucoseLiveSurface';
 
 const key = (uid: string) => `privacy.consent.v1:${uid}`;
+const stopNativeAccountData = async (uid: string): Promise<void> => {
+  const raw = await AsyncStorage.getItem(`privacy.deletion.sources:${uid}`);
+  let sources: readonly string[] = [];
+  try {
+    const decoded: unknown = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(decoded) && decoded.every(value => typeof value === 'string')) {
+      sources = decoded;
+    }
+  } catch { /* Native owner metadata still permits teardown if a legacy manifest is corrupt. */ }
+  await deleteAndroidGlucoseAccountData(uid, sources);
+};
 const startDeletion = async (
   uid: string,
   receipt: string,
@@ -64,6 +77,11 @@ const startDeletion = async (
 export const nativePrivacyService = {
   async recoveryOwner(): Promise<string | null> {
     return AsyncStorage.getItem('privacy.deletion.recovery.v1');
+  },
+  async resumeNativeDeletion(uid: string): Promise<void> {
+    if (!(await AsyncStorage.getItem(`privacy.deletion.pending:${uid}`))) {return;}
+    await stopNativeAccountData(uid);
+    await blockAndDrainLocalAccountWrites(uid);
   },
   async load(
     uid: string,
@@ -178,6 +196,10 @@ export const nativePrivacyService = {
     // They must be durable before a server request can remove the Auth account.
     await AsyncStorage.setItem('privacy.deletion.recovery.v1', uid);
     await AsyncStorage.setItem(`privacy.deletion.pending:${uid}`, 'requested');
+    // Provider unmounting does not stop Android's independent scheduler/vault.
+    // Await native teardown before any cloud request or fallible local cleanup.
+    await stopNativeAccountData(uid);
+    await blockAndDrainLocalAccountWrites(uid);
     await blockNativeMealImageOwner(uid);
     const sourceManifest = `privacy.deletion.sources:${uid}`;
     if ((await AsyncStorage.getItem(sourceManifest)) === null) {
@@ -218,6 +240,8 @@ export const nativePrivacyService = {
     ) {
       throw new Error('Cloud deletion is not complete.');
     }
+    await stopNativeAccountData(uid);
+    await blockAndDrainLocalAccountWrites(uid);
     let sourceManifest = await AsyncStorage.getItem(
       `privacy.deletion.sources:${uid}`,
     );

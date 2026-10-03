@@ -442,21 +442,24 @@ const ProductExperienceScreen = ({
     [glucoseSettings, loopChangesDataSource],
   );
   const alertWorkspaceId = activeJournalWorkspace?.scope.workspaceId;
+  const alertOwnerId = activeJournalWorkspace?.scope.productUserId;
   const updateCenterRepository = useMemo(
     () =>
       alertWorkspaceId === undefined
         ? undefined
-        : createNativeUpdateCenterRepository({scopeId: alertWorkspaceId}),
-    [alertWorkspaceId],
+        : createNativeUpdateCenterRepository({scopeId: alertWorkspaceId,
+            ...(alertOwnerId === undefined ? {} : {ownerProductUserId: alertOwnerId})}),
+    [alertOwnerId, alertWorkspaceId],
   );
   const alertRulesRepository = useMemo(
     () =>
       alertWorkspaceId === undefined
         ? undefined
-        : createNativeAlertRulesRepository({scopeId: alertWorkspaceId}),
-    [alertWorkspaceId],
+        : createNativeAlertRulesRepository({scopeId: alertWorkspaceId,
+            ...(alertOwnerId === undefined ? {} : {ownerProductUserId: alertOwnerId})}),
+    [alertOwnerId, alertWorkspaceId],
   );
-  const alertDelivery = useAlertDeliveryMode(alertWorkspaceId);
+  const alertDelivery = useAlertDeliveryMode(alertWorkspaceId, alertOwnerId);
   const alertRuleInterpreter = useMemo(
     () => ({
       availability: (!aiSettings.enabled
@@ -500,6 +503,7 @@ const ProductExperienceScreen = ({
     updateCenterRepository,
     language,
     alertDelivery.mode,
+    alertOwnerId,
   );
   useProactiveCareUpdateCenter({
     scopeId: alertWorkspaceId,

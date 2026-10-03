@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {sha1} from 'js-sha1';
+import {withLocalAccountWrite} from '../modules/privacy/localAccountCleanup';
 import {AppState} from 'react-native';
 
 import {nativeNightscoutVaultAuthSession} from 'app/services/backend/nativeNightscoutVaultSync';
@@ -266,7 +267,9 @@ export const AiSettingsProvider = ({
   // Initialization, writes and retries share one queue. A slow status read
   // cannot overwrite a completed save or remove another queued credential.
   const enqueue = useCallback((operation: () => Promise<void>): Promise<void> => {
-    const result = mutationTail.current.then(operation);
+    const queuedOwner = ownerUserIdRef.current;
+    const result = mutationTail.current.then(() => withLocalAccountWrite(
+      AsyncStorage, queuedOwner ?? undefined, operation));
     mutationTail.current = result.catch(() => undefined);
     return result;
   }, []);

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {withLocalAccountWrite} from '../../modules/privacy/localAccountCleanup';
 import {
   aiWorkspaceStorageKey,
   type AiWorkspaceScope,
@@ -120,7 +121,8 @@ async function saveAiAnalystHistory(
   items: AiConversationHistoryItem[],
 ): Promise<void> {
   try {
-    await AsyncStorage.setItem(historyStorageKey(scope), JSON.stringify(items));
+    await withLocalAccountWrite(AsyncStorage, scope.productUserId,
+      () => AsyncStorage.setItem(historyStorageKey(scope), JSON.stringify(items)));
   } catch {
     // ignore (storage may be full)
   }

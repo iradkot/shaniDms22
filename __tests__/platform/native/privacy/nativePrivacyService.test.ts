@@ -9,6 +9,8 @@ const mockPurgeCaches = jest.fn(async (..._args: unknown[]) => {});
 const mockBlockImages = jest.fn(async (..._args: unknown[]) => {});
 const mockRemoveSecret = jest.fn(async (..._args: unknown[]) => {});
 const mockClearSource = jest.fn();
+const mockNativeCleanup = jest.fn(async (..._args: unknown[]) => {});
+const mockBlockLocal = jest.fn(async (..._args: unknown[]) => {});
 const mockTerminate = jest.fn(async () => {});
 const mockClearPersistence = jest.fn(async () => {});
 const mockSignOut = jest.fn(async () => {mockAuth.currentUser = null;});
@@ -24,6 +26,8 @@ jest.mock('../../../../src/services/nightscoutProfiles', () => ({prepareAccountN
 jest.mock('../../../../src/services/nightscoutAccountCleanup', () => ({purgeAccountNightscoutCaches: (...args: unknown[]) => mockPurgeCaches(...args)}));
 jest.mock('../../../../src/platform/native/mealMedia/reactNativeFsMealImageFileAdapter', () => ({blockNativeMealImageOwner: (...args: unknown[]) => mockBlockImages(...args), createReactNativeFsMealImageFileAdapter: () => ({remove: jest.fn(async () => {})})}));
 jest.mock('../../../../src/api/shaniNightscoutInstances', () => ({clearNightscoutInstance: () => mockClearSource()}));
+jest.mock('../../../../src/services/androidGlucoseLiveSurface', () => ({deleteAndroidGlucoseAccountData: (...args: unknown[]) => mockNativeCleanup(...args)}));
+jest.mock('../../../../src/modules/privacy/localAccountCleanup', () => ({...jest.requireActual('../../../../src/modules/privacy/localAccountCleanup'), blockAndDrainLocalAccountWrites: (...args: unknown[]) => mockBlockLocal(...args)}));
 
 import {nativePrivacyService} from '../../../../src/platform/native/privacy/nativePrivacyService';
 
@@ -32,6 +36,7 @@ beforeEach(async () => {
   await AsyncStorage.clear();
   mockRequest.mockReset();
   mockPrepare.mockReset().mockResolvedValue([sourceIdentity]);
+  mockNativeCleanup.mockReset().mockResolvedValue(undefined);
   mockAuth.currentUser = {uid: 'owner-A'};
   registerPrivacySession('owner-A', cloudConsent);
 });
@@ -60,6 +65,8 @@ test('receipt and cache identities are durable before destructive request, even 
     if (path === '/v1/account/delete/receipt') {return {version: 1, receipt};}
     expect(await nativePrivacyService.recoveryOwner()).toBe('owner-A');
     expect(await AsyncStorage.getItem('privacy.deletion.sources:owner-A')).toBe(JSON.stringify([sourceIdentity]));
+    expect(mockNativeCleanup).toHaveBeenCalledWith('owner-A', []);
+    expect(mockBlockLocal).toHaveBeenCalledWith('owner-A');
     throw new Error('lost response');
   });
   await expect(nativePrivacyService.deleteAccount('owner-A')).rejects.toThrow('lost response');
@@ -67,6 +74,41 @@ test('receipt and cache identities are durable before destructive request, even 
   expect(mockPurgeProfiles).not.toHaveBeenCalled();
   expect(mockPurgeCaches).not.toHaveBeenCalled();
   expect(mockClearPersistence).not.toHaveBeenCalled();
+});
+
+test('failed native teardown prevents cloud deletion and retains durable recovery for a retry', async () => {
+  mockRequest.mockResolvedValueOnce({version: 1, receipt});
+  mockNativeCleanup.mockRejectedValueOnce(new Error('native cancellation failed'));
+  await expect(nativePrivacyService.deleteAccount('owner-A')).rejects.toThrow('native cancellation failed');
+  expect(mockRequest).toHaveBeenCalledTimes(1);
+  expect(await nativePrivacyService.recoveryOwner()).toBe('owner-A');
+  expect(await AsyncStorage.getItem('privacy.deletion.pending:owner-A')).toBe('requested');
+  expect(await AsyncStorage.getItem('privacy.deletion.receipt:owner-A')).toBe(receipt);
+  expect(mockPurgeProfiles).not.toHaveBeenCalled();
+  mockRequest.mockResolvedValueOnce({version: 1, deleted: true});
+  await nativePrivacyService.deleteAccount('owner-A');
+  expect(mockNativeCleanup).toHaveBeenCalledTimes(3);
+  expect(await nativePrivacyService.recoveryOwner()).toBeNull();
+});
+
+test('native teardown still runs before a fallible source capture or cloud operation', async () => {
+  mockRequest.mockResolvedValueOnce({version: 1, receipt});
+  mockPrepare.mockRejectedValueOnce(new Error('source metadata failure'));
+  await expect(nativePrivacyService.deleteAccount('owner-A')).rejects.toThrow('source metadata failure');
+  expect(mockNativeCleanup).toHaveBeenCalledWith('owner-A', []);
+  expect(mockNativeCleanup.mock.invocationCallOrder[0]).toBeLessThan(mockPrepare.mock.invocationCallOrder[0]);
+  expect(mockRequest).toHaveBeenCalledTimes(1);
+  expect(await nativePrivacyService.recoveryOwner()).toBe('owner-A');
+});
+
+test('signed-out startup resumes native cleanup without starting a cloud deletion', async () => {
+  await storePendingDeletion();
+  mockAuth.currentUser = null;
+  await nativePrivacyService.resumeNativeDeletion('owner-A');
+  expect(mockNativeCleanup).toHaveBeenCalledWith('owner-A', [sourceIdentity]);
+  expect(mockBlockLocal).toHaveBeenCalledWith('owner-A');
+  expect(mockRequest).not.toHaveBeenCalled();
+  expect(await nativePrivacyService.recoveryOwner()).toBe('owner-A');
 });
 
 test('authorized deletion completes while signed out and preserves the other account', async () => {

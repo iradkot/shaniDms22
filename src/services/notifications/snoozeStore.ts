@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {withLocalAccountWrite} from '../../modules/privacy/localAccountCleanup';
 import type {NotificationStoreScope} from './localNotificationsStore';
 
 const LEGACY_KEY = 'notifications:snooze:until:v1';
@@ -33,7 +34,8 @@ async function writeMap(
   map: SnoozeMap,
   scope?: NotificationStoreScope,
 ): Promise<void> {
-  await AsyncStorage.setItem(storageKey(scope), JSON.stringify(map));
+  await withLocalAccountWrite(AsyncStorage, scope?.ownerProductUserId,
+    () => AsyncStorage.setItem(storageKey(scope), JSON.stringify(map)));
 }
 
 export async function setRuleSnooze(
