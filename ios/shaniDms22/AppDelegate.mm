@@ -23,6 +23,8 @@ RCT_EXPORT_MODULE();
   id rulesSchemaVersion = [bundle objectForInfoDictionaryKey:@"ShaniFirestoreRulesSchemaVersion"] ?: @0;
   NSString *releaseChannel = [bundle objectForInfoDictionaryKey:@"ShaniReleaseChannel"] ?: @"pilot";
   return @{
+    @"versionName": [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"",
+    @"buildNumber": [bundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"",
     @"backendBaseUrl": backendBaseUrl,
     @"firestoreRulesSchemaVersion": rulesSchemaVersion,
     @"releaseChannel": releaseChannel,

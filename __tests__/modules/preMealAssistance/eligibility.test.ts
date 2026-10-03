@@ -104,6 +104,8 @@ describe('evaluatePreMealAssistance', () => {
             trend: 'forty-five-up',
             iobUnits: 1.25,
             cobGrams: 12,
+            iobTimestampMs: nowMs - 2 * 60_000,
+            cobTimestampMs: nowMs - 3 * 60_000,
           },
         },
       }),
@@ -117,8 +119,43 @@ describe('evaluatePreMealAssistance', () => {
         trend: 'forty-five-up',
         iobUnits: 1.25,
         cobGrams: 12,
+        iobTimestampMs: nowMs - 2 * 60_000,
+        cobTimestampMs: nowMs - 3 * 60_000,
       },
     });
+  });
+
+  it('re-ages loads independently while the meal card remains open', () => {
+    const nowMs = 1_800_000_000_000;
+    const result = evaluatePreMealAssistance({
+      nowMs,
+      period: {dayStartMs: nowMs - HOUR, dayEndMs: nowMs + HOUR},
+      settings: {enabled: true, notificationsEnabled: false},
+      snapshot: {
+        relevance: {
+          kind: 'active',
+          startedAtMs: nowMs - HOUR,
+          expiresAtMs: nowMs + HOUR,
+        },
+        sourceState: {kind: 'live'},
+        facts: {
+          observedAtMs: nowMs - 60_000,
+          glucoseMgDl: 110,
+          iobUnits: -1,
+          iobTimestampMs: nowMs - 15 * 60_000,
+          cobGrams: 0,
+          cobTimestampMs: nowMs - 60_000,
+        },
+      },
+    });
+    expect(result).toMatchObject({
+      kind: 'visible',
+      availability: 'current',
+      facts: {glucoseMgDl: 110, cobGrams: 0, cobTimestampMs: nowMs - 60_000},
+    });
+    if (result.kind === 'visible') {
+      expect(result.facts?.iobUnits).toBeUndefined();
+    }
   });
 
   it('marks old cached facts stale and an offline source offline', () => {

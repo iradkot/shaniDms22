@@ -1,0 +1,625 @@
+[
+  {
+    "name": "programmed generic basal stays unknown while recorded bolus survives",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "_id": "b1",
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:20:00Z",
+        "insulin": 2
+      },
+      {
+        "_id": "t1",
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:00:00Z",
+        "absolute": 1,
+        "duration": 60
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "bolusUnits": 2,
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "Loop delivered amount beats programmed rate and clips a historical cutoff",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T00:30:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "_id": "t1",
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:00:00Z",
+        "enteredBy": "loop://phone",
+        "temp": "absolute",
+        "absolute": 2,
+        "duration": 60,
+        "amount": 1
+      },
+      {
+        "_id": "b1",
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:20:00Z",
+        "insulin": 2
+      }
+    ],
+    "expected": {
+      "quality": "available",
+      "basalUnits": 0.5,
+      "bolusUnits": 2,
+      "basalCoveredMs": 1800000,
+      "basalCoveragePercent": 100,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "Loop recorded intervals leave gaps unknown",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:00:00Z",
+        "enteredBy": "loop://phone",
+        "temp": "absolute",
+        "rate": 1.2,
+        "duration": 30,
+        "amount": 0.6
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "basalUnits": 0.6,
+      "bolusUnits": 0,
+      "basalCoveredMs": 1800000,
+      "basalCoveragePercent": 50,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "mutable and future-ended basal cannot establish completed delivery",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T00:30:00Z",
+    "observedAt": "2026-09-27T00:30:00Z",
+    "records": [
+      {
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:00:00Z",
+        "enteredBy": "loop://phone",
+        "rate": 1,
+        "duration": 60,
+        "amount": 1
+      },
+      {
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:00:00Z",
+        "enteredBy": "loop://phone",
+        "rate": 1,
+        "duration": 30,
+        "isMutable": true,
+        "amount": 0.5
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "bolusUnits": 0,
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "conflicting basal overlap is uncovered rather than counted twice",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "_id": "t1",
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:00:00Z",
+        "enteredBy": "loop://phone",
+        "rate": 1,
+        "duration": 60,
+        "amount": 1
+      },
+      {
+        "_id": "t2",
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:30:00Z",
+        "enteredBy": "loop://phone",
+        "rate": 2,
+        "duration": 30,
+        "amount": 1
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "basalUnits": 0.5,
+      "bolusUnits": 0,
+      "basalCoveredMs": 1800000,
+      "basalCoveragePercent": 50,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "explicit zero delivery covers an interval and duplicates do not inflate bolus",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "_id": "t1",
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:00:00Z",
+        "deliveredUnits": 0,
+        "duration": 60
+      },
+      {
+        "_id": "b1",
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:20:00Z",
+        "insulin": 2
+      },
+      {
+        "_id": "b1",
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:20:00Z",
+        "insulin": 2
+      }
+    ],
+    "expected": {
+      "quality": "available",
+      "basalUnits": 0,
+      "bolusUnits": 2,
+      "basalCoveredMs": 3600000,
+      "basalCoveragePercent": 100,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "invalid explicit delivery stays unknown instead of falling back to programmed values",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "_id": "invalid-amount",
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:00:00Z",
+        "enteredBy": "loop://phone",
+        "amount": "unknown",
+        "rate": 2,
+        "duration": 30
+      },
+      {
+        "_id": "invalid-delivered-basal",
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:30:00Z",
+        "enteredBy": "loop://phone",
+        "deliveredUnits": -1,
+        "amount": 1,
+        "rate": 2,
+        "duration": 30
+      },
+      {
+        "_id": "invalid-delivered-bolus",
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:20:00Z",
+        "deliveredUnits": "unknown",
+        "insulin": 2
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "distinct recorded boluses with matching timestamp and amount both count",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "_id": "bolus-a",
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:20:00Z",
+        "insulin": 0.05
+      },
+      {
+        "_id": "bolus-b",
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:20:00Z",
+        "insulin": 0.05
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "bolusUnits": 0.1,
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "Loop programmed rate with absent or null amount is never recorded delivery",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:00:00Z",
+        "enteredBy": "loop://fixture",
+        "temp": "absolute",
+        "duration": 30,
+        "absolute": 1
+      },
+      {
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:30:00Z",
+        "enteredBy": "loop://fixture",
+        "temp": "absolute",
+        "duration": 30,
+        "absolute": 1,
+        "amount": null,
+        "deliveredUnits": null
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "bolusUnits": 0,
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "completed normal bolus crossing midnight prorates its recorded total",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "type": "normal",
+        "enteredBy": "loop://fixture",
+        "created_at": "2026-09-26T23:55:00Z",
+        "insulin": 2,
+        "duration": 10
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "bolusUnits": 1,
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "completed normal bolus crossing a historical cutoff prorates its recorded total",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "type": "normal",
+        "enteredBy": "loop://fixture",
+        "created_at": "2026-09-27T00:59:00Z",
+        "insulin": 5,
+        "duration": 5
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "bolusUnits": 1,
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "null explicit delivered amount falls through to Loop recorded amount",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Temp Basal",
+        "created_at": "2026-09-27T00:00:00Z",
+        "enteredBy": "loop://fixture",
+        "duration": 60,
+        "deliveredUnits": null,
+        "amount": 0.8
+      }
+    ],
+    "expected": {
+      "quality": "available",
+      "basalUnits": 0.8,
+      "bolusUnits": 0,
+      "basalCoveredMs": 3600000,
+      "basalCoveragePercent": 100,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "empty sync identifier falls back to stable record id",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "type": "normal",
+        "enteredBy": "loop://fixture",
+        "created_at": "2026-09-27T00:10:00Z",
+        "insulin": 2,
+        "_id": "dose",
+        "syncIdentifier": ""
+      },
+      {
+        "eventType": "Correction Bolus",
+        "type": "normal",
+        "enteredBy": "loop://fixture",
+        "created_at": "2026-09-27T00:10:00Z",
+        "insulin": 2,
+        "_id": "dose",
+        "syncIdentifier": ""
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "bolusUnits": 2,
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "invalid primary revision falls through to a valid modification date",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "type": "normal",
+        "enteredBy": "loop://fixture",
+        "created_at": "2026-09-27T00:10:00Z",
+        "insulin": 2,
+        "syncIdentifier": "dose",
+        "srvModified": "invalid",
+        "modified_at": "2026-09-27T00:12:00Z"
+      },
+      {
+        "eventType": "Correction Bolus",
+        "type": "normal",
+        "enteredBy": "loop://fixture",
+        "created_at": "2026-09-27T00:10:00Z",
+        "insulin": 5,
+        "syncIdentifier": "dose",
+        "srvModified": "2026-09-27T00:11:00Z"
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "bolusUnits": 2,
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "numeric string timestamp uses epoch milliseconds",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "date": "1790467800000",
+        "insulin": 2
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "bolusUnits": 2,
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "fractional timestamp normalizes to milliseconds on both platforms",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T00:00:00.050Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "type": "normal",
+        "enteredBy": "loop://fixture",
+        "created_at": "2026-09-27T00:00:00.1Z",
+        "insulin": 2
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "bolusUnits": 0,
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "invalid calendar date cannot create a recorded bolus",
+    "start": "2026-03-03T00:00:00Z",
+    "end": "2026-03-03T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "type": "normal",
+        "enteredBy": "loop://fixture",
+        "created_at": "2026-02-31T00:10:00Z",
+        "insulin": 2
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "invalid explicit bolus interval remains unknown",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "type": "normal",
+        "enteredBy": "loop://fixture",
+        "created_at": "2026-09-27T00:10:00Z",
+        "insulin": 2,
+        "endDate": "corrupt",
+        "duration": "corrupt"
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "reversed explicit bolus interval remains unknown",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "type": "normal",
+        "enteredBy": "loop://fixture",
+        "created_at": "2026-09-27T00:10:00Z",
+        "insulin": 2,
+        "endDate": "2026-09-27T00:05:00Z"
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "malformed finite doses cannot overflow a recorded component",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:10:00Z",
+        "insulin": 1e308,
+        "_id": "a"
+      },
+      {
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:10:00Z",
+        "insulin": 1e308,
+        "_id": "b"
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "overflow of total leaves finite components partial without a false total",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Temp Basal",
+        "enteredBy": "loop://fixture",
+        "created_at": "2026-09-27T00:00:00Z",
+        "duration": 60,
+        "amount": 1e308
+      },
+      {
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:10:00Z",
+        "insulin": 1e308
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "basalUnits": 1e308,
+      "bolusUnits": 1e308,
+      "basalCoveredMs": 3600000,
+      "basalCoveragePercent": 100,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "hexadecimal dose strings are not decimal recorded amounts",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:10:00Z",
+        "insulin": "0x10"
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  },
+  {
+    "name": "language-specific numeric suffixes are not recorded amounts",
+    "start": "2026-09-27T00:00:00Z",
+    "end": "2026-09-27T01:00:00Z",
+    "observedAt": "2026-09-28T12:00:00Z",
+    "records": [
+      {
+        "eventType": "Correction Bolus",
+        "created_at": "2026-09-27T00:10:00Z",
+        "insulin": "1f"
+      }
+    ],
+    "expected": {
+      "quality": "partial",
+      "basalCoveredMs": 0,
+      "basalCoveragePercent": 0,
+      "basalEvidence": "recorded"
+    }
+  }
+]

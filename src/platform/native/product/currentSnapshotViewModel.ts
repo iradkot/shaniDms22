@@ -87,7 +87,7 @@ export const createCurrentSnapshotViewModel = ({
   state,
   target,
 }: CreateCurrentSnapshotViewModelInput): CurrentSnapshotViewModel => {
-  const sample = selectLatestNightscoutSample(state.snapshot);
+  const sample = selectLatestNightscoutSample(state.snapshot, nowMs);
   const offline = hasError(state.error);
   const copy = COPY[locale];
 

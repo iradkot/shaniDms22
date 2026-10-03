@@ -10,6 +10,7 @@ import React, {
 import {useWindowDimensions} from 'react-native';
 import type {JournalWorkspace} from '../src/modules/journal';
 import {interpretAlertRuleDraft} from '../src/modules/alerts';
+import type {CurrentDataSource} from '../src/modules/currentData';
 import type {MealImagesRuntime} from '../src/modules/mealMedia';
 import {
   coreDestinationRegistry,
@@ -23,6 +24,7 @@ import type {
   StoredProductPersonalization,
 } from '../src/product/personalization';
 import {createNativeSettingsDataSource} from '../src/platform/native/settings/nativeSettingsDataSource';
+import {WEB_BUILD_INFO} from './buildInfo';
 import type {AlertsModuleRuntime} from '../src/product/alerts';
 import {
   AuthenticatedWebApiClient,
@@ -32,6 +34,7 @@ import {
   BrowserNightscoutClient,
   createAuthenticatedBrowserWorkspaceScope,
   createBrowserAiEvidenceProvider,
+  createBrowserCurrentDataSource,
   createBrowserAlertRulesRepository,
   createBrowserFirebaseAlertsRemoteAdapter,
   createBrowserFirebaseJournalRemoteAdapter,
@@ -181,6 +184,8 @@ interface BrowserResources {
   readonly aiConfigured: boolean;
   readonly aiEnabled: boolean;
   readonly nightscoutClient?: BrowserNightscoutClient;
+  readonly currentDataSource?: CurrentDataSource;
+  readonly currentDataScopeKey: () => string;
   readonly journalRemote: boolean;
   readonly alertsRuntime: AlertsModuleRuntime;
   readonly preMealAssistance: BrowserPreMealAssistanceController;
@@ -326,10 +331,9 @@ const BrowserProduct = (props: {
     () => selectCurrentSnapshotTarget(coreDestinationRegistry, {runtime}),
     [runtime],
   );
+  const currentDataSource = resources.currentDataSource;
   const currentSnapshot = useBrowserCurrentSnapshot({
-    ...(resources.nightscoutClient === undefined
-      ? {}
-      : {client: resources.nightscoutClient}),
+    ...(currentDataSource === undefined ? {} : {currentDataSource}),
     locale,
     target: currentSnapshotTarget,
   });
@@ -340,9 +344,11 @@ const BrowserProduct = (props: {
         ? undefined
         : createBrowserAiEvidenceProvider({
             client: resources.nightscoutClient,
+            ...(currentDataSource === undefined ? {} : {currentDataSource}),
+            getScopeKey: resources.currentDataScopeKey,
             sourceId: resources.nightscout.sourceId,
           }),
-    [resources.nightscout.sourceId, resources.nightscoutClient],
+    [currentDataSource, resources.currentDataScopeKey, resources.nightscout.sourceId, resources.nightscoutClient],
   );
   const aiRuntime = useBrowserAiAnalystRuntime({
     service: resources.aiService,
@@ -359,6 +365,7 @@ const BrowserProduct = (props: {
   const settingsDataSource = useMemo(
     () =>
       createNativeSettingsDataSource({
+        appInfo: WEB_BUILD_INFO,
         language: locale,
         layout,
         personalization: state.personalization,
@@ -922,10 +929,21 @@ export const BrowserApp = () => {
           },
         });
       }
+      const currentDataScopeKey = (): string => {
+        if (!isCurrentScope()) {
+          throw new Error('Current data source changed during loading.');
+        }
+        return String(scopeToken);
+      };
+      const currentDataSource = nightscoutClient === undefined ? undefined : createBrowserCurrentDataSource({
+        client: nightscoutClient,
+        getScopeKey: currentDataScopeKey,
+      });
       const preMealAssistance = createBrowserPreMealAssistanceController({
         storage: keyValueStore,
         scope,
         ...(nightscoutClient === undefined ? {} : {client: nightscoutClient}),
+        ...(currentDataSource === undefined ? {} : {currentDataSource}),
       });
       await preMealAssistance.initialize();
       if (!isCurrentScope()) {
@@ -953,6 +971,8 @@ export const BrowserApp = () => {
           aiConfigured: marker.aiConfigured,
           aiEnabled: marker.aiEnabled,
           ...(nightscoutClient === undefined ? {} : {nightscoutClient}),
+          ...(currentDataSource === undefined ? {} : {currentDataSource}),
+          currentDataScopeKey,
           journalRemote: Boolean(remoteAdapter),
           alertsRuntime: {
             alertRules: {repository: alertRules},
@@ -1321,6 +1341,8 @@ export const BrowserApp = () => {
             locale={locale}
             nightscout={readyResources.nightscout}
             onChanged={() => {
+              // Invalidate in-flight data and model calls while the panel remains open.
+              bootstrapScopeTokenRef.current += 1;
               connectionsChanged.current = true;
             }}
             onClose={() => {

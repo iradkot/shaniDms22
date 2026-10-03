@@ -1,13 +1,17 @@
 import {NativeModules} from 'react-native';
+import type {SettingsAppInfo} from '../../modules/settings';
 
 export const REQUIRED_FIRESTORE_RULES_SCHEMA_VERSION = 2;
 
 interface ShaniDmsRuntimeConfigModule {
+  readonly versionName?: unknown;
+  readonly buildNumber?: unknown;
   readonly backendBaseUrl?: unknown;
   readonly firestoreRulesSchemaVersion?: unknown;
 }
 
 export interface ShaniDmsRuntimeConfig {
+  readonly appInfo?: SettingsAppInfo;
   readonly backendBaseUrl?: string;
   readonly firestoreRulesSchemaVersion: number;
 }
@@ -29,7 +33,22 @@ export const decodeShaniDmsRuntimeConfig = (
     value.backendBaseUrl.trim().length > 0
       ? value.backendBaseUrl.trim()
       : undefined;
+  const versionName = typeof value?.versionName === 'string'
+    ? value.versionName.trim().slice(0, 120)
+    : undefined;
+  const buildNumber = typeof value?.buildNumber === 'string'
+    ? value.buildNumber.trim().slice(0, 120)
+    : typeof value?.buildNumber === 'number' &&
+      Number.isSafeInteger(value.buildNumber) && value.buildNumber >= 0
+    ? String(value.buildNumber)
+    : undefined;
   return {
+    ...(versionName || buildNumber ? {
+      appInfo: {
+        ...(versionName ? {versionName} : {}),
+        ...(buildNumber ? {buildNumber} : {}),
+      },
+    } : {}),
     ...(backendBaseUrl === undefined ? {} : {backendBaseUrl}),
     firestoreRulesSchemaVersion: asNonNegativeInteger(
       value?.firestoreRulesSchemaVersion,

@@ -1,6 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import BGDataService from 'app/api/firebase/services/BGDataService';
 import type {AxiosAdapter} from 'axios';
-import {fetchBgDataForDateRangeWithMetadata, fetchTreatmentsForDateRangeWithMetadata} from 'app/api/apiRequests';
+import {
+  fetchBgDataForDateRangeUncached,
+  fetchBgDataForDateRangeWithMetadata,
+  fetchTreatmentsForDateRangeWithMetadata,
+} from 'app/api/apiRequests';
 import {
   requestCompleteNightscoutRange,
   NightscoutIncompleteRangeError,
@@ -35,18 +40,63 @@ describe('Nightscout range completeness', () => {
     nightscoutInstance.defaults.adapter = previousAdapter;
   });
 
+  it.each(['cached', 'uncached', 'legacy'] as const)(
+    '%s history includes numeric-date glucose with no optional dateString',
+    async reader => {
+      const raw = [
+        {date: +end - 4 * 60_000, sgv: 123},
+        {
+          date: +end - 243 * 60_000,
+          sgv: 181,
+          dateString: new Date(+end - 243 * 60_000).toISOString(),
+        },
+      ];
+      nightscoutInstance.defaults.adapter = async config => {
+        const url = new URL(config.url!, config.baseURL);
+        const startNumber = url.searchParams.get('find[date][$gte]');
+        const endNumber = url.searchParams.get('find[date][$lte]');
+        const data =
+          startNumber !== null && endNumber !== null
+            ? raw.filter(
+                row =>
+                  row.date >= Number(startNumber) &&
+                  row.date <= Number(endNumber),
+              )
+            : raw.filter(row => row.dateString !== undefined);
+        return {config, data, status: 200, statusText: 'OK', headers: {}};
+      };
+      const result =
+        reader === 'cached'
+          ? (await fetchBgDataForDateRangeWithMetadata(start, end)).records
+          : reader === 'uncached'
+          ? await fetchBgDataForDateRangeUncached(start, end, {
+              throwOnError: true,
+            })
+          : await BGDataService.fetchBgDataForDateRange(start, end);
+      expect(result.map(row => row.sgv)).toEqual([123, 181]);
+    },
+  );
+
   it('enumerates one-minute daily glucose beyond the initial count, including invalid raw rows', async () => {
     const dayStart = new Date('2026-09-01T00:00:00Z');
     const dayEnd = new Date('2026-09-02T00:00:00Z');
     const glucose = Array.from({length: 1440}, (_, index) => ({
-      _id: `g-${index}`, date: +dayStart + index * 60_000, sgv: 100,
+      _id: `g-${index}`,
+      date: +dayStart + index * 60_000,
+      sgv: 100,
     }));
     const raw = [...glucose, ...Array(60).fill(null)];
     const counts: number[] = [];
     nightscoutInstance.defaults.adapter = async config => {
       const count = Number(config.url?.match(/[?&]count=(\d+)/)?.[1]);
       counts.push(count);
-      return {config, data: raw.slice(0, count), status: 200, statusText: 'OK', headers: {}};
+      return {
+        config,
+        data: raw.slice(0, count),
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      };
     };
     const result = await fetchBgDataForDateRangeWithMetadata(dayStart, dayEnd);
     expect(counts).toEqual([1000, 2000]);
@@ -59,11 +109,69 @@ describe('Nightscout range completeness', () => {
     const dayEnd = new Date(+dayStart + 24 * 60 * 60 * 1000);
     nightscoutInstance.defaults.adapter = async config => {
       const count = Number(config.url?.match(/[?&]count=(\d+)/)?.[1]);
-      return {config, data: Array(count).fill({date: +dayStart, sgv: 120}), status: 200, statusText: 'OK', headers: {}};
+      return {
+        config,
+        data: Array(count).fill({date: +dayStart, sgv: 120}),
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      };
     };
-    await expect(fetchBgDataForDateRangeWithMetadata(dayStart, dayEnd)).rejects.toBeInstanceOf(NightscoutIncompleteRangeError);
-    nightscoutInstance.defaults.adapter = async () => {throw new Error('offline-after-saturation');};
-    await expect(fetchBgDataForDateRangeWithMetadata(dayStart, dayEnd)).rejects.toThrow('offline-after-saturation');
+    await expect(
+      fetchBgDataForDateRangeWithMetadata(dayStart, dayEnd),
+    ).rejects.toBeInstanceOf(NightscoutIncompleteRangeError);
+    nightscoutInstance.defaults.adapter = async () => {
+      throw new Error('offline-after-saturation');
+    };
+    await expect(
+      fetchBgDataForDateRangeWithMetadata(dayStart, dayEnd),
+    ).rejects.toThrow('offline-after-saturation');
+  });
+
+  it('uses the same complete decoded glucose range for uncached analysis readers', async () => {
+    const raw = [
+      {date: String(+start), sgv: '110'},
+      null,
+      {date: +start + 60_000, sgv: 120},
+      {date: +start + 120_000, sgv: -5},
+      {date: +start + 180_000, sgv: 130},
+    ];
+    const counts: number[] = [];
+    nightscoutInstance.defaults.adapter = async config => {
+      const count = Number(config.url?.match(/[?&]count=(\d+)/)?.[1]);
+      counts.push(count);
+      return {
+        config,
+        data: raw.slice(0, count),
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      };
+    };
+    const result = await fetchBgDataForDateRangeUncached(start, end, {
+      count: 2,
+      throwOnError: true,
+    });
+    expect(counts).toEqual([2, 4, 8]);
+    expect(result).toEqual([
+      {date: +start + 180_000, sgv: 130},
+      {date: +start + 60_000, sgv: 120},
+      {date: +start, sgv: 110},
+    ]);
+    expect(await AsyncStorage.getAllKeys()).toEqual([]);
+  });
+
+  it('rejects malformed uncached glucose and does not relabel it as an empty history in strict mode', async () => {
+    nightscoutInstance.defaults.adapter = async config => ({
+      config,
+      data: {error: 'not a record list'},
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+    await expect(
+      fetchBgDataForDateRangeUncached(start, end, {throwOnError: true}),
+    ).rejects.toThrow('invalid record list');
   });
 
   it('loads every five-minute basal event in a seven-day analysis plus its carry-in day', async () => {

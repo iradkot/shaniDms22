@@ -13,6 +13,7 @@ const DEVICE_STATUS_CHUNK_MS = 2 * 60 * 60 * 1_000;
 const MAX_DEVICE_STATUS_SERIES_MS = 27 * 60 * 60 * 1_000;
 // Matches the existing upstream entries route; saturation is not a complete range.
 const ENTRIES_RANGE_LIMIT = 15_000;
+const TREATMENTS_RANGE_LIMIT = 5_000;
 
 export type BrowserNightscoutResource =
   | 'entries'
@@ -30,7 +31,7 @@ export interface BrowserNightscoutStatus {
 
 export interface BrowserNightscoutRange<T> {
   readonly records: readonly T[];
-  /** Glucose-only raw response completeness, evaluated before invalid rows are removed. */
+  /** Raw response completeness, evaluated before decoding can remove invalid rows. */
   readonly complete?: boolean;
   readonly freshness:
     | {readonly kind: 'fresh'; readonly fetchedAtMs: number}
@@ -230,6 +231,18 @@ export interface BrowserNightscoutEntry {
 }
 
 export interface BrowserNightscoutTreatment {
+  readonly syncIdentifier?: string;
+  readonly deliveredUnits?: number;
+  readonly srvModified?: number | string;
+  readonly modified_at?: number | string;
+  readonly type?: string;
+  readonly temp?: string;
+  readonly endDate?: string | number;
+  readonly endTime?: string | number;
+  readonly isMutable?: boolean;
+  readonly mutable?: boolean;
+  readonly isValid?: boolean;
+  readonly deleted?: boolean;
   readonly _id?: string;
   readonly identifier?: string;
   readonly created_at?: string;
@@ -251,9 +264,11 @@ export interface BrowserNightscoutDeviceStatus {
   readonly _id?: string;
   readonly createdAtMs: number;
   readonly iobUnits?: number;
+  readonly iobTimestampMs?: number | null;
   readonly bolusIobUnits?: number;
   readonly basalIobUnits?: number;
   readonly cobGrams?: number;
+  readonly cobTimestampMs?: number | null;
   /** Minimal forecast facts, including their original observation times. */
   readonly forecastStatus?: ForecastDeviceStatus;
 }
@@ -331,7 +346,7 @@ export const decodeBrowserNightscoutTreatment = (
   const enteredBy = text(value.enteredBy, 160);
   const carbs = numeric('carbs');
   const insulin = numeric('insulin');
-  const amount = numeric('amount');
+  const amount = value.amount == null ? undefined : numeric('amount') ?? -1;
   const rate = bounded(value.rate, 0, 50);
   const absolute = bounded(value.absolute, 0, 50);
   const duration = bounded(value.duration, 0, 24 * 60);
@@ -339,6 +354,29 @@ export const decodeBrowserNightscoutTreatment = (
   const profile = text(value.profile, 512);
   const app = text(value.app, 160);
   const result: BrowserNightscoutTreatment = {
+    ...Object.fromEntries(
+      ['syncIdentifier', 'type', 'temp'].flatMap(key => {
+        const field = text(value[key], 160);
+        return field === undefined ? [] : [[key, field]];
+      }),
+    ),
+    ...Object.fromEntries(
+      ['isMutable', 'mutable', 'isValid', 'deleted'].flatMap(key =>
+        typeof value[key] === 'boolean' ? [[key, value[key]]] : [],
+      ),
+    ),
+    ...Object.fromEntries(
+      ['srvModified', 'modified_at', 'endDate', 'endTime'].flatMap(key => {
+        const revision =
+          typeof value[key] === 'number'
+            ? number(value[key])
+            : text(value[key], 80);
+        return revision === undefined ? [] : [[key, revision]];
+      }),
+    ),
+    ...(value.deliveredUnits == null
+      ? {}
+      : {deliveredUnits: numeric('deliveredUnits') ?? -1}),
     ...(id === undefined ? {} : {_id: id}),
     ...(identifier === undefined ? {} : {identifier}),
     ...(createdAt === undefined ? {} : {created_at: createdAt}),
@@ -404,8 +442,28 @@ export const decodeBrowserNightscoutDeviceStatus = (
     openaps === undefined ? undefined : nestedRecord(openaps, 'suggested');
   const enacted =
     openaps === undefined ? undefined : nestedRecord(openaps, 'enacted');
+  const openapsMeal = openaps === undefined ? undefined : nestedRecord(openaps, 'meal');
+  const openapsCob = openaps === undefined ? undefined : nestedRecord(openaps, 'cob');
+  // A value and its clock must come from the same payload. Upload time is not a load clock.
+  const iobPayload = value.iobUnits !== undefined || value.iobTimestampMs !== undefined
+    ? {value: value.iobUnits, timestamp: value.iobTimestampMs}
+    : loopIob !== undefined ? {value: loopIob.iob, timestamp: loopIob.timestamp}
+    : {value: openapsIob?.iob, timestamp: openapsIob?.timestamp};
+  const cobPayload = value.cobGrams !== undefined || value.cobTimestampMs !== undefined
+    ? {value: value.cobGrams, timestamp: value.cobTimestampMs}
+    : loopCob !== undefined ? {value: loopCob.cob, timestamp: loopCob.timestamp}
+    : openapsMeal !== undefined ? {value: openapsMeal.cob, timestamp: openapsMeal.timestamp}
+    : openapsCob !== undefined ? {value: openapsCob.cob, timestamp: openapsCob.timestamp}
+    : suggested?.COB !== undefined ? {value: suggested.COB, timestamp: suggested.timestamp}
+    : {value: enacted?.COB, timestamp: enacted?.timestamp};
+  const fieldTimestamp = (raw: unknown): number | undefined => {
+    const parsed = number(raw) ?? (typeof raw === 'string' ? Date.parse(raw) : undefined);
+    return parsed !== undefined && Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+  };
+  const iobTimestampMs = fieldTimestamp(iobPayload.timestamp);
+  const cobTimestampMs = fieldTimestamp(cobPayload.timestamp);
   const iobUnits = bounded(
-    value.iobUnits ?? loopIob?.iob ?? openapsIob?.iob,
+    iobPayload.value,
     -100,
     100,
   );
@@ -420,7 +478,7 @@ export const decodeBrowserNightscoutDeviceStatus = (
     100,
   );
   const cobGrams = bounded(
-    value.cobGrams ?? loopCob?.cob ?? suggested?.COB ?? enacted?.COB,
+    cobPayload.value,
     0,
     1_000,
   );
@@ -430,13 +488,17 @@ export const decodeBrowserNightscoutDeviceStatus = (
   const forecastStatus = decodedForecast && (
     decodedForecast.loopPrediction !== undefined ||
     decodedForecast.iobUnits !== undefined ||
-    decodedForecast.cobGrams !== undefined
+    decodedForecast.cobGrams !== undefined ||
+    decodedForecast.iobTimestampMs !== undefined ||
+    decodedForecast.cobTimestampMs !== undefined
   ) ? decodedForecast : undefined;
   if (
     iobUnits === undefined &&
     bolusIobUnits === undefined &&
     basalIobUnits === undefined &&
     cobGrams === undefined &&
+    iobPayload.timestamp === undefined &&
+    cobPayload.timestamp === undefined &&
     forecastStatus === undefined
   ) {
     return null;
@@ -446,9 +508,11 @@ export const decodeBrowserNightscoutDeviceStatus = (
     createdAtMs,
     ...(id === undefined ? {} : {_id: id}),
     ...(iobUnits === undefined ? {} : {iobUnits}),
+    ...(iobPayload.timestamp === undefined ? {} : {iobTimestampMs: iobTimestampMs ?? null}),
     ...(bolusIobUnits === undefined ? {} : {bolusIobUnits}),
     ...(basalIobUnits === undefined ? {} : {basalIobUnits}),
     ...(cobGrams === undefined ? {} : {cobGrams}),
+    ...(cobPayload.timestamp === undefined ? {} : {cobTimestampMs: cobTimestampMs ?? null}),
     ...(forecastStatus === undefined ? {} : {forecastStatus}),
   };
 };
@@ -654,6 +718,27 @@ export class BrowserNightscoutClient {
     );
   }
 
+  /**
+   * Raw evidence for buildRecordedInsulinSummary. Unlike chart readTreatments,
+   * this retains malformed fields, delivered amounts, revisions and duplicate
+   * identities so the canonical calculator can distinguish unknown from zero.
+   * A separate cache prevents chart decoding from erasing delivery evidence.
+   */
+  async readRecordedTreatments(
+    startMs: number,
+    endMs: number,
+    signal?: AbortSignal,
+  ): Promise<BrowserNightscoutRange<Record<string, unknown>>> {
+    return this.readRange(
+      'treatments',
+      startMs,
+      endMs,
+      value => (isRecord(value) ? {...value} : null),
+      signal,
+      'recorded',
+    );
+  }
+
   async readTreatments(
     startMs: number,
     endMs: number,
@@ -795,6 +880,7 @@ export class BrowserNightscoutClient {
     endMs: number,
     decode: (value: unknown) => T | null,
     signal?: AbortSignal,
+    cacheVariant?: 'recorded',
   ): Promise<BrowserNightscoutRange<T>> {
     if (
       !Number.isSafeInteger(startMs) ||
@@ -803,13 +889,14 @@ export class BrowserNightscoutClient {
     ) {
       throw new Error('Nightscout range is invalid.');
     }
-    const key = cacheKey(
-      this.options.workspaceId,
-      this.options.sourceId,
-      resource,
-      startMs,
-      endMs,
-    );
+    const key =
+      cacheKey(
+        this.options.workspaceId,
+        this.options.sourceId,
+        resource,
+        startMs,
+        endMs,
+      ) + (cacheVariant === undefined ? '' : `:${cacheVariant}`);
     try {
       const value = responseData(
         await this.options.api.requestJson('/v1/nightscout/range', {
@@ -828,8 +915,11 @@ export class BrowserNightscoutClient {
       if (!Array.isArray(value)) {
         throw new Error('Nightscout range is invalid.');
       }
-      if (resource === 'entries' && value.length >= ENTRIES_RANGE_LIMIT) {
-        throw new Error('Nightscout returned an incomplete glucose range.');
+      if (
+        (resource === 'entries' && value.length >= ENTRIES_RANGE_LIMIT) ||
+        (resource === 'treatments' && value.length >= TREATMENTS_RANGE_LIMIT)
+      ) {
+        throw new Error(`Nightscout returned an incomplete ${resource} range.`);
       }
       const records = value.map(decode).filter((row): row is T => row !== null);
       const fetchedAtMs = this.now();
@@ -847,7 +937,9 @@ export class BrowserNightscoutClient {
       return {
         records,
         freshness: {kind: 'fresh', fetchedAtMs},
-        ...(resource === 'entries' ? {complete: true} : {}),
+        ...(['entries', 'treatments'].includes(resource)
+          ? {complete: true}
+          : {}),
       };
     } catch (error) {
       if (signal?.aborted) {
@@ -887,7 +979,9 @@ export class BrowserNightscoutClient {
       return {
         records,
         freshness: {kind: 'stale', fetchedAtMs: cached.fetchedAtMs},
-        ...(resource === 'entries' ? {complete: false} : {}),
+        ...(['entries', 'treatments'].includes(resource)
+          ? {complete: false}
+          : {}),
       };
     }
   }

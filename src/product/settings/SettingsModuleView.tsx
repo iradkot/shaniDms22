@@ -20,6 +20,7 @@ import type {
 } from './runtime';
 import {NightscoutConnectionCard} from './NightscoutConnectionCard';
 import {usePrivacyControls} from '../privacy/PrivacyControlsContext';
+import {AppVersionRow} from './AppVersionRow';
 
 const COPY = {
   en: {
@@ -404,6 +405,7 @@ export const SettingsModuleView = ({
             />
           </View>
         ) : null}
+        <AppVersionRow locale={locale} {...(overview.appInfo ? {appInfo: overview.appInfo} : {})} />
         <NightscoutConnectionCard
           source={overview.nightscout}
           locale={locale}

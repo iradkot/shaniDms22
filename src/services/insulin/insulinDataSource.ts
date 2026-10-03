@@ -25,6 +25,8 @@ import {
   mapNightscoutTreatmentsToInsulinDataEntries,
 } from '../../utils/nightscoutTreatments.utils';
 import {getActiveNightscoutCacheScope} from '../nightscoutCacheScope';
+import type {DailyInsulinSourceSummary} from '../../modules/dailyOverview';
+import {buildRecordedInsulinSummary} from './recordedInsulin';
 
 export type InsulinDataAvailability = 'available' | 'stale' | 'unavailable';
 export interface InsulinContextRequest {
@@ -35,6 +37,11 @@ export interface InsulinContextRequest {
   readonly forceRefresh?: boolean;
 }
 export type InsulinLoadSample = NightscoutLoadSample;
+/**
+ * Legacy chart/model context: programmed temp rates plus a basal schedule.
+ * Normalized insulinData is not a complete record of delivered amounts.
+ * Use recordedInsulinDataSource for recorded daily amounts and coverage.
+ */
 export interface InsulinContext {
   /** Treatment events in the requested range. Basal carry-in is in insulinData. */
   readonly treatments: readonly Record<string, unknown>[];
@@ -44,6 +51,9 @@ export interface InsulinContext {
   readonly basalProfileData: BasalProfile;
   readonly carbTreatments: FoodItemDTO[];
   readonly loadSamples: readonly InsulinLoadSample[];
+  /** Canonical recorded amounts from the same raw snapshot, including carry-in.
+   * Optional for older injected adapters; absence means unknown, never zero. */
+  readonly recordedInsulin?: DailyInsulinSourceSummary;
   readonly availability: {
     readonly treatments: InsulinDataAvailability;
     readonly deviceStatus: InsulinDataAvailability;
@@ -91,9 +101,12 @@ const copyContext = (context: InsulinContext): InsulinContext => ({
   basalProfileData: context.basalProfileData.map(item => ({...item})),
   carbTreatments: context.carbTreatments.map(item => ({...item})),
   loadSamples: context.loadSamples.map(item => ({...item})),
+  ...(context.recordedInsulin === undefined
+    ? {}
+    : {recordedInsulin: {...context.recordedInsulin}}),
 });
 
-/** One loading/decoding contract for React, product adapters and AI tools. */
+/** Shared legacy chart/model loader. Fetches treatments, device status and a basal profile. */
 export const createInsulinContextLoader = (
   dependencies: InsulinContextDependencies,
 ): InsulinContextLoader => {
@@ -210,6 +223,16 @@ export const createInsulinContextLoader = (
           })
           .sort((left, right) => left.timestampMs - right.timestampMs);
         const context: InsulinContext = {
+          recordedInsulin:
+            treatmentsResult.status === 'fulfilled' &&
+            treatmentsResult.value.freshness.kind === 'fresh' &&
+            treatmentsResult.value.complete !== false
+              ? buildRecordedInsulinSummary(
+                  treatments,
+                  {startMs, endMs},
+                  Math.min(treatmentsResult.value.freshness.fetchedAtMs, now()),
+                )
+              : {quality: 'unavailable'},
           treatments: treatments.filter(
             item =>
               treatmentTime(item) >= startMs && treatmentTime(item) < endMs,

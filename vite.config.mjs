@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {fileURLToPath, URL} from 'node:url';
 import react from '@vitejs/plugin-react';
 import {defineConfig, transformWithEsbuild} from 'vite';
@@ -8,6 +9,16 @@ import {webReleaseManifestPlugin} from './scripts/web-release-manifest.mjs';
 
 const projectPath = path => fileURLToPath(new URL(path, import.meta.url));
 const buildReleaseChannel = releaseChannel.resolveReleaseChannel();
+
+const webBuildInfo = {builtAt: new Date().toISOString()};
+try {
+  const options = {cwd: projectPath('./'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']};
+  const revision = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], options).trim();
+  const changed = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], options).trim();
+  webBuildInfo.revision = `${revision}${changed ? '-dirty' : ''}`;
+} catch {
+  // A source archive has a build timestamp but no verifiable Git revision.
+}
 
 const reactNativeDependencyJsxPlugin = () => ({
   name: 'react-native-dependency-jsx',
@@ -174,5 +185,6 @@ export default defineConfig({
   define: {
     global: 'globalThis',
     __SHANI_RELEASE_CHANNEL__: JSON.stringify(buildReleaseChannel),
+    __SHANI_WEB_BUILD__: JSON.stringify(webBuildInfo),
   },
 });

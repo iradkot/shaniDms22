@@ -41,7 +41,7 @@ import {
 import {buildLoopModeSummary} from 'app/services/aiAnalyst/loopModeSummaryTool';
 import {TimeValueEntry} from 'app/types/insulin.types';
 import {loadInsulinContext} from 'app/services/insulin/insulinDataSource';
-import {calculateInsulinContextMetrics} from 'app/services/insulin/insulinRangeMetrics';
+import {calculateModeledInsulinContextMetrics} from 'app/services/insulin/insulinRangeMetrics';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW} from 'app/constants/GLUCOSE_WINDOWS';
 import type {TirThresholds} from 'app/types/loopAnalysis.types';
@@ -414,9 +414,11 @@ export async function runAiAnalystTool(
         const insulinEntries = context.insulinData;
         const carbItems = context.carbTreatments;
 
-        const bolusTotal = insulinEntries
-          .filter(e => e.type === 'bolus')
-          .reduce((sum: number, e: any) => sum + (typeof e.amount === 'number' ? e.amount : 0), 0);
+        const recorded = context.recordedInsulin;
+        if (!recorded || recorded.quality === 'unavailable' || recorded.bolusUnits === undefined) {
+          throw new Error('Recorded bolus totals are unavailable for this interval.');
+        }
+        const bolusTotal = recorded.bolusUnits;
 
         const carbsTotal = carbItems.reduce((sum, c) => sum + (typeof c.carbs === 'number' ? c.carbs : 0), 0);
 
@@ -424,6 +426,7 @@ export async function runAiAnalystTool(
           ok: true,
           result: {
             range: {startMs, endMs, rangeDays},
+            recordedInsulin: recorded,
             totals: {
               bolusU: Number(bolusTotal.toFixed(2)),
               carbsG: Math.round(carbsTotal),
@@ -1303,9 +1306,9 @@ export async function runAiAnalystTool(
 
         const context = await loadInsulinContext({startMs, endMs});
         const insulinEntries = context.insulinData;
-        const metrics = calculateInsulinContextMetrics(context, new Date(startMs), new Date(endMs));
+        const metrics = calculateModeledInsulinContextMetrics(context, new Date(startMs), new Date(endMs));
 
-        // Delivery totals use the same scheduled/temporary basal timeline as charts.
+        // This legacy tool models scheduled/temporary basal; it cannot prove delivery.
         const boluses = insulinEntries.filter(e => e.type === 'bolus');
         const totalBolus = metrics.totalBolus;
         const totalTempBasal = metrics.totalTempBasal;
@@ -1335,6 +1338,8 @@ export async function runAiAnalystTool(
               end: new Date(endMs).toISOString(),
               days: Math.round(days),
             },
+            calculation: 'profile-model',
+            basalEstimated: metrics.basalEstimated,
             totals: {
               bolusU: Math.round(totalBolus * 100) / 100,
               basalU: Math.round(metrics.totalBasal * 100) / 100,

@@ -21,6 +21,9 @@ export interface PreMealAssistanceFacts {
   readonly trend?: PreMealTrend;
   readonly iobUnits?: number;
   readonly cobGrams?: number;
+  /** Load values retain their own device-observation clocks. */
+  readonly iobTimestampMs?: number;
+  readonly cobTimestampMs?: number;
 }
 
 export type PreMealRelevance =
@@ -52,4 +55,3 @@ export interface PreMealAssistanceDataSource {
     request: PreMealAssistanceLoadRequest,
   ) => Promise<PreMealAssistanceSnapshot>;
 }
-

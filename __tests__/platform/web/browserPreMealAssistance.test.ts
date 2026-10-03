@@ -146,4 +146,26 @@ describe('browser pre-meal assistance', () => {
       notificationsEnabled: false,
     });
   });
+
+  it.each(['fresh', 'stale', 'missing'] as const)('preserves glucose and evaluates %s device field clocks independently', async clock => {
+    const nowMs = 1_800_000_000_000;
+    const iobTimestampMs = nowMs - (clock === 'stale' ? 30 : 2) * 60_000;
+    const controller = createBrowserPreMealAssistanceController({
+      storage: new MemoryStorage(), scope, now: () => nowMs,
+      client: {
+        readEntries: jest.fn(async () => ({records: [{date: nowMs - 4 * 60_000, sgv: 104, direction: 'Flat'}], freshness: {kind: 'fresh' as const, fetchedAtMs: nowMs}})),
+        readDeviceStatuses: jest.fn(async () => ({records: [{createdAtMs: nowMs - 60_000,
+          iobUnits: -0.25, ...(clock === 'missing' ? {} : {iobTimestampMs}),
+          cobGrams: 0, cobTimestampMs: nowMs - 3 * 60_000}], freshness: {kind: 'fresh' as const, fetchedAtMs: nowMs}})),
+      },
+    });
+    const context = await controller.dataSource.loadContext({nowMs, period: {dayStartMs: nowMs - 12 * 60 * 60_000, dayEndMs: nowMs + 1}});
+    expect(context.sourceState).toEqual({kind: 'live'});
+    expect(context.facts).toMatchObject({glucoseMgDl: 104, observedAtMs: nowMs - 4 * 60_000, cobGrams: 0, cobTimestampMs: nowMs - 3 * 60_000});
+    if (clock === 'fresh') {
+      expect(context.facts).toMatchObject({iobUnits: -0.25, iobTimestampMs});
+    } else {
+      expect(context.facts).not.toHaveProperty('iobUnits');
+    }
+  });
 });

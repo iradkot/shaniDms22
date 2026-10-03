@@ -33,11 +33,27 @@ const noVaultSync: NightscoutVaultSynchronizer = {
 const mockFetchLatestBgEntry = jest.fn();
 const mockFetchLatestDeviceStatusEntry = jest.fn();
 
-jest.mock('app/api/apiRequests', () => ({
-  fetchLatestBgEntry: (...args: unknown[]) =>
-    mockFetchLatestBgEntry(...args),
-  fetchLatestDeviceStatusEntry: (...args: unknown[]) =>
-    mockFetchLatestDeviceStatusEntry(...args),
+jest.mock('app/services/currentData/nativeCurrentDataSource', () => ({
+  nativeCurrentDataSource: {
+    loadCurrent: async () => {
+      const [glucose, deviceStatus] = await Promise.all([
+        mockFetchLatestBgEntry(),
+        mockFetchLatestDeviceStatusEntry(),
+      ]);
+      const now = Date.now();
+      return require('app/modules/currentData').buildCurrentDataSnapshot({
+        observedAtMs: now,
+        glucose: {
+          records: glucose ? [glucose] : [],
+          freshness: {kind: 'fresh', fetchedAtMs: now},
+        },
+        deviceStatus: {
+          records: deviceStatus ? [deviceStatus] : [],
+          freshness: {kind: 'fresh', fetchedAtMs: now},
+        },
+      });
+    },
+  },
 }));
 
 type Deferred<T> = {
@@ -62,7 +78,7 @@ const bg = (sgv: number, date: number) =>
     direction: 'Flat',
     device: 'test',
     type: 'sgv',
-  }) as const;
+  } as const);
 
 describe('latest Nightscout snapshot Workspace isolation', () => {
   beforeEach(async () => {
@@ -111,14 +127,12 @@ describe('latest Nightscout snapshot Workspace isolation', () => {
       .mockImplementationOnce(() => betaDevice.promise);
 
     let config: NightscoutConfigContextValue | null = null;
-    let latest:
-      | {
-          snapshot: LatestNightscoutSnapshot | null;
-          isLoading: boolean;
-          error: unknown;
-          refresh: () => Promise<void>;
-        }
-      | null = null;
+    let latest: {
+      snapshot: LatestNightscoutSnapshot | null;
+      isLoading: boolean;
+      error: unknown;
+      refresh: () => Promise<void>;
+    } | null = null;
 
     const Consumer = () => {
       config = useNightscoutConfig();
@@ -141,7 +155,7 @@ describe('latest Nightscout snapshot Workspace isolation', () => {
     expect(latest?.snapshot?.bg.sgv).toBe(111);
 
     act(() => {
-      void latest?.refresh();
+      latest?.refresh();
     });
     expect(mockFetchLatestBgEntry).toHaveBeenCalledTimes(2);
 

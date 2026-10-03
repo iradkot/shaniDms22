@@ -156,6 +156,11 @@ function addProfileBoundaries(
   }
 }
 
+/**
+ * Programmed-rate timeline for charts/models. Schedule fills uncovered time;
+ * integrating this timeline cannot establish recorded delivered insulin.
+ * Use services/insulin/recordedInsulin for explicit delivered-dose evidence.
+ */
 export function buildBasalDeliveryTimeline(params: {
   basalProfile: BasalProfile;
   insulinData?: InsulinDataEntry[];

@@ -63,3 +63,10 @@ test('keeps a valid zero basal schedule and confirmed empty treatments as a know
     ),
   ).toMatchObject({totalBasal: 0, totalBolus: 0, totalInsulin: 0});
 });
+
+test('identifies profile-derived totals as modeled even when the inputs are fresh', () => {
+  expect(calculateInsulinContextMetrics(context(), start, end)).toMatchObject({
+    totalBasal: 1,
+    basalEstimated: true,
+  });
+});

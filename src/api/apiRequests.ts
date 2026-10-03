@@ -88,28 +88,39 @@ const estimateBgCountForRange = (startDate: Date, endDate: Date) => {
   return Math.min(MAX_BG_COUNT, Math.max(DEFAULT_BG_COUNT, estimate));
 };
 
+/** One complete transport/decoder for cached views and uncached analysis. */
+const readGlucoseRange = async (
+  startDate: Date,
+  endDate: Date,
+  initialCount = estimateBgCountForRange(startDate, endDate),
+): Promise<BgSample[]> => {
+  const startMs = startDate.getTime();
+  const endMs = endDate.getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
+    throw new Error('Invalid glucose range.');
+  }
+  const records = await requestCompleteNightscoutRange(
+    count =>
+      `/api/v1/entries?find[date][$gte]=${startMs}&find[date][$lte]=${endMs}&count=${count}`,
+    initialCount,
+    MAX_BG_COUNT,
+  );
+  return records
+    .map(decodeBgSample)
+    .filter((sample): sample is BgSample => sample !== null)
+    .sort(bgSortFunction(false));
+};
+
 export const fetchBgDataForDateRangeWithMetadata = async (
   startDate: Date,
   endDate: Date,
 ): Promise<NightscoutRangeResult<BgSample>> => {
-  const startIso = startDate.toISOString();
-  const endIso = endDate.toISOString();
-  const count = estimateBgCountForRange(startDate, endDate);
   const cacheScope = getActiveNightscoutCacheScope();
   try {
-    const records = await requestCompleteNightscoutRange(
-      limit =>
-        `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=${limit}`,
-      count,
-      MAX_BG_COUNT,
-    );
+    const sortedBgData = await readGlucoseRange(startDate, endDate);
     if (cacheScope) {
       assertActiveNightscoutCacheScope(cacheScope);
     }
-    const sortedBgData = records
-      .map(decodeBgSample)
-      .filter((sample): sample is BgSample => sample !== null)
-      .sort(bgSortFunction(false));
     const fetchedAtMs = Date.now();
     if (cacheScope) {
       try {
@@ -187,24 +198,17 @@ export const fetchBgDataForDateRange = async (
  * Oracle PRD: the Oracle feature maintains its own stable local cache and
  * performs incremental sync; we avoid polluting the generic date-range cache
  * keys (which would change on every run for rolling windows).
+ * New numeric-analysis callers must use throwOnError:true: the legacy default
+ * returns [] on failure and cannot distinguish unavailable from known-empty.
+ * count is the initial request size, never permission to truncate a range.
  */
 export const fetchBgDataForDateRangeUncached = async (
   startDate: Date,
   endDate: Date,
   options?: {count?: number; throwOnError?: boolean},
 ): Promise<BgSample[]> => {
-  const startIso = startDate.toISOString();
-  const endIso = endDate.toISOString();
-  const count =
-    typeof options?.count === 'number'
-      ? options.count
-      : estimateBgCountForRange(startDate, endDate);
-
-  const apiUrl: string = `/api/v1/entries?find[dateString][$gte]=${startIso}&find[dateString][$lte]=${endIso}&count=${count}`;
   try {
-    const response = await nightscoutInstance.get<BgSample[]>(apiUrl);
-    const bgData: BgSample[] = response.data ?? [];
-    return bgData.sort(bgSortFunction(false));
+    return await readGlucoseRange(startDate, endDate, options?.count);
   } catch (error: any) {
     console.warn(
       'fetchBgDataForDateRangeUncached: Failed to fetch BG data',

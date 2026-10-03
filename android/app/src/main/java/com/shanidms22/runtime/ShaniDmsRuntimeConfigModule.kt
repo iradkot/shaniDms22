@@ -11,6 +11,8 @@ class ShaniDmsRuntimeConfigModule(reactContext: ReactApplicationContext) :
 
   override fun getConstants(): MutableMap<String, Any> =
     hashMapOf(
+      "versionName" to BuildConfig.VERSION_NAME,
+      "buildNumber" to BuildConfig.VERSION_CODE.toString(),
       "backendBaseUrl" to BuildConfig.SHANI_BACKEND_BASE_URL,
       "firestoreRulesSchemaVersion" to BuildConfig.FIRESTORE_RULES_SCHEMA_VERSION,
       "releaseChannel" to BuildConfig.SHANI_RELEASE_CHANNEL,

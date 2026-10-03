@@ -1,20 +1,25 @@
 import {buildNativeRecommendationEvidence} from '../../../src/platform/native/ai/nativeRecommendationEvidence';
 import type {NativeRecommendationToolResult} from '../../../src/platform/native/ai/nativeRecommendationEvidence';
+import {buildCurrentDataSnapshot} from '../../../src/modules/currentData';
 
 const now = Date.parse('2026-09-28T12:00:00Z');
+const snapshot = (
+  records: readonly unknown[],
+  deviceRecords: readonly unknown[] = [],
+  kind: 'fresh' | 'stale' = 'fresh',
+) =>
+  buildCurrentDataSnapshot({
+    observedAtMs: now,
+    glucose: {records, freshness: {kind: 'fresh', fetchedAtMs: now}},
+    deviceStatus: {records: deviceRecords, freshness: {kind, fetchedAtMs: now}},
+  });
 const build = (
   overrides: Partial<
     Parameters<typeof buildNativeRecommendationEvidence>[0]
   > = {},
 ) =>
   buildNativeRecommendationEvidence({
-    cgm: {
-      ok: true,
-      result: {
-        samples: [{tMs: now - 5 * 60_000, mgdl: 110, iobU: 9, cobG: 80}],
-        availability: {deviceStatus: 'available'},
-      },
-    },
+    current: snapshot([{date: now - 5 * 60_000, sgv: 110, iobU: 9, cobG: 80}]),
     stats: {
       ok: true,
       result: {
@@ -27,6 +32,13 @@ const build = (
     insulin: {
       ok: true,
       result: {
+        recordedInsulin: {
+          quality: 'partial',
+          bolusUnits: 0,
+          basalEvidence: 'recorded',
+          basalCoveragePercent: 0,
+          basalCoveredMs: 0,
+        },
         totals: {bolusU: 0, carbsG: 0},
         counts: {insulinEntries: 0},
         availability: {treatments: 'available'},
@@ -51,38 +63,38 @@ describe('native recommendation evidence', () => {
     expect(evidence.currentSnapshot.latest).not.toHaveProperty('cobG');
     expect(evidence.currentDeviceStatus).toMatchObject({
       available: false,
-      sourceTimestampMs: null,
       iobU: null,
       cobG: null,
-      sourceAvailability: 'available',
+      iob: {sourceTimestampMs: null},
+      cob: {sourceTimestampMs: null},
     });
     expect(evidence.currentDeviceStatus.warning).toContain(
-      'original device observation timestamp',
+      'independent source observation timestamps',
     );
     expect(evidence.glucose).toMatchObject({estimatedCoveragePct: 100});
   });
 
   it('retains stale device availability without exposing stale IOB or COB numbers', () => {
     const evidence = build({
-      cgm: {
-        ok: true,
-        result: {
-          samples: [{tMs: now, mgdl: 105, iobU: 15, cobG: 100}],
-          availability: {
-            deviceStatus: 'stale',
-            treatments: 'stale',
-            profile: 'available',
+      current: snapshot(
+        [{date: now, sgv: 105}],
+        [
+          {
+            created_at: new Date(now).toISOString(),
+            loop: {
+              iob: {iob: 15, timestamp: new Date(now).toISOString()},
+              cob: {cob: 100, timestamp: new Date(now).toISOString()},
+            },
           },
-        },
-      },
+        ],
+        'stale',
+      ),
     });
     expect(evidence.currentSnapshot.fresh).toBe(true);
-    expect(evidence.currentSnapshot.sourceAvailability.deviceStatus).toBe(
-      'stale',
-    );
     expect(evidence.currentDeviceStatus).toMatchObject({
       fresh: false,
-      sourceAvailability: 'stale',
+      iob: {status: 'stale'},
+      cob: {status: 'stale'},
       iobU: null,
       cobG: null,
     });
@@ -91,7 +103,7 @@ describe('native recommendation evidence', () => {
   it('keeps an old glucose value timestamped and explicitly not current', () => {
     const timestamp = now - 60 * 60_000;
     const evidence = build({
-      cgm: {ok: true, result: {samples: [{tMs: timestamp, mgdl: 110}]}},
+      current: snapshot([{date: timestamp, sgv: 110}]),
     });
     expect(evidence.currentSnapshot).toMatchObject({
       fresh: false,
@@ -103,19 +115,62 @@ describe('native recommendation evidence', () => {
     );
   });
 
+  it('preserves fresh signed IOB while independently omitting stale COB', () => {
+    const freshTime = now - 4 * 60_000;
+    const oldTime = now - 243 * 60_000;
+    const evidence = build({
+      current: snapshot(
+        [{date: freshTime, sgv: 110}],
+        [
+          {
+            created_at: new Date(now).toISOString(),
+            loop: {
+              iob: {iob: -0.4, timestamp: new Date(freshTime).toISOString()},
+              cob: {cob: 20, timestamp: new Date(oldTime).toISOString()},
+            },
+          },
+        ],
+      ),
+    });
+    expect(evidence.currentDeviceStatus).toMatchObject({
+      available: true,
+      fresh: false,
+      iobU: -0.4,
+      cobG: null,
+      iob: {status: 'fresh', sourceTimestampMs: freshTime},
+      cob: {status: 'stale', sourceTimestampMs: oldTime, value: null},
+    });
+  });
+
+  it('ages the current snapshot again after historical loading without changing original timestamps', () => {
+    const sourceTime = now - 14 * 60_000;
+    const evidence = build({
+      current: snapshot([{date: sourceTime, sgv: 110}]),
+      observedAtMs: now + 3 * 60_000,
+    });
+    expect(evidence.currentSnapshot).toMatchObject({
+      fresh: false,
+      ageMinutes: 17,
+      observation: {
+        status: 'stale',
+        fetchedAtMs: now,
+        sourceTimestampMs: sourceTime,
+      },
+    });
+  });
+
   it.each([
-    {tMs: now + 1, mgdl: 110},
-    {tMs: now, mgdl: Number.NaN},
-    {tMs: now, mgdl: 0},
-    {tMs: now, mgdl: -12},
-    {tMs: Number.NaN, mgdl: 110},
-    {tMs: now},
+    {date: now + 1, sgv: 110},
+    {date: now, sgv: Number.NaN},
+    {date: now, sgv: 0},
+    {date: now, sgv: -12},
+    {date: Number.NaN, sgv: 110},
+    {date: now},
   ])('does not mark invalid or future measurements as current: %p', sample => {
-    const evidence = build({cgm: {ok: true, result: {samples: [sample]}}});
+    const evidence = build({current: snapshot([sample])});
     expect(evidence.currentSnapshot).toMatchObject({
       fresh: false,
       latest: null,
-      invalidSampleCount: 1,
     });
   });
 
@@ -170,4 +225,24 @@ describe('native recommendation evidence', () => {
       expect(evidence.insulin).not.toHaveProperty('totals');
     }
   });
+});
+
+it('does not promote a fresh modeled total to recorded recommendation evidence', () => {
+  const evidence = build({
+    insulin: {
+      ok: true,
+      result: {
+        availability: {treatments: 'available'},
+        totals: {bolusU: 9, basalU: 24},
+        recordedInsulin: {
+          quality: 'available',
+          basalUnits: 24,
+          bolusUnits: 9,
+          basalEstimated: true,
+        },
+      },
+    },
+  });
+  expect(evidence.insulin.available).toBe(false);
+  expect(evidence.insulin).not.toHaveProperty('totals');
 });

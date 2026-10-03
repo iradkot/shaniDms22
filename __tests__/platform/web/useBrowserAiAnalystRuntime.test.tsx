@@ -6,6 +6,7 @@ import renderer, {act} from 'react-test-renderer';
 import type {AiAnalystModuleRuntime} from '../../../src/product/ai';
 import {
   BrowserAiService,
+  createBrowserAiEvidenceProvider,
   type BrowserAiEvidenceProvider,
   useBrowserAiAnalystRuntime,
 } from '../../../src/platform/web';
@@ -47,6 +48,96 @@ describe('browser AI analyst runtime', () => {
     expect(runtime?.snapshot.history[0]?.recommendation?.kind).toBe('weekly');
     act(() => tree.unmount());
   });
+  it.each([1, 2])('does not publish an old-source answer after %i source revisions during the final model call', async revisions => {
+    const nowMs = Date.now();
+    let revision = 0;
+    let resolveReview!: (value: unknown) => void;
+    let markReviewStarted!: () => void;
+    const reviewStarted = new Promise<void>(resolve => {markReviewStarted = resolve;});
+    const evidenceProvider = createBrowserAiEvidenceProvider({
+      sourceId: 'fixture-a', now: () => nowMs, getScopeKey: () => String(revision),
+      client: {
+        readEntries: async () => ({records: [{date: nowMs - 4 * 60_000, sgv: 129}], freshness: {kind: 'fresh', fetchedAtMs: nowMs}}),
+        readRecordedTreatments: async () => ({records: [], freshness: {kind: 'fresh', fetchedAtMs: nowMs}}),
+        readDeviceStatuses: async () => ({records: [], freshness: {kind: 'fresh', fetchedAtMs: nowMs}}),
+      },
+    });
+    const requestJson = jest.fn()
+      .mockResolvedValueOnce({version: 1, content: 'Initial factual review.'})
+      .mockImplementationOnce(() => {
+        markReviewStarted();
+        return new Promise(resolve => {resolveReview = resolve;});
+      });
+    const service = new BrowserAiService({requestJson});
+    const storage = new MemoryStorage();
+    let runtime: AiAnalystModuleRuntime | undefined;
+    const Harness = () => {
+      runtime = useBrowserAiAnalystRuntime({service, storage, scopeId: 'same-account-workspace', locale: 'en', enabled: true,
+        credentialConfigured: true, evidenceProvider, onOpenSettings: jest.fn()});
+      return null;
+    };
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {tree = renderer.create(<Harness />);});
+    let pending: Promise<void> | undefined;
+    await act(async () => {
+      pending = runtime?.startRecommendation?.({request: {kind: 'now'}, locale: 'en'});
+      await reviewStarted;
+    });
+    // Keep the same component/account. Two revisions represent A -> B -> A.
+    revision += revisions;
+    await act(async () => {
+      resolveReview({version: 1, content: 'Old source answer must not be published.'});
+      await pending;
+    });
+    expect(requestJson).toHaveBeenCalledTimes(2);
+    expect(runtime?.snapshot.busy).toBe(false);
+    expect(runtime?.snapshot.error).toBeDefined();
+    expect(runtime?.snapshot.messages).toEqual([]);
+    expect(runtime?.snapshot.history).toEqual([]);
+    expect(JSON.stringify(runtime?.snapshot)).not.toContain('Old source answer');
+    act(() => tree!.unmount());
+  });
+
+  it('passes independent fresh current evidence through both model calls when history fails', async () => {
+    const nowMs = Date.now();
+    const evidenceProvider = createBrowserAiEvidenceProvider({
+      sourceId: 'fixture', now: () => nowMs,
+      client: {
+        readEntries: async (start, end) => {
+          if (end - start > 2 * 60 * 60_000 + 1) {
+            throw new Error('history unavailable');
+          }
+          return {records: [{date: nowMs - 4 * 60_000, sgv: 129, direction: 'Flat'}], freshness: {kind: 'fresh', fetchedAtMs: nowMs}};
+        },
+        readRecordedTreatments: async () => ({records: [], freshness: {kind: 'fresh', fetchedAtMs: nowMs}}),
+        readDeviceStatuses: async () => {throw new Error('device unavailable');},
+      },
+    });
+    const requestJson = jest.fn().mockResolvedValue({version: 1, content: 'Use your current reading when following your existing plan.'});
+    const service = new BrowserAiService({requestJson});
+    const storage = new MemoryStorage();
+    let runtime: AiAnalystModuleRuntime | undefined;
+    const Harness = () => {
+      runtime = useBrowserAiAnalystRuntime({service, storage, scopeId: 'fixture-workspace', locale: 'en', enabled: true,
+        credentialConfigured: true, evidenceProvider, onOpenSettings: jest.fn()});
+      return null;
+    };
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {tree = renderer.create(<Harness />);});
+    await act(async () => runtime?.startRecommendation?.({request: {kind: 'now'}, locale: 'en'}));
+    expect(runtime?.snapshot.error).toBeUndefined();
+    expect(runtime?.snapshot.messages).toHaveLength(2);
+    expect(runtime?.snapshot.visibleContext).toContain('Current glucose: 129 mg/dL; fresh');
+    expect(requestJson).toHaveBeenCalledTimes(2);
+    requestJson.mock.calls.forEach(([, options]) => {
+      const prompt = JSON.stringify(options.body.messages);
+      expect(prompt).toContain('Current glucose: 129 mg/dL; fresh');
+      expect(prompt).toContain('Glucose history for the selected period is unavailable');
+      expect(prompt).toContain('IOB: unavailable');
+    });
+    act(() => tree!.unmount());
+  });
+
   it('preserves a failed question and retries it without duplicate history', async () => {
     const requestJson = jest
       .fn<Promise<unknown>, [string]>()

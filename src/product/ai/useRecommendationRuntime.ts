@@ -32,6 +32,13 @@ import {
 } from '../../modules/releaseSafety/policy';
 
 type Chat = Parameters<typeof runRecommendation>[0]['chat'];
+export type RecommendationEvidence =
+  | string
+  | {
+      readonly text: string;
+      /** Earliest expiry of a fact explicitly used as current; omitted for historical-only evidence. */
+      readonly currentFactsExpireAtMs?: number;
+    };
 export interface RecommendationRuntimePorts {
   readonly scopeId: string | null;
   readonly locale: AiLocale;
@@ -43,7 +50,7 @@ export interface RecommendationRuntimePorts {
   readonly loadEvidence: (
     input: AiRecommendationStart,
     signal: AbortSignal,
-  ) => Promise<string>;
+  ) => Promise<RecommendationEvidence>;
   readonly loadLegacyHistory?: () => Promise<readonly AiConversationSummary[]>;
 }
 
@@ -57,7 +64,11 @@ const storageError = (locale: AiLocale) =>
     ? 'לא הצלחנו לשמור או לטעון את הזיכרון. אפשר לנסות שוב.'
     : 'Memory could not be saved or loaded. Please try again.';
 const runError = (locale: AiLocale, caught?: unknown) =>
-  caught instanceof Error && caught.name === 'UnsafeRecommendationError'
+  caught instanceof Error && caught.name === 'CurrentEvidenceExpiredError'
+    ? locale === 'he'
+      ? 'נתוני עכשיו התיישנו בזמן הכנת ההמלצה. נסו שוב כדי לקבל המלצה עם נתונים מעודכנים.'
+      : 'Current data became outdated while preparing the recommendation. Try again to use updated readings.'
+    : caught instanceof Error && caught.name === 'UnsafeRecommendationError'
     ? locale === 'he'
       ? 'התשובה כללה הנחיית טיפול שלא מתאימה לייעוץ כאן ולכן לא הוצגה. אפשר לנסות שוב או להתייעץ עם הצוות המטפל.'
       : 'The answer contained a treatment instruction that is not appropriate here, so it was not shown. Try again or discuss it with your care team.'
@@ -364,13 +375,35 @@ export function useRecommendationRuntime(
         patientMemory,
         start.locale,
       );
-      const evidence = await abortable(
+      const loadedEvidence = await abortable(
         ports.loadEvidence(start, abort.signal),
         abort.signal,
       );
       if (!current()) {
         return;
       }
+      const evidence =
+        typeof loadedEvidence === 'string'
+          ? loadedEvidence
+          : loadedEvidence.text;
+      const currentFactsExpireAtMs =
+        typeof loadedEvidence === 'string'
+          ? undefined
+          : loadedEvidence.currentFactsExpireAtMs;
+      const assertEvidenceCurrent = () => {
+        if (
+          currentFactsExpireAtMs !== undefined &&
+          (!Number.isFinite(currentFactsExpireAtMs) ||
+            Date.now() >= currentFactsExpireAtMs)
+        ) {
+          const expired = new Error(
+            'Current evidence expired during recommendation.',
+          );
+          expired.name = 'CurrentEvidenceExpiredError';
+          throw expired;
+        }
+      };
+      assertEvidenceCurrent();
       const focus = createAiConversationLaunch({
         specialist: pending.specialist,
         locale: start.locale,
@@ -386,7 +419,12 @@ export function useRecommendationRuntime(
         evidence: factualContext,
         patientContext,
         messages: pending.messages,
-        chat: ports.chat,
+        chat: async (messages, signal) => {
+          assertEvidenceCurrent();
+          const providerAnswer = await ports.chat(messages, signal);
+          assertEvidenceCurrent();
+          return providerAnswer;
+        },
         signal: abort.signal,
         onProgress: value => {
           if (current()) {
@@ -397,6 +435,7 @@ export function useRecommendationRuntime(
       if (!current()) {
         return;
       }
+      assertEvidenceCurrent();
       const complete: AiConversationSummary = {
         ...pending,
         updatedAt: Date.now(),

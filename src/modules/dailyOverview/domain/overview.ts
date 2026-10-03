@@ -1,11 +1,14 @@
 import type {
   TrendsCoverageQuality,
+  TrendsGlucoseFreshness,
   TrendsRangeDistribution,
   TrendsRangeThresholds,
 } from '../../trends';
 import {
   assertTrendsSampleInterval,
+  buildElapsedGlucoseSummary,
   buildTrendsDescriptiveSummary,
+  isDailyGlucoseValue,
 } from '../../trends';
 import type {
   DailyInsulinSourceSummary,
@@ -19,11 +22,19 @@ export type DailyInsulinSummary =
       readonly basalUnits: number;
       readonly bolusUnits: number;
       readonly totalUnits: number;
+      readonly basalEstimated?: boolean;
+      readonly basalEvidence?: 'recorded';
+      readonly basalCoveredMs?: number;
+      readonly basalCoveragePercent?: number;
     }
+  | Extract<DailyInsulinSourceSummary, {quality: 'partial'}>
   | {readonly quality: 'unavailable'};
 
 export interface DailyOverview {
   readonly period: DailyOverviewPeriod;
+  readonly observedPeriod?: DailyOverviewPeriod;
+  readonly isPartialDay?: boolean;
+  readonly glucoseFreshness: TrendsGlucoseFreshness;
   readonly thresholds: TrendsRangeThresholds;
   readonly validSampleCount: number;
   readonly excludedSampleCount: number;
@@ -46,6 +57,8 @@ export interface BuildDailyOverviewInput {
   readonly expectedSampleIntervalMs: number;
   readonly thresholds: TrendsRangeThresholds;
   readonly source: DailyOverviewSourceSnapshot;
+  /** Exclusive observation cutoff; omitted for a complete historical day. */
+  readonly asOfMs?: number;
 }
 
 export class DailyOverviewInputError extends Error {
@@ -83,9 +96,7 @@ export const moveLocalDay = (dayStartMs: number, dayDelta: number): number => {
   return localDate.getTime();
 };
 
-export const getLocalDayPeriod = (
-  timestampMs: number,
-): DailyOverviewPeriod => {
+export const getLocalDayPeriod = (timestampMs: number): DailyOverviewPeriod => {
   const startMs = localDayStart(timestampMs);
   return {startMs, endMs: moveLocalDay(startMs, 1)};
 };
@@ -107,6 +118,23 @@ const buildInsulinSummary = (
   if (source.quality === 'unavailable') {
     return {quality: 'unavailable'};
   }
+  if (source.quality === 'partial') {
+    if (
+      [source.basalUnits, source.bolusUnits].some(
+        value => value !== undefined && (!Number.isFinite(value) || value < 0),
+      ) ||
+      !Number.isFinite(source.basalCoveredMs) ||
+      source.basalCoveredMs < 0 ||
+      !Number.isFinite(source.basalCoveragePercent) ||
+      source.basalCoveragePercent < 0 ||
+      source.basalCoveragePercent > 100
+    ) {
+      throw new DailyOverviewInputError(
+        'Recorded insulin evidence must be finite and non-negative.',
+      );
+    }
+    return {...source};
+  }
   if (
     !Number.isFinite(source.basalUnits) ||
     !Number.isFinite(source.bolusUnits) ||
@@ -117,11 +145,38 @@ const buildInsulinSummary = (
       'Available insulin totals must be finite and non-negative.',
     );
   }
+  // Legacy sources can still return estimates. They cannot establish recorded basal.
+  if (source.basalEstimated) {
+    return {
+      quality: 'partial',
+      bolusUnits: source.bolusUnits,
+      basalCoveredMs: 0,
+      basalCoveragePercent: 0,
+    };
+  }
+  if ((source.basalCoveragePercent ?? 100) !== 100) {
+    return {
+      quality: 'partial',
+      basalUnits: source.basalUnits,
+      bolusUnits: source.bolusUnits,
+      basalCoveredMs: source.basalCoveredMs ?? 0,
+      basalCoveragePercent: Number.isFinite(source.basalCoveragePercent)
+        ? Math.max(0, Math.min(100, source.basalCoveragePercent!))
+        : 0,
+      ...(source.basalEvidence === undefined
+        ? {}
+        : {basalEvidence: source.basalEvidence}),
+    };
+  }
   return {
+    ...source,
     quality: 'available',
     basalUnits: source.basalUnits,
     bolusUnits: source.bolusUnits,
     totalUnits: roundTo(source.basalUnits + source.bolusUnits),
+    ...(source.basalEstimated === undefined
+      ? {}
+      : {basalEstimated: source.basalEstimated}),
   };
 };
 
@@ -137,31 +192,78 @@ export const buildDailyOverview = (
   assertOneLocalDay(input.period);
   // Keep the daily module's established cadence-before-threshold validation.
   assertTrendsSampleInterval(input.expectedSampleIntervalMs);
+  if (input.asOfMs !== undefined) {
+    assertFiniteTimestamp(input.asOfMs);
+  }
+  const observedPeriod = {
+    startMs: input.period.startMs,
+    endMs: Math.min(
+      input.period.endMs,
+      Math.max(input.period.startMs, input.asOfMs ?? input.period.endMs),
+    ),
+  };
+  const hasElapsedTime = observedPeriod.endMs > observedPeriod.startMs;
+  // Snapshot source values once. Every daily metric uses the same accepted
+  // evidence, while the original Trends acceptance policy remains unchanged.
+  const dailySamples = input.source.glucoseSamples
+    .map(sample => ({
+      timestampMs: sample.timestampMs,
+      valueMgDl: sample.valueMgDl,
+    }))
+    .filter(sample => isDailyGlucoseValue(sample.valueMgDl));
+  const excludedDailyValues =
+    input.source.glucoseSamples.length - dailySamples.length;
   const sharedOverview = buildTrendsDescriptiveSummary({
-    period: input.period,
+    // A zero-duration day has no expected readings. Validate the usual domain
+    // invariants through the empty full-day model, then expose zero expectation.
+    period: hasElapsedTime ? observedPeriod : input.period,
     expectedSampleIntervalMs: input.expectedSampleIntervalMs,
     thresholds: input.thresholds,
-    samples: input.source.glucoseSamples,
+    samples: hasElapsedTime ? dailySamples : [],
   });
   const prepared = sharedOverview.sampleSet;
+  const elapsed = hasElapsedTime
+    ? buildElapsedGlucoseSummary({
+        period: observedPeriod,
+        expectedSampleIntervalMs: input.expectedSampleIntervalMs,
+        thresholds: input.thresholds,
+        samples: dailySamples,
+      })
+    : undefined;
 
+  const freshness = input.source.glucoseFreshness;
+  const glucoseFreshness: TrendsGlucoseFreshness =
+    freshness &&
+    freshness.kind !== 'unknown' &&
+    Number.isFinite(freshness.fetchedAtMs) &&
+    freshness.fetchedAtMs >= 0
+      ? freshness
+      : {kind: 'unknown'};
   return {
     period: input.period,
+    glucoseFreshness,
+    ...(input.asOfMs === undefined
+      ? {}
+      : {
+          observedPeriod,
+          isPartialDay: observedPeriod.endMs < input.period.endMs,
+        }),
     thresholds: input.thresholds,
     validSampleCount: prepared.validSampleCount,
-    excludedSampleCount: prepared.excludedSampleCount,
+    excludedSampleCount: hasElapsedTime
+      ? prepared.excludedSampleCount + excludedDailyValues
+      : input.source.glucoseSamples.length,
     duplicateSampleCount: prepared.duplicateSampleCount,
-    expectedSampleCount: prepared.expectedSampleCount,
-    coveragePercent: prepared.coveragePercent,
-    coverageQuality: prepared.coverageQuality,
+    expectedSampleCount: hasElapsedTime ? prepared.expectedSampleCount : 0,
+    coveragePercent: elapsed?.coveragePercent ?? 0,
+    coverageQuality: elapsed?.coverageQuality ?? 'no-data',
     largestGapMs: prepared.largestGapMs,
     lastReadingTimestampMs: prepared.lastReadingTimestampMs,
-    ranges: sharedOverview.ranges,
+    ranges: elapsed?.ranges,
     meanGlucoseMgDl: sharedOverview.meanGlucoseMgDl,
     minimumGlucoseMgDl: sharedOverview.minimumGlucoseMgDl,
     maximumGlucoseMgDl: sharedOverview.maximumGlucoseMgDl,
-    coefficientOfVariationPercent:
-      sharedOverview.coefficientOfVariationPercent,
+    coefficientOfVariationPercent: sharedOverview.coefficientOfVariationPercent,
     insulinSummary: buildInsulinSummary(input.source.insulinSummary),
   };
 };

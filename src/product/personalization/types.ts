@@ -53,7 +53,7 @@ export const DEFAULT_DAILY_OVERVIEW_PREFERENCES: StoredDailyOverviewPreferences 
   {
     schemaVersion: 1,
     rangeStyle: 'ring',
-    cardOrder: DAILY_OVERVIEW_CARD_IDS,
+    cardOrder: ['ranges', 'insulin', 'mean', 'glucose', 'coverage'],
   };
 
 export const HOME_WIDGET_IDS = [

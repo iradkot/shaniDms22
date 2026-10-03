@@ -31,7 +31,8 @@ class WidgetForecastSchemaTest {
     assertEquals(170, widgetForecastSummary(listOf(data.loopForecast!!), now)!!.point.sgv)
     assertEquals(-1.25, data.iob!!, 0.001)
     assertNull(data.cob)
-    assertNull(data.cobTimestampMs)
+    // Keep the original stale observation clock for provenance; never its value.
+    assertEquals(now - 20 * 60_000, data.cobTimestampMs)
   }
 
   @Test fun `fresh device envelope cannot revive old Loop predictions or missing source timestamps`() {

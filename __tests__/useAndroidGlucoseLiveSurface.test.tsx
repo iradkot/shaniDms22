@@ -28,15 +28,17 @@ describe('useAndroidGlucoseLiveSurface', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('clears the old widget and live notification when the snapshot disappears', () => {
+  it('keeps the native daily summary while the foreground snapshot loads or retries', () => {
     const Consumer = ({snapshot}: {readonly snapshot: unknown}) => {
       useAndroidGlucoseLiveSurface(snapshot as never, {low: 70, high: 180});
       return null;
     };
     let tree: renderer.ReactTestRenderer;
 
-    act(() => tree = renderer.create(<Consumer snapshot={null} />));
-    expect(mockClear).toHaveBeenCalledTimes(1);
+    act(() => {tree = renderer.create(<Consumer snapshot={null} />);});
+    // The native background sync may already have today's complete summary.
+    // A foreground mount starts with null and must not erase that persisted data.
+    expect(mockClear).not.toHaveBeenCalled();
     expect(mockUpdate).not.toHaveBeenCalled();
 
     const snapshot = {enrichedBg: {sgv: 100, date: 1}};
@@ -44,7 +46,7 @@ describe('useAndroidGlucoseLiveSurface', () => {
     expect(mockUpdate).toHaveBeenCalledWith(snapshot, {low: 70, high: 180});
 
     act(() => tree!.update(<Consumer snapshot={null} />));
-    expect(mockClear).toHaveBeenCalledTimes(2);
+    expect(mockClear).not.toHaveBeenCalled();
     act(() => tree!.unmount());
   });
 });

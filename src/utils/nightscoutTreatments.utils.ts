@@ -10,7 +10,9 @@ function insulinEntryStartMs(entry: InsulinDataEntry): number {
 function insulinEntryEndMs(entry: InsulinDataEntry, startMs: number): number {
   if (entry.endTime) {
     const explicitEnd = Date.parse(entry.endTime);
-    if (Number.isFinite(explicitEnd)) return explicitEnd;
+    if (Number.isFinite(explicitEnd)) {
+      return explicitEnd;
+    }
   }
   return typeof entry.duration === 'number' && Number.isFinite(entry.duration)
     ? startMs + Math.max(0, entry.duration) * 60_000
@@ -22,8 +24,8 @@ function finiteNumber(value: unknown): number | null {
     typeof value === 'number'
       ? value
       : typeof value === 'string' && value.trim() !== ''
-        ? Number(value)
-        : NaN;
+      ? Number(value)
+      : NaN;
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -52,7 +54,12 @@ export function mapNightscoutTreatmentsToInsulinDataEntries(
       const insulin = finiteNumber(t?.insulin) ?? finiteNumber(t?.amount);
       const eventType = typeof t?.eventType === 'string' ? t.eventType : '';
 
-      if (timestamp && insulin != null && insulin > 0 && /bolus/i.test(eventType)) {
+      if (
+        timestamp &&
+        insulin != null &&
+        insulin > 0 &&
+        /bolus/i.test(eventType)
+      ) {
         return {
           type: 'bolus',
           amount: insulin,
@@ -62,11 +69,19 @@ export function mapNightscoutTreatmentsToInsulinDataEntries(
 
       if (eventType === 'Temp Basal' && timestamp) {
         const durationMin = Math.max(0, finiteNumber(t?.duration) ?? 0);
-        const parsedRate = finiteNumber(t?.rate) ?? finiteNumber(t?.absolute);
+        // Percentage rates are not U/hour. Use an explicit absolute value when
+        // present; resolving a percentage requires its effective basal profile.
+        const percentage = /percent/i.test(String(t?.temp ?? ''));
+        const parsedRate =
+          finiteNumber(t?.absolute) ??
+          (percentage ? null : finiteNumber(t?.rate));
         const rate = parsedRate ?? (durationMin === 0 ? 0 : null);
-        if (rate == null || rate < 0) return null;
-        const endTime =
-          new Date(Date.parse(timestamp) + durationMin * 60_000).toISOString();
+        if (rate == null || rate < 0) {
+          return null;
+        }
+        const endTime = new Date(
+          Date.parse(timestamp) + durationMin * 60_000,
+        ).toISOString();
 
         return {
           type: 'tempBasal',
@@ -95,8 +110,12 @@ export function mapNightscoutTreatmentsToInsulinDataEntries(
   );
   for (let index = 0; index < sorted.length; index++) {
     const entry = sorted[index];
-    if (!entry) continue;
-    if (entry.type !== 'suspendPump' || entry.endTime) continue;
+    if (!entry) {
+      continue;
+    }
+    if (entry.type !== 'suspendPump' || entry.endTime) {
+      continue;
+    }
     const startMs = insulinEntryStartMs(entry);
     const nextBasalControlMs = sorted
       .slice(index + 1)
@@ -112,10 +131,7 @@ export function mapNightscoutTreatmentsToInsulinDataEntries(
     );
     if (Number.isFinite(nextStartMs)) {
       entry.endTime = new Date(nextStartMs).toISOString();
-      entry.duration = Math.max(
-        0,
-        (nextStartMs - startMs) / 60_000,
-      );
+      entry.duration = Math.max(0, (nextStartMs - startMs) / 60_000);
     }
   }
   return sorted;
@@ -132,7 +148,9 @@ export function mapNightscoutTreatmentsToCarbFoodItems(
       }
       const createdAt = t?.created_at;
       const ts = typeof createdAt === 'string' ? Date.parse(createdAt) : NaN;
-      if (!Number.isFinite(ts)) return null;
+      if (!Number.isFinite(ts)) {
+        return null;
+      }
 
       const id = typeof t?._id === 'string' ? t._id : `carbs-${ts}-${carbs}`;
       const rawNotes = typeof t?.notes === 'string' ? t.notes : '';
@@ -157,7 +175,9 @@ export function filterInsulinDataToRange(
 ): InsulinDataEntry[] {
   return insulinData.filter(entry => {
     const entryStartMs = insulinEntryStartMs(entry);
-    if (!Number.isFinite(entryStartMs)) return false;
+    if (!Number.isFinite(entryStartMs)) {
+      return false;
+    }
     if (entry.type === 'bolus') {
       return entryStartMs >= startMs && entryStartMs <= endMs;
     }

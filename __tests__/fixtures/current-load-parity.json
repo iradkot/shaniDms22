@@ -1,0 +1,9 @@
+[
+  {"name":"signed IOB and zero COB keep independent clocks","nowMs":1800000000000,"records":[{"loop":{"iob":{"iob":-0.2,"timestamp":1799999940000},"cob":{"cob":0,"timestamp":1799999880000}}}],"iob":-0.2,"cob":0},
+  {"name":"newest explicit unknown does not revive earlier load","nowMs":1800000000000,"records":[{"loop":{"iob":{"iob":null,"timestamp":1800000000000},"cob":{"cob":null,"timestamp":1800000000000}}},{"loop":{"iob":{"iob":2,"timestamp":1799999940000},"cob":{"cob":12,"timestamp":1799999940000}}}],"iob":null,"cob":null},
+  {"name":"newest out-of-bounds observations stay unknown","nowMs":1800000000000,"records":[{"loop":{"iob":{"iob":101,"timestamp":1800000000000},"cob":{"cob":1001,"timestamp":1800000000000}}},{"loop":{"iob":{"iob":2,"timestamp":1799999940000},"cob":{"cob":12,"timestamp":1799999940000}}}],"iob":null,"cob":null},
+  {"name":"fresh upload cannot replace missing load clocks","nowMs":1800000000000,"records":[{"created_at":1800000000000,"loop":{"timestamp":1800000000000,"iob":{"iob":2},"cob":{"cob":12}}}],"iob":null,"cob":null},
+  {"name":"exact fifteen-minute cutoff expires each field independently","nowMs":1800000000000,"records":[{"loop":{"iob":{"iob":2,"timestamp":1799999100000},"cob":{"cob":12,"timestamp":1799999100001}}}],"iob":null,"cob":12},
+  {"name":"future observations fail closed even one millisecond ahead","nowMs":1800000000000,"records":[{"loop":{"iob":{"iob":2,"timestamp":1800000000001},"cob":{"cob":12,"timestamp":1800000000001}}}],"iob":null,"cob":null},
+  {"name":"OpenAPS own clocks allow signed IOB and zero meal COB","nowMs":1800000000000,"records":[{"openaps":{"iob":{"iob":-1,"timestamp":1799999940000},"meal":{"cob":0,"timestamp":1799999880000}}}],"iob":-1,"cob":0}
+]

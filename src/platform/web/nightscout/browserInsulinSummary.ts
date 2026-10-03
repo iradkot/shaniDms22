@@ -1,4 +1,3 @@
-import type {DailyInsulinSourceSummary} from '../../../modules/dailyOverview';
 import {calculateTotalInsulin} from '../../../utils/insulin.utils/calculateTotalInsulin';
 import {mapNightscoutTreatmentsToInsulinDataEntries} from '../../../utils/nightscoutTreatments.utils';
 import type {
@@ -7,13 +6,28 @@ import type {
   BrowserNightscoutTreatment,
 } from './browserNightscoutClient';
 
-/** Shares the native delivery calculation; missing evidence stays unknown. */
-export const buildBrowserInsulinSummary = (
+/** Deliberately distinct from a recorded-delivery summary. */
+export type BrowserModeledInsulinSummary =
+  | {readonly quality: 'unavailable'}
+  | {
+      readonly quality: 'available';
+      readonly basalUnits: number;
+      readonly bolusUnits: number;
+      readonly basalEstimated: true;
+    };
+
+/**
+ * Compatibility-only profile model; no current product summary uses this.
+ * Schedule fills basal gaps. Use createRecordedInsulinDataSource for recorded
+ * daily totals, previous-day summaries and comparisons.
+ * @deprecated Kept for existing imports. Never present this as recorded insulin.
+ */
+export const buildBrowserModeledInsulinSummary = (
   startMs: number,
   endMs: number,
   treatments: BrowserNightscoutRange<BrowserNightscoutTreatment> | undefined,
   profile: BrowserNightscoutRange<BrowserNightscoutBasalProfile> | undefined,
-): DailyInsulinSourceSummary => {
+): BrowserModeledInsulinSummary => {
   const entries = profile?.records[0]?.entries;
   if (
     !treatments ||
@@ -48,8 +62,12 @@ export const buildBrowserInsulinSummary = (
     totals.totalBolus >= 0
     ? {
         quality: 'available',
+        basalEstimated: true,
         basalUnits: totals.totalBasal,
         bolusUnits: totals.totalBolus,
       }
     : {quality: 'unavailable'};
 };
+
+/** @deprecated Use buildBrowserModeledInsulinSummary; these totals contain scheduled basal. */
+export const buildBrowserInsulinSummary = buildBrowserModeledInsulinSummary;

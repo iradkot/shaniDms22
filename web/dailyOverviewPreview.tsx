@@ -9,7 +9,14 @@ import {
 import {parseStoredLayoutProfile} from '../src/product/personalization/validation';
 import {createDefaultProductPersonalization} from '../src/product/personalization/presets';
 import {selectLayoutProfile} from '../src/product/personalization/updates';
-import type {DailyOverviewDataSource} from '../src/modules/dailyOverview';
+import type {
+  DailyOverviewDataSource,
+  DailyInsulinSourceSummary,
+} from '../src/modules/dailyOverview';
+import {
+  buildDailyInsulinComparison,
+  getDailyInsulinComparisonWindows,
+} from '../src/modules/dailyOverview';
 import './styles.css';
 
 const key = 'shani.daily-overview.development-preview';
@@ -19,18 +26,53 @@ const thresholds = {
   targetMaxMgDl: 180,
   highMaxMgDl: 250,
 };
-const now = () => new Date(2026, 8, 7, 21).getTime();
+const now = () => new Date(2026, 8, 28, 10, 56).getTime();
+const scenarioName = () =>
+  new URLSearchParams(window.location.search).get('scenario') ?? 'recorded';
+const fixtureInsulin = (
+  durationMs: number,
+  historicalIndex?: number,
+): DailyInsulinSourceSummary => {
+  const scenario = scenarioName();
+  if (scenario === 'empty') {
+    return {quality: 'unavailable'};
+  }
+  const bolusUnits =
+    historicalIndex === undefined ? 5.1 : 4.8 + historicalIndex * 0.2;
+  if (scenario === 'partial' || scenario === 'bolus-only') {
+    const coverage = scenario === 'bolus-only' ? 0 : 32;
+    return {
+      quality: 'partial',
+      ...(coverage ? {basalUnits: 2.1} : {}),
+      bolusUnits,
+      basalEvidence: 'recorded',
+      basalCoveredMs: Math.round((durationMs * coverage) / 100),
+      basalCoveragePercent: coverage,
+    };
+  }
+  return {
+    quality: 'available',
+    basalUnits:
+      historicalIndex === undefined ? 7.35 : 6.8 + historicalIndex * 0.1,
+    bolusUnits,
+    basalEvidence: 'recorded',
+    basalCoveredMs: durationMs,
+    basalCoveragePercent: 100,
+  };
+};
 const source: DailyOverviewDataSource = {
-  async loadDailyOverview(period) {
-    const scenario = new URLSearchParams(window.location.search).get(
-      'scenario',
+  async loadDailyOverview(period, options) {
+    const scenario = scenarioName();
+    const durationMs = Math.max(
+      0,
+      Math.min(period.endMs, options?.asOfMs ?? now()) - period.startMs,
     );
     return {
       glucoseSamples:
         scenario === 'empty'
           ? []
           : Array.from(
-              {length: scenario === 'partial' ? 20 : 288},
+              {length: Math.ceil(durationMs / (5 * 60 * 1000))},
               (_, index) => ({
                 timestampMs: period.startMs + index * 5 * 60 * 1000,
                 valueMgDl:
@@ -45,15 +87,24 @@ const source: DailyOverviewDataSource = {
                     : 265,
               }),
             ),
-      insulinSummary:
-        scenario === 'empty'
-          ? {quality: 'unavailable'}
-          : {
-              quality: 'available',
-              basalUnits: 32.06189509722221,
-              bolusUnits: 28.200000000000003,
-            },
+      insulinSummary: fixtureInsulin(durationMs),
     };
+  },
+  async loadDailyInsulinComparison(request) {
+    const scenario = scenarioName();
+    if (scenario === 'history-loading') {
+      return new Promise(() => {});
+    }
+    if (scenario === 'history-error') {
+      throw new Error('Synthetic history failure');
+    }
+    const windows = getDailyInsulinComparisonWindows(request);
+    return buildDailyInsulinComparison(
+      windows,
+      windows.previousDays.map((period, index) =>
+        fixtureInsulin(period.endMs - period.startMs, index),
+      ),
+    );
   },
 };
 const initial = (): StoredDailyOverviewPreferences => {

@@ -6,6 +6,21 @@ import {
   parseWorkspaceId,
 } from '../../../src/modules/journal';
 import type {InsulinContext} from '../../../src/services/insulin/insulinDataSource';
+jest.mock('../../../src/services/currentData/nativeCurrentDataSource', () => {
+  const {
+    buildCurrentDataSnapshot,
+  } = require('../../../src/modules/currentData');
+  return {
+    nativeCurrentDataSource: {
+      loadCurrent: async () =>
+        buildCurrentDataSnapshot({
+          observedAtMs: Date.now(),
+          glucose: null,
+          deviceStatus: null,
+        }),
+    },
+  };
+});
 
 const mockTool = jest.fn(
   async (_scope: unknown, name: string, _args: unknown) => ({
@@ -52,6 +67,13 @@ const context = (): InsulinContext => ({
   deviceStatus: [],
   profileData: null,
   basalProfileData: [],
+  recordedInsulin: {
+    quality: 'partial',
+    bolusUnits: 4,
+    basalCoveragePercent: 0,
+    basalCoveredMs: 0,
+    basalEvidence: 'recorded',
+  },
   insulinData: [
     {type: 'bolus', timestamp: iso(startMs), amount: 1.25},
     {type: 'bolus', timestamp: iso(endMs - 1), amount: 2.75},
@@ -90,7 +112,7 @@ const portsAndScope = () => {
 };
 const loadSelectedEvidence = async () => {
   const {ports, scope} = portsAndScope();
-  const text = await ports.loadEvidence(
+  const loaded = await ports.loadEvidence(
     {
       locale: 'en',
       request: {kind: 'weekly'},
@@ -98,6 +120,7 @@ const loadSelectedEvidence = async () => {
     },
     new AbortController().signal,
   );
+  const text = typeof loaded === 'string' ? loaded : loaded.text;
   return {
     text,
     evidence: JSON.parse(text.slice(text.indexOf('\n') + 1)),
@@ -139,7 +162,7 @@ it.each(['unavailable', 'stale'] as const)(
       available: true,
       range: {start: iso(startMs), end: iso(endMs)},
       totals: {bolusU: 4, carbsG: 55},
-      counts: {bolusCount: 2, carbTreatments: 2},
+      counts: {carbTreatments: 2},
       availability: {profile},
     });
     expect(text).not.toContain('"basalU"');
@@ -181,4 +204,39 @@ it('preserves the existing rolling summary when no dates were selected', async (
     rangeDays: 7,
   });
   expect(mockLoadContext).not.toHaveBeenCalled();
+});
+
+it('uses canonical recorded amounts rather than recounting normalized programmed entries', async () => {
+  const data = context();
+  mockLoadContext.mockResolvedValue({
+    ...data,
+    recordedInsulin: {
+      quality: 'partial',
+      bolusUnits: 1.5,
+      basalCoveragePercent: 0,
+      basalCoveredMs: 0,
+      basalEvidence: 'recorded',
+    },
+  });
+  const {evidence} = await loadSelectedEvidence();
+  expect(evidence.insulin.totals.bolusU).toBe(1.5);
+  expect(evidence.insulin.recordedInsulin.quality).toBe('partial');
+  expect(evidence.insulin.counts).not.toHaveProperty('bolusCount');
+  expect(evidence.insulin.counts).not.toHaveProperty('insulinEntries');
+});
+
+it('keeps an unknown canonical bolus unknown even when normalized entries contain amounts', async () => {
+  const data = context();
+  mockLoadContext.mockResolvedValue({
+    ...data,
+    recordedInsulin: {
+      quality: 'partial',
+      basalCoveragePercent: 0,
+      basalCoveredMs: 0,
+      basalEvidence: 'recorded',
+    },
+  });
+  const {evidence} = await loadSelectedEvidence();
+  expect(evidence.insulin.available).toBe(false);
+  expect(evidence.insulin).not.toHaveProperty('totals');
 });

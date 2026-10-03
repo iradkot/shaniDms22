@@ -11,6 +11,7 @@ import {SettingsModuleView} from 'app/product/settings';
 
 const overview: SettingsOverview = {
   schemaVersion: 1,
+  appInfo: {versionName: '1.0.529-preview', buildNumber: '53568000'},
   language: 'en',
   layout: {profile: 'tablet', columns: 3},
   personalization: {
@@ -70,6 +71,9 @@ describe('SettingsModuleView', () => {
     expect(textValues(tree!)).toEqual(
       expect.arrayContaining([
         'Settings',
+        'App version',
+        '1.0.529-preview',
+        'Build: 53568000',
         'Make it yours',
         'Language',
         'Connections and account',

@@ -1,4 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useSyncExternalStore} from 'react';
+import {
+  getNightscoutConfigurationRevision,
+  subscribeNightscoutConfiguration,
+} from '../../../api/shaniNightscoutInstances';
 import {useAiSettings} from '../../../contexts/AiSettingsContext';
 import {decodeAiConversationHistory} from '../../../modules/ai';
 import type {RecommendationRuntimePorts} from '../../../product/ai/useRecommendationRuntime';
@@ -10,6 +15,7 @@ import {aiWorkspaceStorageKey} from '../../../services/aiMemory/aiWorkspaceScope
 import {loadAiAnalystHistory} from '../../../services/aiAnalyst/aiAnalystHistory';
 import {createLlmProvider} from '../../../services/llm/llmClient';
 import {buildNativeRecommendationEvidence} from './nativeRecommendationEvidence';
+import {nativeCurrentDataSource} from '../../../services/currentData/nativeCurrentDataSource';
 
 // Keep the existing native data graph behind its established runtime boundary.
 const localTools =
@@ -28,6 +34,16 @@ export function useNativeRecommendationPorts(
   locale: 'he' | 'en',
 ): RecommendationRuntimePorts {
   const {settings} = useAiSettings();
+  const configurationRevision = useSyncExternalStore(
+    subscribeNightscoutConfiguration,
+    getNightscoutConfigurationRevision,
+    getNightscoutConfigurationRevision,
+  );
+  const assertCurrentSource = () => {
+    if (configurationRevision !== getNightscoutConfigurationRevision()) {
+      throw new Error('Nightscout source changed during recommendation.');
+    }
+  };
   return {
     locale,
     scopeId: workspace
@@ -35,6 +51,7 @@ export function useNativeRecommendationPorts(
       : null,
     storage: AsyncStorage,
     chat: async (messages, signal) => {
+      assertCurrentSource();
       if (!workspace || !settings.enabled) {
         throw new Error('AI unavailable');
       }
@@ -44,6 +61,7 @@ export function useNativeRecommendationPorts(
         maxOutputTokens: 2500,
         abortSignal: signal,
       });
+      assertCurrentSource();
       if (!result.content.trim()) {
         throw new Error('Empty recommendation');
       }
@@ -54,6 +72,7 @@ export function useNativeRecommendationPorts(
         ? decodeAiConversationHistory(await loadAiAnalystHistory(workspace))
         : [],
     loadEvidence: async (input, signal) => {
+      assertCurrentSource();
       if (!workspace || signal.aborted) {
         throw new Error('Workspace unavailable');
       }
@@ -61,11 +80,7 @@ export function useNativeRecommendationPorts(
       const period = recommendationEvidenceRange(input, Date.now());
       const {startMs: start, endMs: end} = period;
       const results = await Promise.all([
-        localTools.runAiAnalystTool(workspace, 'getCgmSamples', {
-          rangeDays: 1,
-          maxSamples: 80,
-          includeDeviceStatus: false,
-        }),
+        nativeCurrentDataSource.loadCurrent({signal}),
         localTools.runAiAnalystTool(workspace, 'getGlucoseStats', {
           startDate: new Date(start).toISOString(),
           endDate: new Date(end).toISOString(),
@@ -76,12 +91,13 @@ export function useNativeRecommendationPorts(
               rangeDays: days,
             }),
       ]);
+      assertCurrentSource();
       if (signal.aborted) {
         throw new Error('Cancelled');
       }
-      const [cgm, stats, insulin] = results;
+      const [current, stats, insulin] = results;
       const evidence = buildNativeRecommendationEvidence({
-        cgm,
+        current,
         stats,
         insulin,
         startMs: start,
@@ -89,11 +105,16 @@ export function useNativeRecommendationPorts(
         observedAtMs: Date.now(),
         days: period.days,
       });
-      return `${
-        locale === 'he'
-          ? 'נתונים ששימשו להמלצה'
-          : 'Evidence used for this recommendation'
-      }\n${JSON.stringify(evidence, null, 2)}`;
+      return {
+        ...(evidence.currentFactsExpireAtMs === undefined
+          ? {}
+          : {currentFactsExpireAtMs: evidence.currentFactsExpireAtMs}),
+        text: `${
+          locale === 'he'
+            ? 'נתונים ששימשו להמלצה'
+            : 'Evidence used for this recommendation'
+        }\n${JSON.stringify(evidence, null, 2)}`,
+      };
     },
   };
 }

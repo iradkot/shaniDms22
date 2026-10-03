@@ -17,6 +17,205 @@ const localNoon = (year: number, month: number, day: number): number =>
   new Date(year, month, day, 12).getTime();
 
 describe('Daily Overview domain', () => {
+  it('preserves source freshness and makes omitted or invalid metadata explicitly unknown', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
+    const summarize = (
+      glucoseFreshness?: Parameters<
+        typeof buildDailyOverview
+      >[0]['source']['glucoseFreshness'],
+    ) =>
+      buildDailyOverview({
+        period,
+        asOfMs: period.startMs + 600_000,
+        expectedSampleIntervalMs: 300_000,
+        thresholds,
+        source: {
+          glucoseSamples: [{timestampMs: period.startMs, valueMgDl: 123}],
+          insulinSummary: {quality: 'unavailable'},
+          ...(glucoseFreshness ? {glucoseFreshness} : {}),
+        },
+      });
+    const stale = {
+      kind: 'stale' as const,
+      fetchedAtMs: period.startMs + 120_000,
+    };
+    expect(summarize(stale).glucoseFreshness).toEqual(stale);
+    expect(summarize(stale).ranges?.targetPercent).toBe(100);
+    expect(summarize().glucoseFreshness).toEqual({kind: 'unknown'});
+    expect(
+      summarize({kind: 'fresh', fetchedAtMs: NaN}).glucoseFreshness,
+    ).toEqual({kind: 'unknown'});
+  });
+
+  it('weights the observed duration of uneven readings without filling gaps', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
+    const overview = buildDailyOverview({
+      period,
+      asOfMs: period.startMs + 10 * 60_000,
+      expectedSampleIntervalMs: 5 * 60_000,
+      thresholds,
+      source: {
+        glucoseSamples: [
+          {timestampMs: period.startMs, valueMgDl: 100},
+          {timestampMs: period.startMs + 60_000, valueMgDl: 200},
+        ],
+        insulinSummary: {quality: 'unavailable'},
+      },
+    });
+    expect(overview.ranges?.targetPercent).toBe(16.67);
+    expect(overview.coveragePercent).toBe(60);
+    expect(overview.coverageQuality).toBe('low');
+    expect(overview.meanGlucoseMgDl).toBe(150);
+    expect(overview.validSampleCount).toBe(2);
+  });
+
+  it('excludes daily outliers from sample statistics as well as elapsed ranges', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
+    const overview = buildDailyOverview({
+      period,
+      asOfMs: period.startMs + 15 * 60_000,
+      expectedSampleIntervalMs: 5 * 60_000,
+      thresholds,
+      source: {
+        glucoseSamples: [
+          {timestampMs: period.startMs, valueMgDl: 19},
+          {timestampMs: period.startMs + 5 * 60_000, valueMgDl: 120},
+          {timestampMs: period.startMs + 10 * 60_000, valueMgDl: 601},
+        ],
+        insulinSummary: {quality: 'unavailable'},
+      },
+    });
+    expect(overview).toMatchObject({
+      validSampleCount: 1,
+      excludedSampleCount: 2,
+      meanGlucoseMgDl: 120,
+      minimumGlucoseMgDl: 120,
+      maximumGlucoseMgDl: 120,
+      coveragePercent: 33.33,
+    });
+    expect(overview.ranges?.targetPercent).toBe(100);
+  });
+
+  it('uses midnight carry-in for observed time without adding it to the selected-day mean', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
+    const overview = buildDailyOverview({
+      period,
+      asOfMs: period.startMs + 10 * 60_000,
+      expectedSampleIntervalMs: 5 * 60_000,
+      thresholds,
+      source: {
+        glucoseSamples: [
+          {timestampMs: period.startMs - 2 * 60_000, valueMgDl: 100},
+          {timestampMs: period.startMs + 3 * 60_000, valueMgDl: 200},
+        ],
+        insulinSummary: {quality: 'unavailable'},
+      },
+    });
+    expect(overview.coveragePercent).toBe(80);
+    expect(overview.ranges?.targetPercent).toBe(37.5);
+    expect(overview.validSampleCount).toBe(1);
+    expect(overview.meanGlucoseMgDl).toBe(200);
+  });
+
+  it('keeps only recorded bolus from legacy estimates and never totals partial basal coverage', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
+    const summarize = (
+      insulinSummary: Parameters<
+        typeof buildDailyOverview
+      >[0]['source']['insulinSummary'],
+    ) =>
+      buildDailyOverview({
+        period,
+        thresholds,
+        expectedSampleIntervalMs: 300_000,
+        source: {glucoseSamples: [], insulinSummary},
+      }).insulinSummary;
+    expect(
+      summarize({
+        quality: 'available',
+        basalUnits: 24,
+        bolusUnits: 2,
+        basalEstimated: true,
+      }),
+    ).toEqual({
+      quality: 'partial',
+      bolusUnits: 2,
+      basalCoveredMs: 0,
+      basalCoveragePercent: 0,
+    });
+    const partial = summarize({
+      quality: 'available',
+      basalUnits: 2,
+      bolusUnits: 3,
+      basalCoveragePercent: 50,
+      basalCoveredMs: 43_200_000,
+    });
+    expect(partial).toMatchObject({
+      quality: 'partial',
+      basalUnits: 2,
+      bolusUnits: 3,
+      basalCoveragePercent: 50,
+    });
+    expect(partial).not.toHaveProperty('totalUnits');
+  });
+  it('uses elapsed-day coverage and excludes future readings while preserving selected-day identity', () => {
+    const asOfMs = new Date(2026, 8, 28, 3, 15).getTime();
+    const period = getLocalDayPeriod(asOfMs);
+    const samples = Array.from({length: 39}, (_, index) => ({
+      timestampMs: period.startMs + index * 5 * 60_000,
+      valueMgDl: 120,
+    }));
+    const overview = buildDailyOverview({
+      period,
+      asOfMs,
+      expectedSampleIntervalMs: 5 * 60_000,
+      thresholds,
+      source: {
+        glucoseSamples: [
+          ...samples,
+          {timestampMs: period.endMs - 1, valueMgDl: 400},
+        ],
+        insulinSummary: {quality: 'unavailable'},
+      },
+    });
+    expect(overview.period).toEqual(period);
+    expect(overview.observedPeriod).toEqual({
+      startMs: period.startMs,
+      endMs: asOfMs,
+    });
+    expect(overview).toMatchObject({
+      isPartialDay: true,
+      validSampleCount: 39,
+      excludedSampleCount: 1,
+      expectedSampleCount: 39,
+      coveragePercent: 100,
+      coverageQuality: 'adequate',
+      meanGlucoseMgDl: 120,
+    });
+    expect(overview.ranges?.targetPercent).toBe(100);
+  });
+
+  it('has no expected readings or numeric glucose summary exactly at midnight', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28, 0).getTime());
+    const overview = buildDailyOverview({
+      period,
+      asOfMs: period.startMs,
+      expectedSampleIntervalMs: 5 * 60_000,
+      thresholds,
+      source: {
+        glucoseSamples: [{timestampMs: period.startMs, valueMgDl: 120}],
+        insulinSummary: {quality: 'unavailable'},
+      },
+    });
+    expect(overview).toMatchObject({
+      validSampleCount: 0,
+      expectedSampleCount: 0,
+      coverageQuality: 'no-data',
+      isPartialDay: true,
+    });
+    expect(overview.ranges).toBeUndefined();
+  });
+
   it('prepares each source reading only once for all descriptive daily metrics', () => {
     const period = getLocalDayPeriod(localNoon(2026, 0, 15));
     const sampleCount = 288;

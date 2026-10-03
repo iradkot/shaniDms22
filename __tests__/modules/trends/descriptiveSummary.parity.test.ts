@@ -153,6 +153,7 @@ describe('descriptive glucose public-output parity', () => {
     });
 
     // Golden hashes cover every public field over 24 reproducible fixtures;
+    // daily now also carries explicit unknown freshness for these array-only sources.
     // the neighboring domain tests document individual medical expectations.
     expect({
       trends: digest(outputs.map(output => output.trends)),
@@ -160,7 +161,7 @@ describe('descriptive glucose public-output parity', () => {
       previous: digest(outputs.map(output => output.previous)),
     }).toMatchInlineSnapshot(`
       {
-        "daily": "46e82db7bf1067c1d20af58f6e11a352742f071f9e9d7f842ec711376b9b08af",
+        "daily": "f3b4cadef336fc4e6e3b2dceb15f9c4cc464e53021af52771e2eb0da63c25cbc",
         "previous": "bc34c3f22ce8b5ec411c0979d8d55be9965b616075582e0c7136d64b92ddb37d",
         "trends": "79bad2e856e2b4831963dd7bac03fdf9eaa547e958c26a9687a4a75c0be46df6",
       }
