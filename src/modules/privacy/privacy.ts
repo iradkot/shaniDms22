@@ -42,6 +42,8 @@ export interface PrivacyRuntime {
   readonly deleteAccount: () => Promise<void>;
   readonly onClose?: () => void;
   readonly reauthenticate?: () => Promise<void>;
+  /** Continue on this device with sharing off; remote changes may remain pending. */
+  readonly continueLocally?: () => Promise<void>;
 }
 
 export const PRIVACY_POLICY = {

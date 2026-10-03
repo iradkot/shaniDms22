@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -14,6 +14,8 @@ import {
 } from '../../modules/privacy';
 import type {DestinationLocale} from '../destinations';
 
+type PrivacyOperation = 'save' | 'continueLocally' | 'delete' | 'reauthenticate';
+
 export const PrivacyView = ({
   locale,
   runtime,
@@ -27,32 +29,65 @@ export const PrivacyView = ({
   const [cloud, setCloud] = useState(runtime.consent?.cloudSync ?? false);
   const [ai, setAi] = useState(runtime.consent?.aiProcessing ?? false);
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [error, setError] = useState<string>();
-  const act = async (action: () => Promise<void>) => {
-    if (busy) {
+  const [error, setError] = useState<{
+    message: string;
+    operation: PrivacyOperation;
+    code: string | undefined;
+  }>();
+  const errorMessage = (operation: PrivacyOperation, code?: string) => {
+    if (operation === 'delete' && code === 'local_cleanup_account_changed') {
+      return he
+        ? 'המחיקה בענן הושלמה. יש להתנתק מהחשבון הנוכחי ואז לנסות שוב כדי להשלים את הניקוי במכשיר.'
+        : 'Cloud deletion finished. Sign out of the current account, then retry to finish clearing this device.';
+    }
+    if (code === 'recent_auth_required') {
+      if (operation === 'delete') {
+        return he
+          ? 'יש להתחבר מחדש עם Google ואז לנסות למחוק שוב. שום הצלחה לא אושרה.'
+          : 'Sign in again with Google, then retry deletion. Completion has not been confirmed.';
+      }
+      return he
+        ? 'יש להתחבר מחדש עם Google ואז לנסות לשמור שוב.'
+        : 'Sign in again with Google, then try saving again.';
+    }
+    if (operation === 'delete') {
+      return he
+        ? 'המחיקה לא הושלמה. אפשר לנסות שוב. אם המחיקה התחילה, השיתוף נשאר חסום עד להשלמתה.'
+        : 'Deletion did not complete. Try again. If deletion started, sharing stays blocked until it finishes.';
+    }
+    if (operation === 'continueLocally') {
+      return he
+        ? 'שמירת הבחירה במכשיר לא הושלמה. אפשר לנסות שוב.'
+        : 'The choice could not be saved on this device. Try again.';
+    }
+    if (operation === 'reauthenticate') {
+      return he
+        ? 'החיבור עם Google לא הושלם. אפשר לנסות שוב.'
+        : 'Google sign-in did not complete. Try again.';
+    }
+    return he
+      ? 'שמירת הבחירות לא הושלמה. אפשר לנסות שוב.'
+      : 'Your choices could not be saved. Try again.';
+  };
+  const act = async (
+    operation: PrivacyOperation,
+    action: () => Promise<void>,
+  ) => {
+    if (inFlight.current) {
       return;
     }
+    inFlight.current = true;
     setBusy(true);
     setError(undefined);
     try {
       await action();
     } catch (reason) {
-      const code = (reason as {code?: string; status?: number})?.code;
-      setError(
-        code === 'local_cleanup_account_changed'
-          ? he
-            ? 'המחיקה בענן הושלמה. יש להתנתק מהחשבון הנוכחי ואז לנסות שוב כדי להשלים את הניקוי במכשיר.'
-            : 'Cloud deletion finished. Sign out of the current account, then retry to finish clearing this device.'
-          : code === 'recent_auth_required'
-          ? he
-            ? 'יש להתחבר מחדש עם Google ואז לנסות למחוק שוב. שום הצלחה לא אושרה.'
-            : 'Sign in again with Google, then retry deletion. Completion has not been confirmed.'
-          : he
-          ? 'הפעולה לא הושלמה. אפשר לנסות שוב. אם מחיקה התחילה, השיתוף נשאר חסום עד להשלמתה.'
-          : 'The operation did not complete. Try again. If deletion started, sharing stays blocked until it finishes.',
-      );
+      const code = (reason as {code?: string})?.code;
+      setError({message: errorMessage(operation, code), operation, code});
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
@@ -71,7 +106,13 @@ export const PrivacyView = ({
         ...(checked === undefined ? {} : {checked}),
       }}
       disabled={busy}
-      onPress={action}
+      onPress={() => {
+        // Native taps can arrive before React commits the disabled state.
+        if (inFlight.current) {
+          return;
+        }
+        return action();
+      }}
       style={styles.button}>
       <Text style={styles.label}>
         {checked === undefined ? '' : checked ? '☑ ' : '☐ '}
@@ -79,6 +120,19 @@ export const PrivacyView = ({
       </Text>
     </Pressable>
   );
+  const closeButton = runtime.onClose
+    ? button(
+        'privacy-close',
+        readOnly
+          ? he
+            ? 'סגירה'
+            : 'Close'
+          : he
+          ? 'חזרה לאפליקציה'
+          : 'Return to the app',
+        runtime.onClose,
+      )
+    : null;
   return (
     <ScrollView
       style={styles.root}
@@ -126,19 +180,62 @@ export const PrivacyView = ({
           )}
           {button(
             'privacy-save',
-            he ? 'שמירת הבחירות שלי' : 'Save my choices',
-            () => act(() => runtime.saveConsent(cloud, ai)),
+            he ? 'שמירה והמשך לאפליקציה' : 'Save and continue to the app',
+            () => act('save', () => runtime.saveConsent(cloud, ai)),
           )}
+          {busy ? <ActivityIndicator testID="privacy-busy" /> : null}
+          {error ? (
+            <Text
+              accessibilityRole="alert"
+              style={styles.error}
+              testID="privacy-error">
+              {error.message}
+            </Text>
+          ) : null}
+          {error &&
+          runtime.reauthenticate &&
+          (error.code === 'recent_auth_required' ||
+            (error.operation === 'delete' &&
+              error.code === 'local_cleanup_account_changed'))
+            ? button(
+                'privacy-reauthenticate',
+                error.code === 'local_cleanup_account_changed'
+                  ? he
+                    ? 'התנתקות לצורך ניקוי המכשיר'
+                    : 'Sign out to finish device cleanup'
+                  : he
+                  ? 'חיבור מחדש עם Google'
+                  : 'Sign in again with Google',
+                () => act('reauthenticate', runtime.reauthenticate!),
+              )
+            : null}
+          {runtime.continueLocally
+            ? button(
+                'privacy-continue-locally',
+                he ? 'המשך ללא סנכרון ענן' : 'Continue without cloud sync',
+                () =>
+                  act('continueLocally', async () => {
+                    await runtime.continueLocally!();
+                    setCloud(false);
+                    setAi(false);
+                  }),
+              )
+            : null}
           <Text style={[styles.body, he && styles.rtl]}>
-            {he
+            {runtime.continueLocally
+              ? he
+                ? 'אפשר להמשיך במכשיר הזה ללא סנכרון ענן וללא AI. בחירות הענן יעודכנו רק לאחר שמירה מוצלחת.'
+                : 'You can continue on this device without cloud sync or AI. Cloud choices update only after a successful save.'
+              : he
               ? 'לשימוש מקומי בלבד, השאירו את שתי האפשרויות ללא סימון. אין צורך בהסכמה ל־AI כדי להציג ולבדוק נתונים.'
               : 'For local use only, leave both choices unchecked. AI consent is not needed to display and review data.'}
           </Text>
+          {closeButton}
           {runtime.consent !== null
             ? button(
                 'privacy-revoke',
                 he ? 'ביטול כל השיתוף החדש' : 'Withdraw all new sharing',
-                () => act(() => runtime.saveConsent(false, false)),
+                () => act('save', () => runtime.saveConsent(false, false)),
               )
             : null}
           <View style={styles.danger}>
@@ -160,7 +257,7 @@ export const PrivacyView = ({
                 {button(
                   'privacy-confirm-delete',
                   he ? 'כן, למחוק לצמיתות' : 'Yes, permanently delete',
-                  () => act(runtime.deleteAccount),
+                  () => act('delete', runtime.deleteAccount),
                 )}
                 {button('privacy-cancel-delete', he ? 'ביטול' : 'Cancel', () =>
                   setConfirmDelete(false),
@@ -176,30 +273,10 @@ export const PrivacyView = ({
           </View>
         </>
       ) : null}
-      {busy ? <ActivityIndicator testID="privacy-busy" /> : null}
-      {error ? (
-        <Text
-          accessibilityRole="alert"
-          style={styles.error}
-          testID="privacy-error">
-          {error}
-        </Text>
-      ) : null}
-      {error && runtime.reauthenticate
-        ? button(
-            'privacy-reauthenticate',
-            he
-              ? 'חיבור מחדש עם Google או התנתקות לצורך ניקוי'
-              : 'Reconnect Google or sign out to finish cleanup',
-            () => act(runtime.reauthenticate!),
-          )
-        : null}
       <Text style={[styles.body, he && styles.rtl]}>
         {PRIVACY_POLICY_VERSION}
       </Text>
-      {runtime.onClose
-        ? button('privacy-close', he ? 'סגירה' : 'Close', runtime.onClose)
-        : null}
+      {readOnly ? closeButton : null}
     </ScrollView>
   );
 };

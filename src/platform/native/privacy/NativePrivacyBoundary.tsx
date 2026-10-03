@@ -121,7 +121,7 @@ export const NativePrivacyBoundary = ({
       registerPrivacySession(uid, null);
       setConsent(null);
       setOpen(true);
-      const capturedSequence = sequence.current;
+      const capturedSequence = ++sequence.current;
       try {
         const next = await nativePrivacyService.save(
           uid,
@@ -147,6 +147,7 @@ export const NativePrivacyBoundary = ({
       if (!owner) {
         throw new Error('Sign in first.');
       }
+      const capturedSequence = ++sequence.current;
       registerPrivacySession(owner, null);
       setDeleting(true);
       try {
@@ -154,7 +155,12 @@ export const NativePrivacyBoundary = ({
         setNativeRecoveryFailed(false);
         setRecoveryOwner(null);
       } catch (error) {
-        setRecoveryOwner(await nativePrivacyService.recoveryOwner());
+        const recovery = await nativePrivacyService.recoveryOwner();
+        const pending = await nativePrivacyService.deletionPending(owner);
+        setRecoveryOwner(recovery);
+        if (sequence.current === capturedSequence) {
+          setDeleting(recovery !== null || pending);
+        }
         throw error;
       }
     },
@@ -184,6 +190,7 @@ export const NativePrivacyBoundary = ({
     );
   }
   if (recoveryOwner || (uid && (consent === null || deleting || open))) {
+    const renderedSequence = sequence.current;
     return (
       <View style={{flex: 1}}>
       {nativeRecoveryFailed ? <Text testID="privacy-native-recovery-error" accessibilityRole="alert">
@@ -193,9 +200,39 @@ export const NativePrivacyBoundary = ({
         locale={language}
         runtime={{
           ...runtime,
+          ...(uid && !deleting && !recoveryOwner
+            ? {
+                continueLocally: async () => {
+                  registerPrivacySession(uid, null);
+                  setConsent(null);
+                  setOpen(true);
+                  const capturedSequence = ++sequence.current;
+                  const next = await nativePrivacyService.continueLocalOnly(uid);
+                  if (
+                    getAuth(getApp()).currentUser?.uid !== uid ||
+                    sequence.current !== capturedSequence
+                  ) {
+                    throw new Error('Account changed.');
+                  }
+                  if (next.cloudSync || next.aiProcessing) {
+                    throw new Error('The local choice must keep sharing disabled.');
+                  }
+                  registerPrivacySession(uid, next);
+                  setConsent(next);
+                  setOpen(false);
+                  setGeneration(value => value + 1);
+                },
+              }
+            : {}),
           ...(uid && consent !== null && !deleting && !recoveryOwner
             ? {
                 onClose: () => {
+                  if (
+                    sequence.current !== renderedSequence ||
+                    getAuth(getApp()).currentUser?.uid !== uid
+                  ) {
+                    return;
+                  }
                   registerPrivacySession(uid, consent);
                   setOpen(false);
                 },

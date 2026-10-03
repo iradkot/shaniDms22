@@ -45,7 +45,9 @@ jest.mock(
     nativePrivacyService: {
       load: jest.fn(),
       save: jest.fn(),
+      continueLocalOnly: jest.fn(),
       recoveryOwner: jest.fn(),
+      deletionPending: jest.fn(),
       resumeNativeDeletion: jest.fn(),
       deleteAccount: jest.fn(),
     },
@@ -84,7 +86,9 @@ beforeEach(() => {
   mockAuth.currentUser = {uid: 'owner-A'};
   service.load.mockReset().mockResolvedValue({consent: null, deleting: false});
   service.save.mockReset().mockResolvedValue({...consent, cloudSync: false});
+  service.continueLocalOnly.mockReset().mockResolvedValue({...consent, cloudSync: false, aiProcessing: false});
   service.recoveryOwner.mockReset().mockResolvedValue(null);
+  service.deletionPending.mockReset().mockResolvedValue(false);
   service.deleteAccount.mockReset().mockResolvedValue(undefined);
   service.resumeNativeDeletion.mockReset().mockResolvedValue(undefined);
 });
@@ -241,6 +245,162 @@ test('a failed withdrawal cannot close the view and restore the previous cloud p
   ).toBeUndefined();
   expect(tree.root.findAllByProps({testID: 'product-child'})).toHaveLength(0);
   expect(hasPrivacyConsent('cloud')).toBe(false);
+});
+test('a same-tick stale close cannot restore cloud permission while withdrawal is pending', async () => {
+  service.load.mockResolvedValue({consent, deleting: false});
+  const tree = await mount();
+  await act(async () => {
+    tree.root.findByProps({testID: 'product-child'}).props.onPress();
+  });
+  const previousRuntime = tree.root.findByType(PrivacyView).props.runtime;
+  const staleClose = previousRuntime.onClose;
+  const localConsent = {...consent, cloudSync: false, aiProcessing: false};
+  let resolve!: (value: typeof localConsent) => void;
+  service.save.mockReturnValue(new Promise(done => {resolve = done;}));
+  let pending!: Promise<void>;
+  await act(async () => {
+    pending = previousRuntime.saveConsent(false, false);
+    staleClose();
+  });
+  try {
+    expect(hasPrivacyConsent('cloud')).toBe(false);
+    expect(tree.root.findAllByProps({testID: 'product-child'})).toHaveLength(0);
+  } finally {
+    await act(async () => {
+      resolve(localConsent);
+      await pending;
+      tree.unmount();
+    });
+  }
+});
+test('a failed cloud opt-in can explicitly return to the local app with cloud and AI denied', async () => {
+  service.save.mockRejectedValue(new Error('cloud service unavailable'));
+  const tree = await mount();
+  await act(async () => {
+    await expect(
+      tree.root.findByType(PrivacyView).props.runtime.saveConsent(true, true),
+    ).rejects.toThrow('cloud service unavailable');
+  });
+  expect(tree.root.findAllByProps({testID: 'product-child'})).toHaveLength(0);
+  expect(tree.root.findByType(PrivacyView).props.runtime.onClose).toBeUndefined();
+  await act(async () => {
+    await tree.root.findByType(PrivacyView).props.runtime.continueLocally();
+  });
+  expect(service.continueLocalOnly).toHaveBeenCalledWith('owner-A');
+  expect(tree.root.findByProps({testID: 'product-child'})).toBeDefined();
+  expect(hasPrivacyConsent('cloud')).toBe(false);
+  expect(hasPrivacyConsent('ai')).toBe(false);
+  await act(async () => {
+    tree.root.findByProps({testID: 'product-child'}).props.onPress();
+  });
+  expect(tree.root.findByType(PrivacyView).props.runtime.consent).toMatchObject({cloudSync: false, aiProcessing: false});
+});
+test('failed local choice persistence keeps the privacy view open and cloud permissions denied', async () => {
+  service.continueLocalOnly.mockRejectedValue(new Error('device storage unavailable'));
+  const tree = await mount();
+  await act(async () => {
+    await expect(
+      tree.root.findByType(PrivacyView).props.runtime.continueLocally(),
+    ).rejects.toThrow('device storage unavailable');
+  });
+  expect(tree.root.findAllByProps({testID: 'product-child'})).toHaveLength(0);
+  expect(tree.root.findByType(PrivacyView).props.runtime.onClose).toBeUndefined();
+  expect(hasPrivacyConsent('cloud')).toBe(false);
+  expect(hasPrivacyConsent('ai')).toBe(false);
+});
+test('a local continuation result cannot grant cloud or AI permission', async () => {
+  service.continueLocalOnly.mockResolvedValue({...consent, cloudSync: true, aiProcessing: true});
+  const tree = await mount();
+  await act(async () => {
+    await expect(
+      tree.root.findByType(PrivacyView).props.runtime.continueLocally(),
+    ).rejects.toThrow();
+  });
+  expect(tree.root.findAllByProps({testID: 'product-child'})).toHaveLength(0);
+  expect(tree.root.findByType(PrivacyView).props.runtime.onClose).toBeUndefined();
+  expect(hasPrivacyConsent('cloud')).toBe(false);
+  expect(hasPrivacyConsent('ai')).toBe(false);
+});
+test('account deletion prevents local continuation from bypassing recovery', async () => {
+  service.load.mockResolvedValue({consent: null, deleting: true});
+  const tree = await mount();
+  expect(tree.root.findByType(PrivacyView).props.runtime.continueLocally).toBeUndefined();
+  expect(tree.root.findAllByProps({testID: 'product-child'})).toHaveLength(0);
+});
+test('signed-out deletion recovery does not offer local continuation', async () => {
+  mockAuth.currentUser = null;
+  service.recoveryOwner.mockResolvedValue('owner-A');
+  const tree = await mount();
+  expect(tree.root.findByType(PrivacyView).props.runtime.continueLocally).toBeUndefined();
+  expect(tree.root.findAllByProps({testID: 'product-child'})).toHaveLength(0);
+});
+test('a rejected deletion receipt re-offers local continuation when deletion never started', async () => {
+  service.deleteAccount.mockRejectedValue(new Error('recent sign-in required'));
+  const tree = await mount();
+  await act(async () => {
+    await expect(
+      tree.root.findByType(PrivacyView).props.runtime.deleteAccount(),
+    ).rejects.toThrow('recent sign-in required');
+  });
+  expect(tree.root.findByType(PrivacyView).props.runtime.continueLocally).toEqual(expect.any(Function));
+  await act(async () => {
+    await tree.root.findByType(PrivacyView).props.runtime.continueLocally();
+  });
+  expect(tree.root.findByProps({testID: 'product-child'})).toBeDefined();
+  expect(hasPrivacyConsent('cloud')).toBe(false);
+});
+test('a failed deletion with durable recovery keeps local continuation blocked', async () => {
+  service.deleteAccount.mockRejectedValue(new Error('lost deletion response'));
+  service.recoveryOwner.mockResolvedValueOnce(null).mockResolvedValue('owner-A');
+  const tree = await mount();
+  await act(async () => {
+    await expect(
+      tree.root.findByType(PrivacyView).props.runtime.deleteAccount(),
+    ).rejects.toThrow('lost deletion response');
+  });
+  expect(tree.root.findByType(PrivacyView).props.runtime.continueLocally).toBeUndefined();
+  expect(tree.root.findAllByProps({testID: 'product-child'})).toHaveLength(0);
+  expect(hasPrivacyConsent('cloud')).toBe(false);
+});
+test('a failed deletion keeps an orphaned pending-deletion marker blocked without a recovery owner', async () => {
+  service.load.mockResolvedValue({consent: null, deleting: true});
+  service.deleteAccount.mockRejectedValue(new Error('deletion service unavailable'));
+  service.deletionPending.mockResolvedValue(true);
+  const tree = await mount();
+  await act(async () => {
+    await expect(
+      tree.root.findByType(PrivacyView).props.runtime.deleteAccount(),
+    ).rejects.toThrow('deletion service unavailable');
+  });
+  expect(tree.root.findByType(PrivacyView).props.runtime.continueLocally).toBeUndefined();
+  expect(service.deletionPending).toHaveBeenCalledWith('owner-A');
+  expect(tree.root.findAllByProps({testID: 'product-child'})).toHaveLength(0);
+  expect(hasPrivacyConsent('cloud')).toBe(false);
+});
+test('A to B to A rejects an earlier local continuation result', async () => {
+  const localConsent = {...consent, cloudSync: false, aiProcessing: false};
+  let resolve!: (value: typeof localConsent) => void;
+  service.continueLocalOnly.mockReturnValue(new Promise(done => {
+    resolve = done;
+  }));
+  const tree = await mount();
+  let pending!: Promise<void>;
+  await act(async () => {
+    pending = tree.root.findByType(PrivacyView).props.runtime.continueLocally();
+  });
+  await act(async () => {
+    mockAuth.currentUser = {uid: 'owner-B'};
+    mockListener(mockAuth.currentUser);
+    mockAuth.currentUser = {uid: 'owner-A'};
+    mockListener(mockAuth.currentUser);
+  });
+  await act(async () => {
+    resolve(localConsent);
+    await expect(pending).rejects.toThrow('Account changed');
+  });
+  expect(tree.root.findAllByProps({testID: 'product-child'})).toHaveLength(0);
+  expect(hasPrivacyConsent('cloud')).toBe(false);
+  expect(hasPrivacyConsent('ai')).toBe(false);
 });
 test('recovery lookup holds startup and a signed-out recovery cannot mount the app', async () => {
   mockAuth.currentUser = null;
