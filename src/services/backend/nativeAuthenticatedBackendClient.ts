@@ -7,6 +7,7 @@ import {NATIVE_RUNTIME_CONFIG} from 'app/platform/native/runtimeConfig';
 import {
   RequestAbortError,
   createRequestAbortScope,
+  type RequestAbortScope,
 } from 'app/utils/requestAbortScope';
 
 type FetchLike = (
@@ -175,6 +176,31 @@ const validatePath = (path: string): void => {
   }
 };
 
+/** Bounds even native auth and fetch implementations that ignore cancellation. */
+const awaitRequestStage = async <T>(
+  operation: () => Promise<T>,
+  abortScope: RequestAbortScope,
+): Promise<T> => {
+  let onAbort: (() => void) | undefined;
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      onAbort = () =>
+        reject(new RequestAbortError(abortScope.kind ?? 'cancelled'));
+      abortScope.signal.addEventListener('abort', onAbort, {once: true});
+      try {
+        abortScope.throwIfAborted();
+        operation().then(resolve, reject);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  } finally {
+    if (onAbort !== undefined) {
+      abortScope.signal.removeEventListener('abort', onAbort);
+    }
+  }
+};
+
 export const createNativeAuthenticatedBackendClient = (
   runtime: NativeAuthenticatedBackendRuntime,
 ): NativeAuthenticatedBackendClient => ({
@@ -215,7 +241,7 @@ export const createNativeAuthenticatedBackendClient = (
       const anonymousDeletionFinish = path === '/v1/account/delete/finish';
       const session = anonymousDeletionFinish
         ? null
-        : await runtime.getSession();
+        : await awaitRequestStage(() => runtime.getSession(), abortScope);
       abortScope.throwIfAborted();
       if (
         !anonymousDeletionFinish &&
@@ -233,23 +259,31 @@ export const createNativeAuthenticatedBackendClient = (
       }
 
       authorize();
-      const response = await runtime.fetch(`${baseUrl}${path}`, {
-        method: request.method ?? (serialized === undefined ? 'GET' : 'POST'),
-        headers: {
-          Accept: 'application/json',
-          ...(session === null
-            ? {}
-            : {Authorization: `Bearer ${session.idToken}`}),
-          'Cache-Control': 'no-store',
-          ...(serialized === undefined
-            ? {}
-            : {'Content-Type': 'application/json'}),
-        },
-        ...(serialized === undefined ? {} : {body: serialized}),
-        signal: abortScope.signal,
-      });
+      const response = await awaitRequestStage(
+        () =>
+          runtime.fetch(`${baseUrl}${path}`, {
+            method:
+              request.method ?? (serialized === undefined ? 'GET' : 'POST'),
+            headers: {
+              Accept: 'application/json',
+              ...(session === null
+                ? {}
+                : {Authorization: `Bearer ${session.idToken}`}),
+              'Cache-Control': 'no-store',
+              ...(serialized === undefined
+                ? {}
+                : {'Content-Type': 'application/json'}),
+            },
+            ...(serialized === undefined ? {} : {body: serialized}),
+            signal: abortScope.signal,
+          }),
+        abortScope,
+      );
       abortScope.throwIfAborted();
-      const responseText = await response.text();
+      const responseText = await awaitRequestStage(
+        () => response.text(),
+        abortScope,
+      );
       abortScope.throwIfAborted();
       const decoded = decodeJsonObject(responseText);
       authorize();

@@ -27,6 +27,8 @@ export const NativePrivacyBoundary = ({
   const [uid, setUid] = useState<string | null>(() =>
     isE2E ? null : getAuth(getApp()).currentUser?.uid ?? null,
   );
+  const observedUid = useRef(uid);
+  const [authRevision, setAuthRevision] = useState(0);
   const [consent, setConsent] = useState<PrivacyConsent | null>(null);
   const [loading, setLoading] = useState(!isE2E && uid !== null);
   const [open, setOpen] = useState(false);
@@ -61,11 +63,21 @@ export const NativePrivacyBoundary = ({
       })
       .finally(() => setRecoveryLoading(false));
     return getAuth(getApp()).onAuthStateChanged(user => {
+      const nextUid = user?.uid ?? null;
+      // Firebase emits an initial callback even when currentUser was restored
+      // before mount. That notification must not invalidate its only load.
+      if (observedUid.current === nextUid) {
+        return;
+      }
+      observedUid.current = nextUid;
       clearPrivacySession();
       sequence.current += 1;
       setConsent(null);
       setLoading(user !== null);
-      setUid(user?.uid ?? null);
+      setUid(nextUid);
+      // A -> B -> A can be batched into one render with an unchanged UID.
+      // The revision still starts a fresh consent load for the new session.
+      setAuthRevision(value => value + 1);
       setDeleting(false);
       setOpen(false);
     });
@@ -98,7 +110,7 @@ export const NativePrivacyBoundary = ({
       sequence.current += 1;
       clearPrivacySession();
     };
-  }, [uid]);
+  }, [authRevision, uid]);
   const runtime = {
     consent,
     saveConsent: async (cloudSync: boolean, aiProcessing: boolean) => {
