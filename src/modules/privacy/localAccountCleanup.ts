@@ -138,22 +138,7 @@ const recordOwner = (value: unknown): string | undefined => {
   return direct ?? structuredScopeOwner(data.ownerScope) ?? recordOwner(data.scope) ?? recordOwner(data.value);
 };
 const ownsRecord = (value: unknown, uid: string): boolean => {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  if (Array.isArray(value)) {
-    return false;
-  }
-  const data = value as Record<string, unknown>;
-  if (
-    [data.productUserId, data.ownerProductUserId, data.ownerUserId].includes(
-      uid,
-    )
-  ) {
-    return true;
-  }
-  return structuredScopeOwner(data.ownerScope) === uid ||
-    (data.scope !== undefined && ownsRecord(data.scope, uid));
+  return recordOwner(value) === uid;
 };
 
 type WorkspaceOwners = Map<string, Set<string>>;

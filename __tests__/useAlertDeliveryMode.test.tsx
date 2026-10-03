@@ -114,12 +114,12 @@ describe('useAlertDeliveryMode', () => {
     act(() => tree!.unmount());
   });
 
-  it('normalizes an unsupported iOS vibration-only preference to silent', async () => {
+  it('normalizes an unsupported iOS preference while preserving its account owner', async () => {
     jest.replaceProperty(Platform, 'OS', 'ios');
     getMode.mockResolvedValue('vibrate-only');
     const states: AlertDeliveryModeState[] = [];
     const Harness = () => {
-      states.push(useAlertDeliveryMode('workspace-ios'));
+      states.push(useAlertDeliveryMode('workspace-ios', 'account-ios'));
       return null;
     };
     let tree: renderer.ReactTestRenderer;
@@ -135,7 +135,7 @@ describe('useAlertDeliveryMode', () => {
       ready: true,
       error: false,
     });
-    expect(saveMode).toHaveBeenCalledWith('workspace-ios', 'silent');
+    expect(saveMode).toHaveBeenCalledWith('workspace-ios', 'silent', 'account-ios');
     act(() => tree!.unmount());
   });
 });

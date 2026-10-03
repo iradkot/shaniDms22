@@ -124,6 +124,23 @@ test('safely imports a provably owned legacy recommendation scope into the new o
   expect(JSON.parse(storage.values.get(key)!)).toMatchObject({ownerProductUserId: accountScope.productUserId, workspaceId: accountScope.workspaceId});
 });
 
+test('shared-array cleanup honors an explicit B owner over a contradictory nested A scope', async () => {
+  const storage = new MemoryStorage();
+  const a = 'shared-precedence-owner-A';
+  const b = 'shared-precedence-owner-B';
+  const retained = {ownerProductUserId: b, scope: {productUserId: a},
+    localUri: 'file:///private/meal-images/image_retained_B.jpg'};
+  const unknown = {label: 'unknown owner'};
+  await storage.setItem('shared-legacy-records', JSON.stringify([
+    {ownerProductUserId: a, localUri: 'file:///private/meal-images/image_removed_A.jpg'}, retained, unknown,
+  ]));
+  const removeImage = jest.fn(async (_uri: string) => {});
+  await purgeLocalAccountData(storage, a, removeImage);
+  expect(JSON.parse(storage.values.get('shared-legacy-records')!)).toEqual([retained, unknown]);
+  expect(removeImage).toHaveBeenCalledTimes(1);
+  expect(removeImage).toHaveBeenCalledWith('file:///private/meal-images/image_removed_A.jpg');
+});
+
 test.each(['memory', 'journal', 'alerts'] as const)('drains an actual delayed %s write and blocks queued or stale writes after deletion', async kind => {
   const storage = new MemoryStorage();
   const accountScope = scopeOf(`race-${kind}-owner`, 'workspace');
