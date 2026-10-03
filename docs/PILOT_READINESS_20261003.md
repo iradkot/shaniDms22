@@ -1,8 +1,56 @@
 # Pilot implementation handoff — 2026-10-03
 
-The code changes for the four requested workstreams are implemented. The first preview's verification and delivery are recorded below. A later main integration and independent deletion review are being verified separately; the original APKs do not include those later fixes. Provider-side credential rotation and physical/live-data acceptance remain incomplete. This handoff does not establish readiness to distribute to people with type 1 diabetes. No backend, rules, IAM, Hosting, or store deployment was performed.
+The code changes for the four requested workstreams are implemented. The first preview's verification and delivery are recorded below. The later main integration and independent deletion review also passed local verification; the original APKs do not include those later fixes. Provider-side credential rotation and physical/live-data acceptance remain incomplete. This handoff does not establish readiness to distribute to people with type 1 diabetes. No backend, rules, IAM, Hosting, or store deployment was performed.
 
 The candidate is a restricted internal Android preview. It uses the Android debug certificate, even though it runs in release mode. It is not a Google Play release. Keep the cloud rules schema at **0** until the matching backend, schema **2** rules, and service-account permissions have been deployed and verified.
+
+## Additional main integration and review — completed locally
+
+Application source `6c1f74799483b310d23a2e105a34491e99def8ce` integrates latest main
+`b46c73394f756296612dd12ce5d9f881c2ebf04d`, including current-data freshness,
+recorded-insulin contracts, and native/browser AI evidence. The independent
+review found and fixed missed local AI/history/alert records, late writes
+recreating deleted records, Android sync retaining credentials during recovery,
+an unbounded anonymous recovery budget, and orphan credentials during legacy
+profile migration. Exact owner positions/stamps preserve other accounts and
+ambiguous legacy records. Android configuration without a stored owner remains
+preserved with background reads disabled. No concrete blocking code finding
+remained after the fixes and repeat review.
+
+| Verification on the integrated source | Result |
+| --- | --- |
+| Full app/backend/rules/web pipeline | `yarn verify:all` passed, exit 0. [Log](../artifacts/pilot-merge-20261003/verify-all-final.log). |
+| TypeScript, lint, app tests | Native and web typechecks passed; 0 lint errors / 340 warnings. 306 Jest suites / 2,030 tests and one snapshot passed. Calendar subsets (154 and 8 tests) overlap the full suite. |
+| Server and rules | 93 backend, 29 Firestore, and 4 Storage tests passed. Seven web build/publishing checks passed; restricted web build/service-worker verification passed. |
+| Android build and native unit tests | Both release-mode preview APKs and instrumentation APK built. 63 JVM tests passed, 0 failures/errors/skips. [Build](../artifacts/pilot-merge-20261003/native-build-final.log), [unit totals](../artifacts/pilot-merge-20261003/native-unit-results.json). |
+| Exact-APK emulator acceptance | Dedicated API 35 `emulator-5580`: 29 instrumentation tests and 6 smoke stages passed. Covers actual credential/health teardown, delayed worker fencing, shared-URL owner separation, ownerless fail-closed behavior, widgets, upgrade, denied notifications, offline launch, process restart, and reboot. [Instrumentation](../artifacts/pilot-merge-20261003/native-instrumentation.log), [smoke](../artifacts/pilot-merge-20261003/android-smoke/report.json). |
+| Packaged configuration and signing | APK DEX confirms version `1.0.20261003-main-pilot-preview`, code `53793921`, channel `pilot`, E2E/experiments false, schema 0. Packaged manifest disables FCM auto-init. Both APK signatures match the earlier Android Debug certificate. [Artifact checks](../artifacts/pilot-merge-20261003/apk-hashes.json). |
+
+The first integration run exposed old test assumptions about forecast policy,
+the expanded ownership bridge, and anonymous Kotlin fixtures. They were updated
+to assert the restricted policy and exact captured ownership; the complete
+pipeline and native build then passed. The earlier failed logs remain in
+`artifacts/pilot-merge-20261003/`. APK acceptance does not establish physical
+phone, live-CGM, overnight, production-backend, or clinical readiness.
+
+| Updated artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| [ARM64 phone APK](../releases/pilot-main-20261003/ShaniDms-1.0.20261003-main-pilot-preview-arm64-v8a.apk) | 32,485,534 | `085d1d7975e8229f1f6cd1b13bc8ba9dee2699630ce77a8a6326b91d3d55f2c2` |
+| [x86_64 emulator APK](../releases/pilot-main-20261003/ShaniDms-1.0.20261003-main-pilot-preview-x86_64.apk) | 32,725,913 | `492ed781ab558c812a36d6ec2fcf79e5edc0dc0c7b46fcc5a3b7f537b037cf45` |
+
+These supersede the first preview below. Backend/rules/IAM, credential rotation,
+production signing, and physical/live-data checks remain the release blockers
+listed in this document.
+
+Both updated APK download links were emailed to `irad16@gmail.com`; Gmail
+confirmed message `1a1012c59dbc5db1` with `SENT`. The private copies are at
+`gs://shanidms-3a065.appspot.com/internal-pilot-releases/2026-10-03-53793921/`.
+Read-back size/MD5 match both local files, the recipient is an object owner,
+and bucket/project policies and object ACLs have no public principal. No IAM
+or public-sharing change was made. [Delivery metadata](../artifacts/pilot-merge-20261003/delivery-artifacts.json).
+
+- [Updated ARM64 authenticated download](https://storage.cloud.google.com/shanidms-3a065.appspot.com/internal-pilot-releases/2026-10-03-53793921/ShaniDms-1.0.20261003-main-pilot-preview-arm64-v8a.apk).
+- [Updated x86_64 authenticated download](https://storage.cloud.google.com/shanidms-3a065.appspot.com/internal-pilot-releases/2026-10-03-53793921/ShaniDms-1.0.20261003-main-pilot-preview-x86_64.apk).
 
 ## Four requested changes
 
@@ -61,7 +109,7 @@ The first native build exposed a manifest conflict with the Firebase library's d
 
 No iOS build or physical-device test was performed on this Windows host. The ARM64 package was built and its signature inspected; exact-APK device acceptance ran against x86_64 on the emulator.
 
-## Delivery
+## Delivery — first preview
 
 Download links for both final APKs were emailed to `irad16@gmail.com`, as requested by the standing delivery instruction. Gmail confirmed message `1a0fef3253a9a887` with the `SENT` label. The files are links rather than email attachments.
 
