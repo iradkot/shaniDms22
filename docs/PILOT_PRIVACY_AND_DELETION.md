@@ -6,7 +6,8 @@ copies describe Google/Firebase, the server-decryptable credential vault,
 Nightscout proxying on web, OpenAI context and image transfers, local AI memory,
 retention, withdrawal, and the limits of provider/backups deletion. This is the
 pilot implementation policy; review the operator details and publish its public
-URL before store distribution. No deployment was performed by this change.
+URL before store distribution. This document describes the implementation and
+deployment requirements; a source change alone does not establish a live rollout.
 
 ## Consent
 
@@ -105,12 +106,15 @@ personalization, alert and image remotes remain disabled until 2 is configured.
 
 Storage rules read the Firestore consent and deletion-lock documents. Verify
 cross-service rules access is enabled for the project's Firebase Storage service
-agent during the reviewed rules deployment. Test both emulators together:
+agent during the reviewed rules deployment. The agent
+`service-77401553924@gcp-sa-firebasestorage.iam.gserviceaccount.com` needs
+`roles/firebaserules.firestoreServiceAgent` on `shanidms-3a065` for these
+cross-service reads. Test both emulators together:
 `yarn test:rules:storage` starts Firestore and Storage, then checks missing/old
 consent, withdrawal, deleted-owner denial, immutability, and cross-owner denial.
 `yarn test:rules:firestore` covers the equivalent Journal privacy cases.
 
-Read-only inspection found deployed `shaniApi` uses
+Read-only inspection on 2026-10-03 found deployed `shaniApi` uses
 `shani-api-runtime@shanidms-3a065.iam.gserviceaccount.com`. Its current project
 custom role grants `datastore.entities.create/delete/get/update` and
 `firebaseauth.users.get`. Before deploying deletion, review/add these exact
@@ -119,15 +123,28 @@ permissions to the runtime service account at the narrow appropriate scope:
 - `firebaseauth.users.delete` for the final Auth removal.
 - `datastore.entities.list` for recursive subcollection discovery and legacy
   owner queries.
+- `datastore.databases.get` for Firestore transaction begin/rollback, including
+  consent updates and credential writes.
 - `storage.objects.list` and `storage.objects.delete` on the application's
   configured image bucket. Read-only bucket IAM inspection also found no direct
   runtime-service-account grant on `gs://shanidms-3a065.appspot.com`; this access
   must be reviewed and added before the deletion endpoint can run.
 
+Configure the backend's `STORAGE_BUCKET_NAME` as the bare existing bucket name
+`shanidms-3a065.appspot.com`. An absent value uses Firebase's configured default,
+which must not be assumed to exist in a direct gcloud deployment.
+
 Preserve the existing KMS envelope encryption/decryption access. Do not blindly
-grant broad Firebase Admin or Storage Admin roles. No IAM mutation, deployment,
-or real account deletion was performed. Verify least-privilege permissions and
-receipt retry with an isolated test project/disposable account before release.
+grant broad Firebase Admin or Storage Admin roles. Apply the reviewed
+[`infrastructure/privacy/deploy.ps1`](https://github.com/iradkot/shani-dms-firebase/blob/main/infrastructure/privacy/deploy.ps1)
+entrypoint from the infrastructure repository with the exact reviewed app commit.
+See [Backend deployment](BACKEND_DEPLOYMENT.md#deploy-privacy-infrastructure-and-backend-from-powershell)
+for the command. Verify least-privilege permissions and receipt retry with a
+disposable account before release. Record live results separately; the dated
+inspection above describes the state before that rollout.
+
+References: [Firestore transaction IAM permissions](https://firebase.google.com/docs/firestore/security/iam)
+and [deploying cross-service Firebase rules](https://firebase.google.com/docs/rules/manage-deploy).
 
 ## Verification
 

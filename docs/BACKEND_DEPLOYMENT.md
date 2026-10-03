@@ -14,18 +14,26 @@ yarn verify:rules
 
 ## Required configuration
 
-Create an AES-capable Cloud KMS key in the same controlled Google Cloud
-environment. Grant the Functions runtime service account only the KMS
-encrypt/decrypt permissions it needs. Configure:
+For an existing deployment, reuse its KMS key so stored credentials remain
+readable. A new environment needs an AES-capable Cloud KMS key. Grant the
+Functions runtime service account only the KMS encrypt/decrypt permissions it
+needs. Configure:
 
 ```text
 KMS_KEY_NAME=projects/PROJECT/locations/LOCATION/keyRings/RING/cryptoKeys/KEY
 ALLOWED_LLM_MODELS=gpt-5.5
 ALLOWED_CORS_ORIGINS=https://app.example.com
+STORAGE_BUCKET_NAME=EXISTING_BUCKET_NAME
 ```
 
 Use the real reviewed model allowlist and every exact production Web origin.
 Do not use wildcard CORS. Do not put these values in a committed `.env` file.
+
+The privacy deployment explicitly selects the existing image bucket with
+`STORAGE_BUCKET_NAME=shanidms-3a065.appspot.com`. Supply only its bare name,
+without `gs://` or an object path. If the setting is absent or blank, the backend
+uses Firebase's configured default bucket. A gcloud deployment may not supply
+that default, so the infrastructure entrypoint always sets the explicit name.
 
 ## Deploy order
 
@@ -51,70 +59,59 @@ Do not use wildcard CORS. Do not put these values in a committed `.env` file.
 The client defaults are fail-closed. Building an app does not deploy backend
 rules or grant KMS access.
 
-## Deploy only the AI backend from PowerShell
+## Deploy privacy infrastructure and backend from PowerShell
 
 Use PowerShell 7+, Node.js 22+, installed `functions` npm dependencies and an
 authenticated Google Cloud CLI. The selected project must already have billing,
 Firebase Authentication and a default Firestore database. The deployer needs
-permission to enable APIs, create service accounts/custom roles, bind IAM roles,
-create KMS resources, deploy Cloud Functions/Cloud Run and act as the runtime
+permission to update custom roles and bind IAM roles, deploy Firebase rules and
+Cloud Functions/Cloud Run, and act as the runtime
 service account. The project's build account also needs its normal Cloud Build,
 Artifact Registry and source-bucket permissions. The script does not grant
 Owner/Editor or change existing build-account permissions.
 
+Use the reviewed deployment entrypoint in
+[`iradkot/shani-dms-firebase`](https://github.com/iradkot/shani-dms-firebase/blob/main/infrastructure/privacy/deploy.ps1).
+Run it from that repository and pin the clean app checkout to its reviewed commit:
+
 Review the exact operations without changing cloud resources:
 
 ```powershell
-pwsh -File scripts/deploy-ai-backend.ps1 -ProjectId shanidms-3a065 -WhatIf
+pwsh -File infrastructure/privacy/deploy.ps1 `
+  -AppSourcePath C:\Users\irad1\projects\shaniDms22 `
+  -ExpectedAppGitSha REVIEWED_APP_COMMIT `
+  -WhatIf
 ```
 
-After approval, run the same command without `-WhatIf`. Supply
-`-AllowedCorsOrigins 'https://actual-app.example'` for a web client. The default
-empty CORS list supports native requests with no browser Origin header.
+For the authorized rollout, run the same command without `-WhatIf`. Keep the
+existing runtime identity and KMS key. Preserve the deployed model allowlist,
+CORS origins, and unrelated environment settings. The explicit image bucket
+must be the same bucket used by clients and covered by `storage.rules`.
 
-The script enables missing required service APIs, creates a dedicated runtime
-service account, and binds a custom role containing only
-`firebaseauth.users.get` and Firestore entity get/create/update/delete. These
-permissions support revoked-token checks and vault document operations. It
-grants KMS encrypt/decrypt only on the new vault key. Firestore server IAM applies
-at the database/project boundary; user isolation remains enforced by the API's
-verified uid and vault document path. Existing custom roles with different
-permissions cause the script to stop for review.
-
-That existing script role supports the earlier API; it does **not** establish
-permission to run the new account-deletion endpoints. The pilot additionally
-requires reviewed `firebaseauth.users.delete`, `datastore.entities.list`, and
-bucket-scoped `storage.objects.list`/`storage.objects.delete`, plus the Storage
-cross-service rules check described in
+The privacy additions require `firebaseauth.users.delete`,
+`datastore.entities.list`, `datastore.databases.get`, and bucket-scoped
+`storage.objects.list`/`storage.objects.delete`, plus the Storage cross-service
+rules grant described in
 [Pilot privacy and deletion](PILOT_PRIVACY_AND_DELETION.md#deployment-prerequisites-pending).
-Do not treat a successful script deployment as confirmation that deletion is
-ready. Complete those prerequisites and staging recovery checks before enabling
-schema 2 clients.
+`datastore.databases.get` is needed for Firestore transactions, including consent
+updates and credential writes. Firestore server IAM applies at the
+database/project boundary; user isolation remains enforced by the API's verified
+UID and document paths.
 
-It runs backend verification and calls `gcloud functions deploy shaniApi`
-directly. No Firebase-wide deployment, rules deployment, function deletion or
-unrelated function update occurs. It sets the app model to `gpt-5.5` and mirrors
-the function's memory, one CPU, timeout and concurrency options explicitly. A
-full CPU is required for concurrency greater than one. The exported
-Firebase `onRequest` handler is an HTTP request handler usable as the gcloud
-entry point; the Google Node.js buildpack compiles `lib/index.js` via
-`GOOGLE_NODE_RUN_SCRIPTS=build`. `.gcloudignore` excludes local credentials,
-dependencies and generated files from the source upload.
+Deploy only `shaniApi`, `firestore.rules`, and `storage.rules` for this rollout.
+An unauthenticated `401` proves authentication is enforced; it does not establish
+that a privacy route exists or that its IAM permissions work. Use a disposable
+account to verify consent saving, withdrawal, cross-user denial, and completed
+deletion with receipt retry before enabling schema 2 clients.
 
-After deployment, the script prints the Cloud Functions endpoint and Cloud Run
-URL. It checks the unauthenticated vault-status route for the exact
-`401 / unauthenticated` response, without any API key or health data. This checks
-deployment/routing/auth enforcement; a signed-in save and explicit connection
-test are still needed to check Firestore, KMS and the provider end to end. API
-enablement, KMS resources and function execution can incur cloud charges.
-
-The script has no rollback deletion step. Rerunning it reuses its named resources
-and deploys only `shaniApi`; inspect a failed step before retrying. The KMS key
-name must remain stable once credentials have been stored.
+The older app-repository `scripts/deploy-ai-backend.ps1` is an AI-only deployment
+script. It has the earlier runtime permission list, omits the privacy rules and
+bucket permissions, and replaces environment settings with its own model/CORS
+values. Do not use it for this privacy rollout.
 
 References: [gcloud functions deploy](https://docs.cloud.google.com/sdk/gcloud/reference/functions/deploy),
 [Node.js buildpacks](https://docs.cloud.google.com/docs/buildpacks/nodejs), and
-[Firestore server IAM](https://docs.cloud.google.com/firestore/docs/security/iam).
+[Firestore server IAM](https://firebase.google.com/docs/firestore/security/iam).
 
 ## Existing production vault access rules
 

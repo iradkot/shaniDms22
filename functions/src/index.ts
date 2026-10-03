@@ -13,6 +13,7 @@ import {GoogleKmsEnvelopeCipher} from './kmsEnvelopeCipher';
 import {EncryptedNightscoutCredentialVault} from './nightscoutVault';
 import {NightscoutUpstream} from './nightscoutUpstream';
 import {OpenAiUpstream} from './openAiUpstream';
+import {configuredStorageBucketName} from './storageBucketConfiguration';
 import {EncryptedCredentialVault} from './vault';
 
 const app = initializeApp();
@@ -59,7 +60,13 @@ const handler = createShaniApiHandler({
       return {uid: decoded.uid, authTimeSeconds: decoded.auth_time};
     },
   },
-  privacy: new FirestoreAccountPrivacyRepository(firestore, getStorage(app).bucket(), getAuth(app)),
+  privacy: new FirestoreAccountPrivacyRepository(
+    firestore,
+    getStorage(app).bucket(
+      configuredStorageBucketName(process.env.STORAGE_BUCKET_NAME),
+    ),
+    getAuth(app),
+  ),
   vault,
   nightscoutVault,
   nightscoutUpstream: new NightscoutUpstream(),
