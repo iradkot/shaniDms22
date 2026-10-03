@@ -13,6 +13,7 @@ import {
   recommendationColors as colors,
 } from './RecommendationControls';
 import {PatientMemoryControl} from './RecommendationPersonalization';
+import {getReleaseSafetyPolicy, isRecommendationAllowed, pilotAiNotice} from '../../modules/releaseSafety/policy';
 
 const COPY = {
   he: {
@@ -269,7 +270,47 @@ export const RecommendationLanding = ({
   readonly runtime: AiAnalystModuleRuntime;
   readonly focus?: AiConversationFocus;
 }) => {
-  const copy = COPY[locale];
+  const currentRecommendations = getReleaseSafetyPolicy().currentRecommendations;
+  const copy = currentRecommendations ? COPY[locale] : {
+    ...COPY[locale],
+    ...(locale === 'he' ? {
+      title: 'מה אפשר ללמוד מנתוני העבר?',
+      subtitle: 'סיכומים ודפוסים מהנתונים, לקראת שיחה עם הצוות המטפל.',
+      ahead: 'מסתכלים על הנתונים',
+      weekly: 'סיכום השבוע האחרון',
+      monthly: 'סיכום החודש האחרון',
+      weeklyDetail: 'דפוסים ונתונים מהשבוע האחרון',
+      monthlyDetail: 'דפוסים ונתונים מהחודש האחרון',
+      guidedTitle: 'ניתוח ממוקד של נתוני העבר',
+      guidedDetail: 'בחרו תקופה ונושא לניתוח. אפשר להכין שאלות לצוות המטפל.',
+      guided: 'בחירת נושא לניתוח',
+      durationQuestion: 'איזו תקופה לנתח?',
+      styleQuestion: 'איך נוח לכם לקבל את הסיכום?',
+      week: 'השבוע האחרון',
+      month: 'החודש האחרון',
+      submit: 'קבל סיכום וניתוח',
+      preparing: 'מכינים את הניתוח…',
+      advisory: pilotAiNotice(locale),
+    } : {
+      title: 'What can we learn from past data?',
+      subtitle: 'Summaries and patterns to discuss with your care team.',
+      ahead: 'Review your data',
+      weekly: 'Review the past week',
+      monthly: 'Review the past month',
+      weeklyDetail: 'Patterns and facts from the past week',
+      monthlyDetail: 'Patterns and facts from the past month',
+      guidedTitle: 'Focused analysis of past data',
+      guidedDetail: 'Choose a period and topic. Prepare questions for your care team.',
+      guided: 'Choose an analysis topic',
+      durationQuestion: 'What period should we analyze?',
+      styleQuestion: 'How would you like your summary?',
+      week: 'The past week',
+      month: 'The past month',
+      submit: 'Get a summary and analysis',
+      preparing: 'Preparing your analysis…',
+      advisory: pilotAiNotice(locale),
+    }),
+  };
   const rtl = locale === 'he';
   const [mode, setMode] = useState<'landing' | 'meal' | 'guided'>('landing');
   const [step, setStep] = useState(0);
@@ -284,7 +325,7 @@ export const RecommendationLanding = ({
   const unavailable =
     starting || runtime.snapshot.busy || !runtime.startRecommendation;
   const start = async (nextRequest: AiRecommendationRequest): Promise<void> => {
-    if (startPending.current || !runtime.startRecommendation) {
+    if (startPending.current || !runtime.startRecommendation || !isRecommendationAllowed(nextRequest)) {
       return;
     }
     startPending.current = true;
@@ -377,9 +418,14 @@ export const RecommendationLanding = ({
           </Text>
         </View>
       }>
-      {mode === 'landing' ? (
+      {!currentRecommendations ? (
+        <Text style={[styles.subtitle, rtl && styles.rtl]} testID="pilot-ai-notice">
+          {pilotAiNotice(locale)}
+        </Text>
+      ) : null}
+      {mode === 'landing' || (!currentRecommendations && mode === 'meal') ? (
         <>
-          <View
+          {currentRecommendations ? <View
             style={[styles.cardGrid, rtl && styles.reverse]}
             testID="ai-recommendation-grid">
             <RecommendationCard
@@ -403,7 +449,7 @@ export const RecommendationLanding = ({
               disabled={unavailable}
               testID="ai-recommend-meal"
             />
-          </View>
+          </View> : null}
           <Text
             accessibilityRole="header"
             style={[styles.sectionTitle, rtl && styles.rtl]}>

@@ -12,6 +12,11 @@ const mockScreenModule = name => {
   return {__esModule: true, default: DeferredScreen};
 };
 
+// This suite tests lazy screen evaluation, not consent services or Firebase I/O.
+jest.mock('app/platform/native/privacy/NativePrivacyBoundary', () => ({
+  NativePrivacyBoundary: ({children}) => children,
+}));
+
 jest.mock('@react-navigation/native-stack', () => ({
   createNativeStackNavigator: () => ({
     Navigator: ({children}) => children,

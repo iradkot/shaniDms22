@@ -16,6 +16,31 @@ describe('native Nightscout vault retry integration', () => {
     await AsyncStorage.clear();
   });
 
+  it('loads raw read-only tokens after restart without another account seeing them', async () => {
+    const profile = {
+      id: 'ns_token',
+      label: 'Nightscout',
+      baseUrl: 'https://ns.example',
+      apiSecretSha1: '',
+      authType: 'access-token' as const,
+      accessToken: 'shani-0123456789abcdef',
+      createdAt: 1,
+    };
+    await persistNightscoutProfiles([profile], profile.id, USER_ID);
+    await expect(
+      nativeNightscoutVaultActiveProfileReader.readActiveProfile(USER_ID),
+    ).resolves.toEqual({
+      baseUrl: profile.baseUrl,
+      apiSecretSha1: '',
+      accessToken: profile.accessToken,
+    });
+    await expect(
+      nativeNightscoutVaultActiveProfileReader.readActiveProfile(
+        'another-account',
+      ),
+    ).resolves.toBeNull();
+  });
+
   it('re-reads the latest credential from secure storage after an offline restart', async () => {
     const profile = {
       id: 'ns_profile',

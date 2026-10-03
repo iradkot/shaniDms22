@@ -7,6 +7,7 @@ import {readFile, readdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {gzipSync} from 'node:zlib';
+import {verifyPublishableWebBuild} from './web-release-manifest.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const project = 'shanidms-3a065';
@@ -17,6 +18,8 @@ if (hosting.site !== project || hosting.public !== 'releases/web') {
   throw new Error('Review the deployment target before publishing.');
 }
 const output = path.join(root, hosting.public);
+// Reject missing/development artifacts before authentication, network or writes.
+const releaseManifest = await verifyPublishableWebBuild(output);
 await readFile(path.join(output, 'index.html'));
 const token = execFileSync(
   process.platform === 'win32' ? 'powershell.exe' : 'gcloud',
@@ -106,6 +109,6 @@ for (let index = 0; index < pending.length; index += 6) {
 }
 await request(`${hostingApi}/${version.name}?updateMask=status`, 'PATCH', {status: 'FINALIZED'});
 const release = await request(`${hostingApi}/sites/${project}/releases?versionName=${encodeURIComponent(version.name)}`, 'POST', {
-  message: 'Unified AI recommendations web app',
+  message: `ShaniDMS ${releaseManifest.channel} web app`,
 });
 console.log(JSON.stringify({url: `https://${project}.web.app`, release: release.name, releaseTime: release.releaseTime}, null, 2));

@@ -98,4 +98,12 @@ test('encrypts URL and Nightscout secret together with user-bound AAD', async ()
   assert.equal(JSON.stringify(document).includes(value.url), false);
   assert.equal(JSON.stringify(document).includes(value.apiSecretSha1), false);
   assert.deepEqual(await vault.get('user-1'), value);
+
+  const tokenCredential = {...value, apiSecretSha1: '', accessToken: 'shani-0123456789abcdef'};
+  await vault.put('user-1', tokenCredential);
+  assert.equal(JSON.stringify(document).includes(tokenCredential.accessToken), false);
+  assert.deepEqual(await vault.get('user-1'), tokenCredential);
+  await assert.rejects(vault.put('user-1', {...tokenCredential, apiSecretSha1: 'a'.repeat(40)}));
+  await assert.rejects(vault.put('user-1', {...tokenCredential, accessToken: 'master-secret'}));
+  assert.deepEqual(await vault.get('user-1'), tokenCredential);
 });

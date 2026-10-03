@@ -1,5 +1,7 @@
 /* eslint-env node, browser, es2022 */
 // Exercise the production AI view with synthetic, local-only runtime data.
+// The Vite server must be started with SHANI_RELEASE_CHANNEL=development to
+// inspect experimental now/meal controls. Default pilot builds hide them.
 const assert = require('node:assert/strict');
 const {mkdirSync, writeFileSync} = require('node:fs');
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');

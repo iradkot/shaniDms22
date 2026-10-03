@@ -1,5 +1,6 @@
 const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 const path = require('node:path');
+const {resolveReleaseChannel} = require('./scripts/release-channel.cjs');
 
 /**
  * Metro configuration
@@ -28,6 +29,8 @@ const generatedOutputs = generatedFolders.map(
 const inheritedBlockList = defaultConfig.resolver?.blockList;
 
 module.exports = mergeConfig(defaultConfig, {
+  // Babel's own cache does not invalidate Metro's persisted transformed modules.
+  cacheVersion: `shani-release-${resolveReleaseChannel()}`,
   resolver: {
     // Web/Gradle may replace these folders while Metro is watching. They are
     // outputs, never source inputs; watching them also rescans old releases.

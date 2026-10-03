@@ -13,6 +13,86 @@ const credential = {
   apiSecretSha1: 'a'.repeat(40),
 };
 
+test('validates subject permissions and forwards the raw token for actual glucose access', async () => {
+  const accessToken = 'shani-0123456789abcdef';
+  const calls: URL[] = [];
+  const upstream = new NightscoutUpstream(
+    async () => [{address: '8.8.8.8', family: 4}],
+    async (url, secret) => {
+      calls.push(url);
+      assert.equal(secret, accessToken);
+      return url.pathname.includes('/authorization/')
+        ? {permissionGroups: [['*:*:read']]}
+        : [{date: 1700000000000, sgv: 120}];
+    },
+  );
+  await upstream.validateCredential({
+    ...credential,
+    apiSecretSha1: '',
+    accessToken,
+  });
+  assert.equal(
+    calls[0]?.pathname,
+    `/api/v2/authorization/request/${accessToken}`,
+  );
+  assert.equal(calls[1]?.pathname, '/api/v1/entries/sgv.json');
+  assert.equal(calls[1]?.searchParams.has('token'), false);
+});
+
+test('rejects default/custom write and admin permissions before any data read', async () => {
+  for (const grant of [
+    '*',
+    'api:treatments:create',
+    'admin:api:read',
+    'api:*:read,update',
+  ]) {
+    let calls = 0;
+    const upstream = new NightscoutUpstream(
+      async () => [{address: '8.8.8.8', family: 4}],
+      async () => {
+        calls += 1;
+        return {permissionGroups: [['*:*:read'], [grant]]};
+      },
+    );
+    await assert.rejects(
+      upstream.validateCredential({
+        ...credential,
+        apiSecretSha1: '',
+        accessToken: 'shani-0123456789abcdef',
+      }),
+      (error: unknown) =>
+        error instanceof NightscoutUpstreamError &&
+        error.code === 'nightscout_read_only_required',
+    );
+    assert.equal(calls, 1);
+  }
+});
+
+test('does not fall back to public reads after a subject token has been revoked', async () => {
+  let calls = 0;
+  const upstream = new NightscoutUpstream(
+    async () => [{address: '8.8.8.8', family: 4}],
+    async () => {
+      calls += 1;
+      throw new NightscoutUpstreamError(
+        401,
+        'nightscout_credential_rejected',
+        'Nightscout rejected the credential',
+      );
+    },
+  );
+  await assert.rejects(
+    upstream.validateCredential({
+      ...credential,
+      apiSecretSha1: '',
+      accessToken: 'revoked-0123456789abcdef',
+    }),
+    (error: unknown) =>
+      error instanceof NightscoutUpstreamError && error.status === 401,
+  );
+  assert.equal(calls, 1);
+});
+
 test('normalizes only clean HTTPS Nightscout base URLs', () => {
   assert.equal(
     normalizeNightscoutBaseUrl('https://nightscout.example/base'),

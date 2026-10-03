@@ -1,4 +1,5 @@
 import {buildGlucoseForecast} from './forecast';
+import {assertGlucoseForecastAllowed} from '../releaseSafety/policy';
 import {decodeForecastDeviceStatus} from './nightscout';
 import type {
   ForecastContextEvent,
@@ -82,6 +83,16 @@ export function createGlucoseForecastLoader(
   return (options?: {
     readonly forceRefresh?: boolean;
   }): Promise<GlucoseForecastSnapshot> => {
+    // Covers direct source calls, cached snapshots, and background history warming.
+    try {
+      assertGlucoseForecastAllowed();
+    } catch (error) {
+      glucose = [];
+      statuses = [];
+      last = undefined;
+      pending = undefined;
+      return Promise.reject(error);
+    }
     const requestedScope = dependencies.getScopeKey();
     if (requestedScope !== scope) {
       scope = requestedScope;
@@ -95,6 +106,7 @@ export function createGlucoseForecastLoader(
       last = undefined;
     }
     const assertCurrent = () => {
+      assertGlucoseForecastAllowed();
       if (
         dependencies.getScopeKey() !== requestedScope ||
         scope !== requestedScope

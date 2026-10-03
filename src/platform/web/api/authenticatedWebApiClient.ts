@@ -1,5 +1,6 @@
 import type {BrowserFirebaseAuth} from '../auth';
 import {createRequestAbortScope} from '../../../utils/requestAbortScope';
+import {capturePrivacyAuthorization} from '../../../modules/privacy';
 
 export class WebApiError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
@@ -10,7 +11,8 @@ export class WebApiError extends Error {
 
 export interface AuthenticatedWebApiClientOptions {
   readonly baseUrl: string;
-  readonly auth: Pick<BrowserFirebaseAuth, 'getIdToken'>;
+  readonly auth: Pick<BrowserFirebaseAuth, 'getIdToken'> &
+    Partial<Pick<BrowserFirebaseAuth, 'getIdentity' | 'getSessionRevision'>>;
   readonly fetch?: typeof globalThis.fetch;
   readonly timeoutMs?: number;
 }
@@ -32,8 +34,40 @@ export class AuthenticatedWebApiClient {
       readonly body?: unknown;
       readonly signal?: AbortSignal;
       readonly timeoutMs?: number;
+      readonly expectedUserId?: string;
     } = {},
   ): Promise<unknown> {
+    const authorize =
+      !path.startsWith('/v1/privacy/') &&
+      !path.startsWith('/v1/account/delete') &&
+      !path.endsWith('/remove')
+        ? capturePrivacyAuthorization(
+            path.startsWith('/v1/llm/') ? 'ai' : 'cloud',
+          )
+        : () => undefined;
+    const capturedAuthRevision = this.options.auth.getSessionRevision?.();
+    const checkOwner = () => {
+      if (
+        capturedAuthRevision !== undefined &&
+        this.options.auth.getSessionRevision?.() !== capturedAuthRevision
+      ) {
+        throw new WebApiError(
+          401,
+          'account_changed',
+          'The signed-in account changed.',
+        );
+      }
+      if (
+        options.expectedUserId !== undefined &&
+        this.options.auth.getIdentity?.()?.uid !== options.expectedUserId
+      ) {
+        throw new WebApiError(
+          401,
+          'account_changed',
+          'The signed-in account changed.',
+        );
+      }
+    };
     if (!/^\/v1\/[a-z0-9/_-]+(?:\?[a-z0-9%&=._-]+)?$/i.test(path)) {
       throw new Error('Web API path is invalid.');
     }
@@ -43,12 +77,22 @@ export class AuthenticatedWebApiClient {
     });
     try {
       abortScope.throwIfAborted();
-      const token = await this.options.auth.getIdToken();
+      if (path !== '/v1/account/delete/finish') {
+        checkOwner();
+      }
+      const token =
+        path === '/v1/account/delete/finish'
+          ? null
+          : await this.options.auth.getIdToken();
+      if (path !== '/v1/account/delete/finish') {
+        checkOwner();
+      }
       abortScope.throwIfAborted();
+      authorize();
       const response = await this.request(`${this.options.baseUrl}${path}`, {
         method: options.method ?? 'GET',
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...(token === null ? {} : {Authorization: `Bearer ${token}`}),
           ...(options.body === undefined
             ? {}
             : {'Content-Type': 'application/json'}),
@@ -95,6 +139,13 @@ export class AuthenticatedWebApiClient {
           code,
           'The request could not be completed.',
         );
+      }
+      authorize();
+      if (
+        path !== '/v1/account/delete/finish' &&
+        !path.startsWith('/v1/account/delete')
+      ) {
+        checkOwner();
       }
       return value;
     } catch (error) {

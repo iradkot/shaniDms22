@@ -29,6 +29,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {E2E_TEST_IDS} from '../../constants/E2E_TEST_IDS';
 import type {GlucoseForecastSnapshot} from '../../modules/glucoseForecast';
 import {GlucoseForecastCard} from './GlucoseForecastCard';
+import {getReleaseSafetyPolicy} from '../../modules/releaseSafety/policy';
 
 const COPY = {
   en: {
@@ -101,12 +102,15 @@ export interface RichDayGraphChartProps {
 export const RichDayGraphChart = ({
   locale,
   model,
-  forecast,
-  forecastStatus,
+  forecast: suppliedForecast,
+  forecastStatus: suppliedForecastStatus,
   selectedTimestampMs,
   preferences,
   availableHeight,
 }: RichDayGraphChartProps) => {
+  const allowed = getReleaseSafetyPolicy().experimentalGlucoseForecasts;
+  const forecast = allowed ? suppliedForecast : undefined;
+  const forecastStatus = allowed ? suppliedForecastStatus : undefined;
   const theme = useTheme() as ThemeType;
   const styles = useMemo(() => createStyles(theme), [theme]);
   const palette = getChartPalette(theme);

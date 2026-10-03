@@ -56,6 +56,35 @@ export const DEFAULT_DAILY_OVERVIEW_PREFERENCES: StoredDailyOverviewPreferences 
     cardOrder: ['ranges', 'insulin', 'mean', 'glucose', 'coverage'],
   };
 
+export const HOME_WIDGET_IDS = [
+  'glucose-graph',
+  'time-in-range',
+  'daily-insulin',
+  'weekly-glucose',
+  'weekly-insulin',
+  'chat',
+] as const;
+
+export type HomeWidgetId = (typeof HOME_WIDGET_IDS)[number];
+
+/** Presentation only. Widget data and conversation content are never persisted here. */
+export interface StoredHomePreferences {
+  readonly schemaVersion: 1;
+  readonly mode: 'personal' | 'modules';
+  /** Includes hidden widgets so showing one restores its chosen position. */
+  readonly widgetOrder: readonly HomeWidgetId[];
+  readonly hiddenWidgets: readonly HomeWidgetId[];
+  readonly glucoseWindowHours: 6 | 12 | 'full-day';
+}
+
+export const DEFAULT_HOME_PREFERENCES: StoredHomePreferences = {
+  schemaVersion: 1,
+  mode: 'personal',
+  widgetOrder: HOME_WIDGET_IDS,
+  hiddenWidgets: ['time-in-range', 'weekly-insulin'],
+  glucoseWindowHours: 6,
+};
+
 export const PERSONALIZATION_QUESTIONNAIRE_STAGES = [
   'relationship',
   'quick-access',
@@ -98,6 +127,7 @@ export interface QuestionnairePresentationStage {
   readonly shell: StoredProductShellPreferences;
   readonly dayGraph?: StoredDayGraphPreferences;
   readonly dailyOverview?: StoredDailyOverviewPreferences;
+  readonly home?: StoredHomePreferences;
 }
 
 /**
@@ -141,6 +171,7 @@ export interface StoredLayoutProfile {
   /** Optional for backwards-compatible local and remote snapshots. */
   readonly dayGraph?: StoredDayGraphPreferences;
   readonly dailyOverview?: StoredDailyOverviewPreferences;
+  readonly home?: StoredHomePreferences;
 }
 
 export interface StoredLayoutPersonalization {

@@ -1,3 +1,6 @@
+import {configureExperimentalBuildForTests} from '../../mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import {createGlucoseForecastLoader} from '../../../src/modules/glucoseForecast';
 const NOW = Date.parse('2026-09-07T12:00:00Z');
 const MIN = 60_000;
@@ -5,6 +8,41 @@ const readings = [
   {ts: NOW - 5 * MIN, sgv: 140},
   {ts: NOW, sgv: 140},
 ];
+
+it('rejects direct pilot calls before reads and invalidates cached development snapshots', async () => {
+  const readGlucose = jest.fn(async () => readings);
+  const readDeviceStatus = jest.fn(async () => []);
+  const onSnapshot = jest.fn();
+  const load = createGlucoseForecastLoader({
+    getScopeKey: () => 'a', now: () => NOW, readGlucose, readDeviceStatus, onSnapshot,
+    warmDeviceHistory: false,
+  });
+  globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
+  await expect(load()).rejects.toMatchObject({name: 'ReleaseSafetyError'});
+  expect(readGlucose).not.toHaveBeenCalled();
+  expect(readDeviceStatus).not.toHaveBeenCalled();
+  globalThis.__SHANI_RELEASE_CHANNEL__ = 'development';
+  await load();
+  expect(onSnapshot).toHaveBeenCalledTimes(1);
+  globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
+  await expect(load()).rejects.toMatchObject({name: 'ReleaseSafetyError'});
+  expect(onSnapshot).toHaveBeenCalledTimes(1);
+});
+
+it('does not publish an in-flight forecast after the build policy becomes restricted', async () => {
+  let release!: (value: typeof readings) => void;
+  const onSnapshot = jest.fn();
+  const load = createGlucoseForecastLoader({
+    getScopeKey: () => 'a', now: () => NOW,
+    readGlucose: () => new Promise(resolve => {release = resolve;}),
+    readDeviceStatus: async () => [], onSnapshot,
+  });
+  const pending = load();
+  globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
+  release(readings);
+  await expect(pending).rejects.toMatchObject({name: 'ReleaseSafetyError'});
+  expect(onSnapshot).not.toHaveBeenCalled();
+});
 
 it('warms only the uncovered status tail after initial historical loading', async () => {
   let at = NOW;

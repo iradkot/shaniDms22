@@ -1,4 +1,5 @@
 import type {Firestore} from 'firebase-admin/firestore';
+import {writePrivateCredential} from './writePrivateCredential';
 
 import type {
   SupportedProvider,
@@ -50,7 +51,7 @@ export class FirestoreVaultRepository implements VaultRepository {
   }
 
   async write(uid: string, document: VaultDocument): Promise<void> {
-    await this.firestore.doc(documentPath(uid, document.provider)).set(document);
+    await writePrivateCredential(this.firestore, uid, documentPath(uid, document.provider), document);
   }
 
   async remove(uid: string, provider: SupportedProvider): Promise<void> {

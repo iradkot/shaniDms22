@@ -6,6 +6,10 @@
 export const E2E_TEST_IDS = {
   product: {
     shell: 'product-shell',
+    home: 'product-home',
+    personalHome: 'personal-home-view',
+    homeTools: 'home-tab-modules',
+    homeEditor: 'home-editor',
     hub: 'product-hub',
     categoryGrid: 'hub-category-grid',
     categoryRecord: 'hub-category-record',
@@ -218,4 +222,3 @@ export const E2E_TEST_IDS = {
     backButton: 'loopTuner.backButton',
   },
 } as const;
-

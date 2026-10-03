@@ -1,3 +1,6 @@
+import {configureExperimentalBuildForTests} from '../mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import {createNativeDayGraphDataSource} from 'app/platform/native/product/nativeDayGraphDataSource';
 import {clearNightscoutInstance, configureNightscoutInstance} from 'app/api/shaniNightscoutInstances';
 

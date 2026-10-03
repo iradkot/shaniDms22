@@ -2,18 +2,12 @@ import {lookup} from 'node:dns/promises';
 import {request as httpsRequest} from 'node:https';
 import {isIP} from 'node:net';
 
-import type {
-  NightscoutRangeKind,
-  NightscoutRangeRequest,
-} from './contracts';
+import type {NightscoutRangeKind, NightscoutRangeRequest} from './contracts';
 import type {NightscoutCredential} from './nightscoutVault';
+import {hasReadOnlyNightscoutPermissions} from './nightscoutTokenPermissions';
 
 export class NightscoutUpstreamError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-  ) {
+  constructor(readonly status: number, readonly code: string, message: string) {
     super(message);
     this.name = 'NightscoutUpstreamError';
   }
@@ -46,11 +40,12 @@ const ipv4Number = (address: string): number | null => {
     return null;
   }
   return (
-    (((octets[0] ?? 0) << 24) >>> 0) +
-    ((octets[1] ?? 0) << 16) +
-    ((octets[2] ?? 0) << 8) +
-    (octets[3] ?? 0)
-  ) >>> 0;
+    ((((octets[0] ?? 0) << 24) >>> 0) +
+      ((octets[1] ?? 0) << 16) +
+      ((octets[2] ?? 0) << 8) +
+      (octets[3] ?? 0)) >>>
+    0
+  );
 };
 
 const inIpv4Cidr = (address: number, base: number, prefix: number): boolean => {
@@ -99,18 +94,16 @@ const parseIpv6Words = (address: string): Ipv6Words | null => {
     const separator = normalized.lastIndexOf(':');
     const ipv4 = ipv4Number(normalized.slice(separator + 1));
     if (separator < 0 || ipv4 === null) return null;
-    normalized = `${normalized.slice(0, separator + 1)}${(
-      ipv4 >>> 16
-    ).toString(16)}:${(ipv4 & 0xffff).toString(16)}`;
+    normalized = `${normalized.slice(0, separator + 1)}${(ipv4 >>> 16).toString(
+      16,
+    )}:${(ipv4 & 0xffff).toString(16)}`;
   }
 
   const halves = normalized.split('::');
   if (halves.length > 2) return null;
-  const left = halves[0] === '' ? [] : (halves[0]?.split(':') ?? []);
+  const left = halves[0] === '' ? [] : halves[0]?.split(':') ?? [];
   const right =
-    halves.length === 1 || halves[1] === ''
-      ? []
-      : (halves[1]?.split(':') ?? []);
+    halves.length === 1 || halves[1] === '' ? [] : halves[1]?.split(':') ?? [];
   const omitted = 8 - left.length - right.length;
   const groups =
     halves.length === 2
@@ -123,7 +116,9 @@ const parseIpv6Words = (address: string): Ipv6Words | null => {
   ) {
     return null;
   }
-  return groups.map(group => Number.parseInt(group, 16)) as unknown as Ipv6Words;
+  return groups.map(group =>
+    Number.parseInt(group, 16),
+  ) as unknown as Ipv6Words;
 };
 
 /** Rejects loopback, private, link-local, documentation and reserved ranges. */
@@ -266,7 +261,10 @@ const defaultTransport: NightscoutHttpTransport = (
           return;
         }
         const contentLength = Number(response.headers['content-length'] ?? 0);
-        if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
+        if (
+          Number.isFinite(contentLength) &&
+          contentLength > MAX_RESPONSE_BYTES
+        ) {
           response.destroy();
           reject(
             new NightscoutUpstreamError(
@@ -311,7 +309,9 @@ const defaultTransport: NightscoutHttpTransport = (
             return;
           }
           try {
-            const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            const parsed: unknown = JSON.parse(
+              Buffer.concat(chunks).toString('utf8'),
+            );
             if (typeof parsed !== 'object' || parsed === null) {
               throw new Error('JSON value must be an object or array');
             }
@@ -369,10 +369,7 @@ const rangeUrl = (
     url.searchParams.set('find[date][$gte]', String(range.startMs));
     url.searchParams.set('find[date][$lte]', String(range.endMs));
     url.searchParams.set('count', '15000');
-  } else if (
-    range.kind === 'treatments' ||
-    range.kind === 'devicestatus'
-  ) {
+  } else if (range.kind === 'treatments' || range.kind === 'devicestatus') {
     url.searchParams.set(
       'find[created_at][$gte]',
       new Date(range.startMs).toISOString(),
@@ -381,7 +378,10 @@ const rangeUrl = (
       'find[created_at][$lte]',
       new Date(range.endMs).toISOString(),
     );
-    url.searchParams.set('count', range.kind === 'devicestatus' ? '500' : '5000');
+    url.searchParams.set(
+      'count',
+      range.kind === 'devicestatus' ? '500' : '5000',
+    );
   } else {
     url.searchParams.set('count', '1');
   }
@@ -420,14 +420,56 @@ export class NightscoutUpstream {
     }
     return this.transport(
       url,
-      credential.apiSecretSha1,
+      credential.accessToken ?? credential.apiSecretSha1,
       selected,
       this.timeoutMs,
     );
   }
 
   async validateCredential(credential: NightscoutCredential): Promise<void> {
-    await this.request(credential, apiUrl(credential.url, 'api/v1/status.json'));
+    if (credential.accessToken) {
+      const authorization = await this.request(
+        credential,
+        apiUrl(
+          credential.url,
+          `api/v2/authorization/request/${encodeURIComponent(
+            credential.accessToken,
+          )}`,
+        ),
+      );
+      if (!hasReadOnlyNightscoutPermissions(authorization)) {
+        throw new NightscoutUpstreamError(
+          403,
+          'nightscout_read_only_required',
+          'Use a Nightscout subject token with only readable permissions',
+        );
+      }
+      const entriesUrl = apiUrl(credential.url, 'api/v1/entries/sgv.json');
+      entriesUrl.searchParams.set('count', '1');
+      const entries = await this.request(credential, entriesUrl);
+      if (
+        !Array.isArray(entries) ||
+        entries.some(
+          entry =>
+            typeof entry !== 'object' ||
+            entry === null ||
+            !Number.isFinite(Number((entry as Record<string, unknown>).date)) ||
+            !Number.isFinite(Number((entry as Record<string, unknown>).sgv)) ||
+            Number((entry as Record<string, unknown>).sgv) <= 0,
+        )
+      ) {
+        throw new NightscoutUpstreamError(
+          502,
+          'invalid_nightscout_response',
+          'Nightscout returned invalid glucose entries',
+        );
+      }
+    } else {
+      await this.request(
+        credential,
+        apiUrl(credential.url, 'api/v1/status.json'),
+      );
+    }
   }
 
   range(

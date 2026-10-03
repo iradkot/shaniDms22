@@ -19,6 +19,8 @@ internal data class EncryptedWidgetCredential(
 )
 
 internal sealed class WidgetCredentialAccess {
+  // The historic field name also carries raw Nightscout subject access tokens.
+  // The bridge and GET transport must never hash these values.
   data class Available(val apiSecretSha1: String) : WidgetCredentialAccess()
   data object NotConfigured : WidgetCredentialAccess()
   data object Unavailable : WidgetCredentialAccess()
@@ -27,12 +29,35 @@ internal sealed class WidgetCredentialAccess {
 internal sealed class WidgetSyncConfiguration {
   data class Ready(
     val baseUrl: String,
-    val apiSecretSha1: String?,
+    val apiSecretSha1: String,
     val liveMode: Boolean,
+    val ownerUserId: String? = null,
+    val sourceIdentity: String? = null,
   ) : WidgetSyncConfiguration()
 
   data object Disabled : WidgetSyncConfiguration()
   data object CredentialUnavailable : WidgetSyncConfiguration()
+}
+
+/** Old enabled preferences must never turn a missing credential into an anonymous request. */
+internal fun resolveWidgetSyncConfiguration(
+  enabled: Boolean,
+  baseUrl: String,
+  credential: WidgetCredentialAccess,
+  liveMode: Boolean,
+  ownerUserId: String? = null,
+  sourceIdentity: String? = null,
+): WidgetSyncConfiguration {
+  if (!enabled || baseUrl.isBlank()) return WidgetSyncConfiguration.Disabled
+  return when (credential) {
+    is WidgetCredentialAccess.Available -> if (credential.apiSecretSha1.isNotBlank()) {
+      WidgetSyncConfiguration.Ready(baseUrl, credential.apiSecretSha1, liveMode, ownerUserId, sourceIdentity)
+    } else {
+      WidgetSyncConfiguration.CredentialUnavailable
+    }
+    WidgetCredentialAccess.NotConfigured, WidgetCredentialAccess.Unavailable ->
+      WidgetSyncConfiguration.CredentialUnavailable
+  }
 }
 
 internal data class WidgetSyncConfigurationWriteResult(
@@ -186,6 +211,10 @@ internal object GlucoseWidgetCredentialStore {
   internal const val ENCRYPTED_VALUE_KEY = "api_secret_sha1_ciphertext_v1"
   internal const val ENCRYPTED_IV_KEY = "api_secret_sha1_iv_v1"
   internal const val EXPECTS_ENCRYPTED_CREDENTIAL_KEY = "api_secret_sha1_expected_v1"
+  private const val OWNER_KEY = "owner_user_id_v1"
+  private const val SOURCE_KEY = "owner_source_identity_v1"
+  private const val DELETION_PREFS = "glucose_deleted_owners_v1"
+  private const val DELETED_OWNERS_KEY = "owners"
 
   private val lock = Any()
 
@@ -199,11 +228,16 @@ internal object GlucoseWidgetCredentialStore {
     baseUrl: String?,
     apiSecretSha1: String?,
     enabled: Boolean,
+    ownerUserId: String? = null,
+    sourceIdentity: String? = null,
   ): WidgetSyncConfigurationWriteResult = synchronized(lock) {
     val prefs = preferences(context)
     val credentialVault = vault(prefs)
     val normalizedBaseUrl = baseUrl?.trim()
     val hasLiveModePreference = prefs.contains(GlucoseSyncWorker.KEY_LIVE_MODE)
+    if (enabled && isOwnerDeleted(context, ownerUserId)) {
+      return@synchronized WidgetSyncConfigurationWriteResult(false, normalizedBaseUrl)
+    }
 
     // Fail closed before rotating configuration. If the process dies between commits, the old
     // URL can no longer run with a newly rotated credential (or vice versa).
@@ -218,11 +252,13 @@ internal object GlucoseWidgetCredentialStore {
       // Account removal and explicit disable must not leave a usable background credential.
       credentialVault.clear()
     }
-    var effectiveEnabled = enabled && credentialStored
+    var effectiveEnabled = enabled && !apiSecretSha1.isNullOrBlank() && credentialStored
 
     val editor = prefs.edit()
       .putString(GlucoseSyncWorker.KEY_BASE_URL, normalizedBaseUrl)
       .putBoolean(GlucoseSyncWorker.KEY_ENABLED, effectiveEnabled)
+    if (!ownerUserId.isNullOrBlank()) editor.putString(OWNER_KEY, ownerUserId)
+    if (!sourceIdentity.isNullOrBlank()) editor.putString(SOURCE_KEY, sourceIdentity)
     if (!hasLiveModePreference) editor.putBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, true)
 
     if (!editor.commit()) {
@@ -238,21 +274,59 @@ internal object GlucoseWidgetCredentialStore {
     val prefs = preferences(context)
     val enabled = prefs.getBoolean(GlucoseSyncWorker.KEY_ENABLED, false)
     val baseUrl = prefs.getString(GlucoseSyncWorker.KEY_BASE_URL, null)?.trim().orEmpty()
+    val ownerUserId = prefs.getString(OWNER_KEY, null)
+    // A legacy URL/credential does not prove which Firebase account owns it.
+    // Preserve that data, but never fetch until the provider stamps a verified owner.
+    if (ownerUserId.isNullOrBlank()) return@synchronized WidgetSyncConfiguration.Disabled
+    if (isOwnerDeleted(context, ownerUserId)) return@synchronized WidgetSyncConfiguration.Disabled
     if (!enabled || baseUrl.isBlank()) return@synchronized WidgetSyncConfiguration.Disabled
 
-    when (val credential = vault(prefs).read()) {
-      is WidgetCredentialAccess.Available -> WidgetSyncConfiguration.Ready(
-        baseUrl = baseUrl,
-        apiSecretSha1 = credential.apiSecretSha1,
-        liveMode = prefs.getBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, true),
-      )
-      WidgetCredentialAccess.NotConfigured -> WidgetSyncConfiguration.Ready(
-        baseUrl = baseUrl,
-        apiSecretSha1 = null,
-        liveMode = prefs.getBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, true),
-      )
-      WidgetCredentialAccess.Unavailable -> WidgetSyncConfiguration.CredentialUnavailable
-    }
+    resolveWidgetSyncConfiguration(
+      enabled = enabled,
+      baseUrl = baseUrl,
+      credential = vault(prefs).read(),
+      liveMode = prefs.getBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, true),
+      ownerUserId = ownerUserId,
+      sourceIdentity = prefs.getString(SOURCE_KEY, null),
+    )
+  }
+
+  fun isOwnerDeleted(context: Context, ownerUserId: String?): Boolean =
+    !ownerUserId.isNullOrBlank() && context.getSharedPreferences(DELETION_PREFS, Context.MODE_PRIVATE)
+      .getStringSet(DELETED_OWNERS_KEY, emptySet()).orEmpty().contains(ownerUserId)
+
+  /** Caller holds the same lock as every credential/health publication. */
+  fun deleteAccount(context: Context, ownerUserId: String, sourceIdentities: Set<String>) = withConfigurationLock {
+    require(ownerUserId.isNotBlank())
+    require(sourceIdentities.all { it.matches(Regex("^[a-f0-9]{40}$")) })
+    val prefs = preferences(context)
+    val activeOwner = prefs.getString(OWNER_KEY, null)
+    val ownsConfiguration = widgetDeletionOwnsConfiguration(
+      ownerUserId, activeOwner,
+    )
+    deleteWidgetAccount(object : WidgetAccountDeletionOperations {
+      override fun blockOwner() {
+        val deleted = context.getSharedPreferences(DELETION_PREFS, Context.MODE_PRIVATE)
+        val owners = deleted.getStringSet(DELETED_OWNERS_KEY, emptySet()).orEmpty().toMutableSet()
+        owners.add(ownerUserId)
+        check(deleted.edit().putStringSet(DELETED_OWNERS_KEY, owners).commit())
+      }
+      override fun ownsActiveConfiguration() = ownsConfiguration
+      override fun invalidateConfiguration() {
+        val disabled = prefs.edit().putBoolean(GlucoseSyncWorker.KEY_ENABLED, false)
+          .putBoolean(GlucoseSyncWorker.KEY_LIVE_MODE, false).putString(OWNER_KEY, ownerUserId)
+          .remove(GlucoseSyncWorker.KEY_BASE_URL).commit()
+        // Key invalidation still runs when a preference commit fails.
+        val credentialRemoved = vault(prefs).clear()
+        check(disabled && credentialRemoved)
+      }
+      override fun cancelSync() {
+        GlucoseWidgetSync.cancelAsync()
+        GlucoseSyncScheduler.cancelForAccountDeletion(context)
+      }
+      override fun clearHealthData() = GlucoseWidgetUpdater.clearForAccountDeletion(context)
+    })
+    ownsConfiguration
   }
 
   private fun preferences(context: Context): SharedPreferences =

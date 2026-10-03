@@ -1,3 +1,6 @@
+import {configureExperimentalBuildForTests} from '../../mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
 import {Text} from 'react-native';
@@ -140,6 +143,28 @@ describe('legacy AI runtime adapter', () => {
     act(() => captured?.openSettings());
     expect(current.openSettings).toHaveBeenCalledTimes(1);
     act(() => tree!.unmount());
+  });
+
+  it('enforces pilot limits in the native adapter while retaining retrospective analysis', async () => {
+    globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
+    const current = engine({state: {mode: 'mission', mission: 'openChat'},
+      uiMessages: [{role: 'assistant', content: 'Old advice for now.'}]});
+    mockedEngine.mockReturnValue(current);
+    let tree!: renderer.ReactTestRenderer;
+    await act(async () => {tree = renderer.create(<Harness locale="en" />);});
+    expect(captured?.snapshot.messages).toEqual([]);
+    expect(captured?.snapshot.surface).toEqual({kind: 'landing'});
+    await act(async () => captured?.startRecommendation?.({request: {kind: 'now'}, locale: 'en'}));
+    await act(async () => captured?.startRecommendation?.({request: {kind: 'meal'}, locale: 'en'}));
+    await act(async () => captured?.start({specialist: 'general-chat', locale: 'en'}));
+    expect(chat).not.toHaveBeenCalled();
+    expect(loadEvidence).not.toHaveBeenCalled();
+    expectNoLegacyGeneration(current);
+    await act(async () => captured?.startRecommendation?.({request: {kind: 'weekly'}, locale: 'en'}));
+    expect(chat).toHaveBeenCalledTimes(3);
+    expect(captured?.snapshot.history[0]?.recommendation?.kind).toBe('weekly');
+    expectNoLegacyGeneration(current);
+    act(() => tree.unmount());
   });
 
   it('sends a contextual general-chat launch through the shared recommendation workflow', async () => {

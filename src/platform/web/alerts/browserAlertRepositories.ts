@@ -14,6 +14,43 @@ import {
 import type {IndexedDbKeyValueStore} from '../storage';
 import {createOpaqueBrowserId} from '../identity';
 import {sha1} from 'js-sha1';
+import {
+  accountWorkspaceScopeId,
+  assertLocalAccountActive,
+  readProvenLegacyAccountStore,
+  withLocalAccountWrite,
+  type LocalAccountWorkspaceScope,
+} from '../../../modules/privacy/localAccountCleanup';
+
+interface AccountAlertStorageInput {
+  readonly storage: Pick<IndexedDbKeyValueStore, 'getItem' | 'setItem'> & Partial<Pick<IndexedDbKeyValueStore, 'getAllKeys'>>;
+  readonly scopeId: string;
+  readonly accountScope?: LocalAccountWorkspaceScope;
+}
+
+const localStoreKey = (kind: 'alert-rules' | 'update-center', input: AccountAlertStorageInput): string =>
+  input.accountScope === undefined ? `shani.web.${kind}.v1:${safeScope(input.scopeId)}`
+    : `shani.web.${kind}.v2:${encodeURIComponent(input.accountScope.productUserId)}:${encodeURIComponent(input.accountScope.workspaceId)}`;
+
+const readLocalStore = async (kind: 'alert-rules' | 'update-center', input: AccountAlertStorageInput): Promise<string | null> => {
+  const owner = input.accountScope;
+  if (owner) {
+    await assertLocalAccountActive(input.storage, owner.productUserId);
+  }
+  let raw = await input.storage.getItem(localStoreKey(kind, input));
+  if (raw === null && owner) {
+    raw = await readProvenLegacyAccountStore(input.storage, `shani.web.${kind}.v1:${owner.productUserId}-${owner.workspaceId}`, owner);
+  }
+  if (owner) {
+    await assertLocalAccountActive(input.storage, owner.productUserId);
+  }
+  return raw;
+};
+
+const ownerStamp = (input: AccountAlertStorageInput) => input.accountScope === undefined ? {} : {
+  ownerProductUserId: input.accountScope.productUserId,
+  workspaceId: input.accountScope.workspaceId,
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -87,12 +124,10 @@ const decodeRules = (raw: string | null): readonly AlertRule[] => {
   }
 };
 
-export const createBrowserAlertRulesLocalReplica = (input: {
-  readonly storage: Pick<IndexedDbKeyValueStore, 'getItem' | 'setItem'>;
-  readonly scopeId: string;
+export const createBrowserAlertRulesLocalReplica = (input: AccountAlertStorageInput & {
   readonly createId?: () => string;
 }): AlertRuleLocalReplica => {
-  const key = `shani.web.alert-rules.v1:${safeScope(input.scopeId)}`;
+  const key = localStoreKey('alert-rules', input);
   const createId = input.createId ?? (() => `rule-${createOpaqueBrowserId()}`);
   let snapshot: AlertRulesSnapshot = {status: 'loading'};
   let operationTail = Promise.resolve();
@@ -102,15 +137,15 @@ export const createBrowserAlertRulesLocalReplica = (input: {
     listeners.forEach(listener => listener());
   };
   const write = async (rules: readonly AlertRule[]) => {
-    await input.storage.setItem(
+    await withLocalAccountWrite(input.storage, input.accountScope?.productUserId, () => input.storage.setItem(
       key,
-      JSON.stringify({schemaVersion: 1, rules: rules.slice(0, 100)}),
-    );
+      JSON.stringify({schemaVersion: 1, ...ownerStamp(input), rules: rules.slice(0, 100)}),
+    ));
     publish({status: 'ready', rules});
   };
   const ensureReady = async (): Promise<readonly AlertRule[]> => {
     if (snapshot.status !== 'ready') {
-      const rules = decodeRules(await input.storage.getItem(key));
+      const rules = decodeRules(await readLocalStore('alert-rules', input));
       publish({status: 'ready', rules});
     }
     if (snapshot.status !== 'ready') {
@@ -249,12 +284,10 @@ const decodeUpdates = (raw: string | null): readonly UpdateCenterItem[] => {
   }
 };
 
-export const createBrowserUpdateCenterLocalReplica = (input: {
-  readonly storage: Pick<IndexedDbKeyValueStore, 'getItem' | 'setItem'>;
-  readonly scopeId: string;
+export const createBrowserUpdateCenterLocalReplica = (input: AccountAlertStorageInput & {
   readonly createId?: () => string;
 }): UpdateCenterLocalReplica => {
-  const key = `shani.web.update-center.v1:${safeScope(input.scopeId)}`;
+  const key = localStoreKey('update-center', input);
   const createId = input.createId ?? (() => `update-${createOpaqueBrowserId()}`);
   let snapshot: UpdateCenterSnapshot = {status: 'loading'};
   const listeners = new Set<() => void>();
@@ -263,17 +296,17 @@ export const createBrowserUpdateCenterLocalReplica = (input: {
     listeners.forEach(listener => listener());
   };
   const load = async () => {
-    const items = decodeUpdates(await input.storage.getItem(key));
+    const items = decodeUpdates(await readLocalStore('update-center', input));
     publish({status: 'ready', items});
   };
   const write = async (items: readonly UpdateCenterItem[]) => {
     const normalized = [...items]
       .sort((left, right) => right.occurredAtMs - left.occurredAtMs)
       .slice(0, 250);
-    await input.storage.setItem(
+    await withLocalAccountWrite(input.storage, input.accountScope?.productUserId, () => input.storage.setItem(
       key,
-      JSON.stringify({schemaVersion: 1, items: normalized}),
-    );
+      JSON.stringify({schemaVersion: 1, ...ownerStamp(input), items: normalized}),
+    ));
     publish({status: 'ready', items: normalized});
   };
   return {
@@ -301,7 +334,7 @@ export const createBrowserUpdateCenterLocalReplica = (input: {
       const id =
         idempotencyKey === undefined
           ? createId()
-          : `update-${sha1(`${safeScope(input.scopeId)}\u0000${idempotencyKey}`)}`;
+          : `update-${sha1(`${input.accountScope === undefined ? safeScope(input.scopeId) : accountWorkspaceScopeId(input.accountScope)}\u0000${idempotencyKey}`)}`;
       const existing = snapshot.items.find(item => item.id === id);
       if (existing !== undefined) {
         return existing;

@@ -19,9 +19,10 @@ import {PRODUCT_EXPERIENCE_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
 import {
-  normalizeNightscoutApiSecretToSha1,
   normalizeNightscoutUrl,
 } from 'app/services/nightscoutProfiles';
+import {normalizeNightscoutAccessToken} from 'app/services/nightscoutTokenPermissions';
+import {NightscoutConnectionTestError} from 'app/services/nightscoutConnectionTest';
 
 /**
  * Nightscout configuration screen.
@@ -79,7 +80,9 @@ const NightscoutSetupScreen: React.FC = () => {
       );
     } catch (failure) {
       setError(
-        failure instanceof Error
+        failure instanceof NightscoutConnectionTestError && failure.code === 'permissions'
+          ? tr(language, 'nightscoutSetup.permissionsError')
+          : failure instanceof Error
           ? failure.message
           : tr(language, 'nightscoutSetup.testFailed'),
       );
@@ -102,7 +105,7 @@ const NightscoutSetupScreen: React.FC = () => {
       }
       if (
         (!editingProfile || secretInput.trim().length > 0) &&
-        !normalizeNightscoutApiSecretToSha1(secretInput)
+        !normalizeNightscoutAccessToken(secretInput)
       ) {
         setError(tr(language, 'nightscoutSetup.invalidSecret'));
         return;
@@ -128,8 +131,9 @@ const NightscoutSetupScreen: React.FC = () => {
           routes: [{name: PRODUCT_EXPERIENCE_SCREEN}],
         });
       }
-    } catch {
-      setError(tr(language, 'nightscoutSetup.saveFailed'));
+    } catch (failure) {
+      setError(tr(language, failure instanceof NightscoutConnectionTestError && failure.code === 'permissions'
+        ? 'nightscoutSetup.permissionsError' : 'nightscoutSetup.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -174,7 +178,7 @@ const NightscoutSetupScreen: React.FC = () => {
         </Text>
         <Text style={[styles.intro, rtl && styles.rtlText]}>
           {tr(language, 'nightscoutSetup.intro', {
-            example: 'jvA4cWn9c7zxgTyZ',
+            example: 'shani-0123456789abcdef',
           })}
         </Text>
       </View>
@@ -184,6 +188,13 @@ const NightscoutSetupScreen: React.FC = () => {
           {tr(language, 'nightscoutSetup.readOnly')}
         </Text>
       </View>
+      {editingProfile && editingProfile.authType !== 'access-token' ? (
+        <View style={styles.readOnlyCard} testID="nightscout-legacy-reconnect">
+          <Text style={[styles.readOnlyText, rtl && styles.rtlText]}>
+            {tr(language, 'nightscoutSetup.legacyReconnect')}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.formCard}>
         <Text style={[styles.label, rtl && styles.rtlText]}>

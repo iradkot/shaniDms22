@@ -8,8 +8,14 @@ appId: com.shanidms22
 
 - extendedWaitUntil:
     visible:
-      id: product-hub
+      id: product-home
     timeout: 30000
+
+- tapOn:
+    id: home-tab-modules
+
+- assertVisible:
+    id: product-hub
 
 - scrollUntilVisible:
     element:

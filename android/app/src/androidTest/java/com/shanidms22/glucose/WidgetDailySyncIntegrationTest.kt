@@ -147,9 +147,10 @@ class WidgetDailySyncIntegrationTest {
   private fun withSource(block: (Context) -> Unit) {
     val context = IsolatedContext(instrumentation.targetContext)
     try {
-      context.getSharedPreferences(GlucoseSyncWorker.PREFS, Context.MODE_PRIVATE).edit()
-        .putBoolean(GlucoseSyncWorker.KEY_ENABLED, true)
-        .putString(GlucoseSyncWorker.KEY_BASE_URL, "https://widget-test.invalid").commit()
+      check(GlucoseWidgetCredentialStore.writeSyncConfiguration(
+        context, "https://widget-test.invalid", "synthetic-read-token", true,
+        "daily-widget-test-owner", "d".repeat(40),
+      ).effectiveEnabled)
       GlucoseWidgetUpdater.setThresholds(context, 70, 200)
       block(context)
     } finally { context.cleanUp() }

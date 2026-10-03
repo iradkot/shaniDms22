@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {sha1} from 'js-sha1';
+import {withLocalAccountWrite} from '../../../modules/privacy/localAccountCleanup';
 import type {
   AlertRule,
   AlertRuleLocalReplica,
@@ -148,6 +149,7 @@ const encodeRule = (input: AlertRuleInput): NotificationRequest => {
 export interface NativeAlertRulesOptions {
   /** Opaque product Workspace ID. Never pass a URL, email, or API token. */
   readonly scopeId?: string;
+  readonly ownerProductUserId?: string;
 }
 
 const rulesStorageKey = (scopeId: string | undefined): string =>
@@ -159,8 +161,10 @@ const rulesStorageKey = (scopeId: string | undefined): string =>
 
 const storageScope = (
   scopeId: string | undefined,
+  ownerProductUserId?: string,
 ): NotificationStoreScope | undefined =>
-  scopeId === undefined ? undefined : {scopeId};
+  scopeId === undefined ? undefined : {scopeId,
+    ...(ownerProductUserId === undefined ? {} : {ownerProductUserId})};
 
 const scopedStorageKey = (
   legacyKey: string,
@@ -180,7 +184,7 @@ const scopedStorageKey = (
 export const createNativeAlertRulesLocalReplica = (
   options: NativeAlertRulesOptions = {},
 ): AlertRuleLocalReplica => {
-  const scope = storageScope(options.scopeId);
+  const scope = storageScope(options.scopeId, options.ownerProductUserId);
   let snapshot: AlertRulesSnapshot = {status: 'loading'};
   let requestSequence = 0;
   const listeners = new Set<() => void>();
@@ -232,11 +236,12 @@ export const createNativeAlertRulesLocalReplica = (
         related_user: null,
         times_called: [...rule.triggeredAtMs],
         time_read: rule.triggeredAtMs[rule.triggeredAtMs.length - 1] ?? 0,
+        ...(options.ownerProductUserId === undefined ? {} : {ownerProductUserId: options.ownerProductUserId}),
       }));
-      await AsyncStorage.setItem(
+      await withLocalAccountWrite(AsyncStorage, options.ownerProductUserId, () => AsyncStorage.setItem(
         rulesStorageKey(options.scopeId),
         JSON.stringify(stored),
-      );
+      ));
       await load(false);
     },
     add: async input => {
@@ -410,6 +415,7 @@ const readStoredHistory = async (
 const writeStoredHistory = async (
   key: string,
   items: readonly UpdateCenterItem[],
+  ownerProductUserId?: string,
 ): Promise<void> => {
   const payload: StoredUpdateHistory = {
     schemaVersion: 1,
@@ -417,7 +423,9 @@ const writeStoredHistory = async (
       .sort((left, right) => right.occurredAtMs - left.occurredAtMs)
       .slice(0, MAX_STORED_UPDATES),
   };
-  await AsyncStorage.setItem(key, JSON.stringify(payload));
+  await withLocalAccountWrite(AsyncStorage, ownerProductUserId,
+    () => AsyncStorage.setItem(key, JSON.stringify({...payload,
+      ...(ownerProductUserId === undefined ? {} : {ownerProductUserId})})));
 };
 
 const readLegacyState = async (key: string): Promise<{
@@ -460,7 +468,10 @@ const readLegacyState = async (key: string): Promise<{
 const writeLegacyState = async (
   key: string,
   state: StoredLegacyState,
-): Promise<void> => AsyncStorage.setItem(key, JSON.stringify(state));
+  ownerProductUserId?: string,
+): Promise<void> => withLocalAccountWrite(AsyncStorage, ownerProductUserId,
+  () => AsyncStorage.setItem(key, JSON.stringify({...state,
+    ...(ownerProductUserId === undefined ? {} : {ownerProductUserId})})));
 
 export type NativeUpdateCenterRepository = AppOwnedUpdateCenterRepository;
 
@@ -468,6 +479,7 @@ export interface NativeUpdateCenterOptions {
   readonly createId?: () => string;
   /** Opaque product Workspace ID. Never pass a URL, email, or API token. */
   readonly scopeId?: string;
+  readonly ownerProductUserId?: string;
 }
 
 const defaultUpdateId = (): string =>
@@ -492,7 +504,7 @@ const assertNewUpdate = (value: NewUpdateCenterItem): void => {
 export const createNativeUpdateCenterLocalReplica = (
   options: NativeUpdateCenterOptions = {},
 ): UpdateCenterLocalReplica => {
-  const scope = storageScope(options.scopeId);
+  const scope = storageScope(options.scopeId, options.ownerProductUserId);
   const updateHistoryKey = scopedStorageKey(
     LEGACY_UPDATE_HISTORY_KEY,
     'product:update-center:history',
@@ -547,7 +559,7 @@ export const createNativeUpdateCenterLocalReplica = (
         schemaVersion: 1,
         seenIds: [...seenIds],
         readIds: [...readIds],
-      });
+      }, options.ownerProductUserId);
       const items = [...storedItems, ...legacyItems].sort(
         (left, right) => right.occurredAtMs - left.occurredAtMs,
       );
@@ -573,6 +585,7 @@ export const createNativeUpdateCenterLocalReplica = (
       await writeStoredHistory(
         updateHistoryKey,
         items.filter(item => item.content.kind !== 'alert-rule-trigger'),
+        options.ownerProductUserId,
       );
       await load(false);
     },
@@ -604,7 +617,7 @@ export const createNativeUpdateCenterLocalReplica = (
         id,
         readState: 'unread',
       };
-      await writeStoredHistory(updateHistoryKey, [created, ...stored]);
+      await writeStoredHistory(updateHistoryKey, [created, ...stored], options.ownerProductUserId);
       await load(false);
       return created;
     },
@@ -617,6 +630,7 @@ export const createNativeUpdateCenterLocalReplica = (
           stored.map(item =>
             item.id === itemId ? {...item, readState: 'read'} : item,
           ),
+          options.ownerProductUserId,
         );
       } else {
         const legacy = await readLegacyState(readStateKey);
@@ -630,7 +644,7 @@ export const createNativeUpdateCenterLocalReplica = (
           schemaVersion: 1,
           seenIds: [...seenIds],
           readIds: [...readIds],
-        });
+        }, options.ownerProductUserId);
       }
       await load(false);
     },

@@ -3,6 +3,14 @@
 
 require('react-native-gesture-handler/jestSetup');
 
+// Unit tests use mocked network adapters and an explicit synthetic consent
+// fixture. Privacy tests clear it to exercise the production fail-closed state.
+beforeEach(() => {
+  const {registerPrivacySession, PRIVACY_POLICY_VERSION} = require('./src/modules/privacy');
+  registerPrivacySession('firebase-user-a', {policyVersion: PRIVACY_POLICY_VERSION,
+    cloudSync: true, aiProcessing: true, updatedAtMs: 1});
+});
+
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );

@@ -1,7 +1,11 @@
+import {configureExperimentalBuildForTests} from './mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import {
   buildAndroidGlucoseWidgetUpdateArgs,
   calculateWidgetTir,
   updateAndroidGlucoseLiveSurface,
+  deleteAndroidGlucoseAccountData,
 } from 'app/services/androidGlucoseLiveSurface';
 import {BgSample} from 'app/types/day_bgs.types';
 import {buildCurrentDataSnapshot} from 'app/modules/currentData';
@@ -12,7 +16,7 @@ import {
 } from 'app/api/shaniNightscoutInstances';
 
 jest.mock('react-native', () => ({
-  NativeModules: {GlucoseLiveModule: {updateLiveSurface: jest.fn()}},
+  NativeModules: {GlucoseLiveModule: {updateLiveSurface: jest.fn(), deleteAccountData: jest.fn(async () => {})}},
   Platform: {OS: 'android'},
 }));
 
@@ -20,6 +24,29 @@ const bg = (sgv: number, date = 1, extra: Partial<BgSample> = {}) =>
   ({sgv, date, ...extra} as BgSample);
 
 describe('androidGlucoseLiveSurface widget payload', () => {
+  it('keeps measured glucose, insulin and TIR but strips forecast projections in the pilot', () => {
+    globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
+    const args = buildAndroidGlucoseWidgetUpdateArgs({
+      currentData: buildCurrentDataSnapshot({
+        observedAtMs: 12345,
+        glucose: {records: [bg(101, 12345)], freshness: {kind: 'fresh', fetchedAtMs: 12345}},
+        deviceStatus: {
+          records: [{loop: {
+            iob: {iob: 0.5, timestamp: 12300},
+            cob: {cob: 4, timestamp: 12200},
+          }}],
+          freshness: {kind: 'fresh', fetchedAtMs: 12345},
+        },
+      }),
+      enrichedBg: bg(101, 12345, {iob: 0.5, cob: 4}),
+      predictions: [{sgv: 110}, {sgv: 120}, {sgv: 130}],
+      recentBgSamples: [bg(80), bg(100)],
+    }, {low: 70, high: 180}, 12345);
+    expect(args?.slice(0, 5)).toEqual([101, '•', 12345, 0.5, 4]);
+    expect(args?.[9]).toBe(100);
+    expect(args?.slice(10, 13)).toEqual([-1, -1, -1]);
+    expect(args?.slice(15, 17)).toEqual([12300, 12200]);
+  });
   it('calculates TIR with inclusive range boundaries and ignores invalid samples', () => {
     const samples = [
       bg(69),
@@ -196,5 +223,14 @@ describe('androidGlucoseLiveSurface widget payload', () => {
       'https://source-a.example',
       getNightscoutConfigurationRevision(),
     ]);
+  });
+
+  it('awaits native deletion failures and never appends another account source to the deletion manifest', async () => {
+    const cleanup = NativeModules.GlucoseLiveModule.deleteAccountData as jest.Mock;
+    configureNightscoutInstance({baseUrl: 'https://source-b.example', ownerUserId: 'owner-B'});
+    cleanup.mockRejectedValueOnce(new Error('native teardown failed'));
+    await expect(deleteAndroidGlucoseAccountData('owner-A', ['a'.repeat(40)])).rejects.toThrow('native teardown failed');
+    expect(cleanup).toHaveBeenLastCalledWith('owner-A', ['a'.repeat(40)]);
+    await deleteAndroidGlucoseAccountData('owner-A', ['a'.repeat(40)]);
   });
 });

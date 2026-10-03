@@ -25,6 +25,12 @@ import {
   runRecommendation,
 } from '../../services/aiRecommendations/recommendationOrchestrator';
 import type {AiAnalystModuleRuntime, AiAnalystSurface} from './runtime';
+import {
+  getReleaseSafetyPolicy,
+  isAiConversationAllowed,
+  isRecommendationAllowed,
+} from '../../modules/releaseSafety/policy';
+import type {LocalAccountWorkspaceScope} from '../../modules/privacy/localAccountCleanup';
 
 type Chat = Parameters<typeof runRecommendation>[0]['chat'];
 export type RecommendationEvidence =
@@ -36,10 +42,13 @@ export type RecommendationEvidence =
     };
 export interface RecommendationRuntimePorts {
   readonly scopeId: string | null;
+  readonly accountScope?: LocalAccountWorkspaceScope;
+  readonly legacyScopeId?: string;
   readonly locale: AiLocale;
   readonly storage: {
     getItem(key: string): Promise<string | null>;
     setItem(key: string, value: string): Promise<void>;
+    getAllKeys?(): Promise<readonly string[]>;
   };
   readonly chat: Chat;
   readonly loadEvidence: (
@@ -128,6 +137,9 @@ export function useRecommendationRuntime(
   base: AiAnalystModuleRuntime,
   ports: RecommendationRuntimePorts,
 ): AiAnalystModuleRuntime {
+  const currentRecommendations = getReleaseSafetyPolicy().currentRecommendations;
+  const accountOwner = ports.accountScope?.productUserId;
+  const accountWorkspace = ports.accountScope?.workspaceId;
   const store = useMemo(
     () =>
       ports.scopeId === null
@@ -135,8 +147,12 @@ export function useRecommendationRuntime(
         : createRecommendationMemoryStore({
             storage: ports.storage,
             scopeId: ports.scopeId,
+            ...(accountOwner === undefined || accountWorkspace === undefined ? {} : {
+              accountScope: {productUserId: accountOwner, workspaceId: accountWorkspace},
+            }),
+            ...(ports.legacyScopeId === undefined ? {} : {legacyScopeId: ports.legacyScopeId}),
           }),
-    [ports.scopeId, ports.storage],
+    [ports.scopeId, ports.storage, accountOwner, accountWorkspace, ports.legacyScopeId],
   );
   const [memory, setMemory] = useState<RecommendationMemory>();
   const [memoryBusy, setMemoryBusy] = useState(false);
@@ -244,11 +260,34 @@ export function useRecommendationRuntime(
     }
   }, [base.snapshot.availability, cancel]);
 
+  useLayoutEffect(() => {
+    if (request.current && !isRecommendationAllowed(request.current.request)) {
+      cancel();
+      base.cancel();
+      request.current = undefined;
+      setSession(undefined);
+      setSurface({kind: 'landing'});
+      setDraft('');
+      setVisibleContext(undefined);
+    }
+  }, [currentRecommendations, cancel, base]);
+
   const execute = async (
     start: AiRecommendationStart,
     question: string,
     previous?: AiConversationSummary,
   ) => {
+    // Old navigation parameters, retries and saved callbacks use the same gate.
+    if (!isRecommendationAllowed(start.request)) {
+      cancel();
+      base.cancel();
+      request.current = undefined;
+      setSession(undefined);
+      setSurface({kind: 'landing'});
+      setDraft('');
+      setVisibleContext(undefined);
+      return;
+    }
     if (
       !store ||
       controller.current ||
@@ -269,6 +308,7 @@ export function useRecommendationRuntime(
     const current = () =>
       scope.current === identity &&
       run.current === runId &&
+      isRecommendationAllowed(start.request) &&
       !abort.signal.aborted;
     request.current = start;
     const now = Date.now();
@@ -540,6 +580,14 @@ export function useRecommendationRuntime(
         setMemoryError(storageError(locale));
         return;
       }
+      if (!isAiConversationAllowed(item)) {
+        request.current = undefined;
+        setSession(undefined);
+        setSurface({kind: 'landing'});
+        setDraft('');
+        setVisibleContext(undefined);
+        return;
+      }
       const start: AiRecommendationStart = {
         request:
           item.recommendation ??
@@ -597,7 +645,7 @@ export function useRecommendationRuntime(
   for (const item of memory?.conversations ?? []) {
     historyById.set(item.id, item);
   }
-  const history = [...historyById.values()].sort(
+  const history = [...historyById.values()].filter(isAiConversationAllowed).sort(
     (a, b) => b.updatedAt - a.updatedAt,
   );
   const messageFeedback: Record<number, AiRecommendationFeedback> = {};
@@ -607,7 +655,7 @@ export function useRecommendationRuntime(
     }
   }
   const ownConversation =
-    surface?.kind === 'conversation' && session !== undefined;
+    surface?.kind === 'conversation' && session !== undefined && isAiConversationAllowed(session);
   const selectionAtRender = {
     session,
     request: request.current,
@@ -638,6 +686,16 @@ export function useRecommendationRuntime(
     ...base,
     snapshot: {
       ...base.snapshot,
+      // A previously mounted legacy engine must never expose a current answer.
+      ...(!currentRecommendations ? {
+        messages: [],
+        draft: '',
+        visibleContext: undefined,
+        busy: false,
+        progress: '',
+        surface: base.snapshot.surface.kind === 'conversation'
+          ? {kind: 'landing' as const} : base.snapshot.surface,
+      } : {}),
       ...ownSnapshot,
       history,
       messageFeedback,
@@ -927,6 +985,7 @@ export function useRecommendationRuntime(
     },
     // Meal images remain available in older conversations. New meal requests
     // use explicit size/notes; never upload an image as a side effect of a tap.
-    ...(ownConversation ? {attachMealImage: undefined} : {}),
+    attachMealImage: currentRecommendations && !ownConversation
+      ? base.attachMealImage : undefined,
   };
 }

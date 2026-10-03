@@ -72,7 +72,7 @@ describe('NightscoutSetupScreen', () => {
         .findByType(TextInput).props.onChangeText('example.com');
       tree!.root
         .findByProps({testID: 'nightscout-secret-input'})
-        .findByType(TextInput).props.onChangeText('a valid secret');
+        .findByType(TextInput).props.onChangeText('shani-0123456789abcdef');
     });
 
     await act(async () => {
@@ -82,7 +82,7 @@ describe('NightscoutSetupScreen', () => {
 
     expect(mockAddProfile).toHaveBeenCalledWith({
       urlInput: 'example.com',
-      secretInput: 'a valid secret',
+      secretInput: 'shani-0123456789abcdef',
     });
     expect(mockReset).toHaveBeenCalledWith({
       index: 0,

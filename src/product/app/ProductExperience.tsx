@@ -21,6 +21,7 @@ import {
   CORE_DESTINATION_IDS,
   coreDestinationRegistry,
   createStoredDestinationTarget,
+  resolveDestinationTarget,
 } from '../destinations';
 import type {
   AvailableDestinationTarget,
@@ -52,6 +53,8 @@ import {
   updateDailyOverviewPreferences,
   DEFAULT_DAY_GRAPH_PREFERENCES,
   DEFAULT_DAILY_OVERVIEW_PREFERENCES,
+  DEFAULT_HOME_PREFERENCES,
+  updateHomePreferences,
 } from '../personalization';
 import type {
   PersonalizationLayout,
@@ -75,6 +78,8 @@ import {
   coreProductImplementationRegistry,
   type ProductImplementationRegistry,
 } from './ProductImplementationRegistry';
+import {PersonalHomeView} from '../home/PersonalHomeView';
+import {DEFAULT_DAY_GRAPH_RANGE_THRESHOLDS} from '../../modules/dayGraph';
 
 const DEFAULT_SHELL_PREFERENCES: StoredProductShellPreferences = {
   schemaVersion: 1,
@@ -308,6 +313,8 @@ export const ProductExperience = ({
   const [customizingStage, setCustomizingStage] = useState<
     PersonalizationQuestionnaireStage | undefined
   >();
+  const [homeResetSequence, setHomeResetSequence] = useState(0);
+  const homeBackHandler = useRef<(() => boolean) | undefined>(undefined);
   const outbox = useSyncExternalStore(
     journalWorkspace?.outbox.subscribe ?? subscribeToNothing,
     journalWorkspace?.outbox.getSnapshot ?? getEmptyOutbox,
@@ -338,6 +345,9 @@ export const ProductExperience = ({
     const subscription = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
+        if (homeBackHandler.current?.()) {
+          return true;
+        }
         if (customizingStage !== undefined) {
           setCustomizingStage(undefined);
           return true;
@@ -446,6 +456,9 @@ export const ProductExperience = ({
     // Hub control promised by the navigation model.
     if (customizingStage !== undefined) {
       setCustomizingStage(undefined);
+    }
+    if (action.type === 'hub') {
+      setHomeResetSequence(sequence => sequence + 1);
     }
     if (action.type === 'open-destination') {
       recordVisit(action.request.destination);
@@ -615,19 +628,88 @@ export const ProductExperience = ({
             value={activePersonalization}
           />
         ) : (
-          <HubView
-            {...(snapshotForHub === undefined
-              ? {}
-              : {currentSnapshot: snapshotForHub})}
-            model={hubModel}
-            {...(onPersonalizationChange === undefined
-              ? {}
-              : {
-                  onCustomize: (stage?: 'quick-access') =>
-                    setCustomizingStage(stage ?? 'relationship'),
-                })}
-            onOpenDestination={openDestination}
-            showRecents={layoutProfile.showRecents}
+          <PersonalHomeView
+            locale={locale}
+            scopeKey={JSON.stringify([
+              journalWorkspace?.scope.productUserId ?? 'local',
+              journalWorkspace?.scope.workspaceId,
+              journalWorkspace?.scope.nightscoutSourceId,
+              personalizationLayout,
+            ])}
+            resetSequence={homeResetSequence}
+            onRegisterBack={handler => {
+              homeBackHandler.current = handler;
+            }}
+            value={layoutProfile.home ?? DEFAULT_HOME_PREFERENCES}
+            hydrated={personalization !== undefined}
+            sources={{
+              ...(dailyOverviewRuntime
+                ? {dailyOverview: dailyOverviewRuntime.dataSource}
+                : {}),
+              ...(trendsRuntime ? {trends: trendsRuntime.dataSource} : {}),
+            }}
+            thresholds={
+              dailyOverviewRuntime?.thresholds ??
+              trendsRuntime?.thresholds ??
+              DEFAULT_DAY_GRAPH_RANGE_THRESHOLDS
+            }
+            chatReady={aiRuntime?.snapshot.availability === 'ready'}
+            {...(onPersonalizationChange
+              ? {
+                  onSave: value =>
+                    onPersonalizationChange(
+                      current =>
+                        updateHomePreferences(
+                          current,
+                          personalizationLayout,
+                          value,
+                        ),
+                      {optimistic: false},
+                    ),
+                }
+              : {})}
+            onOpenWidget={(id, dayStartMs) => {
+              const target = resolveDestinationTarget(
+                destinationRegistry,
+                createStoredDestinationTarget(
+                  id === 'glucose-graph'
+                    ? CORE_DESTINATION_IDS.dayGraph
+                    : id === 'chat'
+                    ? CORE_DESTINATION_IDS.aiGeneralChat
+                    : id === 'weekly-glucose'
+                    ? CORE_DESTINATION_IDS.trendsOverview
+                    : CORE_DESTINATION_IDS.dailyOverview,
+                ),
+                undefined,
+                runtime,
+              );
+              if (target.status === 'available') {
+                if (dayStartMs !== undefined) {
+                  openDestinationRequest({
+                    ...createDestinationRequest(target),
+                    focus: {kind: 'day', dayStartMs},
+                  });
+                } else {
+                  openDestination(target);
+                }
+              }
+            }}
+            modules={
+              <HubView
+                {...(snapshotForHub === undefined
+                  ? {}
+                  : {currentSnapshot: snapshotForHub})}
+                model={hubModel}
+                {...(onPersonalizationChange === undefined
+                  ? {}
+                  : {
+                      onCustomize: (stage?: 'quick-access') =>
+                        setCustomizingStage(stage ?? 'relationship'),
+                    })}
+                onOpenDestination={openDestination}
+                showRecents={layoutProfile.showRecents}
+              />
+            }
           />
         )
       }

@@ -1,3 +1,6 @@
+import {configureExperimentalBuildForTests} from '../../mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import React from 'react';
 import {StyleSheet, Text} from 'react-native';
 import renderer, {act} from 'react-test-renderer';
@@ -53,6 +56,17 @@ const runtime = (
 });
 
 describe('AiAnalystModuleView', () => {
+  it.each(['en', 'he'] as const)('offers retrospective analysis and its clinical limitation in the %s pilot', locale => {
+    globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
+    let tree!: renderer.ReactTestRenderer;
+    act(() => {tree = renderer.create(<AiAnalystModuleView locale={locale} runtime={runtime()} />);});
+    expect(tree.root.findAllByProps({testID: 'ai-recommend-now'})).toHaveLength(0);
+    expect(tree.root.findAllByProps({testID: 'ai-recommend-meal'})).toHaveLength(0);
+    expect(tree.root.findAllByProps({testID: 'ai-recommend-weekly'}).length).toBeGreaterThan(0);
+    expect(tree.root.findAllByProps({testID: 'ai-recommend-monthly'}).length).toBeGreaterThan(0);
+    expect(allText(tree)).toContain(locale === 'he' ? 'לא עבר תיקוף קליני' : 'has not been clinically validated');
+    act(() => tree.unmount());
+  });
   it('does not adapt a previous conversation when feedback saving finishes after navigation', async () => {
     const subject = runtime({
       recommendationContextKey: 'conversation-a',

@@ -64,6 +64,8 @@ const isStoredBlob = (value: unknown): value is StoredMealImageBlob =>
 export class IndexedDbMealImageBlobRepository
   implements BrowserMealImageBlobRepository
 {
+  private static readonly blockedOwners = new Set<string>();
+  private static readonly writes = new Map<string, Promise<void>>();
   private databasePromise: Promise<IDBDatabase> | undefined;
 
   constructor(
@@ -73,6 +75,26 @@ export class IndexedDbMealImageBlobRepository
   ) {}
 
   async put(localUri: string, blob: Blob): Promise<void> {
+    const uid = /^meal-image-idb:([^:]+):/.exec(localUri)?.[1];
+    if (!uid) {
+      return this.putBlob(localUri, blob);
+    }
+    const ownerKey = `${this.databaseName}:${uid}`;
+    const write = (
+      IndexedDbMealImageBlobRepository.writes.get(ownerKey) ?? Promise.resolve()
+    ).then(async () => {
+      if (IndexedDbMealImageBlobRepository.blockedOwners.has(ownerKey)) {
+        throw new Error('Account deletion is in progress.');
+      }
+      await this.putBlob(localUri, blob);
+    });
+    IndexedDbMealImageBlobRepository.writes.set(
+      ownerKey,
+      write.catch(() => undefined),
+    );
+    return write;
+  }
+  private async putBlob(localUri: string, blob: Blob): Promise<void> {
     if (blob.size <= 0 || blob.size > MEAL_IMAGE_MAX_BYTES) {
       throw new Error('Meal Images must be 10 MB or smaller.');
     }
@@ -140,6 +162,26 @@ export class IndexedDbMealImageBlobRepository
     const transaction = database.transaction(STORE_NAME, 'readwrite');
     const completed = transactionComplete(transaction);
     await requestResult(transaction.objectStore(STORE_NAME).delete(localUri));
+    await completed;
+  }
+
+  /** Removes uploaded caches, pending images, and orphans for this owner only. */
+  async removeAccount(uid: string): Promise<void> {
+    const ownerKey = `${this.databaseName}:${uid}`;
+    IndexedDbMealImageBlobRepository.blockedOwners.add(ownerKey);
+    await IndexedDbMealImageBlobRepository.writes
+      .get(ownerKey)
+      ?.catch(() => undefined);
+    const database = await this.open();
+    const transaction = database.transaction(STORE_NAME, 'readwrite');
+    const completed = transactionComplete(transaction);
+    const store = transaction.objectStore(STORE_NAME);
+    const keys = await requestResult(store.getAllKeys());
+    for (const key of keys) {
+      if (typeof key === 'string' && key.startsWith(`meal-image-idb:${uid}:`)) {
+        store.delete(key);
+      }
+    }
     await completed;
   }
 

@@ -1,3 +1,4 @@
+import {guardPrivacyCloudGateway} from '../../../modules/privacy/cloudGateway';
 import {getApp} from '@react-native-firebase/app';
 import {
   Timestamp,
@@ -41,7 +42,7 @@ interface OperationDocumentSnapshot {
 export const createReactNativeFirebaseJournalGateway =
   (): JournalFirestoreGateway => {
     const firestore = getFirestore(getApp());
-    return {
+    return guardPrivacyCloudGateway({
       runTransaction: operation =>
         runTransaction(firestore, transaction =>
           operation({
@@ -108,5 +109,5 @@ export const createReactNativeFirebaseJournalGateway =
             return left.operationId.localeCompare(right.operationId);
           });
       },
-    };
+    });
   };

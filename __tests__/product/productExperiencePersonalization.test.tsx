@@ -7,6 +7,7 @@ import {
   ProductImplementationRegistry,
 } from '../../src/product/app';
 import {DayGraphModuleView} from '../../src/product/dayGraph';
+import {getLocalDayPeriod, moveLocalDay} from '../../src/modules/dailyOverview';
 import {
   CORE_DESTINATION_IDS,
   CORE_IMPLEMENTATION_KEYS,
@@ -23,6 +24,8 @@ import {
   selectLayoutProfile,
   recordRecentModule,
   updateDayGraphPreferences,
+  updateHomePreferences,
+  DEFAULT_HOME_PREFERENCES,
 } from '../../src/product/personalization';
 import type {
   ProductPersonalizationChange,
@@ -668,6 +671,7 @@ describe('Product Experience personalization behavior', () => {
       );
     });
 
+    act(() => findPressableByTestId(tree!, 'home-tab-modules').props.onPress());
     const tile = tree!.root
       .findAllByProps({
         testID: `hub-grid-all-tile-${CORE_DESTINATION_IDS.meals}`,
@@ -699,7 +703,11 @@ describe('Product Experience personalization behavior', () => {
     expect(
       tree!.root.findAllByProps({testID: 'personalization-questionnaire'}),
     ).toHaveLength(0);
-    expect(tree!.root.findByProps({testID: 'product-hub'})).toBeDefined();
+    expect(tree!.root.findByProps({testID: 'product-home'})).toBeDefined();
+    expect(
+      tree!.root.findByProps({testID: 'personal-home-view'}),
+    ).toBeDefined();
+    expect(tree!.root.findAllByProps({testID: 'product-hub'})).toHaveLength(0);
     act(() => tree!.unmount());
   });
 
@@ -752,6 +760,7 @@ describe('Product Experience personalization behavior', () => {
       act(() => {
         tree = renderer.create(withTheme(<Experience />));
       });
+      act(() => findPressableByTestId(tree!, 'home-tab-modules').props.onPress());
       act(() =>
         findPressableByTestId(
           tree!,
@@ -763,6 +772,7 @@ describe('Product Experience personalization behavior', () => {
           .children,
       ).toBe(CORE_DESTINATION_IDS.trendsAgpDailyPatterns);
       act(() => findPressableByTestId(tree!, 'shell-control-hub').props.onPress());
+      act(() => findPressableByTestId(tree!, 'home-tab-modules').props.onPress());
 
       const recentIDs = tree!.root
         .findAllByType(Pressable)
@@ -813,6 +823,13 @@ describe('Product Experience personalization behavior', () => {
         ),
       );
     });
+    act(() => findPressableByTestId(tree!, 'home-tab-modules').props.onPress());
+    expect(
+      findPressableByTestId(
+        tree!,
+        `hub-grid-all-tile-${CORE_DESTINATION_IDS.activity}`,
+      ),
+    ).toBeDefined();
     expect(
       tree!.root
         .findAllByProps({
@@ -833,6 +850,7 @@ describe('Product Experience personalization behavior', () => {
         ),
       );
     });
+    act(() => findPressableByTestId(tree!, 'home-tab-modules').props.onPress());
     act(() =>
       findPressableByTestId(tree!, 'hub-filter-toggle').props.onPress(),
     );
@@ -848,4 +866,173 @@ describe('Product Experience personalization behavior', () => {
     ).toHaveLength(1);
     act(() => tree!.unmount());
   });
+
+  it.each([
+    [
+      'glucose-graph',
+      CORE_DESTINATION_IDS.dayGraph,
+      CORE_IMPLEMENTATION_KEYS.dayGraph,
+    ],
+    [
+      'weekly-glucose',
+      CORE_DESTINATION_IDS.trendsOverview,
+      CORE_IMPLEMENTATION_KEYS.trendsOverview,
+    ],
+    [
+      'chat',
+      CORE_DESTINATION_IDS.aiGeneralChat,
+      CORE_IMPLEMENTATION_KEYS.aiGeneralChat,
+    ],
+  ] as const)(
+    'opens the %s home card in its exact destination and returns to personal Home',
+    (widget, destinationId, implementationKey) => {
+      const personalization = skipPersonalizationQuestionnaire(
+        updateHomePreferences(createDefaultProductPersonalization(), 'phone', {
+          ...DEFAULT_HOME_PREFERENCES,
+          hiddenWidgets: [],
+        }),
+      );
+      const implementations = new ProductImplementationRegistry([
+        {
+          implementationKey,
+          render: host => (
+            <Text testID="home-card-destination">
+              {host.destination.target.destinationId}
+            </Text>
+          ),
+        },
+      ]);
+      let tree: renderer.ReactTestRenderer;
+      act(() => {
+        tree = renderer.create(
+          withTheme(
+            <ProductExperience
+              locale="en"
+              runtime={{platform: 'ios'}}
+              personalizationLayout="phone"
+              personalization={personalization}
+              implementationRegistry={implementations}
+            />,
+          ),
+        );
+      });
+      try {
+        expect(
+          tree!.root.findByProps({testID: 'personal-home-view'}),
+        ).toBeDefined();
+        act(() =>
+          findPressableByTestId(tree!, `home-open-${widget}`).props.onPress(),
+        );
+        expect(
+          tree!.root.findByProps({testID: 'home-card-destination'}).props
+            .children,
+        ).toBe(destinationId);
+        expect(
+          tree!.root.findAllByProps({testID: 'product-home'}),
+        ).toHaveLength(0);
+        act(() =>
+          findPressableByTestId(tree!, 'shell-control-hub').props.onPress(),
+        );
+        expect(
+          tree!.root.findByProps({testID: 'personal-home-view'}),
+        ).toBeDefined();
+        expect(
+          tree!.root.findAllByProps({testID: 'home-card-destination'}),
+        ).toHaveLength(0);
+      } finally {
+        act(() => tree!.unmount());
+      }
+    },
+  );
+
+  it.each(['available', 'unavailable'] as const)(
+    'opens an %s weekly insulin day in Daily Overview with that exact local date',
+    async quality => {
+      const nowMs = new Date(2026, 8, 8, 12).getTime();
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(nowMs);
+      const selectedDay = moveLocalDay(getLocalDayPeriod(nowMs).startMs, -3);
+      const personalization = skipPersonalizationQuestionnaire(
+        updateHomePreferences(createDefaultProductPersonalization(), 'phone', {
+          ...DEFAULT_HOME_PREFERENCES,
+          hiddenWidgets: [
+            'glucose-graph',
+            'time-in-range',
+            'daily-insulin',
+            'weekly-glucose',
+            'chat',
+          ],
+        }),
+      );
+      const loadDailyOverview = jest.fn(async () => ({
+        glucoseSamples: [],
+        insulinSummary:
+          quality === 'available'
+            ? {quality: 'available' as const, basalUnits: 15, bolusUnits: 6}
+            : {quality: 'unavailable' as const},
+      }));
+      const implementations = new ProductImplementationRegistry([
+        {
+          implementationKey: CORE_IMPLEMENTATION_KEYS.dailyOverview,
+          render: host => (
+            <>
+              <Text testID="insulin-day-destination">
+                {host.destination.target.destinationId}
+              </Text>
+              <Text testID="insulin-day-focus">
+                {JSON.stringify(host.request.focus)}
+              </Text>
+            </>
+          ),
+        },
+      ]);
+      let tree: renderer.ReactTestRenderer | undefined;
+      try {
+        await act(async () => {
+          tree = renderer.create(
+            withTheme(
+              <ProductExperience
+                locale="en"
+                runtime={{platform: 'ios'}}
+                personalizationLayout="phone"
+                personalization={personalization}
+                implementationRegistry={implementations}
+                dailyOverviewRuntime={{
+                  dataSource: {loadDailyOverview},
+                  thresholds: {
+                    veryLowMaxMgDl: 54,
+                    targetMinMgDl: 70,
+                    targetMaxMgDl: 180,
+                    highMaxMgDl: 250,
+                  },
+                }}
+              />,
+            ),
+          );
+        });
+        expect(loadDailyOverview).toHaveBeenCalledTimes(7);
+        expect(
+          tree!.root.findAllByProps({testID: 'home-open-weekly-insulin'}),
+        ).toHaveLength(0);
+        act(() =>
+          findPressableByTestId(
+            tree!,
+            `home-weekly-insulin-day-${selectedDay}`,
+          ).props.onPress(),
+        );
+        expect(
+          tree!.root.findByProps({testID: 'insulin-day-destination'}).props
+            .children,
+        ).toBe(CORE_DESTINATION_IDS.dailyOverview);
+        expect(
+          JSON.parse(
+            tree!.root.findByProps({testID: 'insulin-day-focus'}).props
+              .children,
+          ),
+        ).toEqual({kind: 'day', dayStartMs: selectedDay});
+      } finally {
+        act(() => tree?.unmount());
+        clock.mockRestore();
+      }
+    },
+  );
 });

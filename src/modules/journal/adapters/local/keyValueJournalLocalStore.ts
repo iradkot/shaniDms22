@@ -6,6 +6,7 @@ import type {
   PersistedJournalState,
 } from '../../engine/types';
 import {journalScopeStorageKey} from './scopeKey';
+import {assertLocalAccountActive, withLocalAccountWrite} from '../../../privacy/localAccountCleanup';
 
 /** Compatible with AsyncStorage on native and a small IndexedDB wrapper on web. */
 export interface JournalStringKeyValueStore {
@@ -23,7 +24,9 @@ export class KeyValueJournalLocalStore implements JournalLocalStore {
   constructor(private readonly storage: JournalStringKeyValueStore) {}
 
   async read(scope: JournalWorkspaceScope): Promise<JournalLocalRead> {
+    await assertLocalAccountActive(this.storage, scope.productUserId);
     const raw = await this.storage.getItem(journalScopeStorageKey(scope));
+    await assertLocalAccountActive(this.storage, scope.productUserId);
     if (raw === null) {
       return {generation: 0, value: null};
     }
@@ -36,7 +39,7 @@ export class KeyValueJournalLocalStore implements JournalLocalStore {
     state: PersistedJournalState,
   ): Promise<JournalLocalCommitResult> {
     const key = journalScopeStorageKey(scope);
-    return this.serialize(key, async () => {
+    return this.serialize(key, () => withLocalAccountWrite(this.storage, scope.productUserId, async () => {
       const raw = await this.storage.getItem(key);
       const current =
         raw === null
@@ -50,12 +53,13 @@ export class KeyValueJournalLocalStore implements JournalLocalStore {
         key,
         JSON.stringify({
           journalEnvelopeVersion: 1,
+          scope,
           generation,
           value: state,
         }),
       );
       return {ok: true, generation};
-    });
+    }));
   }
 
   private serialize<T>(key: string, operation: () => Promise<T>): Promise<T> {

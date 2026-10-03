@@ -65,6 +65,14 @@ before(async () => {
 
 beforeEach(async () => {
   await environment.clearFirestore();
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'users/owner-1/privacy/consent'), {
+      policyVersion: '2026-10-03.1',
+      cloudSync: true,
+      aiProcessing: true,
+      updatedAtMs: 1,
+    });
+  });
 });
 
 after(async () => {
@@ -116,10 +124,7 @@ test('anonymous and cross-owner clients cannot access user documents', async () 
     await assertFails(getDoc(doc(other, path)));
   }
   await assertFails(
-    setDoc(
-      doc(other, 'users/owner-1/legacyFoodItems/meal-1'),
-      foodDocument(),
-    ),
+    setDoc(doc(other, 'users/owner-1/legacyFoodItems/meal-1'), foodDocument()),
   );
 });
 

@@ -686,7 +686,7 @@ const coreProductImplementationRegistrations = [
       host.alertsRuntime ? (
         <AlertRulesView
           locale={host.locale}
-          repository={host.alertsRuntime.alertRules.repository}
+          {...host.alertsRuntime.alertRules}
         />
       ) : undefined,
   },

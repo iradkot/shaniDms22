@@ -17,6 +17,47 @@ describe('shaniNightscoutInstances', () => {
     jest.restoreAllMocks();
   });
 
+  it('switches from legacy secret to raw subject token without keeping prior authentication', () => {
+    jest.replaceProperty(Platform, 'OS', 'android');
+    configureNightscoutInstance({
+      baseUrl: 'https://old.example',
+      apiSecretSha1: 'a'.repeat(40),
+      ownerUserId: 'a',
+    });
+    configureNightscoutInstance({
+      baseUrl: 'https://new.example',
+      accessToken: 'shani-0123456789abcdef',
+      ownerUserId: 'b',
+    });
+    expect(nightscoutInstance.defaults.headers.common['api-secret']).toBe(
+      'shani-0123456789abcdef',
+    );
+    expect(nightscoutInstance.defaults.params).not.toHaveProperty('secret');
+    clearNightscoutInstance();
+    expect(
+      nightscoutInstance.defaults.headers.common['api-secret'],
+    ).toBeUndefined();
+  });
+
+  it('replaces token query credentials when switching browser accounts and clears them on logout', () => {
+    jest.replaceProperty(Platform, 'OS', 'web');
+    configureNightscoutInstance({
+      baseUrl: 'https://a.example',
+      accessToken: 'first-0123456789abcdef',
+      ownerUserId: 'a',
+    });
+    configureNightscoutInstance({
+      baseUrl: 'https://b.example',
+      accessToken: 'second-0123456789abcdef',
+      ownerUserId: 'b',
+    });
+    expect(nightscoutInstance.defaults.params.token).toBe(
+      'second-0123456789abcdef',
+    );
+    clearNightscoutInstance();
+    expect(nightscoutInstance.defaults.params).not.toHaveProperty('token');
+  });
+
   it.each(['android', 'ios'] as const)(
     'uses standard native header authentication on %s',
     platform => {

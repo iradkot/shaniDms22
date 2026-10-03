@@ -1,16 +1,19 @@
 import axios from 'axios';
 import {getNightscoutRequestAuthentication} from '../api/nightscoutAuthentication';
 import {decodeNightscoutGlucose} from '../api/nightscoutGlucose';
+import {hasReadOnlyNightscoutPermissions, normalizeNightscoutAccessToken} from './nightscoutTokenPermissions';
 
 export type NightscoutConnectionTestResult = {
   ok: true;
   entriesCount: number;
   latestEntryDate?: number;
   authMethod: 'query' | 'header';
+  readOnlyVerified?: true;
 };
 
 export type NightscoutConnectionTestErrorCode =
   | 'authentication'
+  | 'permissions'
   | 'not-found'
   | 'timeout'
   | 'network'
@@ -19,7 +22,8 @@ export type NightscoutConnectionTestErrorCode =
 
 const errorMessages: Record<NightscoutConnectionTestErrorCode, string> = {
   authentication:
-    'Nightscout rejected the API secret. Please check it and try again.',
+    'Nightscout rejected the credential. Please check it and try again.',
+  permissions: 'Use a Nightscout access token with only the readable role. Write or admin permissions are not accepted.',
   'not-found':
     'Could not find the Nightscout API. Please check the site address.',
   timeout:
@@ -94,12 +98,31 @@ const parseConnectionResponse = (
 
 export const testNightscoutConnection = async (params: {
   baseUrl: string;
-  apiSecretSha1: string;
+  apiSecretSha1?: string;
+  accessToken?: string;
 }): Promise<NightscoutConnectionTestResult> => {
   const authentication = getNightscoutRequestAuthentication(
     params.apiSecretSha1,
+    params.accessToken,
   );
   try {
+    if (params.accessToken) {
+      const token = normalizeNightscoutAccessToken(params.accessToken);
+      if (!token) {
+        throw new NightscoutConnectionTestError('authentication');
+      }
+      const authorization = await axios.get(
+        `/api/v2/authorization/request/${encodeURIComponent(token)}`,
+        {
+          baseURL: params.baseUrl.replace(/\/+$/, ''),
+          timeout: 12000,
+          headers: {Accept: 'application/json'},
+        },
+      );
+      if (!hasReadOnlyNightscoutPermissions(authorization.data)) {
+        throw new NightscoutConnectionTestError('permissions');
+      }
+    }
     // Axios appends this path to baseURL, including a Nightscout sub-directory.
     // Use the exact authentication mode used for subsequent glucose requests.
     // Request SGV entries specifically; a newer calibration or fingerstick
@@ -110,10 +133,11 @@ export const testNightscoutConnection = async (params: {
       params: {count: 1, ...authentication.params},
       headers: {Accept: 'application/json', ...authentication.headers},
     });
-    return parseConnectionResponse(
+    const result = parseConnectionResponse(
       response.data,
       'api-secret' in authentication.headers ? 'header' : 'query',
     );
+    return params.accessToken ? {...result, readOnlyVerified: true} : result;
   } catch (failure) {
     throw classifyFailure(failure);
   }

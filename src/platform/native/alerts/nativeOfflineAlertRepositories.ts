@@ -68,7 +68,9 @@ const resolveSync = (
 export const createNativeAlertRulesRepository = (
   options: NativeAlertRulesOptions & NativeAlertSyncOptions = {},
 ) => {
-  const local = createNativeAlertRulesLocalReplica(options);
+  const ownerProductUserId = options.ownerProductUserId ?? getAuth(getApp()).currentUser?.uid;
+  const local = createNativeAlertRulesLocalReplica({...options,
+    ...(ownerProductUserId === undefined ? {} : {ownerProductUserId})});
   const sync = resolveSync(options.scopeId, options);
   if (sync === undefined) {
     return local;
@@ -86,7 +88,9 @@ export const createNativeAlertRulesRepository = (
 export const createNativeUpdateCenterRepository = (
   options: NativeUpdateCenterOptions & NativeAlertSyncOptions = {},
 ): NativeUpdateCenterRepository => {
-  const local = createNativeUpdateCenterLocalReplica(options);
+  const ownerProductUserId = options.ownerProductUserId ?? getAuth(getApp()).currentUser?.uid;
+  const local = createNativeUpdateCenterLocalReplica({...options,
+    ...(ownerProductUserId === undefined ? {} : {ownerProductUserId})});
   const sync = resolveSync(options.scopeId, options);
   if (sync === undefined) {
     return local;

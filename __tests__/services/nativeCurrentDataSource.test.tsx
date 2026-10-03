@@ -1,3 +1,6 @@
+import {configureExperimentalBuildForTests} from '../mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
 import {AppState, type AppStateStatus} from 'react-native';
@@ -70,7 +73,8 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-it('feeds the hook and current source from the same latest transport, preserving independent load clocks and predictions', async () => {
+it.each(['development', 'pilot', 'production'] as const)('shares latest transport and preserves independent clocks while applying the %s forecast policy', async channel => {
+  globalThis.__SHANI_RELEASE_CHANNEL__ = channel;
   let hook: ReturnType<typeof useLatestNightscoutSnapshot> | undefined;
   const Harness = () => {
     hook = useLatestNightscoutSnapshot({pollingEnabled: false});
@@ -118,7 +122,7 @@ it('feeds the hook and current source from the same latest transport, preserving
     iob: -0.2,
     cob: 0,
   });
-  expect(hook?.snapshot?.predictions).toHaveLength(3);
+  expect(hook?.snapshot?.predictions).toHaveLength(channel === 'development' ? 3 : 0);
   expect(paths.sort()).toEqual([
     '/api/v1/devicestatus.json?count=12',
     '/api/v1/entries.json?count=24',

@@ -16,6 +16,7 @@ import {
   createBrowserUpdateCenterLocalReplica,
 } from './browserAlertRepositories';
 import {createBrowserAlertsFirestoreGateway} from './browserAlertsFirestoreGateway';
+import type {LocalAccountWorkspaceScope} from '../../../modules/privacy/localAccountCleanup';
 
 export interface BrowserAlertsSyncOptions {
   readonly scope: AlertSyncScope;
@@ -38,8 +39,9 @@ export const createBrowserFirebaseAlertsRemoteAdapter = (input: {
   );
 
 export const createBrowserAlertRulesRepository = (input: {
-  readonly storage: Pick<IndexedDbKeyValueStore, 'getItem' | 'setItem'>;
+  readonly storage: Pick<IndexedDbKeyValueStore, 'getItem' | 'setItem'> & Partial<Pick<IndexedDbKeyValueStore, 'getAllKeys'>>;
   readonly scopeId: string;
+  readonly accountScope?: LocalAccountWorkspaceScope;
   readonly createId?: () => string;
   readonly sync?: BrowserAlertsSyncOptions;
 }) => {
@@ -58,8 +60,9 @@ export const createBrowserAlertRulesRepository = (input: {
 };
 
 export const createBrowserUpdateCenterRepository = (input: {
-  readonly storage: Pick<IndexedDbKeyValueStore, 'getItem' | 'setItem'>;
+  readonly storage: Pick<IndexedDbKeyValueStore, 'getItem' | 'setItem'> & Partial<Pick<IndexedDbKeyValueStore, 'getAllKeys'>>;
   readonly scopeId: string;
+  readonly accountScope?: LocalAccountWorkspaceScope;
   readonly createId?: () => string;
   readonly sync?: BrowserAlertsSyncOptions;
 }) => {

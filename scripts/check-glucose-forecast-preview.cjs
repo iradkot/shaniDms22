@@ -1,5 +1,7 @@
 /* eslint-env node, browser, es2022 */
 // Synthetic browser QA. Run against Vite; PLAYWRIGHT_MODULE can point to a bundled package.
+// Start that Vite server with SHANI_RELEASE_CHANNEL=development; pilot and
+// production deliberately omit experimental forecast cards.
 const assert = require('node:assert/strict');
 const {mkdirSync} = require('node:fs');
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');

@@ -138,10 +138,60 @@ before(async () => {
 
 beforeEach(async () => {
   await environment.clearFirestore();
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'users/owner-1/privacy/consent'), {
+      policyVersion: '2026-10-03.1',
+      cloudSync: true,
+      aiProcessing: true,
+      updatedAtMs: 1,
+    });
+  });
 });
 
 after(async () => {
   await environment.cleanup();
+});
+
+test('owner cannot transmit Journal data without current cloud consent or while deletion is locked', async () => {
+  const database = environment.authenticatedContext('owner-1').firestore();
+  const consent = 'users/owner-1/privacy/consent';
+  await environment.withSecurityRulesDisabled(context =>
+    deleteDoc(doc(context.firestore(), consent)),
+  );
+  await assertFails(commitChange(database, upsert()));
+  for (const value of [
+    {policyVersion: 'old', cloudSync: true},
+    {policyVersion: '2026-10-03.1', cloudSync: false},
+  ]) {
+    await environment.withSecurityRulesDisabled(context =>
+      setDoc(doc(context.firestore(), consent), value),
+    );
+    await assertFails(commitChange(database, upsert()));
+  }
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), consent), {
+      policyVersion: '2026-10-03.1',
+      cloudSync: true,
+    });
+    await setDoc(doc(context.firestore(), 'privateAccountState/owner-1'), {
+      deleting: true,
+    });
+  });
+  await assertFails(commitChange(database, upsert()));
+  await assertFails(
+    getDoc(
+      doc(
+        database,
+        'users/owner-1/workspaces/workspace-1/journalEntries/meal-1',
+      ),
+    ),
+  );
+  await assertFails(
+    setDoc(doc(database, consent), {
+      policyVersion: '2026-10-03.1',
+      cloudSync: true,
+    }),
+  );
 });
 
 test('owner can atomically write and read a valid entry plus operation', async () => {
@@ -383,14 +433,18 @@ test('a purge can compact prior health snapshots to immutable digest markers', a
     committedAt: serverTimestamp(),
   });
   await assertSucceeds(purgeBatch.commit());
-  await assertSucceeds(setDoc(
-    doc(database, firstPaths.operation),
-    compacted(first, firstStored.committedAt, 'a'.repeat(64)),
-  ));
-  await assertSucceeds(setDoc(
-    doc(database, secondPaths.operation),
-    compacted(second, secondStored.committedAt, 'b'.repeat(64)),
-  ));
+  await assertSucceeds(
+    setDoc(
+      doc(database, firstPaths.operation),
+      compacted(first, firstStored.committedAt, 'a'.repeat(64)),
+    ),
+  );
+  await assertSucceeds(
+    setDoc(
+      doc(database, secondPaths.operation),
+      compacted(second, secondStored.committedAt, 'b'.repeat(64)),
+    ),
+  );
 });
 
 test('unauthenticated and cross-owner clients cannot read or write', async () => {

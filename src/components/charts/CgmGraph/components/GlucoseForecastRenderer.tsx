@@ -4,6 +4,7 @@ import {useTheme} from 'styled-components/native';
 import type {GlucoseForecastSnapshot} from '../../../../modules/glucoseForecast';
 import {forecastAppearance} from '../../glucoseForecastPresentation';
 import {GraphStyleContext} from '../contextStores/GraphStyleContext';
+import {getReleaseSafetyPolicy} from '../../../../modules/releaseSafety/policy';
 
 /** Predictions have their own layer and never become observed CGM samples. */
 export const GlucoseForecastRenderer = ({
@@ -13,6 +14,7 @@ export const GlucoseForecastRenderer = ({
 }) => {
   const [{xScale, yScale, graphHeight}] = useContext(GraphStyleContext);
   const theme = useTheme();
+  if (!getReleaseSafetyPolicy().experimentalGlucoseForecasts) {return null;}
   const anchor = forecast.history.find(
     point => point.ts === forecast.glucoseTimestampMs,
   );

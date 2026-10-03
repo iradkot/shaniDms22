@@ -6,6 +6,12 @@ import type {
   AiLocale,
   AiSpecialistId,
 } from '../../modules/ai/domain/types';
+import {
+  assertLocalAccountActive,
+  readProvenLegacyAccountStore,
+  withLocalAccountWrite,
+  type LocalAccountWorkspaceScope,
+} from '../../modules/privacy/localAccountCleanup';
 
 export interface RecommendationQuestion {
   readonly text: string;
@@ -36,6 +42,7 @@ export interface RecommendationMemory {
 export interface RecommendationMemoryStorage {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
+  getAllKeys?(): Promise<readonly string[]>;
 }
 
 export interface RecommendationMemoryStore {
@@ -389,6 +396,8 @@ const sanitize = (value: unknown): RecommendationMemory => {
 export const createRecommendationMemoryStore = (input: {
   readonly storage: RecommendationMemoryStorage;
   readonly scopeId: string;
+  readonly accountScope?: LocalAccountWorkspaceScope;
+  readonly legacyScopeId?: string;
 }): RecommendationMemoryStore => {
   if (!input.scopeId.trim() || input.scopeId.length > 1024) {
     throw new Error('Recommendation memory scope is invalid.');
@@ -403,13 +412,27 @@ export const createRecommendationMemoryStore = (input: {
   }
   const scopedQueues = queues;
   const readStored = async (): Promise<RecommendationMemory> => {
-    const raw = await input.storage.getItem(key);
+    const uid = input.accountScope?.productUserId;
+    if (uid !== undefined) {
+      await assertLocalAccountActive(input.storage, uid);
+    }
+    let raw = await input.storage.getItem(key);
+    let ownerScope = input.scopeId;
+    if (raw === null && input.accountScope && input.legacyScopeId) {
+      raw = await readProvenLegacyAccountStore(input.storage,
+        `shani.ai.recommendations.v1:${encodeURIComponent(input.legacyScopeId)}`, input.accountScope);
+      ownerScope = input.legacyScopeId;
+    }
+    if (uid !== undefined) {
+      await assertLocalAccountActive(input.storage, uid);
+    }
     if (!raw || raw.length > MAX_STORAGE_CHARS) {
       return blank();
     }
     try {
       const parsed: unknown = JSON.parse(raw);
-      return record(parsed) && parsed.ownerScope === input.scopeId
+      return record(parsed) && parsed.ownerScope === ownerScope &&
+        (parsed.ownerProductUserId === undefined || parsed.ownerProductUserId === uid)
         ? sanitize(parsed)
         : blank();
     } catch {
@@ -424,13 +447,19 @@ export const createRecommendationMemoryStore = (input: {
       .catch(() => undefined)
       .then(async () => {
         const next = sanitize(mutator(await readStored()));
-        const serialized = JSON.stringify({...next, ownerScope: input.scopeId});
+        const serialized = JSON.stringify({...next, ownerScope: input.scopeId,
+          ...(input.accountScope === undefined ? {} : {
+            ownerProductUserId: input.accountScope.productUserId,
+            workspaceId: input.accountScope.workspaceId,
+          }),
+        });
         if (serialized.length > MAX_STORAGE_CHARS) {
           throw new Error(
             'Recommendation memory exceeds the supported storage size.',
           );
         }
-        await input.storage.setItem(key, serialized);
+        await withLocalAccountWrite(input.storage, input.accountScope?.productUserId,
+          () => input.storage.setItem(key, serialized));
         return next;
       });
     const settled = run.then(

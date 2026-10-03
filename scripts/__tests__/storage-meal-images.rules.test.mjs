@@ -6,12 +6,8 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import {
-  deleteObject,
-  getBytes,
-  ref,
-  uploadBytes,
-} from 'firebase/storage';
+import {deleteDoc, doc, setDoc} from 'firebase/firestore';
+import {deleteObject, getBytes, ref, uploadBytes} from 'firebase/storage';
 
 const projectId = 'shani-meal-images-rules-test';
 const emulatorAddress =
@@ -38,6 +34,14 @@ before(async () => {
   assert.ok(Number.isInteger(port) && port > 0, 'Invalid Storage port.');
   environment = await initializeTestEnvironment({
     projectId,
+    firestore: {
+      host: '127.0.0.1',
+      port: 8080,
+      rules: await readFile(
+        new URL('../../firestore.rules', import.meta.url),
+        'utf8',
+      ),
+    },
     storage: {
       host,
       port,
@@ -51,10 +55,67 @@ before(async () => {
 
 beforeEach(async () => {
   await environment.clearStorage();
+  await environment.clearFirestore();
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'users/owner-1/privacy/consent'), {
+      policyVersion: '2026-10-03.1',
+      cloudSync: true,
+      aiProcessing: true,
+      updatedAtMs: 1,
+    });
+  });
 });
 
 after(async () => {
   await environment.cleanup();
+});
+
+test('owner image upload is denied without current consent and reads/deletes stop during account deletion', async () => {
+  const deletedOwner = 'owner-deleting';
+  const storage = environment.authenticatedContext(deletedOwner).storage();
+  const image = ref(storage, objectPath.replace('owner-1', deletedOwner));
+  const deletionMetadata = {
+    ...metadata,
+    customMetadata: {
+      ...metadata.customMetadata,
+      ownerProductUserId: deletedOwner,
+    },
+  };
+  const path = `users/${deletedOwner}/privacy/consent`;
+  await environment.withSecurityRulesDisabled(context =>
+    deleteDoc(doc(context.firestore(), path)),
+  );
+  await assertFails(uploadBytes(image, new Uint8Array([1]), deletionMetadata));
+  await environment.withSecurityRulesDisabled(context =>
+    setDoc(doc(context.firestore(), path), {
+      policyVersion: 'old',
+      cloudSync: true,
+    }),
+  );
+  await assertFails(uploadBytes(image, new Uint8Array([1]), deletionMetadata));
+  await environment.withSecurityRulesDisabled(context =>
+    setDoc(doc(context.firestore(), path), {
+      policyVersion: '2026-10-03.1',
+      cloudSync: false,
+    }),
+  );
+  await assertFails(uploadBytes(image, new Uint8Array([1]), deletionMetadata));
+  await environment.withSecurityRulesDisabled(context =>
+    setDoc(doc(context.firestore(), path), {
+      policyVersion: '2026-10-03.1',
+      cloudSync: true,
+    }),
+  );
+  await assertSucceeds(
+    uploadBytes(image, new Uint8Array([1]), deletionMetadata),
+  );
+  await environment.withSecurityRulesDisabled(context =>
+    setDoc(doc(context.firestore(), `privateAccountState/${deletedOwner}`), {
+      deleting: true,
+    }),
+  );
+  await assertFails(getBytes(image));
+  await assertFails(deleteObject(image));
 });
 
 test('owner can create, read and delete a valid immutable Meal Image', async () => {
@@ -106,11 +167,7 @@ test('rules reject wrong type, metadata, path and files over 10 MB', async () =>
     await assertFails(uploadBytes(validRef, new Uint8Array([1]), candidate));
   }
   await assertFails(
-    uploadBytes(
-      validRef,
-      new Uint8Array(10 * 1024 * 1024 + 1),
-      metadata,
-    ),
+    uploadBytes(validRef, new Uint8Array(10 * 1024 * 1024 + 1), metadata),
   );
   await assertFails(
     uploadBytes(

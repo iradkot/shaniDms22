@@ -30,11 +30,22 @@ Do not use wildcard CORS. Do not put these values in a committed `.env` file.
 ## Deploy order
 
 1. Run all verification commands.
-2. Deploy `firestore.rules` and `storage.rules` to the intended project.
-3. Deploy `shaniApi` with the KMS and environment configuration.
-4. Verify Auth, vault provision/status/remove, one bounded Nightscout range,
-   one AI request, and cross-user denial in staging.
-5. Set `FIRESTORE_RULES_SCHEMA_VERSION=1` in signed native builds.
+2. Review the runtime service account's permissions for consent/account deletion
+   and verify Firebase Storage's cross-service access to Firestore rules
+   documents. Follow the exact additions in
+   [Pilot privacy and deletion](PILOT_PRIVACY_AND_DELETION.md#deployment-prerequisites-pending),
+   preserving existing KMS access.
+3. Deploy schema **2** `firestore.rules` and `storage.rules` to the intended
+   project, together with the consent/deletion backend change.
+4. Deploy `shaniApi` with the KMS and environment configuration. Verify Auth,
+   vault provision/status/remove, one bounded Nightscout range, one AI request,
+   consent denial/withdrawal, cross-user denial, and account-deletion recovery
+   using a disposable staging account.
+5. Only after that deployment is verified, set
+   `FIRESTORE_RULES_SCHEMA_VERSION=2` in signed native builds and browser
+   `firestoreRulesSchemaVersion`/`VITE_FIRESTORE_RULES_SCHEMA_VERSION=2`.
+   Keep absent/0 for an unverified preview; schema 1 is insufficient for the
+   pilot privacy controls.
 6. Publish the Web artifact and verify its exact origin is allowlisted.
 
 The client defaults are fail-closed. Building an app does not deploy backend
@@ -69,6 +80,16 @@ grants KMS encrypt/decrypt only on the new vault key. Firestore server IAM appli
 at the database/project boundary; user isolation remains enforced by the API's
 verified uid and vault document path. Existing custom roles with different
 permissions cause the script to stop for review.
+
+That existing script role supports the earlier API; it does **not** establish
+permission to run the new account-deletion endpoints. The pilot additionally
+requires reviewed `firebaseauth.users.delete`, `datastore.entities.list`, and
+bucket-scoped `storage.objects.list`/`storage.objects.delete`, plus the Storage
+cross-service rules check described in
+[Pilot privacy and deletion](PILOT_PRIVACY_AND_DELETION.md#deployment-prerequisites-pending).
+Do not treat a successful script deployment as confirmation that deletion is
+ready. Complete those prerequisites and staging recovery checks before enabling
+schema 2 clients.
 
 It runs backend verification and calls `gcloud functions deploy shaniApi`
 directly. No Firebase-wide deployment, rules deployment, function deletion or

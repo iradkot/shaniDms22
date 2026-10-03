@@ -1,3 +1,6 @@
+import {configureExperimentalBuildForTests} from '../../mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
 import type {
@@ -9,6 +12,7 @@ import {
   useRecommendationRuntime,
   type RecommendationRuntimePorts,
 } from 'app/product/ai/useRecommendationRuntime';
+import {createRecommendationMemoryStore} from 'app/services/aiRecommendations/recommendationMemory';
 
 class MemoryStorage {
   readonly values = new Map<string, string>();
@@ -1126,3 +1130,77 @@ describe('shared recommendation runtime', () => {
 
 const harnessRequests = (runtime: AiAnalystModuleRuntime) =>
   runtime.snapshot.history.map(item => item.recommendation);
+
+describe('pilot recommendation execution boundary shared by native and browser', () => {
+  beforeEach(() => {globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';});
+
+  it.each(['now', 'meal'] as const)('blocks direct %s calls before evidence or AI transmission', async kind => {
+    const {ports, chat, loadEvidence} = fixtures();
+    const harness = await mount(ports);
+    await act(async () => harness.runtime.startRecommendation?.({request: {kind}, locale: 'en'}));
+    expect(chat).not.toHaveBeenCalled();
+    expect(loadEvidence).not.toHaveBeenCalled();
+    expect(harness.runtime.snapshot.surface).toEqual({kind: 'landing'});
+    expect(harness.runtime.snapshot.messages).toEqual([]);
+  });
+
+  it('blocks a saved legacy current deep link and hides an existing legacy answer and image entry', async () => {
+    const {ports, chat, loadEvidence} = fixtures();
+    const base = baseRuntime();
+    const harness = await mount(ports, {
+      ...base, attachMealImage: jest.fn(async () => undefined),
+      snapshot: {...base.snapshot, surface: {kind: 'conversation'},
+        messages: [{role: 'assistant', content: 'Old advice for right now.'}], busy: true},
+    });
+    expect(harness.runtime.snapshot.messages).toEqual([]);
+    expect(harness.runtime.snapshot.surface).toEqual({kind: 'landing'});
+    expect(harness.runtime.snapshot.busy).toBe(false);
+    expect(harness.runtime.attachMealImage).toBeUndefined();
+    await act(async () => harness.runtime.start({specialist: 'general-chat', locale: 'en'}));
+    expect(chat).not.toHaveBeenCalled();
+    expect(loadEvidence).not.toHaveBeenCalled();
+    expect(base.start).not.toHaveBeenCalled();
+  });
+
+  it('hides retained current and legacy transcripts, and rejects resume and saved-route bypasses', async () => {
+    const {ports, chat, loadEvidence} = fixtures();
+    const item = (id: string, kind?: AiRecommendationRequest['kind']): AiConversationSummary => ({
+      id, title: id, specialist: 'general-chat', createdAt: 1, updatedAt: 2,
+      ...(kind ? {recommendation: {kind}} : {}),
+      messages: [{role: 'assistant', content: `Saved ${id}`}],
+    });
+    const memory = createRecommendationMemoryStore({scopeId: ports.scopeId!, storage: ports.storage});
+    await memory.update(value => ({...value, conversations: [item('now', 'now'), item('meal', 'meal'), item('week', 'weekly'), item('legacy')]}));
+    const harness = await mount(ports);
+    expect(harness.runtime.snapshot.history.map(value => value.id)).toEqual(['week']);
+    await act(async () => harness.runtime.resumeConversation('now'));
+    expect(harness.runtime.snapshot.messages).toEqual([]);
+    await act(async () => harness.runtime.start({specialist: 'general-chat', locale: 'en', focus: {kind: 'ai-conversation', conversationId: 'meal'}}));
+    expect(harness.runtime.snapshot.messages).toEqual([]);
+    await act(async () => harness.runtime.resumeConversation('legacy'));
+    expect(harness.runtime.snapshot.messages).toEqual([]);
+    expect(chat).not.toHaveBeenCalled();
+    expect(loadEvidence).not.toHaveBeenCalled();
+    await act(async () => harness.runtime.resumeConversation('week'));
+    expect(harness.runtime.snapshot.messages[0]?.content).toContain('Saved week');
+  });
+
+  it('discards an in-flight current request and its retained callbacks when restrictions apply', async () => {
+    globalThis.__SHANI_RELEASE_CHANNEL__ = 'development';
+    const {ports, chat, loadEvidence} = fixtures();
+    let release!: (value: string) => void;
+    loadEvidence.mockImplementation(() => new Promise(resolve => {release = resolve;}));
+    const harness = await mount(ports);
+    let pending!: Promise<void>;
+    act(() => {pending = harness.runtime.startRecommendation!({request: {kind: 'now'}, locale: 'en'});});
+    await act(async () => {await Promise.resolve(); await Promise.resolve();});
+    globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
+    await harness.update({...ports});
+    await act(async () => {release('Late current evidence'); await pending;});
+    expect(chat).not.toHaveBeenCalled();
+    expect(harness.runtime.snapshot.messages).toEqual([]);
+    expect(harness.runtime.snapshot.surface).toEqual({kind: 'landing'});
+    await act(async () => harness.runtime.retry());
+    expect(chat).not.toHaveBeenCalled();
+  });
+});

@@ -2,6 +2,7 @@ import * as React from 'react';
 import {useMemo, useState} from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,9 +21,11 @@ import {E2E_TEST_IDS} from 'app/constants/E2E_TEST_IDS';
 import {hasAnyNightscoutProfile} from 'app/services/nightscoutProfiles';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
+import {PrivacyView} from '../product/privacy/PrivacyView';
 
 const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
   const [loading, setLoading] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const googleSignIn = useMemo(() => new GoogleSignIn(), []);
   const {language, setLanguage} = useAppLanguage();
@@ -78,102 +81,126 @@ const Login: React.FC<{navigation: NavigationProp<any>}> = ({navigation}) => {
     }
   };
   return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      testID={E2E_TEST_IDS.login.screen}
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardShouldPersistTaps="handled"
-      style={styles.screen}>
-      <View style={styles.decorativeTop} />
-      <View style={[styles.languageRow, rtl && styles.rowReverse]}>
-        <Text style={[styles.languageLabel, rtl && styles.rtlText]}>
-          {tr(language, 'auth.language')}
-        </Text>
-        <View style={[styles.languageControl, rtl && styles.rowReverse]}>
-          {(['he', 'en'] as const).map(locale => (
-            <Pressable
-              accessibilityRole="radio"
-              accessibilityState={{checked: language === locale}}
-              key={locale}
-              onPress={() => setLanguage(locale)}
-              style={[
-                styles.languageOption,
-                language === locale && styles.languageOptionSelected,
-              ]}
-              testID={`login-language-${locale}`}>
-              <Text
+    <>
+      <Modal visible={privacyOpen} onRequestClose={() => setPrivacyOpen(false)}>
+        <PrivacyView
+          locale={language}
+          readOnly
+          runtime={{
+            consent: null,
+            saveConsent: async () => {},
+            deleteAccount: async () => {},
+            onClose: () => setPrivacyOpen(false),
+          }}
+        />
+      </Modal>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        testID={E2E_TEST_IDS.login.screen}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        style={styles.screen}>
+        <View style={styles.decorativeTop} />
+        <Pressable
+          accessibilityRole="button"
+          testID="login-privacy-policy"
+          onPress={() => setPrivacyOpen(true)}>
+          <Text style={[styles.languageLabel, rtl && styles.rtlText]}>
+            {language === 'he'
+              ? 'מדיניות פרטיות — כניסה עם Google משתפת את זהות החשבון עם Firebase'
+              : 'Privacy policy — Google sign-in shares your account identity with Firebase'}
+          </Text>
+        </Pressable>
+        <View style={[styles.languageRow, rtl && styles.rowReverse]}>
+          <Text style={[styles.languageLabel, rtl && styles.rtlText]}>
+            {tr(language, 'auth.language')}
+          </Text>
+          <View style={[styles.languageControl, rtl && styles.rowReverse]}>
+            {(['he', 'en'] as const).map(locale => (
+              <Pressable
+                accessibilityRole="radio"
+                accessibilityState={{checked: language === locale}}
+                key={locale}
+                onPress={() => setLanguage(locale)}
                 style={[
-                  styles.languageOptionText,
-                  language === locale && styles.languageOptionTextSelected,
-                ]}>
-                {locale === 'he' ? 'עברית' : 'English'}
+                  styles.languageOption,
+                  language === locale && styles.languageOptionSelected,
+                ]}
+                testID={`login-language-${locale}`}>
+                <Text
+                  style={[
+                    styles.languageOptionText,
+                    language === locale && styles.languageOptionTextSelected,
+                  ]}>
+                  {locale === 'he' ? 'עברית' : 'English'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.hero}>
+          <View style={styles.logoMark}>
+            <Text style={styles.logoGlyph}>S</Text>
+          </View>
+          <Text style={[styles.brand, rtl && styles.rtlText]}>
+            {tr(language, 'auth.brand')}
+          </Text>
+          <Text style={[styles.title, rtl && styles.rtlText]}>
+            {tr(language, 'auth.title')}
+          </Text>
+          <Text style={[styles.subtitle, rtl && styles.rtlText]}>
+            {tr(language, 'auth.subtitle')}
+          </Text>
+        </View>
+
+        <View style={styles.signInCard}>
+          <Text style={[styles.cardTitle, rtl && styles.rtlText]}>
+            {loading
+              ? tr(language, 'auth.signingIn')
+              : tr(language, 'auth.signIn')}
+          </Text>
+          <Text style={[styles.hint, rtl && styles.rtlText]}>
+            {tr(language, 'auth.signInHint')}
+          </Text>
+          {loading ? (
+            <View style={styles.loadingButton}>
+              <ActivityIndicator color="#FFFFFF" />
+            </View>
+          ) : (
+            <GoogleSigninButton
+              accessibilityLabel={tr(language, 'auth.signIn')}
+              color={GoogleSigninButton.Color.Dark}
+              disabled={loading}
+              onPress={getUserInfo}
+              size={GoogleSigninButton.Size.Wide}
+              style={styles.googleButton}
+              testID={E2E_TEST_IDS.login.googleButton}
+            />
+          )}
+
+          {error ? (
+            <Text
+              accessibilityRole="alert"
+              style={[styles.error, rtl && styles.rtlText]}>
+              {error}
+            </Text>
+          ) : null}
+
+          {isE2E && (
+            <Pressable
+              testID={E2E_TEST_IDS.login.e2eButton}
+              onPress={signInE2E}
+              disabled={loading}
+              style={[styles.e2eButton, loading && styles.buttonDisabled]}>
+              <Text style={styles.e2eButtonText}>
+                {tr(language, 'auth.e2eLogin')}
               </Text>
             </Pressable>
-          ))}
+          )}
         </View>
-      </View>
-
-      <View style={styles.hero}>
-        <View style={styles.logoMark}>
-          <Text style={styles.logoGlyph}>S</Text>
-        </View>
-        <Text style={[styles.brand, rtl && styles.rtlText]}>
-          {tr(language, 'auth.brand')}
-        </Text>
-        <Text style={[styles.title, rtl && styles.rtlText]}>
-          {tr(language, 'auth.title')}
-        </Text>
-        <Text style={[styles.subtitle, rtl && styles.rtlText]}>
-          {tr(language, 'auth.subtitle')}
-        </Text>
-      </View>
-
-      <View style={styles.signInCard}>
-        <Text style={[styles.cardTitle, rtl && styles.rtlText]}>
-          {loading
-            ? tr(language, 'auth.signingIn')
-            : tr(language, 'auth.signIn')}
-        </Text>
-        <Text style={[styles.hint, rtl && styles.rtlText]}>
-          {tr(language, 'auth.signInHint')}
-        </Text>
-        {loading ? (
-          <View style={styles.loadingButton}>
-            <ActivityIndicator color="#FFFFFF" />
-          </View>
-        ) : (
-          <GoogleSigninButton
-            accessibilityLabel={tr(language, 'auth.signIn')}
-            color={GoogleSigninButton.Color.Dark}
-            disabled={loading}
-            onPress={getUserInfo}
-            size={GoogleSigninButton.Size.Wide}
-            style={styles.googleButton}
-            testID={E2E_TEST_IDS.login.googleButton}
-          />
-        )}
-
-        {error ? (
-          <Text
-            accessibilityRole="alert"
-            style={[styles.error, rtl && styles.rtlText]}>
-            {error}
-          </Text>
-        ) : null}
-
-        {isE2E && (
-          <Pressable
-            testID={E2E_TEST_IDS.login.e2eButton}
-            onPress={signInE2E}
-            disabled={loading}
-            style={[styles.e2eButton, loading && styles.buttonDisabled]}>
-            <Text style={styles.e2eButtonText}>
-              {tr(language, 'auth.e2eLogin')}
-            </Text>
-          </Pressable>
-        )}
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </>
   );
 };
 

@@ -1,3 +1,6 @@
+import {configureExperimentalBuildForTests} from '../../mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
 import type {AiAnalystModuleRuntime} from '../../../src/product/ai';
@@ -21,6 +24,30 @@ class MemoryStorage {
 }
 
 describe('browser AI analyst runtime', () => {
+  it('enforces pilot limits on browser direct actions and still runs past-week analysis', async () => {
+    globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
+    const requestJson = jest.fn().mockResolvedValue({version: 1, content: 'The recorded week contains a recurring evening pattern.'});
+    const service = new BrowserAiService({requestJson});
+    const storage = new MemoryStorage();
+    let runtime: AiAnalystModuleRuntime | undefined;
+    const Harness = () => {
+      runtime = useBrowserAiAnalystRuntime({service, storage, scopeId: 'user-workspace', locale: 'en',
+        enabled: true, credentialConfigured: true, onOpenSettings: jest.fn()});
+      return null;
+    };
+    let tree!: renderer.ReactTestRenderer;
+    await act(async () => {tree = renderer.create(<Harness />);});
+    await act(async () => runtime?.startRecommendation?.({request: {kind: 'now'}, locale: 'en'}));
+    await act(async () => runtime?.startRecommendation?.({request: {kind: 'meal'}, locale: 'en'}));
+    await act(async () => runtime?.start({specialist: 'general-chat', locale: 'en'}));
+    expect(requestJson).not.toHaveBeenCalled();
+    expect(runtime?.snapshot.messages).toEqual([]);
+    await act(async () => runtime?.startRecommendation?.({request: {kind: 'weekly'}, locale: 'en'}));
+    expect(requestJson).toHaveBeenCalledTimes(3);
+    expect(runtime?.snapshot.messages[1]?.content).toContain('recorded week');
+    expect(runtime?.snapshot.history[0]?.recommendation?.kind).toBe('weekly');
+    act(() => tree.unmount());
+  });
   it.each([1, 2])('does not publish an old-source answer after %i source revisions during the final model call', async revisions => {
     const nowMs = Date.now();
     let revision = 0;

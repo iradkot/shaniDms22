@@ -18,9 +18,11 @@ const COPY = {
     close: 'Close',
     nightscout: 'Nightscout',
     nsHint:
-      'The URL and API key are encrypted on the server and never returned to this browser.',
+      'In Nightscout Admin, create a separate subject with only the readable role. Enter its token below. The token is encrypted on the server. Do not enter the master API_SECRET.',
     url: 'Nightscout HTTPS URL',
-    nsKey: 'Nightscout API key or secret',
+    nsKey: 'Nightscout read-only subject token',
+    nsLegacy: 'This saved connection uses the master API_SECRET with broader permissions. Replace it with a readable subject token. Your saved data is kept.',
+    nsPermissions: 'Use a subject token with only the readable role. Write or admin access is not accepted.',
     connect: 'Connect and verify',
     disconnect: 'Remove connection',
     connected: 'Connected',
@@ -52,9 +54,11 @@ const COPY = {
     title: 'חיבורים',
     close: 'סגירה',
     nightscout: 'Nightscout',
-    nsHint: 'הכתובת והמפתח מוצפנים בשרת ולעולם אינם מוחזרים לדפדפן הזה.',
+    nsHint: 'יש ליצור ב־Nightscout Admin משתמש נפרד עם readable בלבד ולהזין את הטוקן שלו. הטוקן מוצפן בשרת. אין להזין את הסוד הראשי API_SECRET.',
     url: 'כתובת HTTPS של Nightscout',
-    nsKey: 'מפתח API או secret של Nightscout',
+    nsKey: 'טוקן Nightscout לקריאה בלבד',
+    nsLegacy: 'החיבור השמור משתמש בסוד הראשי עם הרשאות רחבות. יש להחליף אותו בטוקן עם readable בלבד. המידע השמור נשמר.',
+    nsPermissions: 'יש להשתמש בטוקן של משתמש עם readable בלבד. הרשאות כתיבה או ניהול לא מתקבלות.',
     connect: 'חיבור ואימות',
     disconnect: 'הסרת החיבור',
     connected: 'מחובר',
@@ -118,7 +122,8 @@ export const ConnectionPanel = (props: {
               props.locale,
               getAiConnectionErrorCode(error),
             )
-          : copy.failed,
+          : typeof error === 'object' && error !== null && 'code' in error && error.code === 'nightscout_read_only_required'
+          ? copy.nsPermissions : copy.failed,
       );
     } finally {
       setBusy(false);
@@ -160,6 +165,7 @@ export const ConnectionPanel = (props: {
             </span>
           </div>
           <p>{copy.nsHint}</p>
+          {props.nightscout.configured && props.nightscout.authType !== 'access-token' ? <p role="status">{copy.nsLegacy}</p> : null}
           <label>
             <span>{copy.url}</span>
             <input

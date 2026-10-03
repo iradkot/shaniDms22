@@ -2,11 +2,13 @@ import {NativeModules, Platform} from 'react-native';
 
 import {BgSample} from 'app/types/day_bgs.types';
 import type {GlucoseForecastSnapshot} from '../modules/glucoseForecast';
+import {getReleaseSafetyPolicy} from '../modules/releaseSafety/policy';
 import {
   reobserveCurrentData,
   type CurrentDataSnapshot,
 } from '../modules/currentData';
-import {getNightscoutConfigurationRevision} from '../api/shaniNightscoutInstances';
+import {getNightscoutConfigurationRevision, getNightscoutOwnerUserId, getNightscoutBaseUrl} from '../api/shaniNightscoutInstances';
+import {createNightscoutCacheScope} from './nightscoutCacheScope';
 
 type GlucoseNativeModule = {
   updateForecastSnapshot?: (
@@ -34,6 +36,7 @@ type GlucoseNativeModule = {
     sourceBaseUrl: string,
     configurationRevision: number,
   ) => void;
+  deleteAccountData?: (ownerUserId: string, sourceIdentities: readonly string[]) => Promise<void>;
   clearLiveSurface: () => void;
   setWidgetThresholds: (low: number, high: number) => void;
   configureBackgroundSync: (
@@ -41,6 +44,8 @@ type GlucoseNativeModule = {
     apiSecretSha1: string | undefined,
     enabled: boolean,
     configurationRevision: number,
+    ownerUserId: string | null,
+    sourceIdentity: string | null,
   ) => void;
   setLiveModeEnabled: (enabled: boolean) => void;
   setWidgetRangeHours?: (hours: number) => void;
@@ -99,6 +104,9 @@ export function publishAndroidGlucoseForecast(
   baseUrl: string,
   snapshot: GlucoseForecastSnapshot,
 ): void {
+  if (!getReleaseSafetyPolicy().experimentalGlucoseForecasts) {
+    return;
+  }
   if (!nativeModule?.updateForecastSnapshot) {
     return;
   }
@@ -200,9 +208,12 @@ export function buildAndroidGlucoseWidgetUpdateArgs(
   const basalBolusRatio = finiteNumber(snapshot?.insulinStats?.basalBolusRatio);
   const totalInsulin = finiteNumber(snapshot?.insulinStats?.totalInsulin);
   const tir = calculateWidgetTir(snapshot?.recentBgSamples, thresholds);
-  const p1Raw = snapshot?.predictions?.[0]?.sgv;
-  const p2Raw = snapshot?.predictions?.[1]?.sgv;
-  const p3Raw = snapshot?.predictions?.[2]?.sgv;
+  const predictions = getReleaseSafetyPolicy().experimentalGlucoseForecasts
+    ? snapshot?.predictions
+    : undefined;
+  const p1Raw = predictions?.[0]?.sgv;
+  const p2Raw = predictions?.[1]?.sgv;
+  const p3Raw = predictions?.[2]?.sgv;
   const projected1 =
     typeof p1Raw === 'number' && Number.isFinite(p1Raw)
       ? Math.round(p1Raw)
@@ -316,6 +327,7 @@ export function setAndroidWidgetThresholds(low?: number, high?: number): void {
 export function configureAndroidWidgetBackgroundSync(params: {
   baseUrl?: string;
   apiSecretSha1?: string;
+  accessToken?: string;
   enabled: boolean;
 }): void {
   if (!nativeModule?.configureBackgroundSync) {
@@ -324,9 +336,12 @@ export function configureAndroidWidgetBackgroundSync(params: {
   try {
     nativeModule.configureBackgroundSync(
       params.baseUrl,
-      params.apiSecretSha1,
-      params.enabled,
+      // Nightscout also accepts a raw subject token in api-secret. Never hash it.
+      params.accessToken ?? params.apiSecretSha1,
+      params.enabled && Boolean(params.accessToken || params.apiSecretSha1),
       getNightscoutConfigurationRevision(),
+      getNightscoutOwnerUserId(),
+      createNightscoutCacheScope(params.baseUrl)?.sourceIdentity ?? null,
     );
   } catch (err) {
     console.warn(
@@ -334,6 +349,18 @@ export function configureAndroidWidgetBackgroundSync(params: {
       err,
     );
   }
+}
+
+/** Deletion uses an acknowledged native operation, including signed-out restart recovery. */
+export async function deleteAndroidGlucoseAccountData(ownerUserId: string, sourceIdentities: readonly string[]): Promise<void> {
+  if (Platform.OS !== 'android') {return;}
+  if (!nativeModule?.deleteAccountData) {
+    throw new Error('Native account cleanup is unavailable.');
+  }
+  const active = getNightscoutOwnerUserId() === ownerUserId
+    ? createNightscoutCacheScope(getNightscoutBaseUrl(), ownerUserId)?.sourceIdentity
+    : undefined;
+  await nativeModule.deleteAccountData(ownerUserId, [...new Set([...sourceIdentities, ...(active ? [active] : [])])]);
 }
 
 export function setAndroidWidgetLiveModeEnabled(enabled: boolean): void {

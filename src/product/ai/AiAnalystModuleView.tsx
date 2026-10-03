@@ -18,6 +18,7 @@ import {
 import {ProductPage, productUiTokens} from '../ui';
 import type {AiAnalystModuleRuntime} from './runtime';
 import {RecommendationLanding} from './RecommendationLanding';
+import {getReleaseSafetyPolicy, pilotAiNotice} from '../../modules/releaseSafety/policy';
 import {
   RecommendationButton as ActionButton,
   recommendationColors,
@@ -175,10 +176,10 @@ const Conversation = ({
   return (
     <ProductPage
       locale={locale}
-      subtitle={copy.advisory}
+      subtitle={getReleaseSafetyPolicy().currentRecommendations ? copy.advisory : pilotAiNotice(locale)}
       testID="ai-conversation"
       style={styles.page}
-      title={copy.recommendationTitle}>
+      title={getReleaseSafetyPolicy().currentRecommendations ? copy.recommendationTitle : locale === 'he' ? 'ניתוח נתוני העבר' : 'Analysis of past data'}>
       <ActionButton
         label={copy.newConversation}
         onPress={runtime.openLanding}

@@ -52,6 +52,12 @@ const decodeMarker = (raw: string | null): ConnectionMarker | undefined => {
   }
 };
 
+export const readCachedConnections = async (
+  storage: IndexedDbKeyValueStore,
+  uid: string,
+): Promise<ConnectionMarker> =>
+  decodeMarker(await storage.getItem(markerKey(uid))) ?? emptyMarker();
+
 export const emptyMarker = (): ConnectionMarker => ({
   schemaVersion: 1,
   nightscout: {configured: false},

@@ -16,6 +16,11 @@ const restoreAsyncStorageGetItem = () => {
   });
 };
 
+// Language/startup behavior is independent of the separately tested consent boundary.
+jest.mock('app/platform/native/privacy/NativePrivacyBoundary', () => ({
+  NativePrivacyBoundary: ({children}: {children: React.ReactNode}) => children,
+}));
+
 jest.mock('app/components/ErrorBoundary', () => {
   const ReactLib = require('react');
   return ({children}: {children: React.ReactNode}) =>

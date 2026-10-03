@@ -1,7 +1,7 @@
 import {NativeModules} from 'react-native';
 import type {SettingsAppInfo} from '../../modules/settings';
 
-export const REQUIRED_FIRESTORE_RULES_SCHEMA_VERSION = 1;
+export const REQUIRED_FIRESTORE_RULES_SCHEMA_VERSION = 2;
 
 interface ShaniDmsRuntimeConfigModule {
   readonly versionName?: unknown;

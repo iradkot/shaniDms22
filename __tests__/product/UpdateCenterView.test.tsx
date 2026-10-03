@@ -10,11 +10,13 @@ import {createInMemoryUpdateCenterRepository} from 'app/modules/alerts';
 import {UpdateCenterView} from 'app/product/alerts/UpdateCenterView';
 
 const textValues = (tree: renderer.ReactTestRenderer): string[] =>
-  tree.root.findAllByType(Text).map(node =>
-    Array.isArray(node.props.children)
-      ? node.props.children.join('')
-      : String(node.props.children ?? ''),
-  );
+  tree.root
+    .findAllByType(Text)
+    .map(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children.join('')
+        : String(node.props.children ?? ''),
+    );
 
 const controllableRepository = (initial: UpdateCenterSnapshot) => {
   let snapshot = initial;
@@ -40,6 +42,46 @@ const controllableRepository = (initial: UpdateCenterSnapshot) => {
 };
 
 describe('UpdateCenterView', () => {
+  it('describes a one-sided low occurrence without exposing its storage sentinel', async () => {
+    const repository = createInMemoryUpdateCenterRepository([
+      {
+        id: 'low-1',
+        kind: 'alert',
+        occurredAtMs: 2_000,
+        readState: 'unread',
+        content: {
+          kind: 'alert-rule-occurrence',
+          observation: {valueMgDl: 64},
+          rule: {
+            id: 'rule-low',
+            name: 'נמוך בלילה',
+            lowerBoundMgDl: 65,
+            upperBoundMgDl: 1000,
+            activeFromMinute: 22 * 60,
+            activeToMinute: 7 * 60,
+            trend: 'any',
+          },
+        },
+      },
+    ]);
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(
+        <UpdateCenterView
+          formatTimestamp={() => '02:00'}
+          locale="he"
+          repository={repository}
+        />,
+      );
+    });
+
+    const values = textValues(tree!);
+    expect(values).toContain('נמדד 64 mg/dL, מתחת לסף שהוגדר: 65 mg/dL.');
+    expect(values.join(' ')).not.toContain('1000');
+    act(() => tree!.unmount());
+  });
+
   it('shows factual legacy history and opens only its typed descriptor', async () => {
     const deepLink: UpdateDeepLinkDescriptor = {
       kind: 'alert-occurrence',
@@ -102,7 +144,9 @@ describe('UpdateCenterView', () => {
         <UpdateCenterView locale="he" repository={control.repository} />,
       );
     });
-    expect(tree!.root.findByProps({testID: 'update-center-loading'})).toBeTruthy();
+    expect(
+      tree!.root.findByProps({testID: 'update-center-loading'}),
+    ).toBeTruthy();
 
     act(() => control.publish({status: 'error'}));
     expect(textValues(tree!)).toContain('לא הצלחנו לטעון את העדכונים.');
@@ -116,7 +160,9 @@ describe('UpdateCenterView', () => {
     expect(textValues(tree!)).toContain('אין עדיין עדכונים או תזכורות.');
     expect(
       tree!.root.findByProps({testID: 'update-center-view'}).props.style,
-    ).toEqual(expect.arrayContaining([expect.objectContaining({direction: 'rtl'})]));
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({direction: 'rtl'})]),
+    );
     act(() => tree!.unmount());
   });
 });

@@ -312,6 +312,9 @@ export class BrowserFirebaseAuth {
   getIdentity(): BrowserFirebaseIdentity | null {
     return this.session?.identity ?? null;
   }
+  getSessionRevision(): number {
+    return this.authGeneration;
+  }
 
   async getIdToken(forceRefresh = false): Promise<string> {
     const session = this.session;

@@ -7,6 +7,8 @@
  */
 import React from 'react';
 import ErrorBoundary from 'app/components/ErrorBoundary';
+import {NativePrivacyBoundary} from './platform/native/privacy/NativePrivacyBoundary';
+import {hasPrivacyConsent} from './modules/privacy';
 import {Alert, Platform, StatusBar, StyleSheet} from 'react-native';
 import Login from './containers/Login';
 import {NavigationContainer} from '@react-navigation/native';
@@ -250,6 +252,9 @@ const AppInner: () => React.ReactElement = () => {
     }
 
     const checkPermissions = async () => {
+      if (!sessionActive || !hasPrivacyConsent('cloud')) {
+        return;
+      }
       try {
         // Notifee iOS/Android permission prompt
         const settings = await notifee.requestPermission();
@@ -293,7 +298,7 @@ const AppInner: () => React.ReactElement = () => {
       }
     };
     checkPermissions();
-  }, [language]);
+  }, [language, sessionActive]);
   console.log('App.tsx: App component render');
 
   console.log('App.tsx: App component rendering');
@@ -440,7 +445,8 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={ADD_NOTIFICATION_SCREEN}
                             getComponent={() =>
-                              require('./containers/forms/AddNotificationScreen/AddNotificationScreen').default
+                              require('./containers/forms/AddNotificationScreen/AddNotificationScreen')
+                                .default
                             }
                           />
                           <Stack.Screen
@@ -450,7 +456,8 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={EDIT_NOTIFICATION_SCREEN}
                             getComponent={() =>
-                              require('./containers/forms/EditNotificationScreen/EditNotificationScreen').default
+                              require('./containers/forms/EditNotificationScreen/EditNotificationScreen')
+                                .default
                             }
                           />
                           <Stack.Screen
@@ -460,7 +467,8 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={ADD_FOOD_ITEM_SCREEN}
                             getComponent={() =>
-                              require('./containers/forms/Food/AddFoodItem').default
+                              require('./containers/forms/Food/AddFoodItem')
+                                .default
                             }
                           />
                           <Stack.Screen
@@ -470,7 +478,8 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={CAMERA_SCREEN}
                             getComponent={() =>
-                              require('./components/CameraScreen/CameraScreen').default
+                              require('./components/CameraScreen/CameraScreen')
+                                .default
                             }
                           />
                           <Stack.Screen
@@ -480,7 +489,8 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={ADD_SPORT_ITEM_SCREEN}
                             getComponent={() =>
-                              require('./containers/forms/Sport/AddSportItem').default
+                              require('./containers/forms/Sport/AddSportItem')
+                                .default
                             }
                           />
                           <Stack.Screen
@@ -490,7 +500,8 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={EDIT_SPORT_ITEM_SCREEN}
                             getComponent={() =>
-                              require('./containers/forms/Sport/EditSportItem').default
+                              require('./containers/forms/Sport/EditSportItem')
+                                .default
                             }
                           />
                           <Stack.Screen
@@ -500,7 +511,8 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={EDIT_FOOD_ITEM_SCREEN}
                             getComponent={() =>
-                              require('./containers/forms/Food/EditFoodItemScreen').default
+                              require('./containers/forms/Food/EditFoodItemScreen')
+                                .default
                             }
                           />
                           <Stack.Screen
@@ -510,7 +522,8 @@ const AppInner: () => React.ReactElement = () => {
                             })}
                             name={FULL_SCREEN_VIEW_SCREEN}
                             getComponent={() =>
-                              require('./containers/FullScreen/FullScreenViewScreen').default
+                              require('./containers/FullScreen/FullScreenViewScreen')
+                                .default
                             }
                           />
 
@@ -520,7 +533,8 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={DAILY_REVIEW_SCREEN}
                             getComponent={() =>
-                              require('./containers/MainTabsNavigator/Containers/Home/DailyReviewScreen').default
+                              require('./containers/MainTabsNavigator/Containers/Home/DailyReviewScreen')
+                                .default
                             }
                           />
 
@@ -535,7 +549,8 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={RANKS_INFO_SCREEN}
                             getComponent={() =>
-                              require('./containers/MainTabsNavigator/Containers/Home/RanksInfoScreen').default
+                              require('./containers/MainTabsNavigator/Containers/Home/RanksInfoScreen')
+                                .default
                             }
                           />
 
@@ -553,7 +568,8 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={LOOP_ADJUSTMENT_ASSIST_SCREEN}
                             getComponent={() =>
-                              require('./platform/native/ai/UnifiedAiAnalystScreen').default
+                              require('./platform/native/ai/UnifiedAiAnalystScreen')
+                                .default
                             }
                           />
 
@@ -571,7 +587,8 @@ const AppInner: () => React.ReactElement = () => {
                             }}
                             name={HYPO_INVESTIGATION_SCREEN}
                             getComponent={() =>
-                              require('./containers/MainTabsNavigator/Containers/Trends/HypoInvestigationScreen').default
+                              require('./containers/MainTabsNavigator/Containers/Trends/HypoInvestigationScreen')
+                                .default
                             }
                           />
                         </Stack.Navigator>
@@ -607,17 +624,19 @@ const AppAfterLanguageLoaded: React.FC = () => {
 
   return (
     <ThemeSettingsProvider>
-      <NightscoutConfigProvider>
-        <TabsSettingsProvider>
-          <GlucoseSettingsProvider>
-            <AiSettingsProvider>
-              <ProactiveCareSettingsProvider>
-                <AppInner />
-              </ProactiveCareSettingsProvider>
-            </AiSettingsProvider>
-          </GlucoseSettingsProvider>
-        </TabsSettingsProvider>
-      </NightscoutConfigProvider>
+      <NativePrivacyBoundary>
+        <NightscoutConfigProvider>
+          <TabsSettingsProvider>
+            <GlucoseSettingsProvider>
+              <AiSettingsProvider>
+                <ProactiveCareSettingsProvider>
+                  <AppInner />
+                </ProactiveCareSettingsProvider>
+              </AiSettingsProvider>
+            </GlucoseSettingsProvider>
+          </TabsSettingsProvider>
+        </NightscoutConfigProvider>
+      </NativePrivacyBoundary>
     </ThemeSettingsProvider>
   );
 };

@@ -19,6 +19,7 @@ import type {
   SettingsNightscoutConnectionRuntime,
 } from './runtime';
 import {NightscoutConnectionCard} from './NightscoutConnectionCard';
+import {usePrivacyControls} from '../privacy/PrivacyControlsContext';
 import {AppVersionRow} from './AppVersionRow';
 
 const COPY = {
@@ -264,6 +265,7 @@ export const SettingsModuleView = ({
   nightscoutConnection,
 }: SettingsModuleViewProps) => {
   const copy = COPY[locale];
+  const privacyControls = usePrivacyControls();
   const rtl = locale === 'he';
   const [state, setState] = useState<LoadState>({status: 'loading'});
   const [saving, setSaving] = useState(false);
@@ -386,6 +388,23 @@ export const SettingsModuleView = ({
         subtitle={copy.subtitle}
         testID="settings-page"
         title={copy.title}>
+        {privacyControls ? (
+          <View style={styles.card}>
+            <Text style={[styles.cardTitle, rtl && styles.rtlText]}>
+              {locale === 'he' ? 'פרטיות והמידע שלך' : 'Privacy and your data'}
+            </Text>
+            <Text style={[styles.cardLine, rtl && styles.rtlText]}>
+              {locale === 'he'
+                ? 'מדיניות פרטיות, בחירת שיתוף, ביטול הסכמה ומחיקת חשבון ונתונים.'
+                : 'Privacy policy, sharing choices, consent withdrawal, and account and data deletion.'}
+            </Text>
+            <ActionButton
+              label={locale === 'he' ? 'ניהול פרטיות' : 'Manage privacy'}
+              testID="settings-privacy"
+              onPress={privacyControls.openPrivacy}
+            />
+          </View>
+        ) : null}
         <AppVersionRow locale={locale} {...(overview.appInfo ? {appInfo: overview.appInfo} : {})} />
         <NightscoutConnectionCard
           source={overview.nightscout}

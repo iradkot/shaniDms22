@@ -5,6 +5,8 @@ import {State, type PanGesture} from 'react-native-gesture-handler';
 import {getByGestureTestId} from 'react-native-gesture-handler/jest-utils';
 import * as Reanimated from 'react-native-reanimated';
 import {DailyOverviewReorderList} from 'app/product/dailyOverview/DailyOverviewReorderList';
+import {ReorderList} from 'app/product/ui/reorder';
+import {HOME_WIDGET_IDS} from 'app/product/personalization/types';
 
 const ids = ['ranges', 'average', 'metrics', 'insulin', 'coverage'];
 const items = ids.map(id => ({
@@ -47,6 +49,49 @@ describe('daily overview reorder controls', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  test('shares gestures with Home while keeping its labels and identifiers separate', async () => {
+    const onReorder = jest.fn();
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(
+        <ReorderList
+          items={HOME_WIDGET_IDS.map(id => ({
+            id,
+            label: id,
+            preview: <Text>{id}</Text>,
+          }))}
+          locale="he"
+          testIDPrefix="home"
+          listAccessibilityLabel="סידור מסך הבית"
+          onReorder={onReorder}
+        />,
+      );
+    });
+    expect(
+      tree!.root.findByProps({testID: 'home-reorder-list'}).props
+        .accessibilityLabel,
+    ).toBe('סידור מסך הבית');
+    const pan = getByGestureTestId('home-pan-glucose-graph') as PanGesture;
+    act(() => {
+      pan.handlers.onStart?.(event(pan, 40));
+      pan.handlers.onUpdate?.(event(pan, 180));
+      pan.handlers.onEnd?.({...event(pan, 180), state: State.END}, true);
+      pan.handlers.onFinalize?.({...event(pan, 180), state: State.END}, true);
+    });
+    expect(onReorder).toHaveBeenCalledWith([
+      'time-in-range',
+      'glucose-graph',
+      'daily-insulin',
+      'weekly-glucose',
+      'weekly-insulin',
+      'chat',
+    ]);
+    expect(
+      tree!.root.findAllByProps({testID: 'daily-overview-reorder-list'}),
+    ).toHaveLength(0);
+    act(() => tree!.unmount());
   });
 
   test('publishes accessible moves and exposes disabled boundary controls', async () => {

@@ -11,6 +11,7 @@ import {
 } from '@react-native-firebase/firestore';
 import {getMessaging, getToken} from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {hasPrivacyConsent, assertPrivacyConsent} from '../modules/privacy';
 
 const TOKEN_SYNC_KEY = 'lastTokenSyncCheck';
 const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -20,6 +21,9 @@ const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
  * and update if the current token isn't in the server's phoneTokens array
  */
 export async function syncTokenIfNeeded(): Promise<void> {
+  if (!hasPrivacyConsent('cloud')) {
+    return;
+  }
   try {
     const lastSyncStr = await AsyncStorage.getItem(TOKEN_SYNC_KEY);
     const lastSync = lastSyncStr ? parseInt(lastSyncStr, 10) : 0;
@@ -65,6 +69,7 @@ export async function syncTokenIfNeeded(): Promise<void> {
       console.log(
         'rebaseService.syncTokenIfNeeded: token not found on server, updating...',
       );
+      assertPrivacyConsent('cloud', user.uid);
       await updateDoc(userRef, {
         phoneTokens: arrayUnion(currentToken),
         updatedAt: serverTimestamp(),
@@ -98,6 +103,9 @@ export async function syncTokenIfNeeded(): Promise<void> {
  * Register the current device's FCM token in Firestore under user.phoneTokens
  */
 export async function registerDeviceToken(): Promise<void> {
+  if (!hasPrivacyConsent('cloud')) {
+    return;
+  }
   const app = getApp();
   const user = getAuth(app).currentUser;
   if (!user) {
@@ -110,6 +118,7 @@ export async function registerDeviceToken(): Promise<void> {
     console.log('rebaseService.registerDeviceToken: FCM token fetched');
     const userRef = doc(getFirestore(app), 'users', user.uid);
     // Append this device token
+    assertPrivacyConsent('cloud', user.uid);
     await updateDoc(userRef, {
       phoneTokens: arrayUnion(token),
       updatedAt: serverTimestamp(),
@@ -130,6 +139,9 @@ export async function registerDeviceToken(): Promise<void> {
  * Unregister the current device's FCM token from Firestore
  */
 export async function unregisterDeviceToken(): Promise<void> {
+  if (!hasPrivacyConsent('cloud')) {
+    return;
+  }
   const app = getApp();
   const user = getAuth(app).currentUser;
   if (!user) {
@@ -142,6 +154,7 @@ export async function unregisterDeviceToken(): Promise<void> {
     console.log('rebaseService.unregisterDeviceToken: FCM token fetched');
     const userRef = doc(getFirestore(app), 'users', user.uid);
     // Remove this device token
+    assertPrivacyConsent('cloud', user.uid);
     await updateDoc(userRef, {
       phoneTokens: arrayRemove(token),
       updatedAt: serverTimestamp(),

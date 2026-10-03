@@ -11,6 +11,36 @@ import java.util.concurrent.TimeUnit
 
 class WidgetCredentialVaultTest {
   @Test
+  fun `retained enabled anonymous configuration cannot start background sync`() {
+    val vault = WidgetCredentialVault(FakePersistence(), FakeCipher())
+
+    assertEquals(
+      WidgetSyncConfiguration.CredentialUnavailable,
+      resolveWidgetSyncConfiguration(true, "https://old.example", vault.read(), true),
+    )
+    assertEquals(
+      WidgetSyncConfiguration.CredentialUnavailable,
+      resolveWidgetSyncConfiguration(true, "https://old.example", WidgetCredentialAccess.Available(" "), true),
+    )
+  }
+
+  @Test
+  fun `encrypted subject token and legacy master credential retain authenticated configuration`() {
+    for (credential in listOf("reader-0123456789abcdef", "0123456789abcdef0123456789abcdef01234567")) {
+      val vault = WidgetCredentialVault(FakePersistence(), FakeCipher())
+      assertTrue(vault.store(credential))
+      assertEquals(
+        WidgetSyncConfiguration.Ready("https://owned.example", credential, false),
+        resolveWidgetSyncConfiguration(true, "https://owned.example", vault.read(), false),
+      )
+    }
+    assertEquals(
+      WidgetSyncConfiguration.Disabled,
+      resolveWidgetSyncConfiguration(false, "https://owned.example", WidgetCredentialAccess.NotConfigured, true),
+    )
+  }
+
+  @Test
   fun `configuration lock prevents torn url and credential snapshots`() {
     val executor = Executors.newFixedThreadPool(2)
     val writerPaused = CountDownLatch(1)

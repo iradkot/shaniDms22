@@ -43,6 +43,7 @@ export interface NightscoutCredentialRequest {
   readonly version: 1;
   readonly url: string;
   readonly apiKey: string;
+  readonly authType: 'access-token' | 'legacy-api-secret';
 }
 
 export type NightscoutRangeKind =
@@ -287,7 +288,10 @@ export const decodeNightscoutCredentialRequest = (
   value: unknown,
 ): NightscoutCredentialRequest => {
   const input = record(value);
-  exactKeys(input, ['version', 'url', 'apiKey']);
+  exactKeys(input, ['version', 'url', 'apiKey', 'authType']);
+  if (input.authType !== undefined && input.authType !== 'access-token' && input.authType !== 'legacy-api-secret') {
+    throw new ApiContractError(400, 'invalid_nightscout_credential', 'Invalid Nightscout credential type');
+  }
   if (
     typeof input.url !== 'string' ||
     input.url.length === 0 ||
@@ -310,6 +314,7 @@ export const decodeNightscoutCredentialRequest = (
     version: version(input.version),
     url: input.url.trim(),
     apiKey: input.apiKey.trim(),
+    authType: input.authType === 'legacy-api-secret' ? 'legacy-api-secret' : 'access-token',
   };
 };
 

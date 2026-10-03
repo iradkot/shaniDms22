@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SIGNING_MODE: ${{ inputs.signing }}
+      SHANI_RELEASE_CHANNEL: ${{ inputs.signing == 'production' && 'production' || 'pilot' }}
       SHANI_BACKEND_BASE_URL: ${{ vars.SHANI_BACKEND_BASE_URL }}
       FIRESTORE_RULES_SCHEMA_VERSION: ${{ vars.FIRESTORE_RULES_SCHEMA_VERSION }}
 
@@ -102,6 +103,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          node scripts/check-credential-history.mjs
           for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             if [ -z "${!name:-}" ]; then
               echo "::error::Missing required Android release secret: ${name}"

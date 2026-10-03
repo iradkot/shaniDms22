@@ -10,6 +10,14 @@ Firebase Web app: `ShaniDms Web` (`1:77401553924:web:349b67b5d42a8c6fc38951`).
 
 ## Publish an update
 
+The pilot update requires the consent/deletion backend and schema 2 rules before
+publishing the client. The website already exists; this implementation work
+does not deploy an update. `SHANI_RELEASE_CHANNEL` defaults to `pilot`, which
+keeps retrospective AI and disables current/pre-meal recommendations and
+experimental forecasts. The deployment script checks the compiled artifact's
+hidden release manifest before obtaining credentials or contacting Hosting.
+It rejects development builds and builds with no manifest.
+
 From the repository root, with Node.js and an already authenticated Google Cloud CLI:
 
 ```powershell

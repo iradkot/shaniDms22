@@ -25,6 +25,7 @@ const COPY = {
       'The latest glucose request failed. Test the connection or edit the source.',
     credential: 'Configured on this device',
     credentialMissing: 'Credential not configured',
+    legacyCredential: 'This saved connection uses the master API_SECRET. Its permissions are broader than read-only. Edit the connection and replace it with a subject token using only the readable role. Your saved data is kept.',
     test: 'Test connection',
     testing: 'Testing connection…',
     edit: 'Edit connection',
@@ -49,6 +50,7 @@ const COPY = {
       'Restore failed. Try again or enter your connection details using Connect Nightscout or Edit connection. The saved connection has been kept.',
     cancel: 'Cancel',
     errors: {
+      permissions: 'Use a Nightscout subject token with only the readable role. Tokens with write or admin permissions are not accepted.',
       authentication:
         'Nightscout rejected the credential. Edit the connection and check the API secret or token.',
       'not-found':
@@ -72,6 +74,7 @@ const COPY = {
       'טעינת הסוכר האחרונה נכשלה. אפשר לבדוק את החיבור או לערוך את המקור.',
     credential: 'מוגדר במכשיר הזה',
     credentialMissing: 'לא הוגדר מפתח גישה',
+    legacyCredential: 'החיבור השמור משתמש בסוד הראשי של Nightscout. הוא מאפשר יותר מקריאה. יש לערוך את החיבור ולהחליף אותו בטוקן עם תפקיד readable בלבד. המידע השמור נשמר.',
     test: 'בדיקת חיבור',
     testing: 'בודק את החיבור…',
     edit: 'עריכת החיבור',
@@ -96,6 +99,7 @@ const COPY = {
       'השחזור נכשל. אפשר לנסות שוב או להזין מחדש את פרטי החיבור דרך חיבור ל־Nightscout או עריכת החיבור. המידע לשחזור נשמר.',
     cancel: 'ביטול',
     errors: {
+      permissions: 'יש להשתמש בטוקן Nightscout עם תפקיד readable בלבד. טוקן עם הרשאות כתיבה או ניהול לא מתקבל.',
       authentication:
         'Nightscout דחה את מפתח הגישה. יש לערוך את החיבור ולבדוק את הסוד או הטוקן.',
       'not-found':
@@ -283,6 +287,11 @@ export const NightscoutConnectionCard = ({
           {source.credentialConfigured
             ? copy.credential
             : copy.credentialMissing}
+        </Text>
+      ) : null}
+      {configured && connection?.credentialKind === 'legacy-api-secret' ? (
+        <Text style={[styles.text, rtl && styles.rtl]} testID="settings-nightscout-legacy-reconnect">
+          {copy.legacyCredential}
         </Text>
       ) : null}
       {validDate !== undefined ? (

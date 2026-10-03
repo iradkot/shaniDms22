@@ -1,5 +1,13 @@
 # AI recommendations
 
+Pilot and production builds expose retrospective summaries and analysis only.
+Current/meal recommendations and experimental glucose forecasts require an
+explicit development build. Saved current outputs, old routes and direct runtime
+calls are restricted too. See [Pilot release safety](PilotReleaseSafety.md).
+Retrospective AI has not been clinically validated and is not for treatment or
+dosing decisions. The full patient flow below describes the retained development
+implementation.
+
 The current AI Analyst entry point is the shared recommendation experience in
 `src/product/ai/AiAnalystModuleView.tsx`. It runs in native and browser clients.
 The earlier specialist catalogue and the legacy Oracle/LoopTuner tabs are hidden;

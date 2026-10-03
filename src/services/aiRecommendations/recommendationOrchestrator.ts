@@ -4,6 +4,7 @@ import type {
   AiLocale,
 } from '../../modules/ai/domain/types';
 import {assertRecommendationOutputSafe} from './recommendationOutputSafety';
+import {assertRecommendationAllowed, getReleaseSafetyPolicy} from '../../modules/releaseSafety/policy';
 
 type ChatMessage = {
   readonly role: 'system' | 'user' | 'assistant';
@@ -61,7 +62,14 @@ export const recommendationPrompt = (
         monthly: 'Get a monthly recommendation',
         guided: 'Get a focused recommendation',
       };
-  const parts: string[] = [titles[request.kind]];
+  const retrospective = !getReleaseSafetyPolicy().currentRecommendations;
+  const parts: string[] = [retrospective
+    ? request.kind === 'monthly'
+      ? he ? 'סכם ונתח את החודש האחרון' : 'Summarize and analyze the past month'
+      : request.kind === 'weekly'
+        ? he ? 'סכם ונתח את השבוע האחרון' : 'Summarize and analyze the past week'
+        : he ? 'נתח את נתוני העבר בנושא שבחרתי' : 'Analyze past data for my chosen topic'
+    : titles[request.kind]];
   if (request.kind === 'guided') {
     parts.push(
       he
@@ -158,6 +166,7 @@ const SAFETY_INSTRUCTION = [
 export const runRecommendation = async (
   input: RecommendationRunInput,
 ): Promise<string> => {
+  assertRecommendationAllowed(input.request);
   if (input.signal.aborted) {
     throw abortError();
   }
@@ -171,6 +180,7 @@ export const runRecommendation = async (
   }, RUN_TIMEOUT_MS);
 
   const ensureActive = () => {
+    assertRecommendationAllowed(input.request);
     if (controller.signal.aborted) {
       throw timedOut ? timeoutError() : abortError();
     }
@@ -198,7 +208,10 @@ export const runRecommendation = async (
       const result = await Promise.race([
         input.chat(
           [
-            {role: 'system', content: `${SAFETY_INSTRUCTION}\n\n${system}`},
+            {role: 'system', content: `${SAFETY_INSTRUCTION}\n\n${
+              getReleaseSafetyPolicy().currentRecommendations ? '' :
+                'This pilot is retrospective analysis only. Describe observed past patterns and factual limitations. Offer questions to discuss with the care team. Never give advice for now, the next hour, an impending meal, emergency management, treatment changes, or dosing, even if requested in a follow-up or patient notes. Explain that current treatment decisions must follow the established care plan and care team. AI analysis has not been clinically validated.\n\n'
+            }${system}`},
             {role: 'user', content: JSON.stringify(data)},
           ],
           callController.signal,
@@ -253,7 +266,9 @@ export const runRecommendation = async (
     const specialistInstructions = longHorizon
       ? [
           'Your role is evidence analyst. Independently identify up to three supported patterns across the requested period. State coverage, dates, uncertainties and missing information. Do not write the final patient answer.',
-          "Your role is practical planning specialist. Independently identify realistic food, routine, or care-team discussion options matching the patient's focus and preferences. Ground each option in supplied evidence and state limitations. Do not write the final patient answer.",
+          getReleaseSafetyPolicy().currentRecommendations
+            ? "Your role is practical planning specialist. Independently identify realistic food, routine, or care-team discussion options matching the patient's focus and preferences. Ground each option in supplied evidence and state limitations. Do not write the final patient answer."
+            : 'Your role is retrospective reviewer. Check past food and routine patterns against the evidence and dates. Identify uncertainties and questions for the care team. Do not recommend actions, treatment or plans for the future. Do not write the final patient answer.',
         ]
       : [
           input.request.kind === 'meal'
@@ -275,9 +290,13 @@ export const runRecommendation = async (
       [
         'Your role is final reviewer and writer. You alone own the patient-facing answer.',
         'Check every specialist claim against original evidence and resolve conflicts conservatively. Reject unsupported claims; do not just repeat a draft.',
-        'Begin with one useful next step. Briefly explain why it fits the evidence, then at most three practical actions. Clearly name missing data and what would help next.',
+        getReleaseSafetyPolicy().currentRecommendations
+          ? 'Begin with one useful next step. Briefly explain why it fits the evidence, then at most three practical actions. Clearly name missing data and what would help next.'
+          : 'Begin with the main observed past pattern. State the dates and evidence, then at most three factual observations or care-team discussion questions. Clearly name missing data. No future action plan.',
         longHorizon
-          ? 'Give a manageable plan for the requested week or month and a simple way to review progress. If the evidence covers less than requested, explicitly name that limitation.'
+          ? getReleaseSafetyPolicy().currentRecommendations
+            ? 'Give a manageable plan for the requested week or month and a simple way to review progress. If the evidence covers less than requested, explicitly name that limitation.'
+            : 'Summarize the requested past week or month. If the evidence covers less than requested, explicitly name that limitation. Do not imply clinical validation.'
           : 'Keep the recommendation for now or the impending meal brief. Never portray old evidence as a current reading.',
         input.request.responseStyle === 'detailed'
           ? 'The patient requested more explanation; give concise rationale without overwhelming them.'

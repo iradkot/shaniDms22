@@ -3,7 +3,11 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedInAs(uid) {
-      return request.auth != null && request.auth.uid == uid;
+      return request.auth != null && request.auth.uid == uid
+        && !firestore.exists(/databases/(default)/documents/privateAccountState/$(uid))
+        && firestore.exists(/databases/(default)/documents/users/$(uid)/privacy/consent)
+        && firestore.get(/databases/(default)/documents/users/$(uid)/privacy/consent).data.policyVersion == '2026-10-03.1'
+        && firestore.get(/databases/(default)/documents/users/$(uid)/privacy/consent).data.cloudSync == true;
     }
 
     function safeId(value) {

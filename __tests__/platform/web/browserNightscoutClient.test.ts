@@ -361,7 +361,7 @@ describe('BrowserNightscoutClient', () => {
         {requestJson},
         {
           url: 'https://nightscout.example',
-          apiKey: 'secret-that-must-not-return',
+          apiKey: 'shani-0123456789abcdef',
         },
       ),
     ).resolves.toEqual({
@@ -377,7 +377,8 @@ describe('BrowserNightscoutClient', () => {
         body: {
           version: 1,
           url: 'https://nightscout.example',
-          apiKey: 'secret-that-must-not-return',
+          apiKey: 'shani-0123456789abcdef',
+          authType: 'access-token',
         },
       },
     );

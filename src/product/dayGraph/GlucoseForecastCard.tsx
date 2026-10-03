@@ -4,6 +4,7 @@ import {useTheme} from 'styled-components/native';
 import type {GlucoseForecastSnapshot} from '../../modules/glucoseForecast';
 import type {ThemeType} from '../../types/theme';
 import {addOpacity} from '../../style/styling.utils';
+import {getReleaseSafetyPolicy} from '../../modules/releaseSafety/policy';
 import {
   FORECAST_APPEARANCE,
   forecastAppearance,
@@ -31,6 +32,7 @@ export const GlucoseForecastCard = ({
 }) => {
   const theme = useTheme() as ThemeType;
   const styles = useMemo(() => createStyles(theme), [theme]);
+  if (!getReleaseSafetyPolicy().experimentalGlucoseForecasts) {return null;}
   const he = locale === 'he';
   const textStyle = [styles.text, he && styles.rtl];
   const series = snapshot?.series ?? [];

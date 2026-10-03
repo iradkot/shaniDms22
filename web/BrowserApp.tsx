@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import {useWindowDimensions} from 'react-native';
 import type {JournalWorkspace} from '../src/modules/journal';
+import {interpretAlertRuleDraft} from '../src/modules/alerts';
 import type {CurrentDataSource} from '../src/modules/currentData';
 import type {MealImagesRuntime} from '../src/modules/mealMedia';
 import {
@@ -71,6 +72,17 @@ import {
   disableGoogleAutoSelect,
   GoogleSignInButton,
 } from './GoogleSignInButton';
+import {queueBrowserPersonalizationSave} from './browserPersonalizationSave';
+import {PrivacyView} from '../src/product/privacy/PrivacyView';
+import {PrivacyControlsContext} from '../src/product/privacy/PrivacyControlsContext';
+import {createBrowserPrivacyService} from '../src/platform/web/privacy/browserPrivacyService';
+import {
+  clearPrivacySession,
+  registerPrivacySession,
+  type PrivacyConsent,
+} from '../src/modules/privacy';
+import {accountWorkspaceScopeId} from '../src/modules/privacy/localAccountCleanup';
+import {readCachedConnections} from './connectionStatus';
 
 const ProductExperience = React.lazy(() =>
   import('../src/product/app/ProductExperience').then(module => ({
@@ -92,6 +104,7 @@ type RuntimeGlobal = typeof globalThis & {
     readonly firebaseApiKey?: string;
     readonly firebaseProjectId?: string;
     readonly firebaseStorageBucket?: string;
+    readonly firestoreRulesSchemaVersion?: number;
     readonly googleClientId?: string;
     readonly apiBaseUrl?: string;
   };
@@ -101,6 +114,9 @@ const globalConfig = (globalThis as RuntimeGlobal).__SHANI_WEB_CONFIG__;
 const environmentProjectId =
   globalConfig?.firebaseProjectId ?? import.meta.env.VITE_FIREBASE_PROJECT_ID;
 const CONFIG_RESULT = tryParseWebRuntimeConfig({
+  firestoreRulesSchemaVersion:
+    globalConfig?.firestoreRulesSchemaVersion ??
+    import.meta.env.VITE_FIRESTORE_RULES_SCHEMA_VERSION,
   firebaseApiKey:
     globalConfig?.firebaseApiKey ?? import.meta.env.VITE_FIREBASE_API_KEY,
   firebaseProjectId: environmentProjectId,
@@ -242,6 +258,39 @@ const BrowserProduct = (props: {
     authConnection,
   } = props;
   const {resources} = state;
+  const alertRuleInterpreter = useMemo(
+    () => ({
+      availability: (!resources.aiEnabled
+        ? 'disabled'
+        : resources.aiConfigured
+        ? 'ready'
+        : 'missing-credentials') as
+        | 'ready'
+        | 'disabled'
+        | 'missing-credentials',
+      interpret: (request: string) =>
+        interpretAlertRuleDraft(request, prompt =>
+          resources.aiService.chat([{role: 'user', content: prompt}]),
+        ),
+      onOpenSettings: openConnections,
+    }),
+    [
+      openConnections,
+      resources.aiConfigured,
+      resources.aiEnabled,
+      resources.aiService,
+    ],
+  );
+  const alertsRuntime = useMemo<AlertsModuleRuntime>(
+    () => ({
+      ...resources.alertsRuntime,
+      alertRules: {
+        ...resources.alertsRuntime.alertRules,
+        interpreter: alertRuleInterpreter,
+      },
+    }),
+    [alertRuleInterpreter, resources.alertsRuntime],
+  );
   const preMealAssistance = useSyncExternalStore(
     resources.preMealAssistance.subscribe,
     resources.preMealAssistance.getSnapshot,
@@ -305,7 +354,8 @@ const BrowserProduct = (props: {
   const aiRuntime = useBrowserAiAnalystRuntime({
     service: resources.aiService,
     storage: resources.keyValueStore,
-    scopeId: `${resources.scope.productUserId}-${resources.scope.workspaceId}`,
+    scopeId: accountWorkspaceScopeId(resources.scope),
+    accountScope: resources.scope,
     locale,
     enabled: resources.aiEnabled,
     credentialConfigured: resources.aiConfigured,
@@ -379,7 +429,7 @@ const BrowserProduct = (props: {
   return (
     <ProductExperience
       aiRuntime={aiRuntime}
-      alertsRuntime={resources.alertsRuntime}
+      alertsRuntime={alertsRuntime}
       {...(currentSnapshot === undefined ? {} : {currentSnapshot})}
       {...(dataSources === undefined
         ? {}
@@ -455,6 +505,17 @@ export const BrowserApp = () => {
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [connectionRevision, setConnectionRevision] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [privacyState, setPrivacyState] = useState<{
+    uid?: string;
+    loading: boolean;
+    consent: PrivacyConsent | null;
+    deleting: boolean;
+  }>({loading: true, consent: null, deleting: false});
+  const [privacyRevision, setPrivacyRevision] = useState(0);
+  const [deletionRecoveryOwner, setDeletionRecoveryOwner] = useState<
+    string | null
+  >(null);
   const connectionsChanged = useRef(false);
   const [authError, setAuthError] = useState<string | undefined>(undefined);
   const [state, setState] = useState<BootstrapState>({status: 'loading'});
@@ -499,11 +560,11 @@ export const BrowserApp = () => {
         : {displayName: bootstrapIdentity.displayName}),
     };
   }, [authSnapshot.status, bootstrapIdentity]);
-  const personalizationRef = useRef<StoredProductPersonalization | undefined>(
-    undefined,
-  );
   const bootstrapScopeTokenRef = useRef(0);
   const writeTail = useRef<Promise<void>>(Promise.resolve());
+  const personalizationWriteRevision = useRef(0);
+  const personalizationHostState = useRef(state);
+  personalizationHostState.current = state;
 
   useEffect(() => {
     document.documentElement.dir = locale === 'he' ? 'rtl' : 'ltr';
@@ -532,6 +593,147 @@ export const BrowserApp = () => {
     return unsubscribe;
   }, [storage]);
 
+  const privacyUid =
+    authSnapshot.status === 'signed-in' ? authSnapshot.identity.uid : undefined;
+  const privacyService = useMemo(
+    () =>
+      CONFIG_RESULT.ok && auth && storage.ok
+        ? createBrowserPrivacyService({
+            api: new AuthenticatedWebApiClient({
+              baseUrl: CONFIG_RESULT.value.apiBaseUrl,
+              auth,
+            }),
+            storage: storage.value,
+            auth,
+          })
+        : undefined,
+    [auth, storage],
+  );
+  useEffect(() => {
+    let active = true;
+    clearPrivacySession();
+    if (privacyService) {
+      privacyService.recoveryOwner().then(value => {
+        if (active) {
+          setDeletionRecoveryOwner(value);
+        }
+      });
+    }
+    if (!privacyUid || !privacyService) {
+      setPrivacyState({loading: false, consent: null, deleting: false});
+      return;
+    }
+    setPrivacyState({
+      uid: privacyUid,
+      loading: true,
+      consent: null,
+      deleting: false,
+    });
+    privacyService.load(privacyUid).then(value => {
+      if (!active) {
+        return;
+      }
+      registerPrivacySession(privacyUid, value.deleting ? null : value.consent);
+      setPrivacyState({uid: privacyUid, loading: false, ...value});
+    });
+    return () => {
+      active = false;
+      clearPrivacySession();
+    };
+  }, [privacyUid, privacyService, privacyRevision]);
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.key === 'shani.web.privacy.changed') {
+        setPrivacyRevision(value => value + 1);
+      }
+    };
+    window.addEventListener('storage', changed);
+    return () => window.removeEventListener('storage', changed);
+  }, []);
+  const privacyReady =
+    privacyUid === undefined ||
+    (!privacyState.loading && privacyState.uid === privacyUid);
+  const privacyCloud =
+    privacyReady &&
+    privacyState.consent?.cloudSync === true &&
+    !privacyState.deleting &&
+    !privacyOpen;
+  const notifyPrivacyChanged = () => {
+    try {
+      globalThis.localStorage.setItem(
+        'shani.web.privacy.changed',
+        `${Date.now()}:${Math.random()}`,
+      );
+    } catch {
+      /* best effort cross-tab wakeup */
+    }
+  };
+  const privacyRuntime = {
+    consent: privacyState.consent,
+    saveConsent: async (cloudSync: boolean, aiProcessing: boolean) => {
+      if (!privacyUid || !privacyService) {
+        throw new Error('Sign in first.');
+      }
+      registerPrivacySession(privacyUid, null);
+      const capturedAuthRevision = auth?.getSessionRevision();
+      setPrivacyState(previous => ({...previous, consent: null}));
+      const consent = await privacyService.save(
+        privacyUid,
+        cloudSync,
+        aiProcessing,
+      );
+      if (
+        auth?.getIdentity()?.uid !== privacyUid ||
+        auth?.getSessionRevision() !== capturedAuthRevision
+      ) {
+        throw new Error('Account changed.');
+      }
+      registerPrivacySession(privacyUid, consent);
+      setPrivacyState({
+        uid: privacyUid,
+        loading: false,
+        consent,
+        deleting: false,
+      });
+      setPrivacyOpen(false);
+      notifyPrivacyChanged();
+    },
+    deleteAccount: async () => {
+      const owner = deletionRecoveryOwner ?? privacyUid;
+      if (!owner || !privacyService) {
+        throw new Error('Sign in first.');
+      }
+      registerPrivacySession(owner, null);
+      setPrivacyState(previous => ({...previous, deleting: true}));
+      notifyPrivacyChanged();
+      await writeTail.current.catch(() => undefined);
+      try {
+        await privacyService.deleteAccount(owner);
+        setDeletionRecoveryOwner(null);
+      } catch (error) {
+        setDeletionRecoveryOwner(await privacyService.recoveryOwner());
+        throw error;
+      }
+      setPrivacyOpen(false);
+      notifyPrivacyChanged();
+    },
+    reauthenticate: async () => {
+      if (auth) {
+        await auth.signOut();
+      }
+    },
+    ...((privacyState.consent && !privacyState.deleting) || !privacyUid
+      ? {
+          onClose: () => {
+            if (privacyUid) {
+              registerPrivacySession(privacyUid, privacyState.consent);
+            }
+            setPrivacyOpen(false);
+          },
+        }
+      : {}),
+  };
+
   useEffect(() => {
     const scopeToken = bootstrapScopeTokenRef.current + 1;
     bootstrapScopeTokenRef.current = scopeToken;
@@ -545,11 +747,15 @@ export const BrowserApp = () => {
       | undefined;
     setState({status: 'loading'});
     const open = async () => {
+      if (!privacyReady || privacyState.deleting) {
+        return;
+      }
       if (!storage.ok) {
         throw new Error(storage.message);
       }
       const keyValueStore = storage.value;
       const signedIn =
+        privacyCloud &&
         CONFIG_RESULT.ok &&
         auth !== undefined &&
         bootstrapSession.status === 'signed-in';
@@ -577,13 +783,27 @@ export const BrowserApp = () => {
             marker.nightscout.workspaceId ?? 'workspace_unconfigured',
           nightscoutSourceId: sourceId,
         });
-        gateway = createFirestoreRestGateway({
-          projectId: config.firebaseProjectId,
-          auth,
-        });
+        if ((config.firestoreRulesSchemaVersion ?? 0) >= 2) {
+          gateway = createFirestoreRestGateway({
+            projectId: config.firebaseProjectId,
+            auth,
+          });
+        }
         if (!isCurrentScope()) {
           return;
         }
+      } else if (bootstrapSession.status === 'signed-in') {
+        marker = await readCachedConnections(
+          keyValueStore,
+          bootstrapSession.uid,
+        );
+        scope = createAuthenticatedBrowserWorkspaceScope({
+          uid: bootstrapSession.uid,
+          workspaceId:
+            marker.nightscout.workspaceId ?? 'workspace_unconfigured',
+          nightscoutSourceId:
+            marker.nightscout.sourceId ?? 'nightscout-unconfigured',
+        });
       } else {
         scope = getOrCreateBrowserWorkspaceScope(
           globalThis.localStorage,
@@ -597,7 +817,9 @@ export const BrowserApp = () => {
       mealImagesHandle = createBrowserMealImagesRuntime({
         scope,
         strings: keyValueStore,
-        ...(signedIn && config !== undefined
+        ...(signedIn &&
+        config !== undefined &&
+        (config.firestoreRulesSchemaVersion ?? 0) >= 2
           ? {
               auth,
               storageBucket: config.firebaseStorageBucket,
@@ -669,12 +891,14 @@ export const BrowserApp = () => {
             };
       const alertRules = createBrowserAlertRulesRepository({
         storage: keyValueStore,
-        scopeId: `${scope.productUserId}-${scope.workspaceId}`,
+        scopeId: accountWorkspaceScopeId(scope),
+        accountScope: scope,
         ...(alertsSync === undefined ? {} : {sync: alertsSync}),
       });
       const updateCenter = createBrowserUpdateCenterRepository({
         storage: keyValueStore,
-        scopeId: `${scope.productUserId}-${scope.workspaceId}`,
+        scopeId: accountWorkspaceScopeId(scope),
+        accountScope: scope,
         ...(alertsSync === undefined ? {} : {sync: alertsSync}),
       });
       await Promise.all([alertRules.refresh(), updateCenter.refresh()]);
@@ -729,7 +953,6 @@ export const BrowserApp = () => {
       if (!isCurrentScope()) {
         return;
       }
-      personalizationRef.current = personalization;
       setState({
         status: 'ready',
         workspace,
@@ -790,11 +1013,23 @@ export const BrowserApp = () => {
     });
     return () => {
       active = false;
+      if (bootstrapScopeTokenRef.current === scopeToken) {
+        bootstrapScopeTokenRef.current += 1;
+      }
       deactivateSync?.();
       deactivateAlertsSync?.();
       mealImagesHandle?.dispose();
     };
-  }, [auth, bootstrapSession, bootstrapAttempt, connectionRevision, storage]);
+  }, [
+    auth,
+    bootstrapSession,
+    bootstrapAttempt,
+    connectionRevision,
+    storage,
+    privacyCloud,
+    privacyReady,
+    privacyState.deleting,
+  ]);
 
   const statusMonitorApi =
     state.status === 'ready' ? state.resources.api : undefined;
@@ -872,7 +1107,6 @@ export const BrowserApp = () => {
       if (!active) {
         return;
       }
-      personalizationRef.current = personalization;
       setState(previous =>
         previous.status === 'ready' &&
         previous.resources.personalizationRepository ===
@@ -901,38 +1135,35 @@ export const BrowserApp = () => {
         return Promise.reject(new Error('Personalization is not ready.'));
       }
       const currentState = state;
-      const run = writeTail.current.then(async () => {
-        const current =
-          personalizationRef.current ?? currentState.personalization;
-        const next = typeof change === 'function' ? change(current) : change;
-        const persisted =
-          await currentState.resources.personalizationRepository.save(
-            currentState.resources.personalizationScope,
-            current,
-            next,
+      const scopeToken = bootstrapScopeTokenRef.current;
+      const repository = currentState.resources.personalizationRepository;
+      const scope = currentState.resources.personalizationScope;
+      const matchesScope = (candidate: BootstrapState): boolean =>
+        bootstrapScopeTokenRef.current === scopeToken &&
+        candidate.status === 'ready' &&
+        candidate.resources.personalizationRepository === repository &&
+        candidate.resources.personalizationScope.productUserId ===
+          scope.productUserId &&
+        candidate.resources.personalizationScope.workspaceId ===
+          scope.workspaceId &&
+        candidate.resources.personalizationScope.nightscoutSourceId ===
+          scope.nightscoutSourceId &&
+        candidate.resources.personalizationScope.layout === scope.layout;
+      return queueBrowserPersonalizationSave({
+        repository,
+        scope,
+        change,
+        writeTail,
+        revision: personalizationWriteRevision,
+        isCurrentScope: () => matchesScope(personalizationHostState.current),
+        publish: persisted => {
+          setState(previous =>
+            matchesScope(previous) && previous.status === 'ready'
+              ? {...previous, personalization: persisted}
+              : previous,
           );
-        personalizationRef.current = persisted;
-        setState(previous =>
-          previous.status === 'ready'
-            ? {...previous, personalization: persisted}
-            : previous,
-        );
-        currentState.resources.personalizationRepository
-          .synchronize(currentState.resources.personalizationScope)
-          .then(result => {
-            personalizationRef.current = result.preferences;
-            setState(previous =>
-              previous.status === 'ready' &&
-              previous.resources.scope.productUserId ===
-                currentState.resources.scope.productUserId
-                ? {...previous, personalization: result.preferences}
-                : previous,
-            );
-          })
-          .catch(() => undefined);
+        },
       });
-      writeTail.current = run.catch(() => undefined);
-      return run;
     },
     [state],
   );
@@ -976,141 +1207,158 @@ export const BrowserApp = () => {
   const readyResources = sessionReady ? state.resources : undefined;
 
   return (
-    <div className="web-app" dir={locale === 'he' ? 'rtl' : 'ltr'}>
-      <header className="web-status-bar">
-        <div className="web-brand-block">
-          <strong>{copy.appName}</strong>
-          <span className="web-local-badge">{copy.local}</span>
-          <span
-            className={`web-sync-badge ${
-              signedIn ? authSnapshot.connection : 'local'
-            }`}>
-            {signedIn
-              ? authSnapshot.connection === 'online'
-                ? copy.connected
-                : copy.offline
-              : copy.localOnly}
-          </span>
-        </div>
-        <div className="web-account">
-          {CONFIG_RESULT.ok && auth ? (
-            signedIn ? (
-              <>
-                <span className="web-account-label">
-                  {copy.signedInAs}{' '}
-                  {authSnapshot.identity.displayName ??
-                    authSnapshot.identity.email}
-                </span>
-                <button onClick={() => setPanelOpen(true)} type="button">
-                  {copy.connections}
-                </button>
-                <button
-                  className="secondary"
-                  onClick={() => {
-                    disableGoogleAutoSelect();
-                    auth
-                      .signOut()
-                      .catch(error =>
-                        setAuthError(
-                          error instanceof Error
-                            ? error.message
-                            : 'Sign-out failed.',
-                        ),
-                      );
-                  }}
-                  type="button">
-                  {copy.signOut}
-                </button>
-              </>
-            ) : (
-              <GoogleSignInButton
-                clientId={CONFIG_RESULT.value.googleClientId}
-                locale={locale}
-                onCredential={credential =>
-                  auth.signInWithGoogleCredential(credential)
-                }
-                onError={setAuthError}
-              />
-            )
-          ) : null}
-        </div>
-        <div className="web-language" aria-label="Language">
-          <button
-            aria-pressed={locale === 'he'}
-            className={locale === 'he' ? 'selected' : undefined}
-            onClick={() => setLocale('he')}
-            type="button">
-            {copy.hebrew}
-          </button>
-          <button
-            aria-pressed={locale === 'en'}
-            className={locale === 'en' ? 'selected' : undefined}
-            onClick={() => setLocale('en')}
-            type="button">
-            {copy.english}
-          </button>
-        </div>
-        {!CONFIG_RESULT.ok ? (
-          <p className="web-limitations">{copy.cloudMissing}</p>
-        ) : null}
-        {authError ? (
-          <p className="web-auth-message" role="alert">
-            {authError}
-          </p>
-        ) : null}
-      </header>
-
-      <main className="web-product-root">
-        {state.status === 'loading' || sessionMismatch ? (
-          <div className="web-state">{copy.loading}</div>
-        ) : state.status === 'error' ? (
-          <div className="web-state" role="alert">
-            <strong>{copy.failed}</strong>
-            <span>{state.message}</span>
+    <PrivacyControlsContext.Provider
+      value={{openPrivacy: () => setPrivacyOpen(true)}}>
+      <div className="web-app" dir={locale === 'he' ? 'rtl' : 'ltr'}>
+        <header className="web-status-bar">
+          <div className="web-brand-block">
+            <strong>{copy.appName}</strong>
+            <span className="web-local-badge">{copy.local}</span>
+            <span
+              className={`web-sync-badge ${
+                signedIn ? authSnapshot.connection : 'local'
+              }`}>
+              {signedIn
+                ? authSnapshot.connection === 'online'
+                  ? copy.connected
+                  : copy.offline
+                : copy.localOnly}
+            </span>
+          </div>
+          <div className="web-account">
+            <button type="button" onClick={() => setPrivacyOpen(true)}>
+              {locale === 'he' ? 'פרטיות והמידע שלך' : 'Privacy and your data'}
+            </button>
+            {CONFIG_RESULT.ok && auth ? (
+              signedIn ? (
+                <>
+                  <span className="web-account-label">
+                    {copy.signedInAs}{' '}
+                    {authSnapshot.identity.displayName ??
+                      authSnapshot.identity.email}
+                  </span>
+                  <button onClick={() => setPanelOpen(true)} type="button">
+                    {copy.connections}
+                  </button>
+                  <button
+                    className="secondary"
+                    onClick={() => {
+                      disableGoogleAutoSelect();
+                      auth
+                        .signOut()
+                        .catch(error =>
+                          setAuthError(
+                            error instanceof Error
+                              ? error.message
+                              : 'Sign-out failed.',
+                          ),
+                        );
+                    }}
+                    type="button">
+                    {copy.signOut}
+                  </button>
+                </>
+              ) : (
+                <GoogleSignInButton
+                  clientId={CONFIG_RESULT.value.googleClientId}
+                  locale={locale}
+                  onCredential={credential =>
+                    auth.signInWithGoogleCredential(credential)
+                  }
+                  onError={setAuthError}
+                />
+              )
+            ) : null}
+          </div>
+          <div className="web-language" aria-label="Language">
             <button
-              onClick={() => setBootstrapAttempt(attempt => attempt + 1)}
+              aria-pressed={locale === 'he'}
+              className={locale === 'he' ? 'selected' : undefined}
+              onClick={() => setLocale('he')}
               type="button">
-              {copy.retry}
+              {copy.hebrew}
+            </button>
+            <button
+              aria-pressed={locale === 'en'}
+              className={locale === 'en' ? 'selected' : undefined}
+              onClick={() => setLocale('en')}
+              type="button">
+              {copy.english}
             </button>
           </div>
-        ) : (
-          <Suspense fallback={<div className="web-state">{copy.loading}</div>}>
-            <BrowserProduct
-              {...(authSnapshot.status === 'signed-in'
-                ? {authConnection: authSnapshot.connection}
-                : {})}
-              key={`${state.resources.scope.productUserId}:${state.resources.scope.workspaceId}:${state.resources.scope.nightscoutSourceId}`}
-              layout={layout as PersonalizationLayout}
+          {!CONFIG_RESULT.ok ? (
+            <p className="web-limitations">{copy.cloudMissing}</p>
+          ) : null}
+          {authError ? (
+            <p className="web-auth-message" role="alert">
+              {authError}
+            </p>
+          ) : null}
+        </header>
+
+        <main className="web-product-root">
+          {deletionRecoveryOwner ||
+          privacyOpen ||
+          (privacyUid &&
+            privacyReady &&
+            (privacyState.consent === null || privacyState.deleting)) ? (
+            <PrivacyView
               locale={locale}
-              openConnections={() => setPanelOpen(true)}
-              savePersonalization={savePersonalization}
-              setAiEnabled={setAiEnabled}
-              setLocale={setLocale}
-              state={state}
+              runtime={privacyRuntime}
+              readOnly={!privacyUid && !deletionRecoveryOwner}
             />
-          </Suspense>
-        )}
-      </main>
-      {panelOpen && readyResources?.api ? (
-        <ConnectionPanel
-          aiConfigured={readyResources.aiConfigured}
-          api={readyResources.api}
-          locale={locale}
-          nightscout={readyResources.nightscout}
-          onChanged={() => {
-            // Invalidate in-flight data and model calls immediately; the panel may remain open.
-            bootstrapScopeTokenRef.current += 1;
-            connectionsChanged.current = true;
-          }}
-          onClose={() => {
-            setPanelOpen(false);
-            if (connectionsChanged.current) {
-              connectionsChanged.current = false;
-              setConnectionRevision(revision => revision + 1);
-            }
-          }}
-        />
-      ) : null}
-    </div>
+          ) : !privacyReady || state.status === 'loading' || sessionMismatch ? (
+            <div className="web-state">{copy.loading}</div>
+          ) : state.status === 'error' ? (
+            <div className="web-state" role="alert">
+              <strong>{copy.failed}</strong>
+              <span>{state.message}</span>
+              <button
+                onClick={() => setBootstrapAttempt(attempt => attempt + 1)}
+                type="button">
+                {copy.retry}
+              </button>
+            </div>
+          ) : (
+            <Suspense
+              fallback={<div className="web-state">{copy.loading}</div>}>
+              <BrowserProduct
+                {...(authSnapshot.status === 'signed-in'
+                  ? {authConnection: authSnapshot.connection}
+                  : {})}
+                key={`${state.resources.scope.productUserId}:${state.resources.scope.workspaceId}:${state.resources.scope.nightscoutSourceId}`}
+                layout={layout as PersonalizationLayout}
+                locale={locale}
+                openConnections={() => setPanelOpen(true)}
+                savePersonalization={savePersonalization}
+                setAiEnabled={setAiEnabled}
+                setLocale={setLocale}
+                state={state}
+              />
+            </Suspense>
+          )}
+        </main>
+        {privacyCloud && panelOpen && readyResources?.api ? (
+          <ConnectionPanel
+            aiConfigured={readyResources.aiConfigured}
+            api={readyResources.api}
+            locale={locale}
+            nightscout={readyResources.nightscout}
+            onChanged={() => {
+              // Invalidate in-flight data and model calls while the panel remains open.
+              bootstrapScopeTokenRef.current += 1;
+              connectionsChanged.current = true;
+            }}
+            onClose={() => {
+              setPanelOpen(false);
+              if (connectionsChanged.current) {
+                connectionsChanged.current = false;
+                setConnectionRevision(revision => revision + 1);
+              }
+            }}
+          />
+        ) : null}
+      </div>
+    </PrivacyControlsContext.Provider>
   );
 };

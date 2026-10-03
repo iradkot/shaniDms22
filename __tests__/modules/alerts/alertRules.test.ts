@@ -1,5 +1,7 @@
 import {
+  encodeAlertRuleConditionBounds,
   evaluateAlertRule,
+  inferAlertRuleCondition,
   parseClockTime,
   validateAlertRuleInput,
 } from 'app/modules/alerts/domain/alertRules';
@@ -23,33 +25,21 @@ describe('alert-rule validation', () => {
   });
 
   it.each([
-    [
-      {...validRule, name: ' '},
-      'name-required',
-    ],
-    [
-      {...validRule, lowerBoundMgDl: 180},
-      'glucose-range-order',
-    ],
-    [
-      {...validRule, lowerBoundMgDl: 0},
-      'glucose-out-of-bounds',
-    ],
-    [
-      {...validRule, activeToMinute: 22 * 60},
-      'time-window-empty',
-    ],
-    [
-      {...validRule, activeFromMinute: 1440},
-      'time-out-of-bounds',
-    ],
-  ] as const)('rejects invalid input with a stable issue code', (input, code) => {
-    const result = validateAlertRuleInput(input);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.issues.map(issue => issue.code)).toContain(code);
-    }
-  });
+    [{...validRule, name: ' '}, 'name-required'],
+    [{...validRule, lowerBoundMgDl: 180}, 'glucose-range-order'],
+    [{...validRule, lowerBoundMgDl: 0}, 'glucose-out-of-bounds'],
+    [{...validRule, activeToMinute: 22 * 60}, 'time-window-empty'],
+    [{...validRule, activeFromMinute: 1440}, 'time-out-of-bounds'],
+  ] as const)(
+    'rejects invalid input with a stable issue code',
+    (input, code) => {
+      const result = validateAlertRuleInput(input);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues.map(issue => issue.code)).toContain(code);
+      }
+    },
+  );
 
   it('parses exact 24-hour clock input and rejects ambiguous values', () => {
     expect(parseClockTime('06:05')).toBe(365);
@@ -84,6 +74,79 @@ describe('alert-rule validation', () => {
         evaluatedAtMs,
       ),
     ).toEqual({trigger: true, reason: 'outside-range'});
+  });
+
+  it('encodes a strict below-only rule without changing the persisted shape', () => {
+    const bounds = encodeAlertRuleConditionBounds('below', {
+      lowerBoundMgDl: 65,
+      upperBoundMgDl: 180,
+    });
+    const rule = {
+      ...validRule,
+      ...bounds,
+      id: 'below-rule',
+      triggeredAtMs: [],
+    };
+    const evaluatedAtMs = new Date(2026, 0, 1, 23, 0).getTime();
+
+    expect(bounds).toEqual({lowerBoundMgDl: 65, upperBoundMgDl: 1000});
+    expect(inferAlertRuleCondition(rule)).toBe('below');
+    expect(evaluateAlertRule(rule, {valueMgDl: 64}, evaluatedAtMs)).toEqual({
+      trigger: true,
+      reason: 'outside-range',
+    });
+    expect(evaluateAlertRule(rule, {valueMgDl: 65}, evaluatedAtMs)).toEqual({
+      trigger: false,
+      reason: 'inside-range',
+    });
+    expect(evaluateAlertRule(rule, {valueMgDl: 1001}, evaluatedAtMs)).toEqual({
+      trigger: false,
+      reason: 'invalid-observation',
+    });
+  });
+
+  it('encodes a strict above-only rule without changing the persisted shape', () => {
+    const bounds = encodeAlertRuleConditionBounds('above', {
+      lowerBoundMgDl: 70,
+      upperBoundMgDl: 180,
+    });
+    const rule = {
+      ...validRule,
+      ...bounds,
+      id: 'above-rule',
+      triggeredAtMs: [],
+    };
+    const evaluatedAtMs = new Date(2026, 0, 1, 23, 0).getTime();
+
+    expect(bounds).toEqual({lowerBoundMgDl: 1, upperBoundMgDl: 180});
+    expect(inferAlertRuleCondition(rule)).toBe('above');
+    expect(evaluateAlertRule(rule, {valueMgDl: 181}, evaluatedAtMs)).toEqual({
+      trigger: true,
+      reason: 'outside-range',
+    });
+    expect(evaluateAlertRule(rule, {valueMgDl: 180}, evaluatedAtMs)).toEqual({
+      trigger: false,
+      reason: 'inside-range',
+    });
+    expect(evaluateAlertRule(rule, {valueMgDl: 0}, evaluatedAtMs)).toEqual({
+      trigger: false,
+      reason: 'invalid-observation',
+    });
+  });
+
+  it('treats legacy two-sided rules as outside-range rules', () => {
+    const rule = {...validRule, id: 'legacy-rule', triggeredAtMs: []};
+    const evaluatedAtMs = new Date(2026, 0, 1, 23, 0).getTime();
+
+    expect(inferAlertRuleCondition(rule)).toBe('outside-range');
+    expect(evaluateAlertRule(rule, {valueMgDl: 69}, evaluatedAtMs)).toEqual({
+      trigger: true,
+      reason: 'outside-range',
+    });
+    expect(evaluateAlertRule(rule, {valueMgDl: 181}, evaluatedAtMs)).toEqual({
+      trigger: true,
+      reason: 'outside-range',
+    });
   });
 
   it('handles overnight windows and cooldown at their exact boundaries', () => {

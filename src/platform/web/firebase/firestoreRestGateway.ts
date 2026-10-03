@@ -5,6 +5,10 @@ import type {
 } from '../../native/journal/firebaseJournalRemoteAdapter';
 import type {PersonalizationFirestoreGateway} from '../../native/personalization/firebaseProductPersonalizationRemoteAdapter';
 import {createRequestAbortScope} from '../../../utils/requestAbortScope';
+import {
+  capturePrivacyAuthorization,
+  assertPrivacyConsent,
+} from '../../../modules/privacy';
 
 type FirestoreValue = Readonly<Record<string, unknown>>;
 
@@ -17,6 +21,43 @@ const SERVER_TIMESTAMP = Symbol('firestore-server-timestamp');
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const requestDocumentOwners = (url: string, body: unknown): string[] => {
+  const targets: string[] = [decodeURIComponent(new URL(url).pathname)];
+  if (typeof body === 'string') {
+    const value: unknown = JSON.parse(body);
+    if (isRecord(value)) {
+      if (Array.isArray(value.documents)) {
+        value.documents.forEach(name => {
+          if (typeof name === 'string') {
+            targets.push(name);
+          }
+        });
+      }
+      if (Array.isArray(value.writes)) {
+        value.writes.forEach(write => {
+          if (!isRecord(write)) {
+            return;
+          }
+          const name = isRecord(write.update)
+            ? write.update.name
+            : isRecord(write.transform)
+            ? write.transform.document
+            : write.delete;
+          if (typeof name === 'string') {
+            targets.push(name);
+          }
+        });
+      }
+    }
+  }
+  return targets.flatMap(target => {
+    const owner = /\/documents\/users\/([A-Za-z0-9_-]+)(?:\/|:|$)/.exec(
+      target,
+    )?.[1];
+    return owner === undefined ? [] : [owner];
+  });
+};
 
 const firestoreError = async (response: Response): Promise<Error> => {
   let code = `http-${response.status}`;
@@ -239,6 +280,9 @@ class FirestoreRestGateway
     consume: (response: Response) => Promise<T>,
     init?: RequestInit,
   ): Promise<T> {
+    const owners = requestDocumentOwners(url, init?.body);
+    owners.forEach(owner => assertPrivacyConsent('cloud', owner));
+    const authorize = capturePrivacyAuthorization('cloud', owners[0]);
     const abortScope = createRequestAbortScope({
       ...(init?.signal == null ? {} : {signal: init.signal}),
       timeoutMs: this.options.timeoutMs ?? 20_000,
@@ -247,6 +291,7 @@ class FirestoreRestGateway
       abortScope.throwIfAborted();
       const token = await this.options.auth.getIdToken();
       abortScope.throwIfAborted();
+      authorize();
       const response = await this.request(url, {
         ...init,
         headers: {
@@ -261,6 +306,7 @@ class FirestoreRestGateway
       abortScope.throwIfAborted();
       const value = await consume(response);
       abortScope.throwIfAborted();
+      authorize();
       return value;
     } catch (error) {
       if (abortScope.kind === 'cancelled') {
@@ -327,8 +373,10 @@ class FirestoreRestGateway
       serverTimestamp(): unknown;
     }) => Promise<T>,
   ): Promise<T> {
+    const authorize = capturePrivacyAuthorization('cloud');
     let lastError: unknown;
     for (let attempt = 0; attempt < 4; attempt += 1) {
+      authorize();
       const transactionId = await this.authenticatedFetch(
         `${this.databaseRoot}/documents:beginTransaction`,
         async response => {
@@ -346,10 +394,17 @@ class FirestoreRestGateway
       const writes: PendingWrite[] = [];
       try {
         const result = await operation({
-          get: path => this.readDocument(path, transactionId),
-          set: (documentPath, value) => writes.push({documentPath, value}),
+          get: path => {
+            authorize();
+            return this.readDocument(path, transactionId);
+          },
+          set: (documentPath, value) => {
+            authorize();
+            writes.push({documentPath, value});
+          },
           serverTimestamp: () => SERVER_TIMESTAMP,
         });
+        authorize();
         const encodedWrites = writes.map(write => {
           const encoded = encodeFields(write.value);
           const documentName = `${

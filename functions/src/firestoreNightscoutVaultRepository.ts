@@ -1,4 +1,5 @@
 import type {Firestore} from 'firebase-admin/firestore';
+import {writePrivateCredential} from './writePrivateCredential';
 
 import type {
   NightscoutVaultDocument,
@@ -53,7 +54,7 @@ export class FirestoreNightscoutVaultRepository
   }
 
   async write(uid: string, document: NightscoutVaultDocument): Promise<void> {
-    await this.firestore.doc(documentPath(uid)).set(document);
+    await writePrivateCredential(this.firestore, uid, documentPath(uid), document);
   }
 
   async remove(uid: string): Promise<void> {

@@ -3,6 +3,11 @@ import type {
   MealImageSnapshot,
 } from '../../../../src/modules/journal';
 import {
+  clearPrivacySession,
+  PRIVACY_POLICY_VERSION,
+  registerPrivacySession,
+} from '../../../../src/modules/privacy';
+import {
   createAuthenticatedBrowserWorkspaceScope,
   createBrowserMealImagesRuntime,
   type BrowserMealImageBlobRepository,
@@ -50,6 +55,15 @@ const scope = createAuthenticatedBrowserWorkspaceScope({
 });
 
 describe('browser Meal Images runtime', () => {
+  beforeEach(() => {
+    registerPrivacySession('firebase-user-1', {
+      policyVersion: PRIVACY_POLICY_VERSION,
+      cloudSync: true,
+      aiProcessing: false,
+      updatedAtMs: 1,
+    });
+  });
+
   it('stages a picked Blob durably and reference-counts display URLs', async () => {
     const blobs = new MemoryBlobs();
     const revoked: string[] = [];
@@ -156,6 +170,42 @@ describe('browser Meal Images runtime', () => {
     });
     expect([...strings.values.values()].join(' ')).not.toContain(objectPath);
     expect(request).toHaveBeenCalledTimes(2);
+    handle.dispose();
+  });
+
+  it('keeps remote deletion queued without contacting Firebase when consent is missing', async () => {
+    clearPrivacySession();
+    const strings = new MemoryStrings();
+    const request = jest.fn();
+    const getIdToken = jest.fn(async () => 'firebase-id-token');
+    const objectPath =
+      'users/firebase-user-1/workspaces/primary/mealImages/meal_1/image_1234567890abcdef1234567890abcdef.jpg';
+    const handle = createBrowserMealImagesRuntime({
+      scope,
+      strings,
+      blobs: new MemoryBlobs(),
+      auth: {getIdToken},
+      storageBucket: 'shani-project.appspot.com',
+      fetch: request,
+      createObjectUrl: () => 'blob:unused',
+      revokeObjectUrl: jest.fn(),
+    });
+    await handle.store.removeMealImage(scope, 'meal_1' as MealEntryId, {
+      mimeType: 'image/jpeg',
+      syncState: {
+        kind: 'available',
+        objectPath,
+        displayUri: 'storage-object://meal-image',
+        thumbnailUri: 'storage-object://meal-image',
+      },
+    });
+    await expect(handle.retryPendingDeletions()).resolves.toEqual({
+      removed: 0,
+      pending: 1,
+    });
+    expect([...strings.values.values()].join(' ')).toContain(objectPath);
+    expect(getIdToken).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
     handle.dispose();
   });
 });

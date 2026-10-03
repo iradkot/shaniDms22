@@ -3,7 +3,7 @@ tags:
   - product
 ---
 # Rebuilt product smoke. This is intentionally independent of Firebase and
-# Nightscout: it verifies the navigation shell and optional Hub filters.
+# Nightscout: it verifies personal Home, the catalogue and the navigation shell.
 - launchApp:
     clearState: true
 
@@ -12,6 +12,12 @@ tags:
       id: product-shell
     timeout: 30000
 
+- assertVisible:
+    id: product-home
+- assertVisible:
+    id: personal-home-view
+- tapOn:
+    id: home-tab-modules
 - assertVisible:
     id: product-hub
 - tapOn:
@@ -50,27 +56,29 @@ tags:
 - assertVisible:
     id: shell-control-forward
 
-# Back returns to the exact Hub root.
+# Back returns to Home. The catalogue remains available from its tab.
 - tapOn:
     id: shell-control-back
 - extendedWaitUntil:
     visible:
-      id: product-hub
+      id: product-home
     timeout: 15000
 
 # Forward restores the exact Module that Back just left.
 - tapOn:
     id: shell-control-forward
 - assertNotVisible:
-    id: product-hub
+    id: product-home
 - tapOn:
     id: shell-control-hub
 - extendedWaitUntil:
     visible:
-      id: product-hub
+      id: personal-home-view
     timeout: 15000
 
-# Opening the same Module again and using Hub also resets to the Hub root.
+# Opening the same Module again and using Home resets to the personal root.
+- tapOn:
+    id: home-tab-modules
 - tapOn:
     id: hub-filter-toggle
 - scrollUntilVisible:
@@ -91,7 +99,7 @@ tags:
     id: shell-control-hub
 - extendedWaitUntil:
     visible:
-      id: product-hub
+      id: personal-home-view
     timeout: 15000
 
 - takeScreenshot: product-hub-record-navigation

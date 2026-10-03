@@ -1,3 +1,4 @@
+import {guardPrivacyCloudGateway} from '../../../modules/privacy/cloudGateway';
 import {getApp} from '@react-native-firebase/app';
 import {
   collection,
@@ -12,7 +13,7 @@ import type {AlertFirestoreGateway} from '../../../modules/alerts';
 export const createReactNativeFirebaseAlertsGateway =
   (): AlertFirestoreGateway => {
     const firestore = getFirestore(getApp());
-    return {
+    return guardPrivacyCloudGateway({
       async get(documentPath) {
         const snapshot = await runTransaction(firestore, transaction =>
           transaction.get(doc(firestore, documentPath)),
@@ -24,10 +25,12 @@ export const createReactNativeFirebaseAlertsGateway =
       },
       async list(collectionPath) {
         const snapshot = await getDocs(collection(firestore, collectionPath));
-        return snapshot.docs.map((candidate: {id: string; data(): unknown}) => ({
-          id: candidate.id,
-          data: candidate.data(),
-        }));
+        return snapshot.docs.map(
+          (candidate: {id: string; data(): unknown}) => ({
+            id: candidate.id,
+            data: candidate.data(),
+          }),
+        );
       },
       runTransaction: operation =>
         runTransaction(firestore, transaction =>
@@ -46,5 +49,5 @@ export const createReactNativeFirebaseAlertsGateway =
             },
           }),
         ),
-    };
+    });
   };

@@ -4,7 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class WidgetDailyRefreshThrottleTest {
-  private val source = WidgetSyncConfiguration.Ready("https://example.invalid", null, false)
+  private val source = WidgetSyncConfiguration.Ready("https://example.invalid", "synthetic-read-token", false, "synthetic-owner", "a".repeat(40))
 
   @Test fun `repeated foreground snapshots retry missing data once per minute`() {
     val gate = WidgetDailyRefreshThrottle()

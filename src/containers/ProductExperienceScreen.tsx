@@ -23,6 +23,7 @@ import {useNightscoutConfig} from 'app/contexts/NightscoutConfigContext';
 import {useGlucoseSettings} from 'app/contexts/GlucoseSettingsContext';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
 import {testLlmConnection} from 'app/services/llm/shaniLlmProxy';
+import {createLlmProvider} from 'app/services/llm/llmClient';
 import {isConfiguredAiCredential} from 'app/services/llm/credentialReadiness';
 import {useProactiveCareSettings} from 'app/contexts/ProactiveCareSettingsContext';
 import {NIGHTSCOUT_SETUP_SCREEN} from 'app/constants/SCREEN_NAMES';
@@ -72,9 +73,11 @@ import {useLegacyAiAnalystModuleRuntime} from 'app/platform/native/ai';
 import {NATIVE_RUNTIME_CONFIG} from 'app/platform/native/runtimeConfig';
 import {sha1WorkspaceIdentityDigest} from 'app/modules/workspaces';
 import {useGlucoseRuleNotifications} from 'app/hooks/useGlucoseRuleNotifications';
+import {useAlertDeliveryMode} from 'app/hooks/useAlertDeliveryMode';
 import {unregisterDeviceToken} from 'app/services/rebaseService';
 import {usePreMealNotifications} from 'app/hooks/usePreMealNotifications';
 import {useProactiveCareUpdateCenter} from 'app/hooks/useProactiveCareUpdateCenter';
+import {interpretAlertRuleDraft} from 'app/modules/alerts';
 
 type RootNavigation = NavigationProp<Record<string, object | undefined>>;
 
@@ -134,7 +137,7 @@ const ProductExperienceScreen = ({
             firebaseUserId ?? '',
             activeProfile?.id ?? '',
             activeProfile?.baseUrl ?? '',
-            activeProfile?.apiSecretSha1 ?? '',
+            activeProfile?.accessToken ?? activeProfile?.apiSecretSha1 ?? '',
           ].join('|'),
         ),
         profile: activeProfile,
@@ -439,19 +442,52 @@ const ProductExperienceScreen = ({
     [glucoseSettings, loopChangesDataSource],
   );
   const alertWorkspaceId = activeJournalWorkspace?.scope.workspaceId;
+  const alertOwnerId = activeJournalWorkspace?.scope.productUserId;
   const updateCenterRepository = useMemo(
     () =>
       alertWorkspaceId === undefined
         ? undefined
-        : createNativeUpdateCenterRepository({scopeId: alertWorkspaceId}),
-    [alertWorkspaceId],
+        : createNativeUpdateCenterRepository({scopeId: alertWorkspaceId,
+            ...(alertOwnerId === undefined ? {} : {ownerProductUserId: alertOwnerId})}),
+    [alertOwnerId, alertWorkspaceId],
   );
   const alertRulesRepository = useMemo(
     () =>
       alertWorkspaceId === undefined
         ? undefined
-        : createNativeAlertRulesRepository({scopeId: alertWorkspaceId}),
-    [alertWorkspaceId],
+        : createNativeAlertRulesRepository({scopeId: alertWorkspaceId,
+            ...(alertOwnerId === undefined ? {} : {ownerProductUserId: alertOwnerId})}),
+    [alertOwnerId, alertWorkspaceId],
+  );
+  const alertDelivery = useAlertDeliveryMode(alertWorkspaceId, alertOwnerId);
+  const alertRuleInterpreter = useMemo(
+    () => ({
+      availability: (!aiSettings.enabled
+        ? 'disabled'
+        : aiCredentialConfigured
+        ? 'ready'
+        : 'missing-credentials') as
+        | 'ready'
+        | 'disabled'
+        | 'missing-credentials',
+      interpret: (request: string) => {
+        if (!aiSettings.enabled || !aiCredentialConfigured) {
+          return Promise.reject(new Error('AI is not available.'));
+        }
+        const provider = createLlmProvider(aiSettings);
+        return interpretAlertRuleDraft(request, async prompt => {
+          const response = await provider.sendChat({
+            model: aiSettings.openAiModel,
+            messages: [{role: 'user', content: prompt}],
+            temperature: 0.1,
+            maxOutputTokens: 500,
+          });
+          return response.content;
+        });
+      },
+      onOpenSettings: () => setSettingsDetail('ai-credentials'),
+    }),
+    [aiCredentialConfigured, aiSettings],
   );
   useEffect(
     () =>
@@ -462,10 +498,12 @@ const ProductExperienceScreen = ({
     [alertRulesRepository, updateCenterRepository],
   );
   useGlucoseRuleNotifications(
-    latestNightscoutSnapshotState.snapshot,
+    alertDelivery.ready ? latestNightscoutSnapshotState.snapshot : undefined,
     alertWorkspaceId,
     updateCenterRepository,
     language,
+    alertDelivery.mode,
+    alertOwnerId,
   );
   useProactiveCareUpdateCenter({
     scopeId: alertWorkspaceId,
@@ -489,9 +527,25 @@ const ProductExperienceScreen = ({
             },
             alertRules: {
               repository: alertRulesRepository,
+              deliveryMode: alertDelivery.mode,
+              deliveryModeReady: alertDelivery.ready,
+              deliveryModeLoadError: alertDelivery.error,
+              retryDeliveryMode: alertDelivery.retry,
+              setDeliveryMode: alertDelivery.setMode,
+              interpreter: alertRuleInterpreter,
             },
           },
-    [alertRulesRepository, alertWorkspaceId, updateCenterRepository],
+    [
+      alertDelivery.mode,
+      alertDelivery.ready,
+      alertDelivery.error,
+      alertDelivery.retry,
+      alertDelivery.setMode,
+      alertRulesRepository,
+      alertRuleInterpreter,
+      alertWorkspaceId,
+      updateCenterRepository,
+    ],
   );
   const currentSnapshotTarget = useMemo(
     () => selectCurrentSnapshotTarget(coreDestinationRegistry, {runtime}),
@@ -598,7 +652,7 @@ const ProductExperienceScreen = ({
           status: activeProfile ? 'connected' : 'not-connected',
           ...(activeProfile?.label ? {displayLabel: activeProfile.label} : {}),
           credentialConfigured:
-            (activeProfile?.apiSecretSha1.trim().length ?? 0) > 0,
+            ((activeProfile?.accessToken ?? activeProfile?.apiSecretSha1)?.trim().length ?? 0) > 0,
         },
         offline: {
           status:

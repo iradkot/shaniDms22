@@ -1,3 +1,6 @@
+import {configureExperimentalBuildForTests} from '../../mocks/experimentalBuild';
+configureExperimentalBuildForTests();
+
 import type {JournalWorkspace} from 'app/modules/journal';
 import {
   buildPreviousDaySummary,
