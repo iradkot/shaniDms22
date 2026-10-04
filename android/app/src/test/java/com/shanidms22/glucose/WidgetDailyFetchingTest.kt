@@ -54,13 +54,14 @@ class WidgetDailyFetchingTest {
     assertTrue("a slow or unavailable insulin/history request must not leave today's TIR blank", hadRangeBeforeOptionalRequest)
   }
 
-  @Test fun `profile endpoints are not needed for recorded insulin and are never requested`() {
+  @Test fun `optional profile requests cannot turn programmed basal into a recorded amount`() {
     val server = NightscoutV1Server(glucoseCount = 40, treatmentCount = 40)
     val result = fetchWidgetDailySummary("https://nightscout.test", null, 70, 180, now, zone, fetch = server::fetch)
     assertNotNull(result.summary.range)
     assertNotNull(result.summary.insulin?.today)
     assertNull("no schedule may fill today's missing recorded basal", result.summary.insulin?.today?.totalBasal)
-    assertTrue(server.requests.none { it.contains("profile") })
+    assertEquals(8, server.requests.count { it.contains("profiles") })
+    assertNull(result.summary.insulin?.today?.estimatedTotalUnits)
   }
 
   /** Mirrors Nightscout 15 lib/server/{entries,treatments}.js: count, find, sort; no skip. */

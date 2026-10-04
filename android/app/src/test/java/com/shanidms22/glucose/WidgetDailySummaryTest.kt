@@ -91,7 +91,7 @@ class WidgetDailySummaryTest {
     assertEquals("partial", empty.quality)
   }
 
-  @Test fun `weekly basal does not average incomplete subtotals into a baseline`() {
+  @Test fun `weekly basal retains all seven partial subtotals and their mean coverage`() {
     val treatments = JSONArray()
     for (daysAgo in 1..7) {
       val dayStart = start - daysAgo * 24 * hour
@@ -102,8 +102,10 @@ class WidgetDailySummaryTest {
     assertEquals(0.5, comparison.yesterday!!.totalBasal!!, 0.0)
     assertEquals(50.0, comparison.yesterday!!.basalCoveragePercent, 0.0)
     assertEquals(7, comparison.weekDays)
-    assertNull(comparison.weekAverage!!.totalBasal)
-    assertEquals(0.0, comparison.weekAverage!!.basalCoveragePercent, 0.0)
+    assertEquals(0.5, comparison.weekAverage!!.totalBasal!!, 0.0)
+    assertEquals(50.0, comparison.weekAverage!!.basalCoveragePercent, 0.0)
+    assertEquals("partial", comparison.weekAverage!!.quality)
+    assertNull(comparison.weekAverage!!.totalInsulin)
     assertEquals(2.0, comparison.weekAverage!!.totalBolus!!, 0.0)
   }
 

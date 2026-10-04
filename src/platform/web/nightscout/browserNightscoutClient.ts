@@ -274,6 +274,9 @@ export interface BrowserNightscoutDeviceStatus {
 }
 
 export interface BrowserNightscoutBasalProfile {
+  readonly timeZone?: string;
+  /** Preserves when the returned profile became effective; required for historical estimates. */
+  readonly effectiveFromMs?: number;
   readonly entries: readonly {
     readonly secondsFromMidnight: number;
     readonly rateUnitsPerHour: number;
@@ -532,6 +535,13 @@ const decodeBrowserNightscoutBasalProfile = (
       ? (store[defaultProfile] as Record<string, unknown>)
       : undefined;
   const normalized = Array.isArray(value.entries);
+  const timeZone = normalized ? value.timeZone : selected?.timezone ?? value.timezone;
+  if (timeZone !== undefined && (typeof timeZone !== 'string' || timeZone.trim() === '')) {
+    return null;
+  }
+  const effectiveFromMs = normalized
+    ? (typeof value.effectiveFromMs === 'number' ? value.effectiveFromMs : undefined)
+    : (typeof value.startDate === 'string' ? Date.parse(value.startDate) : undefined);
   const basal = normalized ? value.entries : selected?.basal;
   if (!Array.isArray(basal)) {
     return null;
@@ -543,11 +553,11 @@ const decodeBrowserNightscoutBasalProfile = (
       }
       const time = text(entry.time, 8);
       const match =
-        time === undefined ? null : /^(\d{1,2}):(\d{2})$/.exec(time);
+        time === undefined ? null : /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(time);
       const parsedSeconds =
-        match === null || Number(match[1]) > 23 || Number(match[2]) > 59
+        match === null || Number(match[1]) > 23 || Number(match[2]) > 59 || Number(match[3] ?? 0) > 59
           ? undefined
-          : Number(match[1]) * 60 * 60 + Number(match[2]) * 60;
+          : Number(match[1]) * 60 * 60 + Number(match[2]) * 60 + Number(match[3] ?? 0);
       const secondsFromMidnight = bounded(
         normalized
           ? entry.secondsFromMidnight
@@ -562,6 +572,7 @@ const decodeBrowserNightscoutBasalProfile = (
       );
       return secondsFromMidnight === undefined ||
         !Number.isInteger(secondsFromMidnight) ||
+        (!normalized && parsedSeconds !== secondsFromMidnight) ||
         rateUnitsPerHour === undefined
         ? []
         : [{secondsFromMidnight, rateUnitsPerHour}];
@@ -575,7 +586,10 @@ const decodeBrowserNightscoutBasalProfile = (
     new Set(entries.map(entry => entry.secondsFromMidnight)).size !==
       entries.length
     ? null
-    : {entries};
+    : {entries,
+        ...(typeof timeZone === 'string' ? {timeZone} : {}),
+        ...(effectiveFromMs !== undefined && Number.isFinite(effectiveFromMs) ? {effectiveFromMs} : {}),
+      };
 };
 
 const cacheKey = (

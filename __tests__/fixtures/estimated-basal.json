@@ -1,0 +1,147 @@
+{
+  "start": "2026-09-27T00:00:00Z",
+  "end": "2026-09-27T03:00:00Z",
+  "observedAt": "2026-09-27T03:00:00Z",
+  "profile": {
+    "timeZone": "UTC",
+    "entries": [{"time": "00:00", "timeAsSeconds": 0, "value": 1}]
+  },
+  "records": [{"eventType": "Correction Bolus", "created_at": "2026-09-27T00:00:00Z", "insulin": 2}],
+  "cases": [
+    {"name": "schedule fills uncovered time", "records": [], "expectedBasalUnits": 3},
+    {
+      "name": "temporary absolute basal replaces the schedule",
+      "records": [{"eventType": "Temp Basal", "created_at": "2026-09-27T01:00:00Z", "duration": 60, "absolute": 2}],
+      "expectedBasalUnits": 4
+    },
+    {
+      "name": "later temp terminates the earlier command and schedule resumes after expiry",
+      "records": [
+        {"eventType": "Temp Basal", "created_at": "2026-09-27T00:00:00Z", "duration": 180, "absolute": 2},
+        {"eventType": "Temp Basal", "created_at": "2026-09-27T01:00:00Z", "duration": 30, "absolute": 0.5}
+      ],
+      "expectedBasalUnits": 3.75
+    },
+    {
+      "name": "Loop actual amount overrides programmed rate",
+      "records": [{"eventType": "Temp Basal", "created_at": "2026-09-27T01:00:00Z", "duration": 60, "absolute": 99, "enteredBy": "loop://fixture", "amount": 1.8}],
+      "expectedBasalUnits": 3.8,
+      "expectedRecordedBasalUnits": 1.8
+    },
+    {
+      "name": "later resume does not truncate an actual completed amount",
+      "records": [
+        {"eventType": "Temp Basal", "created_at": "2026-09-27T01:00:00Z", "duration": 60, "absolute": 2, "deliveredUnits": 1.8},
+        {"eventType": "Resume Pump", "created_at": "2026-09-27T01:30:00Z"}
+      ],
+      "expectedBasalUnits": 3.8,
+      "expectedRecordedBasalUnits": 1.8
+    },
+    {
+      "name": "zero duration cancels a temp and restores schedule",
+      "records": [
+        {"eventType": "Temp Basal", "created_at": "2026-09-27T00:00:00Z", "duration": 180, "absolute": 2},
+        {"eventType": "Temp Basal", "created_at": "2026-09-27T01:00:00Z", "duration": 0, "absolute": 0}
+      ],
+      "expectedBasalUnits": 4
+    },
+    {
+      "name": "temp carry in replaces the first half hour once",
+      "records": [{"eventType": "Temp Basal", "created_at": "2026-09-26T23:30:00Z", "duration": 60, "absolute": 2}],
+      "expectedBasalUnits": 3.5
+    },
+    {
+      "name": "open suspension carry in delivers zero until resume",
+      "records": [
+        {"eventType": "Suspend Pump", "created_at": "2026-09-26T23:00:00Z"},
+        {"eventType": "Resume Pump", "created_at": "2026-09-27T01:00:00Z"}
+      ],
+      "expectedBasalUnits": 2
+    },
+    {
+      "name": "percent is a relative increase rather than percent of the schedule",
+      "records": [{"eventType": "Temp Basal", "created_at": "2026-09-27T01:00:00Z", "duration": 60, "temp": "percentage", "percent": 50}],
+      "expectedBasalUnits": 3.5
+    },
+    {
+      "name": "absolute rate takes precedence over contradictory percentage",
+      "records": [{"eventType": "Temp Basal", "created_at": "2026-09-27T01:00:00Z", "duration": 60, "absolute": 2, "temp": "percentage", "percent": -100}],
+      "expectedBasalUnits": 4
+    },
+    {
+      "name": "percentage follows schedule rate changes",
+      "profile": {"timeZone": "UTC", "entries": [{"time": "00:00", "value": 1}, {"time": "01:00", "value": 2}]},
+      "records": [{"eventType": "Temp Basal", "created_at": "2026-09-27T00:00:00Z", "duration": 120, "temp": "percentage", "percent": 50}],
+      "expectedBasalUnits": 6.5
+    },
+    {
+      "name": "permanent intraday profile switch remains unresolved",
+      "records": [{"eventType": "Profile Switch", "created_at": "2026-09-27T01:00:00Z", "profile": "Other"}],
+      "expectedBasalUnits": null
+    },
+    {
+      "name": "permanent profile switch carry in remains unresolved",
+      "records": [{"eventType": "ProfileChange", "created_at": "2026-09-26T23:00:00Z", "duration": 0}],
+      "expectedBasalUnits": null
+    },
+    {
+      "name": "temporary profile switch carry in remains unresolved until expiry",
+      "records": [{"eventType": "Profile Change", "created_at": "2026-09-26T23:00:00Z", "duration": 180}],
+      "expectedBasalUnits": null
+    },
+    {
+      "name": "temporary profile switch expired before the window",
+      "records": [{"eventType": "Profile Switch", "created_at": "2026-09-26T22:00:00Z", "duration": 60}],
+      "expectedBasalUnits": 3
+    },
+    {
+      "name": "profile timezone selects the schedule independently of device zone",
+      "profile": {"timeZone": "GMT+3", "entries": [{"time": "00:00", "value": 1}, {"time": "03:00", "value": 2}]},
+      "records": [],
+      "expectedBasalUnits": 6
+    },
+    {
+      "name": "schedule retains second boundaries",
+      "end": "2026-09-27T00:01:00Z",
+      "profile": {"timeZone": "UTC", "entries": [{"time": "00:00", "value": 1}, {"time": "00:00:30", "timeAsSeconds": 30, "value": 2}]},
+      "records": [],
+      "expectedBasalUnits": 0.025
+    },
+    {
+      "name": "schedule without midnight is incomplete",
+      "profile": {"timeZone": "UTC", "entries": [{"time": "01:00", "value": 2}]},
+      "records": [],
+      "expectedBasalUnits": null
+    },
+    {
+      "name": "identical schedule duplicates remain ambiguous",
+      "profile": {"timeZone": "UTC", "entries": [{"time": "00:00", "value": 1}, {"time": "00:00", "value": 1}]},
+      "records": [],
+      "expectedBasalUnits": null
+    },
+    {
+      "name": "conflicting schedule duplicates remain ambiguous",
+      "profile": {"timeZone": "UTC", "entries": [{"time": "00:00", "value": 1}, {"time": "00:00", "value": 2}]},
+      "records": [],
+      "expectedBasalUnits": null
+    },
+    {
+      "name": "malformed textual time cannot be hidden by numeric seconds",
+      "profile": {"timeZone": "UTC", "entries": [{"time": "bad-time", "timeAsSeconds": 0, "value": 1}]},
+      "records": [],
+      "expectedBasalUnits": null
+    },
+    {
+      "name": "mismatched textual time and numeric seconds remain invalid",
+      "profile": {"timeZone": "UTC", "entries": [{"time": "00:00", "timeAsSeconds": 3600, "value": 1}]},
+      "records": [],
+      "expectedBasalUnits": null
+    },
+    {
+      "name": "unknown timezone cannot silently use device timezone",
+      "profile": {"timeZone": "Unknown/Timezone", "entries": [{"time": "00:00", "value": 1}]},
+      "records": [],
+      "expectedBasalUnits": null
+    }
+  ]
+}

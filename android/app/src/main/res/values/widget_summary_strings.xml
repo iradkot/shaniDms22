@@ -35,7 +35,7 @@
   <string name="summary_compare_unavailable">History unavailable · tap to switch</string>
   <string name="summary_range_description">Today: %1$s time in range, %2$s low, %3$s high. Target %4$d to %5$d milligrams per deciliter. %6$d percent of elapsed day covered.</string>
   <string name="summary_insulin_description">Recorded insulin today: %1$s units total. Basal %2$s units, %3$s. Bolus %4$s units, %5$s.</string>
-  <string name="summary_comparison_description">Recorded amount today %1$s units. %2$s %3$s units at the same time of day. Change %4$s. Tap to switch between yesterday and the previous seven days.</string>
+  <string name="summary_comparison_description">Amount today %1$s units. %2$s: %3$s units at the same time of day. Change %4$s. Tap to switch between yesterday and the previous seven days.</string>
   <string name="summary_glucose_description">Latest glucose %1$s milligrams per deciliter. Trend %2$s. %3$s.</string>
   <string name="summary_trend_double_up">rising quickly</string>
   <string name="summary_trend_up">rising</string>
@@ -57,5 +57,18 @@
   <string name="summary_compare_bolus_week">↔ Bolus vs 7-day avg</string>
   <string name="summary_compare_bolus_yesterday">↔ Bolus vs yesterday</string>
   <string name="summary_compare_until">Each day %1$s · tap to switch</string>
-  <string name="summary_insulin_partial_description">Recorded bolus today: %1$s units. Recorded basal subtotal: %2$s units with %3$s coverage. Total insulin and ratio unavailable.</string>
+  <string name="summary_insulin_partial_description">Recorded bolus today: %1$s units. Recorded basal subtotal: %2$s units with %3$s coverage. The recorded subtotal is incomplete.</string>
+  <string name="summary_estimated_compact">Est. %1$s</string>
+  <string name="summary_partial_compact">Partial %1$s</string>
+  <string name="summary_estimated_label">%1$s · estimate</string>
+  <string name="summary_partial_label">%1$s · partial records</string>
+  <string name="summary_bolus_label">%1$s · bolus</string>
+  <string name="summary_insulin_estimated_until">Insulin estimate · %1$s</string>
+  <string name="summary_insulin_partial_until">Recorded subtotal · %1$s</string>
+  <string name="summary_basal_estimated">Basal estimate %1$s · recorded %2$s</string>
+  <string name="summary_compare_estimated_week">↔ Total estimate vs 7-day avg</string>
+  <string name="summary_compare_estimated_yesterday">↔ Total estimate vs yesterday</string>
+  <string name="summary_compare_partial_week">↔ Recorded subtotal vs 7-day avg</string>
+  <string name="summary_compare_partial_yesterday">↔ Recorded subtotal vs yesterday</string>
+  <string name="summary_insulin_estimated_description">Estimated insulin today: %1$s units total, including estimated basal %2$s units and recorded bolus %3$s units. Recorded basal subtotal %4$s units covers %5$s of elapsed time.</string>
 </resources>

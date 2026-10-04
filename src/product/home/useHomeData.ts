@@ -1,5 +1,9 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {getLocalDayPeriod, localDayStart} from '../../modules/dailyOverview';
+import {
+  getLocalDayPeriod,
+  localDayStart,
+  type DailyInsulinComparisonPresentation,
+} from '../../modules/dailyOverview';
 import type {TrendsRangeThresholds} from '../../modules/trends';
 import {
   buildHomeTodayData,
@@ -121,6 +125,7 @@ export interface UseHomeDataInput {
 
 export interface HomeDataState {
   readonly today: HomeLaneState<HomeTodayData>;
+  readonly insulinComparison: HomeLaneState<DailyInsulinComparisonPresentation>;
   readonly weeklyGlucose: HomeLaneState<HomeWeeklyGlucoseData>;
   readonly weeklyInsulin: HomeLaneState<HomeWeeklyInsulinData>;
 }
@@ -164,6 +169,7 @@ export const useHomeData = (input: UseHomeDataInput): HomeDataState => {
   );
   const weeklyGlucoseEnabled = enabledWidgetIds.includes('weekly-glucose');
   const weeklyInsulinEnabled = enabledWidgetIds.includes('weekly-insulin');
+  const insulinComparisonEnabled = enabledWidgetIds.includes('daily-insulin');
 
   const loadToday = useCallback(async (): Promise<HomeTodayData> => {
     if (!dailyOverview) {
@@ -219,6 +225,39 @@ export const useHomeData = (input: UseHomeDataInput): HomeDataState => {
     refreshSequence,
     load: loadToday,
   });
+  const todayData = today.kind === 'ready' ? today.data : undefined;
+  const comparisonSource = dailyOverview?.loadDailyInsulinComparison
+    ? dailyOverview
+    : undefined;
+  const loadInsulinComparison = useCallback(async () => {
+    if (!comparisonSource?.loadDailyInsulinComparison || !todayData) {
+      throw new Error('The daily comparison source is unavailable.');
+    }
+    return comparisonSource.loadDailyInsulinComparison({
+      period: todayData.period,
+      asOfMs: todayData.observedPeriod.endMs,
+    });
+  }, [comparisonSource, todayData]);
+  const comparisonLane = useHomeLane({
+    enabled: insulinComparisonEnabled && todayData !== undefined,
+    source: comparisonSource,
+    scopeKey,
+    // A comparison from another cutoff must never accompany the new summary.
+    rangeKey: `${dayStartMs}:${todayData?.observedPeriod.endMs ?? 'pending'}`,
+    requestKey: String(todayData?.observedPeriod.endMs),
+    // Refresh only after today's read commits, using its exact loaded cutoff.
+    // The new data object also reloads history after a same-clock manual refresh.
+    refreshSequence: 0,
+    load: loadInsulinComparison,
+  });
+  const insulinComparison: HomeLaneState<DailyInsulinComparisonPresentation> =
+    !insulinComparisonEnabled
+      ? {kind: 'unavailable', reason: 'hidden'}
+      : !comparisonSource
+      ? {kind: 'unavailable', reason: 'source'}
+      : todayData === undefined
+      ? {kind: today.kind === 'error' ? 'error' : 'loading'}
+      : comparisonLane;
   const weeklyGlucose = useHomeLane({
     enabled: weeklyGlucoseEnabled,
     source: trends,
@@ -237,5 +276,5 @@ export const useHomeData = (input: UseHomeDataInput): HomeDataState => {
     refreshSequence,
     load: loadWeeklyInsulin,
   });
-  return {today, weeklyGlucose, weeklyInsulin};
+  return {today, insulinComparison, weeklyGlucose, weeklyInsulin};
 };

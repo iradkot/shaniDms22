@@ -16,7 +16,10 @@ import type {
   DailyOverviewSourceSnapshot,
 } from '../contracts';
 
-export type DailyInsulinSummary =
+export type DailyInsulinSummary = {
+  readonly estimatedBasalUnits?: number;
+  readonly estimatedTotalUnits?: number;
+} & (
   | {
       readonly quality: 'available';
       readonly basalUnits: number;
@@ -28,7 +31,8 @@ export type DailyInsulinSummary =
       readonly basalCoveragePercent?: number;
     }
   | Extract<DailyInsulinSourceSummary, {quality: 'partial'}>
-  | {readonly quality: 'unavailable'};
+  | {readonly quality: 'unavailable'}
+);
 
 export interface DailyOverview {
   readonly period: DailyOverviewPeriod;
@@ -118,6 +122,31 @@ const buildInsulinSummary = (
   if (source.quality === 'unavailable') {
     return {quality: 'unavailable'};
   }
+  const estimates = {
+    ...(source.estimatedBasalUnits === undefined
+      ? {}
+      : {estimatedBasalUnits: source.estimatedBasalUnits}),
+    ...(source.estimatedTotalUnits === undefined
+      ? {}
+      : {estimatedTotalUnits: source.estimatedTotalUnits}),
+  };
+  if (
+    [source.estimatedBasalUnits, source.estimatedTotalUnits].some(
+      value => value !== undefined && (!Number.isFinite(value) || value < 0),
+    ) ||
+    (source.estimatedTotalUnits !== undefined &&
+      (source.estimatedBasalUnits === undefined ||
+        source.bolusUnits === undefined ||
+        !Number.isFinite(source.estimatedBasalUnits + source.bolusUnits) ||
+        Math.abs(
+          source.estimatedTotalUnits -
+            (source.estimatedBasalUnits + source.bolusUnits),
+        ) > Math.max(1e-6, source.estimatedTotalUnits * 1e-9)))
+  ) {
+    throw new DailyOverviewInputError(
+      'Estimated insulin totals must be finite, non-negative and consistent.',
+    );
+  }
   if (source.quality === 'partial') {
     if (
       [source.basalUnits, source.bolusUnits].some(
@@ -152,6 +181,7 @@ const buildInsulinSummary = (
       bolusUnits: source.bolusUnits,
       basalCoveredMs: 0,
       basalCoveragePercent: 0,
+      ...estimates,
     };
   }
   if ((source.basalCoveragePercent ?? 100) !== 100) {
@@ -166,14 +196,22 @@ const buildInsulinSummary = (
       ...(source.basalEvidence === undefined
         ? {}
         : {basalEvidence: source.basalEvidence}),
+      ...estimates,
     };
+  }
+  const totalUnits = source.basalUnits + source.bolusUnits;
+  if (!Number.isFinite(totalUnits)) {
+    throw new DailyOverviewInputError(
+      'Available insulin total must be finite.',
+    );
   }
   return {
     ...source,
     quality: 'available',
     basalUnits: source.basalUnits,
     bolusUnits: source.bolusUnits,
-    totalUnits: roundTo(source.basalUnits + source.bolusUnits),
+    totalUnits:
+      totalUnits < Number.MAX_VALUE / 100 ? roundTo(totalUnits) : totalUnits,
     ...(source.basalEstimated === undefined
       ? {}
       : {basalEstimated: source.basalEstimated}),

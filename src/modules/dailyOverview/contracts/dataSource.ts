@@ -6,26 +6,34 @@ import type {
 
 export type DailyOverviewPeriod = TrendsPeriod;
 
-export type DailyInsulinSourceSummary =
-  | {
-      readonly quality: 'available';
-      readonly basalUnits: number;
-      readonly bolusUnits: number;
-      readonly basalEstimated?: boolean;
-      readonly basalEvidence?: 'recorded';
-      readonly basalCoveredMs?: number;
-      readonly basalCoveragePercent?: number;
-    }
-  | {
-      readonly quality: 'partial';
-      /** Recorded subtotal only; gaps are unknown, never filled from a profile. */
-      readonly basalUnits?: number;
-      readonly bolusUnits?: number;
-      readonly basalEvidence?: 'recorded';
-      readonly basalCoveredMs: number;
-      readonly basalCoveragePercent: number;
-    }
-  | {readonly quality: 'unavailable'};
+export interface DailyInsulinEstimate {
+  /** Profile-based estimate, separate from the recorded basal subtotal. */
+  readonly estimatedBasalUnits?: number;
+  readonly estimatedTotalUnits?: number;
+}
+
+export type DailyInsulinSourceSummary = DailyInsulinEstimate &
+  (
+    | {
+        readonly quality: 'available';
+        readonly basalUnits: number;
+        readonly bolusUnits: number;
+        readonly basalEstimated?: boolean;
+        readonly basalEvidence?: 'recorded';
+        readonly basalCoveredMs?: number;
+        readonly basalCoveragePercent?: number;
+      }
+    | {
+        readonly quality: 'partial';
+        /** Recorded subtotal only; gaps are unknown, never filled from a profile. */
+        readonly basalUnits?: number;
+        readonly bolusUnits?: number;
+        readonly basalEvidence?: 'recorded';
+        readonly basalCoveredMs: number;
+        readonly basalCoveragePercent: number;
+      }
+    | {readonly quality: 'unavailable'}
+  );
 
 export interface DailyOverviewSourceSnapshot {
   readonly glucoseSamples: readonly TrendsGlucoseSample[];
@@ -34,7 +42,7 @@ export interface DailyOverviewSourceSnapshot {
   readonly insulinSummary: DailyInsulinSourceSummary;
 }
 
-export interface DailyInsulinComparisonTotals {
+export interface DailyInsulinComparisonTotals extends DailyInsulinEstimate {
   readonly quality: 'available' | 'partial';
   readonly basalUnits?: number;
   readonly bolusUnits?: number;

@@ -53,6 +53,8 @@ export interface InsulinDisplaySource {
   readonly totalUnits?: number;
   readonly basalEstimated?: boolean;
   readonly basalCoveragePercent?: number;
+  readonly estimatedBasalUnits?: number;
+  readonly estimatedTotalUnits?: number;
 }
 
 const recordedUnits = (value: number | undefined): number | undefined =>
@@ -72,9 +74,30 @@ export const recordedInsulinDisplay = (source: InsulinDisplaySource) => {
     basal !== undefined &&
     (source.basalCoveragePercent ??
       (source.quality === 'available' ? 100 : 0)) === 100;
+  const recordedSum =
+    basal !== undefined && bolus !== undefined && Number.isFinite(basal + bolus)
+      ? basal + bolus
+      : undefined;
+  const subtotal = recordedSum;
   const total =
     source.quality === 'available' && basalComplete && bolus !== undefined
-      ? basal + bolus
+      ? recordedSum
+      : undefined;
+  const estimatedBasal = available
+    ? recordedUnits(source.estimatedBasalUnits)
+    : undefined;
+  const estimatedSum =
+    estimatedBasal !== undefined &&
+    bolus !== undefined &&
+    Number.isFinite(estimatedBasal + bolus)
+      ? estimatedBasal + bolus
+      : undefined;
+  const estimatedTotal =
+    estimatedSum !== undefined &&
+    recordedUnits(source.estimatedTotalUnits) !== undefined &&
+    Math.abs(estimatedSum - source.estimatedTotalUnits!) <=
+      Math.max(1e-6, source.estimatedTotalUnits! * 1e-9)
+      ? estimatedSum
       : undefined;
   const basalPercent =
     total !== undefined && total > 0 && basal !== undefined
@@ -84,6 +107,9 @@ export const recordedInsulinDisplay = (source: InsulinDisplaySource) => {
     basal,
     bolus,
     total,
+    subtotal,
+    estimatedBasal,
+    estimatedTotal,
     basalComplete,
     basalPercent,
     bolusPercent: basalPercent === undefined ? undefined : 100 - basalPercent,

@@ -1,7 +1,11 @@
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
 import {useHomeData, type UseHomeDataInput} from 'app/product/home/useHomeData';
-import type {DailyOverviewSourceSnapshot} from 'app/modules/dailyOverview';
+import type {
+  DailyInsulinComparisonPresentation,
+  DailyInsulinComparisonRequest,
+  DailyOverviewSourceSnapshot,
+} from 'app/modules/dailyOverview';
 
 const MINUTE = 60_000;
 const nowMs = new Date(2026, 8, 8, 12, 1).getTime();
@@ -47,11 +51,209 @@ const render = async (input: UseHomeDataInput): Promise<void> => {
     }
   });
 };
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((success, failure) => {
+    resolve = success;
+    reject = failure;
+  });
+  return {promise, resolve, reject};
+};
+const comparison = (
+  cutoffTimestampMs: number,
+  totalUnits = 12,
+): DailyInsulinComparisonPresentation => ({
+  status: 'available',
+  weekDays: 7,
+  cutoffTimestampMs,
+  isPartialDay: true,
+  yesterday: {quality: 'available', totalUnits},
+});
+const createComparisonInput = (): UseHomeDataInput => {
+  const input = createInput();
+  return {
+    ...input,
+    enabledWidgetIds: ['daily-insulin'],
+    sources: {
+      ...input.sources,
+      dailyOverview: {
+        ...input.sources.dailyOverview!,
+        loadDailyInsulinComparison: jest.fn(
+          async (request: DailyInsulinComparisonRequest) =>
+            comparison(request.asOfMs),
+        ),
+      },
+    },
+  };
+};
 afterEach(() => {
   if (tree) {
     act(() => tree?.unmount());
   }
   tree = undefined;
+});
+
+describe('home daily insulin comparison lifecycle', () => {
+  it('uses the loaded today cutoff and full local day even when the clock changes during loading', async () => {
+    const input = createComparisonInput();
+    const todayRequest = deferred<DailyOverviewSourceSnapshot>();
+    jest
+      .mocked(input.sources.dailyOverview!.loadDailyOverview)
+      .mockReturnValueOnce(todayRequest.promise);
+    await render(input);
+    expect(state.insulinComparison.kind).toBe('loading');
+    expect(
+      input.sources.dailyOverview!.loadDailyInsulinComparison,
+    ).not.toHaveBeenCalled();
+    await render({...input, nowMs: nowMs + MINUTE});
+    await act(async () => todayRequest.resolve(sample));
+    expect(
+      input.sources.dailyOverview!.loadDailyInsulinComparison,
+    ).toHaveBeenCalledWith({
+      period: {startMs: midnight, endMs: new Date(2026, 8, 9).getTime()},
+      asOfMs: nowMs,
+    });
+    expect(state.today).toMatchObject({
+      kind: 'ready',
+      data: {observedPeriod: {endMs: nowMs}},
+    });
+    expect(state.insulinComparison).toMatchObject({
+      kind: 'ready',
+      data: {cutoffTimestampMs: nowMs},
+    });
+  });
+
+  it('keeps today available while comparison history is pending or fails', async () => {
+    const input = createComparisonInput();
+    const history = deferred<DailyInsulinComparisonPresentation>();
+    jest
+      .mocked(input.sources.dailyOverview!.loadDailyInsulinComparison!)
+      .mockReturnValueOnce(history.promise);
+    await render(input);
+    expect(state.insulinComparison.kind).toBe('loading');
+    expect(state.today).toMatchObject({
+      kind: 'ready',
+      data: {overview: {insulinSummary: {totalUnits: 14.5}}},
+    });
+    await act(async () => history.reject(new Error('History offline')));
+    expect(state.insulinComparison.kind).toBe('error');
+    expect(state.today).toMatchObject({
+      kind: 'ready',
+      data: {overview: {insulinSummary: {totalUnits: 14.5}}},
+    });
+  });
+
+  it('reloads history only after a five-minute refresh loads today and replaces the old cutoff', async () => {
+    const input = createComparisonInput();
+    const loadComparison = jest.mocked(
+      input.sources.dailyOverview!.loadDailyInsulinComparison!,
+    );
+    await render(input);
+    const refreshedToday = deferred<DailyOverviewSourceSnapshot>();
+    const refreshedHistory = deferred<DailyInsulinComparisonPresentation>();
+    jest
+      .mocked(input.sources.dailyOverview!.loadDailyOverview)
+      .mockReturnValueOnce(refreshedToday.promise);
+    loadComparison.mockReturnValueOnce(refreshedHistory.promise);
+    const nextNowMs = nowMs + 5 * MINUTE;
+    await render({...input, nowMs: nextNowMs});
+    expect(loadComparison).toHaveBeenCalledTimes(1);
+    expect(state.insulinComparison).toMatchObject({
+      kind: 'ready',
+      data: {cutoffTimestampMs: nowMs},
+    });
+    await act(async () => refreshedToday.resolve(sample));
+    expect(state.today).toMatchObject({
+      kind: 'ready',
+      data: {observedPeriod: {endMs: nextNowMs}},
+    });
+    expect(state.insulinComparison.kind).toBe('loading');
+    expect(loadComparison).toHaveBeenLastCalledWith({
+      period: {startMs: midnight, endMs: new Date(2026, 8, 9).getTime()},
+      asOfMs: nextNowMs,
+    });
+    await act(async () => refreshedHistory.resolve(comparison(nextNowMs)));
+    expect(state.insulinComparison).toMatchObject({
+      kind: 'ready',
+      data: {cutoffTimestampMs: nextNowMs},
+    });
+  });
+
+  it('reloads history on a same-clock manual refresh without refetching for equivalent props', async () => {
+    const input = createComparisonInput();
+    const loadComparison = input.sources.dailyOverview!.loadDailyInsulinComparison;
+    await render(input);
+    await render({...input, enabledWidgetIds: ['daily-insulin', 'chat']});
+    expect(loadComparison).toHaveBeenCalledTimes(1);
+    await render({...input, refreshSequence: 1});
+    expect(loadComparison).toHaveBeenCalledTimes(2);
+    expect(loadComparison).toHaveBeenLastCalledWith({
+      period: {startMs: midnight, endMs: new Date(2026, 8, 9).getTime()},
+      asOfMs: nowMs,
+    });
+  });
+
+  it('does not read history for hidden widgets or missing comparison adapters', async () => {
+    const input = createComparisonInput();
+    await render({...input, enabledWidgetIds: ['glucose-graph']});
+    expect(
+      input.sources.dailyOverview!.loadDailyInsulinComparison,
+    ).not.toHaveBeenCalled();
+    expect(state.insulinComparison).toEqual({
+      kind: 'unavailable',
+      reason: 'hidden',
+    });
+    await render(createInput());
+    expect(state.insulinComparison).toEqual({
+      kind: 'unavailable',
+      reason: 'source',
+    });
+  });
+
+  it.each(['scope', 'source', 'day', 'hidden'] as const)(
+    'discards late history after a %s change',
+    async mode => {
+      const input = createComparisonInput();
+      const firstHistory = deferred<DailyInsulinComparisonPresentation>();
+      const loadComparison = jest.mocked(
+        input.sources.dailyOverview!.loadDailyInsulinComparison!,
+      );
+      loadComparison.mockReturnValueOnce(firstHistory.promise);
+      await render(input);
+      let next: UseHomeDataInput;
+      if (mode === 'scope') {
+        next = {...input, scopeKey: 'user-b:workspace-b'};
+      } else if (mode === 'source') {
+        const replacement = createComparisonInput();
+        next = {...input, sources: replacement.sources};
+      } else if (mode === 'day') {
+        next = {...input, nowMs: new Date(2026, 8, 9, 12, 1).getTime()};
+      } else {
+        next = {...input, enabledWidgetIds: ['glucose-graph']};
+      }
+      await render(next);
+      await act(async () => firstHistory.resolve(comparison(nowMs, 99)));
+      if (mode === 'hidden') {
+        expect(state.insulinComparison).toEqual({
+          kind: 'unavailable',
+          reason: 'hidden',
+        });
+        expect(loadComparison).toHaveBeenCalledTimes(1);
+      } else {
+        expect(state.insulinComparison).toMatchObject({
+          kind: 'ready',
+          data: {yesterday: {totalUnits: 12}},
+        });
+        if (mode === 'day') {
+          expect(state.insulinComparison).toMatchObject({
+            data: {cutoffTimestampMs: next.nowMs},
+          });
+        }
+      }
+      expect(state.today.kind).toBe('ready');
+    },
+  );
 });
 
 describe('home data request lifecycle', () => {

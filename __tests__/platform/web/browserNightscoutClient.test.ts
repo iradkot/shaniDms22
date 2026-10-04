@@ -730,8 +730,10 @@ describe('BrowserNightscoutClient', () => {
             data: [
               {
                 defaultProfile: 'Default',
+                startDate: '2026-01-01T00:00:00Z',
                 store: {
                   Default: {
+                    timezone: 'Asia/Jerusalem',
                     basal: [
                       {time: '00:00', timeAsSeconds: 0, value: 0.75},
                       {time: '12:00', value: 0.9},
@@ -754,6 +756,8 @@ describe('BrowserNightscoutClient', () => {
     await expect(client.readBasalProfile(asOfMs)).resolves.toEqual({
       records: [
         {
+          timeZone: 'Asia/Jerusalem',
+          effectiveFromMs: Date.parse('2026-01-01T00:00:00Z'),
           entries: [
             {secondsFromMidnight: 0, rateUnitsPerHour: 0.75},
             {secondsFromMidnight: 43_200, rateUnitsPerHour: 0.9},
@@ -767,6 +771,8 @@ describe('BrowserNightscoutClient', () => {
     expect(await client.readBasalProfile(asOfMs)).toMatchObject({
       records: [
         {
+          timeZone: 'Asia/Jerusalem',
+          effectiveFromMs: Date.parse('2026-01-01T00:00:00Z'),
           entries: [
             {secondsFromMidnight: 0, rateUnitsPerHour: 0.75},
             {secondsFromMidnight: 43200, rateUnitsPerHour: 0.9},
@@ -790,6 +796,11 @@ describe('BrowserNightscoutClient', () => {
       {time: '00:00', value: 1},
       {time: '00:00', value: 2},
     ],
+    [
+      {time: '00:00', timeAsSeconds: 0, value: 1},
+      {time: '12:00', timeAsSeconds: 3600, value: 2},
+    ],
+    [{time: 'invalid', timeAsSeconds: 0, value: 1}],
   ])(
     'rejects a profile with invalid or ambiguous entries: %j',
     async (...basal) => {
@@ -807,6 +818,25 @@ describe('BrowserNightscoutClient', () => {
       expect((await client.readBasalProfile(Date.now())).records).toEqual([]);
     },
   );
+
+  it('preserves valid second-level raw profile times before estimate reconstruction', async () => {
+    const client = new BrowserNightscoutClient({
+      api: {requestJson: async () => ({version: 1, data: [{
+        defaultProfile: 'Default', startDate: '2026-01-01T00:00:00Z',
+        store: {Default: {timezone: 'UTC', basal: [
+          {time: '00:00', timeAsSeconds: 0, value: 1},
+          {time: '00:00:30', timeAsSeconds: 30, value: 2},
+        ]}},
+      }]})},
+      storage: new MemoryStorage(), sourceId: 'source-1', workspaceId: 'workspace-1',
+    });
+    expect((await client.readBasalProfile(Date.parse('2026-10-04T00:00:00Z'))).records).toEqual([{
+      timeZone: 'UTC', effectiveFromMs: Date.parse('2026-01-01T00:00:00Z'), entries: [
+        {secondsFromMidnight: 0, rateUnitsPerHour: 1},
+        {secondsFromMidnight: 30, rateUnitsPerHour: 2},
+      ],
+    }]);
+  });
 
   it('deduplicates only the same external identity while keeping identical separate treatments', async () => {
     const treatment = {

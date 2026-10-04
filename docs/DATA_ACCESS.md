@@ -10,9 +10,10 @@ depend on React, authentication, storage or a running Android application.
 | --- | --- | --- |
 | Current glucose, IOB and COB | `nativeCurrentDataSource` in `src/services/currentData` (native); `createBrowserCurrentDataSource` in `src/platform/web/nightscout` (browser) | Independent current reads, shared by the foreground current display and AI; historical coverage cannot invalidate a fresh current observation |
 | Decode or load current facts with another transport | `buildCurrentDataSnapshot`, `createCurrentDataSource` in `src/modules/currentData` | Per-field source/fetch timestamps and fresh, stale or unavailable state; no profile, treatment or history dependency |
-| Daily recorded insulin and same-time comparisons | `recordedInsulinDataSource` in `src/services/insulin/recordedInsulinDataSource.ts` (native) | Shared, source-scoped treatment snapshot; no profile fill |
+| Daily recorded insulin and same-time comparisons | `recordedInsulinDataSource` in `src/services/insulin/recordedInsulinDataSource.ts` (native) | Shared, source-scoped treatment snapshot; daily callers can opt into separately labeled profile estimates |
 | Same recorded loader with a browser/test transport | `createRecordedInsulinDataSource` in `src/services/insulin/createRecordedInsulinDataSource.ts` | Inject transport, source identity and clock; no native runtime dependency |
 | Calculate recorded insulin from already-loaded raw treatments | `buildRecordedInsulinSummary` in `src/services/insulin/recordedInsulin.ts` | Pure calculation; preserve raw delivery, identity and revision fields |
+| Estimate uncovered daily basal | `buildEstimatedBasalUnits` in `src/services/insulin/estimatedBasal.ts` | Completed recorded amounts take precedence; schedule, temp basal and suspension controls fill only remaining time |
 | Decode a raw treatment timestamp | `parseNightscoutTimestampMs` in `src/utils/nightscoutTimestamp.ts` | Shared epoch/ISO validation; invalid or ambiguous input returns `NaN` |
 | A Daily Overview screen | `DailyOverviewDataSource` in `src/modules/dailyOverview` | Use the platform adapter supplied by the product host |
 | Same-clock yesterday/week windows and comparison selection | `getDailyInsulinComparisonWindows`, `buildDailyInsulinComparison`, `selectRecordedInsulinComparison` in `src/modules/dailyOverview` | Local calendar dates; only compare a component supported in every required period |
@@ -43,18 +44,39 @@ metrics path can fill time from a profile. Their output must be called a model o
 estimate, never used to populate recorded daily/widget totals. IOB is insulin
 still active according to the source model; it is not today's administered dose.
 
+Daily Overview, Personal Home and the Android summary widget may show a separate
+`estimatedBasalUnits` / `estimatedTotalUnits`. This uses the raw recorded-dose
+rules first, then fills uncovered time with the effective basal schedule and
+temporary controls. A temp basal replaces scheduled delivery over its interval;
+it is not added on top. The estimate never overwrites recorded basal, coverage
+or quality. The primary basal/bolus amounts use the same basis as the displayed
+total, with recorded subtotals still visible separately.
+
 Use the returned quality state instead of inventing defaults:
 
 | State | What can be shown |
 | --- | --- |
 | `available` | Known bolus plus explicit basal amounts covering the whole requested interval; total and ratio may be shown |
-| `partial` | Known component amounts and basal time coverage; missing components stay absent; no combined total or ratio |
+| `partial` | Known components and basal time coverage; a known basal-plus-bolus sum is labeled a recorded subtotal; an explicit valid estimate is labeled estimated total |
 | `unavailable` | No usable snapshot; show unavailable, not `0 U` |
 
 `0 U` is a valid recorded amount. `undefined` means unknown. Do not write
 `basalUnits ?? 0` to make a total. A basal subtotal from 80% of a day is not an
-estimate for 100% of that day. The seven-day average requires all seven periods;
-the comparison selector falls back to **bolus** when complete totals are unsupported.
+estimate for 100% of that day. Comparisons prefer complete recorded totals, then
+complete or estimated totals with an estimate label when either side is modeled,
+then known recorded basal-plus-bolus subtotals, then clearly labeled bolus only.
+The seven-day average requires all seven periods for the selected basis. A mix of
+complete and estimated daily totals remains an estimate, never a recorded total.
+
+Estimates require a fresh complete treatment snapshot and a validated schedule
+with a midnight entry, unique times and consistent textual/numeric times. Profile
+timezone controls schedule integration; absent timezone uses the device clock.
+Native daily profile reads check through
+the cutoff (through the full date for reusable past-day profiles) and accept a
+schedule only if it was effective before the window. Unresolved profile changes
+disable estimates. The browser proxy currently returns the latest profile, so Web
+estimates additionally require its explicit effective date to precede the window.
+Missing or stale profiles preserve recorded amounts without creating an estimate.
 
 Both native and browser Previous Day Summary use the recorded loader. That older
 screen's contract accepts only complete totals, so partial insulin is unavailable
@@ -156,10 +178,13 @@ import {recordedInsulinDataSource} from 'app/services/insulin/recordedInsulinDat
 
 const asOfMs = Date.now();
 const period = getLocalDayPeriod(asOfMs);
-const {current, comparison} = await recordedInsulinDataSource.loadDailyBundle({period, asOfMs});
+const {current, comparison} = await recordedInsulinDataSource.loadDailyBundle(
+  {period, asOfMs},
+  {includeEstimates: true},
+);
 const versusYesterday = selectRecordedInsulinComparison(current, comparison.yesterday);
 // Render current.quality and only present fields. The selector says whether
-// its amounts mean total insulin or bolus, rather than asking the UI to guess.
+// its amounts mean recorded total, estimated total, subtotal or bolus.
 ```
 
 The browser adapter injects `BrowserNightscoutClient.readRecordedTreatments` into
@@ -167,6 +192,9 @@ the same factory. This raw reader preserves delivery/revision/invalid fields;
 `readTreatments` is the normalized reader for charts and context. The loader shares
 one snapshot between the daily amount and comparisons. It does not import the
 native singleton or start eight independent history reads.
+Recorded-only consumers omit `includeEstimates`; they do not request a profile.
+An advancing live estimate cutoff refreshes treatment observation rather than
+modeling elapsed time beyond a cached snapshot.
 
 ```ts
 import {fetchTreatmentsForDateRangeWithMetadata} from 'app/api/apiRequests';
@@ -200,6 +228,7 @@ glucose readers share the same complete transport and decoder.
    and interval. Keep fixtures synthetic and credentials out of test data.
 3. For daily insulin, put cross-platform cases in
    `__tests__/fixtures/recorded-insulin.json`; both TypeScript and Kotlin consume it.
+   Separate reconstruction cases use `__tests__/fixtures/estimated-basal.json`.
 4. Test the caller seam too: completeness, account changes, stale data, source
    field preservation and cache reuse can invalidate a correct calculator.
 5. Update this guide when introducing a genuinely different meaning or entry

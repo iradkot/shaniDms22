@@ -35,7 +35,7 @@
   <string name="summary_compare_unavailable">אין נתוני עבר · לחיצה להחלפה</string>
   <string name="summary_range_description">היום: %1$s מהזמן בטווח, %2$s נמוך, %3$s גבוה. טווח יעד %4$d עד %5$d מיליגרם לדציליטר. יש נתונים מ־%6$d אחוז מהיום עד כה.</string>
   <string name="summary_insulin_description">אינסולין מתועד היום: %1$s יחידות בסך הכול. בזאל %2$s יחידות, %3$s. בולוס %4$s יחידות, %5$s.</string>
-  <string name="summary_comparison_description">כמות מתועדת היום %1$s יחידות. %2$s %3$s יחידות עד אותה שעה. שינוי %4$s. לחיצה מחליפה בין אתמול לממוצע שבעת הימים הקודמים.</string>
+  <string name="summary_comparison_description">כמות היום %1$s יחידות. %2$s: %3$s יחידות עד אותה שעה. שינוי %4$s. לחיצה מחליפה בין אתמול לממוצע שבעת הימים הקודמים.</string>
   <string name="summary_glucose_description">סוכר אחרון %1$s מיליגרם לדציליטר. מגמה %2$s. %3$s.</string>
   <string name="summary_trend_double_up">עולה מהר</string>
   <string name="summary_trend_up">עולה</string>
@@ -57,5 +57,18 @@
   <string name="summary_compare_bolus_week">↔ בולוס מול ממוצע שבוע</string>
   <string name="summary_compare_bolus_yesterday">↔ בולוס מול אתמול</string>
   <string name="summary_compare_until">בכל יום %1$s · להחלפה</string>
-  <string name="summary_insulin_partial_description">בולוס מתועד היום: %1$s יחידות. בזאל מתועד חלקית: %2$s יחידות עם כיסוי של %3$s. אין סך אינסולין או יחס.</string>
+  <string name="summary_insulin_partial_description">בולוס מתועד היום: %1$s יחידות. בזאל מתועד חלקית: %2$s יחידות עם כיסוי של %3$s. הסכום המתועד חלקי.</string>
+  <string name="summary_estimated_compact">הערכה %1$s</string>
+  <string name="summary_partial_compact">חלקי %1$s</string>
+  <string name="summary_estimated_label">%1$s · הערכה</string>
+  <string name="summary_partial_label">%1$s · תיעוד חלקי</string>
+  <string name="summary_bolus_label">%1$s · בולוס</string>
+  <string name="summary_insulin_estimated_until">הערכת אינסולין · %1$s</string>
+  <string name="summary_insulin_partial_until">סכום מתועד חלקי · %1$s</string>
+  <string name="summary_basal_estimated">הערכת בזאל %1$s · מתועד %2$s</string>
+  <string name="summary_compare_estimated_week">↔ הערכת הסך מול ממוצע שבוע</string>
+  <string name="summary_compare_estimated_yesterday">↔ הערכת הסך מול אתמול</string>
+  <string name="summary_compare_partial_week">↔ סכום מתועד חלקי מול ממוצע שבוע</string>
+  <string name="summary_compare_partial_yesterday">↔ סכום מתועד חלקי מול אתמול</string>
+  <string name="summary_insulin_estimated_description">הערכת אינסולין היום: %1$s יחידות בסך הכול, כולל הערכת בזאל %2$s יחידות ובולוס מתועד %3$s יחידות. בזאל מתועד חלקית %4$s יחידות מכסה %5$s מהזמן שחלף.</string>
 </resources>

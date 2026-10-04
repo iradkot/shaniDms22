@@ -24,6 +24,7 @@ export interface NativeDailyInsulinSummaryDependencies {
   readonly sourceRevision?: string;
   readonly recordedDataSource?: RecordedInsulinDataSource;
   readonly useE2EFixtures?: boolean;
+  readonly includeEstimates?: boolean;
 }
 export interface NativeDailyInsulinSummaryLoader {
   (start: Date, end: Date): Promise<DailyInsulinSourceSummary>;
@@ -38,21 +39,25 @@ export interface NativeDailyOverviewDataSourceDependencies
   readonly now?: () => number;
 }
 
-/** The shared raw-treatment loader never fetches or fills from a basal profile. */
+/** Daily totals retain recorded facts and may add a separately labeled estimate. */
 export const createNativeDailyInsulinSummaryLoader = (
   dependencies: NativeDailyInsulinSummaryDependencies = {},
 ): NativeDailyInsulinSummaryLoader => {
   const source = dependencies.recordedDataSource ?? recordedInsulinDataSource;
   const useFixtures = dependencies.useE2EFixtures ?? isE2E;
+  const options = {includeEstimates: dependencies.includeEstimates ?? false};
   const load: NativeDailyInsulinSummaryLoader = async (start, end) => {
     if (useFixtures || end.getTime() <= start.getTime()) {
       return {quality: 'unavailable'};
     }
     try {
-      return await source.loadWindow({
-        startMs: start.getTime(),
-        endMs: end.getTime(),
-      });
+      return await source.loadWindow(
+        {
+          startMs: start.getTime(),
+          endMs: end.getTime(),
+        },
+        options,
+      );
     } catch {
       return {quality: 'unavailable'};
     }
@@ -63,7 +68,7 @@ export const createNativeDailyInsulinSummaryLoader = (
     ): Promise<RecordedDailyInsulinBundle> => {
       if (!useFixtures) {
         try {
-          return await source.loadDailyBundle(request);
+          return await source.loadDailyBundle(request, options);
         } catch {
           /* Preserve independent CGM data. */
         }
@@ -86,7 +91,10 @@ export const createNativeDailyOverviewDataSource = (
     dependencies.glucoseDataSource ?? createNativeTrendsDataSource();
   const loadInsulinSummary =
     dependencies.loadInsulinSummary ??
-    createNativeDailyInsulinSummaryLoader(dependencies);
+    createNativeDailyInsulinSummaryLoader({
+      ...dependencies,
+      includeEstimates: dependencies.includeEstimates ?? true,
+    });
   const now = dependencies.now ?? Date.now;
   const loadSummary = async (
     startMs: number,

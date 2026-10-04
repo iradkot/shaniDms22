@@ -316,7 +316,7 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
     expect(result.freshness.kind).toBe('stale');
   });
 
-  it('keeps recorded bolus without filling basal gaps or fetching a profile', async () => {
+  it('keeps recorded bolus when the latest profile has no historical effective date', async () => {
     const client = clientFixture();
     const result = await sources(client).dailyOverview.loadDailyOverview({
       startMs: dayStartMs,
@@ -337,7 +337,7 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
       dayStartMs - 300_000,
       dayEndMs,
     );
-    expect(client.readBasalProfile).not.toHaveBeenCalled();
+    expect(client.readBasalProfile).toHaveBeenCalledWith(dayStartMs);
   });
 
   it('retains cached glucose freshness through trends and daily adapters', async () => {
@@ -405,7 +405,23 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
     });
     expect(comparison.weekAverage?.bolusUnits).toBeCloseTo(2);
     expect(client.readTreatments).toHaveBeenCalledTimes(1);
-    expect(client.readBasalProfile).not.toHaveBeenCalled();
+    expect(client.readBasalProfile).toHaveBeenCalledTimes(8);
+  });
+
+  it('estimates totals only when the latest browser profile was effective before the requested window', async () => {
+    const client = clientFixture();
+    client.readTreatments.mockResolvedValue(range([
+      {_id: 'b', eventType: 'Correction Bolus', created_at: new Date(dayStartMs).toISOString(), insulin: 2},
+      {_id: 't', eventType: 'Temp Basal', created_at: new Date(dayStartMs + HOUR).toISOString(), duration: 60, rate: 2, deliveredUnits: 1.8},
+    ]));
+    const historical = {entries: [{secondsFromMidnight: 0, rateUnitsPerHour: 1}], effectiveFromMs: dayStartMs - 24 * HOUR};
+    client.readBasalProfile.mockResolvedValue(range([historical]));
+    const daily = await sources(client).dailyOverview.loadDailyOverview({startMs: dayStartMs, endMs: dayStartMs + 3 * HOUR});
+    expect(daily.insulinSummary).toMatchObject({quality: 'partial', basalUnits: 1.8, bolusUnits: 2});
+    expect(daily.insulinSummary.estimatedTotalUnits).toBeCloseTo(5.8);
+    client.readBasalProfile.mockResolvedValue(range([{...historical, effectiveFromMs: dayStartMs + HOUR}]));
+    const future = await sources(client).dailyOverview.loadDailyOverview({startMs: dayStartMs, endMs: dayStartMs + 3 * HOUR});
+    expect(future.insulinSummary).not.toHaveProperty('estimatedTotalUnits');
   });
 
   it('does not turn missing or stale insulin evidence into an available zero', async () => {

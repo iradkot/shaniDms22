@@ -1,4 +1,7 @@
-import {createNativeDailyOverviewDataSource} from 'app/platform/native/product/nativeDailyOverviewDataSource';
+import {
+  createNativeDailyOverviewDataSource,
+  createNativeDailyInsulinSummaryLoader,
+} from 'app/platform/native/product/nativeDailyOverviewDataSource';
 import {getLocalDayPeriod} from 'app/modules/dailyOverview';
 import {createRecordedInsulinDataSource} from 'app/services/insulin/recordedInsulinDataSource';
 import {getUserProfileFromNightscout} from 'app/api/apiRequests';
@@ -34,6 +37,59 @@ const setup = (records: Record<string, unknown>[] = []) => {
 };
 
 describe('createNativeDailyOverviewDataSource recorded insulin', () => {
+  it('opts daily cards into separate total estimates while keeping the shared loader recorded-only by default', async () => {
+    const cutoff = period.startMs + 3 * 3_600_000;
+    const fetchBasalProfile = jest.fn(async () => ({
+      profile: {entries: [{time: '00:00', value: 1}]},
+      freshness: fresh([]).freshness,
+    }));
+    const recordedDataSource = createRecordedInsulinDataSource({
+      fetchTreatments: async () =>
+        fresh([
+          {
+            eventType: 'Correction Bolus',
+            created_at: new Date(period.startMs).toISOString(),
+            insulin: 2,
+          },
+          {
+            eventType: 'Temp Basal',
+            created_at: new Date(period.startMs + 3_600_000).toISOString(),
+            duration: 60,
+            rate: 2,
+            deliveredUnits: 1.8,
+          },
+        ]),
+      fetchBasalProfile,
+      getScopeKey: () => 'account',
+      now: () => clock,
+    });
+    const source = createNativeDailyOverviewDataSource({
+      recordedDataSource,
+      glucoseDataSource: {loadGlucoseSamples: async () => []},
+      useE2EFixtures: false,
+      now: () => clock,
+    });
+    const summary = (await source.loadDailyOverview(period, {asOfMs: cutoff}))
+      .insulinSummary;
+    expect(summary.estimatedTotalUnits).toBeCloseTo(5.8);
+    expect(summary).toMatchObject({
+      quality: 'partial',
+      basalUnits: 1.8,
+      bolusUnits: 2,
+    });
+    expect(fetchBasalProfile).toHaveBeenCalledTimes(1);
+    const recordedLoader = createNativeDailyInsulinSummaryLoader({
+      recordedDataSource,
+      useE2EFixtures: false,
+    });
+    const recorded = await recordedLoader(
+      new Date(period.startMs),
+      new Date(cutoff),
+    );
+    expect(recorded).not.toHaveProperty('estimatedTotalUnits');
+    expect(fetchBasalProfile).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps a recorded bolus when basal delivery is unknown and never fetches a profile', async () => {
     const {source} = setup([
       {

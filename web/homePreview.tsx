@@ -10,6 +10,10 @@ import {
   type StoredHomePreferences,
 } from '../src/product/personalization';
 import type {HomeDataSources} from '../src/product/home/homeData';
+import {
+  buildDailyInsulinComparison,
+  getDailyInsulinComparisonWindows,
+} from '../src/modules/dailyOverview';
 import './styles.css';
 
 const key = 'shani.home.development-preview';
@@ -49,6 +53,20 @@ const sources: HomeDataSources = {
       insulinSummary:
         scenario === 'empty' || new Date(period.startMs).getDate() === 4
           ? {quality: 'unavailable'}
+          : scenario === 'recorded-bolus'
+          ? {
+              quality: 'partial',
+              bolusUnits: 8.2,
+              basalCoveredMs: 0,
+              basalCoveragePercent: 0,
+            }
+          : scenario === 'estimated-total' || scenario === 'recorded-subtotal'
+          ? {
+              quality: 'partial', bolusUnits: 8.2, basalUnits: 4.8,
+              basalEvidence: 'recorded', basalCoveredMs: 6 * 3_600_000,
+              basalCoveragePercent: 32.4,
+              ...(scenario === 'estimated-total' ? {estimatedBasalUnits: 18.6, estimatedTotalUnits: 26.8} : {}),
+            }
           : {
               quality: 'available',
               basalUnits: ((period.endMs - period.startMs) / 3600000) * 0.81,
@@ -56,6 +74,33 @@ const sources: HomeDataSources = {
                 17.200000000000003 + new Date(period.startMs).getDate() / 2,
             },
     }),
+    loadDailyInsulinComparison: async request =>
+      buildDailyInsulinComparison(
+        getDailyInsulinComparisonWindows(request),
+        Array.from({length: 7}, (_, index) =>
+          scenario === 'empty'
+            ? {quality: 'unavailable' as const}
+            : scenario === 'recorded-bolus'
+            ? {
+                quality: 'partial' as const,
+                bolusUnits: index === 0 ? 6.2 : 7.2,
+                basalCoveredMs: 0,
+                basalCoveragePercent: 0,
+              }
+            : scenario === 'estimated-total' || scenario === 'recorded-subtotal'
+            ? {
+                quality: 'partial' as const, bolusUnits: 8.2, basalUnits: index === 0 ? 3.8 : 4.2,
+                basalEvidence: 'recorded' as const, basalCoveredMs: 6 * 3_600_000,
+                basalCoveragePercent: 32.4,
+                ...(scenario === 'estimated-total' ? {estimatedBasalUnits: index === 0 ? 17.6 : 18, estimatedTotalUnits: index === 0 ? 25.8 : 26.2} : {}),
+              }
+            : {
+                quality: 'available' as const,
+                basalUnits: 14.5,
+                bolusUnits: 19.5,
+              },
+        ),
+      ),
   },
   trends: {
     loadGlucoseSamples: async period => readings(period.startMs, period.endMs),

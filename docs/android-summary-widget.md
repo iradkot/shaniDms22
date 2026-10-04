@@ -9,8 +9,10 @@ window.
   segment without relying on color.
 - Data coverage shows how much of the elapsed day has CGM readings. Missing
   readings are not counted as in range. Each reading covers at most five minutes.
-- Complete recorded insulin uses a basal/bolus ratio bar. Partial insulin retains
-  known amounts and labels basal time coverage; it never fills a schedule estimate.
+- Complete recorded insulin uses a basal/bolus ratio bar. Valid total estimates
+  include scheduled and temporary basal, with an explicit estimate label and a
+  ratio on that same basis. Recorded basal and its time coverage remain separate.
+  Without an estimate, partial insulin shows known subtotals and basal coverage.
 - Tap the comparison to switch between yesterday and the previous seven days.
   Each comparison ends at the same local time of day as today's summary. The
   selection is saved separately for each widget.
@@ -28,8 +30,11 @@ replacement and logout still clear it through the native sync configuration.
 Foreground glucose updates and threshold changes request a missing/stale daily
 summary, throttled to one attempt per minute for the same source and thresholds.
 
-CGM is published before optional insulin requests. Today's insulin is calculated
-independently of historical profiles and is published before comparison history.
+CGM is published before optional insulin requests. Today's recorded insulin is
+published before profile reconstruction and comparison history. Each day uses an
+effective profile verified unchanged through its checked interval. Past profiles
+are cached by source, date and timezone; profile failure does not erase recorded
+amounts. Unresolved profile changes keep the estimate unavailable.
 Nightscout v1 history uses bounded increasing `count` requests because its list
 endpoints do not apply `skip`. A saturated bound stays unknown rather than being
 shown as a complete total.
