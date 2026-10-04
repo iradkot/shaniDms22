@@ -546,6 +546,7 @@ export const getUserProfileFromNightscout = async (
   const asOfIso = Number.isFinite(asOfMs)
     ? new Date(asOfMs).toISOString()
     : new Date().toISOString();
-  const apiUrl = `/api/v1/profiles?find[startDate][$lte]=${asOfIso}&sort[startDate]=-1&count=1`;
+  // Nightscout's profile route already sorts startDate newest first.
+  const apiUrl = `/api/v1/profiles?find[startDate][$lte]=${asOfIso}&count=1`;
   return (await requestNightscoutRecords(apiUrl)) as unknown as ProfileDataType;
 };

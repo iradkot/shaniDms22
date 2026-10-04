@@ -2,6 +2,7 @@ import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import Svg, {Circle, Line, Path, Rect, Text as SvgText} from 'react-native-svg';
 import type {TrendsRangeThresholds} from '../../modules/trends';
+import type {DailyInsulinComparisonPresentation} from '../../modules/dailyOverview';
 import {
   RangeGraphic,
   formatDailyValue as format,
@@ -14,6 +15,7 @@ import type {
   HomeWeeklyInsulinData,
 } from './homeData';
 import {HOME_COPY} from './homeCopy';
+import {HomeDailyInsulin} from './HomeDailyInsulin';
 
 type Locale = 'en' | 'he';
 export const HOME_WIDGET_COLORS: Record<HomeWidgetId, string> = {
@@ -325,6 +327,7 @@ export interface HomeWidgetProps {
   today: HomeLaneState<HomeTodayData>;
   weeklyGlucose: HomeLaneState<HomeWeeklyGlucoseData>;
   weeklyInsulin: HomeLaneState<HomeWeeklyInsulinData>;
+  insulinComparison?: HomeLaneState<DailyInsulinComparisonPresentation>;
   chatReady: boolean;
   onOpen?: (id: HomeWidgetId, dayStartMs?: number) => void;
   preview?: boolean;
@@ -338,6 +341,7 @@ export function HomeWidget({
   today,
   weeklyGlucose,
   weeklyInsulin,
+  insulinComparison,
   chatReady,
   onOpen,
   preview,
@@ -475,30 +479,12 @@ export function HomeWidget({
               ) : (
                 <Text style={s.empty}>{c.noGlucose}</Text>
               )
-            ) : data.overview.insulinSummary.quality === 'available' ? (
-              <>
-                <Text style={[s.big, locale === 'he' && s.numericRtl]}>
-                  {format(data.overview.insulinSummary.totalUnits)}{' '}
-                  <Text style={s.unit}>U</Text>
-                </Text>
-                <View
-                  style={[s.insulinBreakdown, locale === 'he' && s.reverse]}>
-                  <View style={s.insulinCell}>
-                    <Text style={[s.note, rtl]}>{c.basal}</Text>
-                    <Text style={[s.medium, locale === 'he' && s.numericRtl]}>
-                      {format(data.overview.insulinSummary.basalUnits)} U
-                    </Text>
-                  </View>
-                  <View style={s.insulinCell}>
-                    <Text style={[s.note, rtl]}>{c.bolus}</Text>
-                    <Text style={[s.medium, locale === 'he' && s.numericRtl]}>
-                      {format(data.overview.insulinSummary.bolusUnits)} U
-                    </Text>
-                  </View>
-                </View>
-              </>
             ) : (
-              <Text style={s.empty}>{c.unavailable}</Text>
+              <HomeDailyInsulin
+                data={data}
+                locale={locale}
+                comparison={preview ? undefined : insulinComparison}
+              />
             )}
             <Text style={[s.note, rtl]}>
               {c.today} · {c.to} {time(data.observedPeriod.endMs, locale)}
@@ -574,12 +560,6 @@ const s = StyleSheet.create({
     writingDirection: 'ltr',
   },
   unit: {fontSize: 15, fontWeight: '500', color: '#5C6875'},
-  medium: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#58488A',
-    writingDirection: 'ltr',
-  },
   note: {fontSize: 12, lineHeight: 18, color: '#627484'},
   description: {fontSize: 14, lineHeight: 22, color: '#506579'},
   empty: {
@@ -608,15 +588,6 @@ const s = StyleSheet.create({
     gap: 10,
   },
   rangeText: {flex: 1, minWidth: 96},
-  insulinBreakdown: {flexDirection: 'row', gap: 12},
-  insulinCell: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: '#F5F2FA',
-    borderRadius: 14,
-    padding: 12,
-    gap: 4,
-  },
   bars: {flexDirection: 'row', gap: 5, paddingTop: 8},
   barColumn: {flex: 1, minWidth: 0, gap: 5, alignItems: 'center'},
   barValue: {fontSize: 11, color: '#465D70', fontWeight: '600'},

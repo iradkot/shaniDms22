@@ -385,6 +385,24 @@ export const createBrowserNightscoutDataSources = (input: {
       );
       return {...range, records: range.records.map(record => ({...record}))};
     },
+    fetchBasalProfile: async asOf => {
+      const range = await input.client.readBasalProfile(asOf.getTime());
+      const selected = range.records[0];
+      // The browser proxy currently returns the latest profile. It is usable
+      // for history only if its explicit effective date precedes this window.
+      const eligible = range.complete !== false && selected?.effectiveFromMs !== undefined && selected.effectiveFromMs <= asOf.getTime();
+      return {
+        freshness: range.freshness,
+        ...(eligible ? {profile: {
+          entries: selected.entries.map(entry => ({
+            time: `${String(Math.floor(entry.secondsFromMidnight / 3600)).padStart(2, '0')}:${String(Math.floor((entry.secondsFromMidnight % 3600) / 60)).padStart(2, '0')}:${String(entry.secondsFromMidnight % 60).padStart(2, '0')}`,
+            timeAsSeconds: entry.secondsFromMidnight,
+            value: entry.rateUnitsPerHour,
+          })),
+          ...(selected.timeZone === undefined ? {} : {timeZone: selected.timeZone}),
+        }} : {}),
+      };
+    },
   });
   const dailyOverview: DailyOverviewDataSource = {
     async loadDailyOverview(period, options) {
@@ -404,7 +422,7 @@ export const createBrowserNightscoutDataSources = (input: {
           startMs: period.startMs - 5 * MINUTE_MS,
           endMs: cutoff,
         }),
-        recordedInsulin.loadWindow({...period, endMs: cutoff}),
+        recordedInsulin.loadWindow({...period, endMs: cutoff}, {includeEstimates: true}),
       ]);
       input.client.assertCurrentSource?.();
       return {
@@ -414,7 +432,7 @@ export const createBrowserNightscoutDataSources = (input: {
       };
     },
     async loadDailyInsulinComparison(request) {
-      return (await recordedInsulin.loadDailyBundle(request)).comparison;
+      return (await recordedInsulin.loadDailyBundle(request, {includeEstimates: true})).comparison;
     },
   };
   const previousDaySummary: PreviousDaySummaryDataSource = {

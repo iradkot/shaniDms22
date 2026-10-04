@@ -19,6 +19,7 @@ const units = (value: number) => `${formatDailyValue(value)} U`;
 const InsulinComponent = ({
   kind,
   amount,
+  estimatedAmount,
   percent,
   complete,
   coverage,
@@ -26,6 +27,7 @@ const InsulinComponent = ({
 }: {
   readonly kind: 'basal' | 'bolus';
   readonly amount: number | undefined;
+  readonly estimatedAmount: number | undefined;
   readonly percent: number | undefined;
   readonly complete: boolean;
   readonly coverage: number | undefined;
@@ -33,14 +35,38 @@ const InsulinComponent = ({
 }) => {
   const copy = DAILY_OVERVIEW_COPY[locale];
   const align = locale === 'he' && styles.rtl;
+  const showEstimate = kind === 'basal' && estimatedAmount !== undefined;
   return (
     <View style={styles.part}>
       <Text style={[styles.partLabel, {color: INSULIN_COLORS[kind]}, align]}>
-        {copy[kind]}
+        {showEstimate ? copy.estimatedBasal : copy[kind]}
       </Text>
-      <Text testID={`daily-overview-insulin-${kind}`} style={styles.amount}>
-        {amount === undefined ? '—' : units(amount)}
+      <Text
+        testID={
+          showEstimate
+            ? 'daily-overview-insulin-estimated-basal'
+            : `daily-overview-insulin-${kind}`
+        }
+        style={styles.amount}>
+        {showEstimate
+          ? units(estimatedAmount)
+          : amount === undefined
+          ? '—'
+          : units(amount)}
       </Text>
+      {showEstimate ? (
+        <View style={styles.recordedPart}>
+          <Text style={[styles.note, align]}>{copy.recordedBasal}</Text>
+          <Text
+            testID="daily-overview-insulin-basal"
+            style={styles.recordedAmount}
+            accessibilityLabel={`${copy.recordedBasal}: ${
+              amount === undefined ? '—' : units(amount)
+            }`}>
+            {amount === undefined ? '—' : units(amount)}
+          </Text>
+        </View>
+      ) : null}
       {percent !== undefined ? (
         <Text
           testID={`daily-overview-insulin-${kind}-percent`}
@@ -82,11 +108,43 @@ export const DailyInsulinCard = ({
   const align = rtl && styles.rtl;
   const row = [styles.row, rtl && styles.reverse];
   const insulin = recordedInsulinDisplay(overview.insulinSummary);
+  const primary =
+    insulin.total !== undefined
+      ? {value: insulin.total, label: copy.recordedTotal, id: 'total'}
+      : insulin.estimatedTotal !== undefined
+      ? {
+          value: insulin.estimatedTotal,
+          label: copy.estimatedTotal,
+          id: 'estimated-total',
+        }
+      : insulin.subtotal !== undefined
+      ? {
+          value: insulin.subtotal,
+          label: copy.recordedSubtotal,
+          id: 'recorded-subtotal',
+        }
+      : insulin.bolus !== undefined
+      ? {value: insulin.bolus, label: copy.recordedBolus, id: 'recorded-bolus'}
+      : insulin.basal !== undefined
+      ? {
+          value: insulin.basal,
+          label: insulin.basalComplete
+            ? copy.recordedBasal
+            : copy.recordedSubtotal,
+          id: 'recorded-basal',
+        }
+      : undefined;
+  const graphBasal =
+    insulin.total !== undefined
+      ? insulin.basal
+      : insulin.estimatedTotal !== undefined
+      ? insulin.estimatedBasal
+      : insulin.subtotal !== undefined
+      ? insulin.basal
+      : undefined;
   const split =
-    insulin.total !== undefined &&
-    insulin.basal !== undefined &&
-    insulin.bolus !== undefined
-      ? {basalUnits: insulin.basal, bolusUnits: insulin.bolus}
+    graphBasal !== undefined && insulin.bolus !== undefined
+      ? {basalUnits: graphBasal, bolusUnits: insulin.bolus}
       : undefined;
   if (compact) {
     return (
@@ -95,11 +153,7 @@ export const DailyInsulinCard = ({
           <InsulinSplitGraphic insulin={split} miniature rtl={rtl} />
         ) : null}
         <Text style={styles.compactValue}>
-          {insulin.total !== undefined
-            ? units(insulin.total)
-            : insulin.bolus !== undefined
-            ? `${copy.recordedBolus} · ${units(insulin.bolus)}`
-            : copy.noData}
+          {primary ? `${primary.label} · ${units(primary.value)}` : copy.noData}
         </Text>
       </View>
     );
@@ -116,29 +170,16 @@ export const DailyInsulinCard = ({
         testID="daily-overview-insulin-period"
       />
       <View testID="daily-overview-insulin-metrics">
-        {insulin.total !== undefined ? (
+        {primary ? (
           <View style={[row, styles.hero]}>
-            <Text style={[styles.heroLabel, align]}>{copy.recordedTotal}</Text>
-            <Text style={styles.total} testID="daily-overview-insulin-total">
-              {units(insulin.total)}
-            </Text>
-          </View>
-        ) : insulin.bolus !== undefined ? (
-          <View style={[row, styles.hero]}>
-            <Text style={[styles.heroLabel, align]}>{copy.recordedBolus}</Text>
+            <Text style={[styles.heroLabel, align]}>{primary.label}</Text>
             <Text
-              style={[styles.total, styles.bolus]}
-              testID="daily-overview-insulin-recorded-bolus">
-              {units(insulin.bolus)}
-            </Text>
-          </View>
-        ) : insulin.basal !== undefined && insulin.basalComplete ? (
-          <View style={[row, styles.hero]}>
-            <Text style={[styles.heroLabel, align]}>{copy.recordedBasal}</Text>
-            <Text
-              style={styles.total}
-              testID="daily-overview-insulin-recorded-basal">
-              {units(insulin.basal)}
+              style={[
+                styles.total,
+                primary.id === 'recorded-bolus' && styles.bolus,
+              ]}
+              testID={`daily-overview-insulin-${primary.id}`}>
+              {units(primary.value)}
             </Text>
           </View>
         ) : (
@@ -152,11 +193,11 @@ export const DailyInsulinCard = ({
           <View
             accessible
             accessibilityLabel={
-              insulin.total === 0
+              primary?.value === 0
                 ? copy.noRatio
-                : `${copy.insulinSplit}: ${copy.basal} ${
-                    insulin.basalPercent ?? '—'
-                  }%, ${copy.bolus} ${insulin.bolusPercent ?? '—'}%`
+                : `${primary?.label}: ${copy.basal} ${units(
+                    split.basalUnits,
+                  )}, ${copy.bolus} ${units(split.bolusUnits)}`
             }>
             <InsulinSplitGraphic insulin={split} rtl={rtl} />
           </View>
@@ -165,6 +206,11 @@ export const DailyInsulinCard = ({
           <InsulinComponent
             kind="basal"
             amount={insulin.basal}
+            estimatedAmount={
+              primary?.id === 'estimated-total'
+                ? insulin.estimatedBasal
+                : undefined
+            }
             percent={insulin.basalPercent}
             complete={insulin.basalComplete}
             coverage={insulin.basalCoveragePercent}
@@ -173,12 +219,25 @@ export const DailyInsulinCard = ({
           <InsulinComponent
             kind="bolus"
             amount={insulin.bolus}
+            estimatedAmount={undefined}
             percent={insulin.bolusPercent}
             complete={insulin.bolus !== undefined}
             coverage={undefined}
             locale={locale}
           />
         </View>
+        {insulin.estimatedTotal !== undefined && insulin.total === undefined ? (
+          <View style={styles.estimate}>
+            {insulin.subtotal !== undefined ? (
+              <Text
+                testID="daily-overview-insulin-estimate-recorded-subtotal"
+                style={[styles.note, align]}>
+                {copy.recordedSubtotal}: {units(insulin.subtotal)}
+              </Text>
+            ) : null}
+            <Text style={[styles.note, align]}>{copy.estimateNote}</Text>
+          </View>
+        ) : null}
         {insulin.total === undefined ? (
           <Text style={[styles.incomplete, align]}>{copy.totalIncomplete}</Text>
         ) : insulin.total === 0 ? (
@@ -236,8 +295,16 @@ const styles = StyleSheet.create({
   },
   percent: {fontSize: 18, fontWeight: '700', writingDirection: 'ltr'},
   note: {fontSize: 12, lineHeight: 18, color: '#A6B7CC'},
+  recordedPart: {gap: 2},
+  recordedAmount: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#A6B7CC',
+    writingDirection: 'ltr',
+  },
   unavailable: {marginTop: 16},
   incomplete: {fontSize: 12, lineHeight: 19, color: '#F4C276', marginTop: 12},
+  estimate: {marginTop: 12, gap: 4},
   compactValue: {
     fontSize: 15,
     fontWeight: '700',

@@ -16,6 +16,209 @@ const fresh = (records: Record<string, unknown>[]) => ({
 });
 
 describe('shared recorded insulin loading', () => {
+  it('refreshes the shared treatment observation when a live estimate cutoff advances', async () => {
+    let currentMs = clock;
+    const fetchTreatments = jest.fn(async () => ({
+      records: [],
+      freshness: {kind: 'fresh' as const, fetchedAtMs: currentMs},
+    }));
+    const source = createRecordedInsulinDataSource({
+      fetchTreatments,
+      fetchBasalProfile: async () => ({
+        profile: {entries: [{time: '00:00', value: 1}]},
+        freshness: fresh([]).freshness,
+      }),
+      getScopeKey: () => 'a',
+      now: () => currentMs,
+    });
+    expect(
+      (
+        await source.loadWindow(
+          {...period, endMs: currentMs},
+          {includeEstimates: true},
+        )
+      ).estimatedTotalUnits,
+    ).toBeCloseTo(12);
+    currentMs += 10_000;
+    const [today, history] = await Promise.all([
+      source.loadWindow(
+        {...period, endMs: currentMs},
+        {includeEstimates: true},
+      ),
+      source.loadDailyBundle(
+        {period, asOfMs: currentMs},
+        {includeEstimates: true},
+      ),
+    ]);
+    expect(today.estimatedTotalUnits).toBeCloseTo(12 + 10 / 3600);
+    expect(history.current.estimatedTotalUnits).toBeCloseTo(
+      today.estimatedTotalUnits!,
+    );
+    expect(fetchTreatments).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps recorded evidence when the sum of modeled days would overflow', async () => {
+    const endMs = moveLocalDay(period.startMs, 8);
+    const source = createRecordedInsulinDataSource({
+      fetchTreatments: async () => ({
+        records: [],
+        freshness: {kind: 'fresh', fetchedAtMs: endMs},
+      }),
+      fetchBasalProfile: async () => ({
+        profile: {entries: [{time: '00:00', value: 1e306}]},
+        freshness: {kind: 'fresh', fetchedAtMs: endMs},
+      }),
+      getScopeKey: () => 'a',
+      now: () => endMs,
+    });
+    const result = await source.loadWindow(
+      {startMs: period.startMs, endMs},
+      {includeEstimates: true},
+    );
+    expect(result).toMatchObject({quality: 'partial', bolusUnits: 0});
+    expect(result).not.toHaveProperty('estimatedTotalUnits');
+  });
+
+  it('adds an opt-in total estimate without double-counting a completed temp basal', async () => {
+    const threeHours = {
+      startMs: period.startMs,
+      endMs: period.startMs + 3 * 3_600_000,
+    };
+    const records = [
+      {
+        eventType: 'Correction Bolus',
+        created_at: new Date(period.startMs).toISOString(),
+        insulin: 2,
+      },
+      {
+        eventType: 'Temp Basal',
+        created_at: new Date(period.startMs + 3_600_000).toISOString(),
+        duration: 60,
+        rate: 2,
+        deliveredUnits: 1.8,
+      },
+    ];
+    const fetchBasalProfile = jest.fn(async () => ({
+      profile: {entries: [{time: '00:00', value: 1}]},
+      freshness: fresh([]).freshness,
+    }));
+    const source = createRecordedInsulinDataSource({
+      fetchTreatments: async () => fresh(records),
+      fetchBasalProfile,
+      getScopeKey: () => 'a',
+      now: () => clock,
+    });
+    const recorded = await source.loadWindow(threeHours);
+    expect(recorded).toMatchObject({
+      quality: 'partial',
+      basalUnits: 1.8,
+      bolusUnits: 2,
+    });
+    expect(recorded).not.toHaveProperty('estimatedTotalUnits');
+    expect(fetchBasalProfile).not.toHaveBeenCalled();
+    const estimated = await source.loadWindow(threeHours, {
+      includeEstimates: true,
+    });
+    expect(estimated).toMatchObject({
+      quality: 'partial',
+      basalUnits: 1.8,
+      bolusUnits: 2,
+    });
+    expect(estimated.estimatedBasalUnits).toBeCloseTo(3.8);
+    expect(estimated.estimatedTotalUnits).toBeCloseTo(5.8);
+    expect(fetchBasalProfile).toHaveBeenCalledWith(
+      new Date(period.startMs),
+      new Date(threeHours.endMs - 1),
+    );
+  });
+
+  it('shares current profile reads and uses each historical day schedule for total comparisons', async () => {
+    const fetchBasalProfile = jest.fn(async (asOf: Date) => ({
+      profile: {
+        entries: [{time: '00:00', value: +asOf === period.startMs ? 2 : 1}],
+      },
+      freshness: fresh([]).freshness,
+    }));
+    const source = createRecordedInsulinDataSource({
+      fetchTreatments: async () => fresh([]),
+      fetchBasalProfile,
+      getScopeKey: () => 'a',
+      now: () => clock,
+    });
+    const [today, bundle] = await Promise.all([
+      source.loadWindow({...period, endMs: clock}, {includeEstimates: true}),
+      source.loadDailyBundle({period, asOfMs: clock}, {includeEstimates: true}),
+    ]);
+    expect(today.estimatedTotalUnits).toBeCloseTo(24);
+    expect(bundle.comparison.yesterday?.estimatedTotalUnits).toBeCloseTo(12);
+    expect(bundle.comparison.weekAverage?.estimatedTotalUnits).toBeCloseTo(12);
+    expect(fetchBasalProfile).toHaveBeenCalledTimes(8);
+    expect(fetchBasalProfile.mock.calls.map(call => +call[0]).sort()).toEqual(
+      Array.from({length: 8}, (_, index) =>
+        moveLocalDay(period.startMs, -index),
+      ).sort(),
+    );
+  });
+
+  it.each(['stale', 'failure'] as const)(
+    'retains recorded amounts when the profile is %s',
+    async mode => {
+      const source = createRecordedInsulinDataSource({
+        fetchTreatments: async () =>
+          fresh([
+            {
+              eventType: 'Correction Bolus',
+              created_at: new Date(period.startMs).toISOString(),
+              insulin: 2,
+            },
+          ]),
+        fetchBasalProfile: async () => {
+          if (mode === 'failure') {
+            throw new Error('offline');
+          }
+          return {
+            profile: {entries: [{time: '00:00', value: 1}]},
+            freshness: {kind: 'stale', fetchedAtMs: clock},
+          };
+        },
+        getScopeKey: () => 'a',
+        now: () => clock,
+      });
+      const result = await source.loadWindow(
+        {...period, endMs: clock},
+        {includeEstimates: true},
+      );
+      expect(result).toMatchObject({quality: 'partial', bolusUnits: 2});
+      expect(result).not.toHaveProperty('estimatedTotalUnits');
+    },
+  );
+
+  it('rejects an account change while a profile read is pending', async () => {
+    let scope = 'a';
+    const pending = deferred<{
+      profile: {entries: {time: string; value: number}[]};
+      freshness: ReturnType<typeof fresh>['freshness'];
+    }>();
+    const source = createRecordedInsulinDataSource({
+      fetchTreatments: async () => fresh([]),
+      fetchBasalProfile: () => pending.promise,
+      getScopeKey: () => scope,
+      now: () => clock,
+    });
+    const result = source.loadWindow(
+      {...period, endMs: clock},
+      {includeEstimates: true},
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    scope = 'b';
+    pending.resolve({
+      profile: {entries: [{time: '00:00', value: 1}]},
+      freshness: fresh([]).freshness,
+    });
+    await expect(result).rejects.toThrow('source changed');
+  });
+
   it('does not certify a fresh but explicitly incomplete treatment response', async () => {
     const source = createRecordedInsulinDataSource({
       fetchTreatments: async () => ({...fresh([]), complete: false}),

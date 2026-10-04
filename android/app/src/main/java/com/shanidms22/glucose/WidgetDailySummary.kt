@@ -5,6 +5,7 @@ import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.Calendar
 import java.util.TimeZone
+import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
@@ -85,20 +86,43 @@ internal fun calculateWidgetDailyRange(
 internal fun calculateWidgetInsulinComparison(
   treatments: JSONArray?, nowMs: Long, zone: TimeZone = TimeZone.getDefault(),
   includeHistory: Boolean = true,
+  profilesByDayStart: Map<Long, JSONObject?> = emptyMap(),
 ): WidgetInsulinComparison? {
   val windows = widgetComparisonWindows(nowMs, zone)
-  val today = calculateWidgetInsulinStats(treatments, windows[0].startMs, windows[0].endMs, nowMs)
+  fun stats(window: WidgetDayWindow) = withWidgetBasalEstimate(
+    calculateWidgetInsulinStats(treatments, window.startMs, window.endMs, nowMs), treatments,
+    profilesByDayStart[window.startMs], window.startMs, window.endMs, nowMs, zone,
+  )
+  val today = stats(windows[0])
   val previous = if (includeHistory) windows.drop(1).map {
-    calculateWidgetInsulinStats(treatments, it.startMs, it.endMs, nowMs)
+    stats(it)
   } else emptyList()
   val valid = previous.filterNotNull().filter { it.totalBasal != null || it.totalBolus != null }
   // A weekly comparison represents all seven prior dates; never silently average a biased subset.
   val average = if (valid.size == 7) {
-    val basal = valid.filter { it.basalCoveragePercent == 100.0 }.mapNotNull { it.totalBasal }.completeWeekMean()
+    // Recorded subtotals remain recorded subtotals; averaging never promotes their coverage.
+    val basal = valid.mapNotNull { it.totalBasal }.completeWeekMean()
     val bolus = valid.mapNotNull { it.totalBolus }.completeWeekMean()
-    if (basal == null && bolus == null) null else widgetInsulinStats(basal, bolus,
-      if (basal != null) 100.0 else 0.0, if (basal != null) valid.map { it.basalCoveredMs }.average().toLong() else 0L,
-      if (basal != null && bolus != null) "available" else "partial")
+    // A fully recorded date needs no profile. Combine its actual amount with modeled dates,
+    // but retain the estimated label if any of the seven dates needs reconstruction.
+    val someEstimated = valid.any { it.totalInsulin == null }
+    val estimatedBasal = if (someEstimated) valid.mapNotNull { stats ->
+      if (stats.totalInsulin != null) stats.totalBasal else {
+        val estimate = stats.estimatedBasalUnits
+        val total = stats.estimatedTotalUnits
+        val recordedBolus = stats.totalBolus
+        estimate?.takeIf {
+          it.isFinite() && it >= 0 && total != null && total.isFinite() && total >= 0 &&
+            recordedBolus != null && abs(total - it - recordedBolus) <= maxOf(0.000001, total * 1e-9)
+        }
+      }
+    }.completeWeekMean() else null
+    val estimatedTotal = if (estimatedBasal != null && bolus != null)
+      (estimatedBasal + bolus).takeIf { it.isFinite() } else null
+    if (basal == null && bolus == null && estimatedBasal == null) null else widgetInsulinStats(basal, bolus,
+      valid.map { it.basalCoveragePercent }.average(), valid.map { it.basalCoveredMs }.average().toLong(),
+      if (valid.all { it.quality == "available" }) "available" else "partial")
+      .copy(estimatedBasalUnits = estimatedBasal, estimatedTotalUnits = estimatedTotal)
   } else null
   if (today == null && previous.firstOrNull() == null && average == null) return null
   return WidgetInsulinComparison(today, previous.firstOrNull(), average, valid.size)
@@ -156,7 +180,7 @@ internal fun widgetDailySummaryJson(summary: WidgetDailySummary): String = JSONO
     put("observedMinutes", range.observedMinutes)
   }) }
   summary.insulin?.let { comparison -> put("insulin", JSONObject().apply {
-    put("schemaVersion", 2)
+    put("schemaVersion", 3)
     comparison.today?.let { put("today", insulinJson(it)) }
     comparison.yesterday?.let { put("yesterday", insulinJson(it)) }
     comparison.weekAverage?.let { put("weekAverage", insulinJson(it)) }
@@ -179,9 +203,13 @@ internal fun parseWidgetDailySummary(raw: String?, nowMs: Long, zone: TimeZone =
     WidgetDailyRange(values[0], values[1], values[2], coverage, observed)
   }
   // Version 1 could contain rate-derived basal labeled recorded. Keep TIR, discard those doses.
-  val insulin = root.optJSONObject("insulin")?.takeIf { it.optInt("schemaVersion", 0) == 2 }?.let {
-    WidgetInsulinComparison(parseInsulinJson(it.optJSONObject("today")), parseInsulinJson(it.optJSONObject("yesterday")),
-      parseInsulinJson(it.optJSONObject("weekAverage")), it.optInt("weekDays", 0).coerceIn(0, 7))
+  val insulin = root.optJSONObject("insulin")?.takeIf { it.optInt("schemaVersion", 0) in 2..3 }?.let {
+    val current = it.optInt("schemaVersion", 0) == 3
+    // Schema 2's week dropped recorded partial basal. Keep today's facts, rebuild comparisons.
+    WidgetInsulinComparison(parseInsulinJson(it.optJSONObject("today"), current),
+      if (current) parseInsulinJson(it.optJSONObject("yesterday"), true) else null,
+      if (current) parseInsulinJson(it.optJSONObject("weekAverage"), true) else null,
+      if (current) it.optInt("weekDays", 0).coerceIn(0, 7) else 0)
   }
   WidgetDailySummary(start, updated, low, high, range, insulin)
 }.getOrNull()
@@ -190,9 +218,10 @@ private fun insulinJson(stats: WidgetInsulinStats) = JSONObject().apply {
   put("basal", stats.totalBasal); put("bolus", stats.totalBolus)
   put("quality", stats.quality); put("basalCoveragePercent", stats.basalCoveragePercent)
   put("basalCoveredMs", stats.basalCoveredMs); put("basalEvidence", stats.basalEvidence)
+  put("estimatedBasalUnits", stats.estimatedBasalUnits); put("estimatedTotalUnits", stats.estimatedTotalUnits)
 }
 
-private fun parseInsulinJson(row: JSONObject?): WidgetInsulinStats? {
+private fun parseInsulinJson(row: JSONObject?, allowEstimate: Boolean): WidgetInsulinStats? {
   if (row == null) return null
   // Legacy rows contained scheduled estimates. Never relabel those as recorded delivery.
   if (row.optString("basalEvidence", "") != "recorded" || row.optBoolean("estimated", false)) return null
@@ -205,7 +234,12 @@ private fun parseInsulinJson(row: JSONObject?): WidgetInsulinStats? {
   if (!coverage.isFinite() || coverage !in 0.0..100.0 || covered < 0) return null
   if (basal != null && covered == 0L) return null
   if (quality == "available" && (basal == null || bolus == null || coverage != 100.0 || covered <= 0L)) return null
-  return widgetInsulinStats(basal, bolus, coverage, covered, quality)
+  val recorded = widgetInsulinStats(basal, bolus, coverage, covered, quality)
+  if (!allowEstimate) return recorded
+  val estimatedBasal = component("estimatedBasalUnits")
+  val estimatedTotal = component("estimatedTotalUnits")
+  if (estimatedTotal != null && (estimatedBasal == null || bolus == null || kotlin.math.abs(estimatedTotal - estimatedBasal - bolus) > 0.000001)) return null
+  return recorded.copy(estimatedBasalUnits = estimatedBasal, estimatedTotalUnits = estimatedTotal)
 }
 
 private const val CGM_SAMPLE_MS = 5 * 60_000L

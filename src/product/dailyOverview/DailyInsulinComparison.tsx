@@ -77,14 +77,19 @@ export const DailyInsulinComparison = ({
     : undefined;
   const chartParts = (current: boolean) => {
     const display = current ? todayDisplay : baselineDisplay;
-    return selected?.metric === 'total'
-      ? {basalUnits: display?.basal ?? 0, bolusUnits: display?.bolus ?? 0}
-      : {
-          basalUnits: 0,
-          bolusUnits: current
-            ? selected?.currentUnits ?? 0
-            : selected?.baselineUnits ?? 0,
-        };
+    if (!selected || !display || display.bolus === undefined) {
+      return undefined;
+    }
+    if (selected.metric === 'bolus') {
+      return {basalUnits: 0, bolusUnits: display.bolus};
+    }
+    const basalUnits =
+      selected.metric === 'estimatedTotal' && display.total === undefined
+        ? display.estimatedBasal
+        : display.basal;
+    return basalUnits === undefined
+      ? undefined
+      : {basalUnits, bolusUnits: display.bolus};
   };
   return (
     <View style={styles.panel} testID="daily-overview-insulin-comparison">
@@ -132,6 +137,10 @@ export const DailyInsulinComparison = ({
           <Text style={[styles.metric, align]}>
             {selected.metric === 'total'
               ? copy.recordedTotal
+              : selected.metric === 'estimatedTotal'
+              ? copy.estimatedTotal
+              : selected.metric === 'recordedSubtotal'
+              ? copy.subtotalComparison
               : copy.bolusComparisonOnly}
           </Text>
           <View style={[row, styles.deltaRow]}>
@@ -145,55 +154,72 @@ export const DailyInsulinComparison = ({
               {deltaText}
             </Text>
           </View>
-          {[true, false].map(current => (
-            <View key={String(current)} style={styles.comparisonRow}>
-              {current ? (
-                <DailyPeriodLabel
-                  period={windows.current}
-                  dayLabel={
-                    windows.isPartialDay ? copy.today : copy.comparisonDay
-                  }
-                  locale={locale}
-                  testID="daily-overview-comparison-current-period"
-                />
-              ) : mode === 'yesterday' ? (
-                <DailyPeriodLabel
-                  period={previousDay}
-                  dayLabel={previousDayLabel}
-                  locale={locale}
-                  testID="daily-overview-comparison-baseline-period"
-                />
-              ) : (
-                <DailyPeriodLabel
-                  period={previousDay}
-                  dayLabel={copy.weekAverage}
-                  dateRange={{
-                    firstDayMs: windows.previousDays[6]!.startMs,
-                    lastDayMs: previousDay.startMs,
-                  }}
-                  locale={locale}
-                  testID="daily-overview-comparison-baseline-period"
-                />
-              )}
-              <View style={row}>
-                <View style={styles.flex}>
-                  <InsulinSplitGraphic
-                    insulin={chartParts(current)}
-                    maximum={Math.max(
-                      selected.currentUnits,
-                      selected.baselineUnits,
-                    )}
-                    rtl={rtl}
+          {[true, false].map(current => {
+            const parts = chartParts(current);
+            const display = current ? todayDisplay : baselineDisplay;
+            return (
+              <View key={String(current)} style={styles.comparisonRow}>
+                {current ? (
+                  <DailyPeriodLabel
+                    period={windows.current}
+                    dayLabel={
+                      windows.isPartialDay ? copy.today : copy.comparisonDay
+                    }
+                    locale={locale}
+                    testID="daily-overview-comparison-current-period"
                   />
+                ) : mode === 'yesterday' ? (
+                  <DailyPeriodLabel
+                    period={previousDay}
+                    dayLabel={previousDayLabel}
+                    locale={locale}
+                    testID="daily-overview-comparison-baseline-period"
+                  />
+                ) : (
+                  <DailyPeriodLabel
+                    period={previousDay}
+                    dayLabel={copy.weekAverage}
+                    dateRange={{
+                      firstDayMs: windows.previousDays[6]!.startMs,
+                      lastDayMs: previousDay.startMs,
+                    }}
+                    locale={locale}
+                    testID="daily-overview-comparison-baseline-period"
+                  />
+                )}
+                <View style={row}>
+                  <View style={styles.flex}>
+                    {parts ? (
+                      <InsulinSplitGraphic
+                        insulin={parts}
+                        maximum={Math.max(
+                          selected.currentUnits,
+                          selected.baselineUnits,
+                        )}
+                        rtl={rtl}
+                      />
+                    ) : null}
+                  </View>
+                  <Text style={styles.barValue}>
+                    {units(
+                      current ? selected.currentUnits : selected.baselineUnits,
+                    )}
+                  </Text>
                 </View>
-                <Text style={styles.barValue}>
-                  {units(
-                    current ? selected.currentUnits : selected.baselineUnits,
-                  )}
-                </Text>
+                {(selected.metric === 'recordedSubtotal' ||
+                  selected.metric === 'estimatedTotal') &&
+                display?.basalCoveragePercent !== undefined ? (
+                  <Text style={[styles.caption, align]}>
+                    {formatDailyValue(display.basalCoveragePercent)}%{' '}
+                    {copy.basalCoverage}
+                  </Text>
+                ) : null}
               </View>
-            </View>
-          ))}
+            );
+          })}
+          {selected.metric === 'estimatedTotal' ? (
+            <Text style={[styles.caption, align]}>{copy.estimateNote}</Text>
+          ) : null}
           {mode === 'week' ? (
             <Text style={[styles.caption, align]}>{copy.weekComplete}</Text>
           ) : null}

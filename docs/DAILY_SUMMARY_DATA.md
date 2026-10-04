@@ -1,12 +1,14 @@
 # Daily summary data
 
-The in-app Daily Overview and Android summary widget show recorded insulin.
-Neither fills missing basal intervals from a programmed profile.
+The in-app Daily Overview, Personal Home and Android summary widget show total
+insulin including basal and bolus. Recorded facts retain their original coverage.
+When needed, a separate clearly labeled estimate fills uncovered basal time.
 For new consumers, start with [Data access and calculations](DATA_ACCESS.md).
 
 ## Entry points
 
 - `src/services/insulin/recordedInsulin.ts`: pure treatment-to-summary calculation.
+- `src/services/insulin/estimatedBasal.ts`: pure reconstruction of uncovered basal.
 - `src/services/insulin/recordedInsulinDataSource.ts`: one fresh, account-scoped
   treatment snapshot reused for the selected day and its seven comparison days.
 - `src/services/insulin/createRecordedInsulinDataSource.ts`: the same loader with
@@ -15,6 +17,7 @@ For new consumers, start with [Data access and calculations](DATA_ACCESS.md).
 - `src/product/dailyOverview`: range, insulin, comparison and period components.
 - `android/.../glucose/WidgetDailySummary.kt`: independent native background sync.
 - `android/.../glucose/GlucoseWidgetInsulinData.kt`: native recorded-dose adapter.
+- `android/.../glucose/WidgetBasalEstimate.kt`: native reconstruction with separate estimates.
 
 The widget must refresh when JavaScript is suspended. Its native adapter therefore
 implements the same recorded-dose rules, checked against the same JSON fixtures in
@@ -40,20 +43,35 @@ individual pump pulses. Distinct dose identities remain distinct; duplicate
 versions of one identity do not add another dose. Numeric epoch timestamps and
 ISO timestamps follow the same rules in the app, Web decoder and native widget.
 
-An available summary requires known bolus and complete basal coverage. Only that
-state has total insulin and a basal/bolus ratio. A partial summary preserves known
-components and basal coverage without inventing a total. If both compared periods
-have known bolus but incomplete basal, the comparison explicitly shows bolus only.
-The weekly average requires all seven days for the component being compared.
+An available recorded summary requires known bolus and complete basal coverage.
+A partial summary preserves known components and coverage. Its basal-plus-bolus
+sum is a recorded subtotal, not the full daily amount. Valid explicit estimates
+add separate estimated basal and total fields without promoting recorded quality.
+Comparisons prefer recorded totals, then total estimates, then known recorded
+subtotals, then bolus only. Mixed complete/estimated totals are labeled estimates.
+The weekly average requires all seven days for the basis being compared.
+
+Reconstruction overlays completed delivered basal amounts before filling gaps
+from the profile, temp rates or suspension. Temp basal replaces scheduled basal,
+so the same interval is never counted twice. Unfinished/mutable doses contribute
+only programmed rates to the estimate, never recorded delivery. Schedules require
+a midnight entry, unique times and matching textual/numeric times. Schedule
+integration uses the profile timezone and actual elapsed time across DST.
+Invalid or ambiguous controls and unresolved profile changes disable the estimate.
+Profile failures leave the recorded subtotal available.
 
 The widget shows recorded basal subtotals even when coverage is partial. Its partial
 basal bar represents recorded time coverage, not an insulin ratio; the adjacent
 label identifies this. Compact widgets omit that bar but retain the subtotal.
 Comparison amounts remain visible when the widget is too short for comparison
 charts. Coverage just below 100% is displayed as `<100%`, never rounded to complete.
+With a valid total estimate, basal/bolus amounts and ratios use that same estimate
+basis; smaller recorded amounts and their coverage remain visible separately.
 
 Old native cached insulin without recorded evidence is discarded. Glucose can
 remain available independently when insulin history fails.
+Native cache schema 3 keeps recorded and estimated fields separate. Older schema 2
+today facts remain usable, while historical comparisons are rebuilt.
 
 ## Glucose interval contract
 
@@ -92,6 +110,8 @@ Shared recorded-dose fixtures cover delivery amounts, clipping, gaps, overlaps,
 deduplication and invalid events. Loader tests check request reuse, stale data and
 account changes. Android instrumentation applies actual launcher RemoteViews in
 English and Hebrew at several sizes, including incomplete insulin data.
+`__tests__/fixtures/estimated-basal.json` is also consumed by TypeScript and Kotlin
+for reconstruction and schedule-validation parity.
 
 `__tests__/fixtures/daily-glucose-intervals.json` is also consumed by both platforms.
 It covers irregular cadence, gaps, carry-in, duplicate timestamps and short windows.

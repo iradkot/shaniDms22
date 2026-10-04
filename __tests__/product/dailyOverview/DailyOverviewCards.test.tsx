@@ -210,6 +210,82 @@ describe('Daily overview visual cards', () => {
     expect(scaled.map(node => node.props.maximum)).toEqual([29, 29]);
   });
 
+  it('prefers a complete recorded total over explicit estimates in hero and comparison', () => {
+    const overview = {
+      ...base,
+      insulinSummary: {
+        ...base.insulinSummary,
+        quality: 'available' as const,
+        basalUnits: 18,
+        bolusUnits: 8,
+        totalUnits: 26,
+        estimatedBasalUnits: 20,
+        estimatedTotalUnits: 28,
+      },
+    };
+    const tree = mount(
+      <DailyOverviewCard
+        id="insulin"
+        overview={overview}
+        locale="en"
+        rangeStyle="ring"
+        thresholds={thresholds}
+        insulinComparison={{
+          ...comparison,
+          yesterday: {
+            quality: 'available',
+            basalUnits: 15,
+            bolusUnits: 8,
+            estimatedBasalUnits: 18,
+            estimatedTotalUnits: 26,
+          },
+        }}
+      />,
+    );
+    expect(textAt(tree, 'daily-overview-insulin-total')).toBe('26 U');
+    expect(textAt(tree, 'daily-overview-insulin-delta')).toBe('+3 U');
+    expect(
+      tree.root.findAllByProps({
+        testID: 'daily-overview-insulin-estimated-total',
+      }),
+    ).toHaveLength(0);
+    expect(allText(tree)).toContain('Recorded total');
+    expect(allText(tree)).not.toContain('Estimated total');
+  });
+
+  it('keeps actual basal in a mixed actual-versus-estimated comparison chart', () => {
+    const tree = mount(
+      <DailyOverviewCard
+        id="insulin"
+        overview={base}
+        locale="en"
+        rangeStyle="ring"
+        thresholds={thresholds}
+        insulinComparison={{
+          ...comparison,
+          yesterday: {
+            quality: 'partial',
+            basalUnits: 1,
+            bolusUnits: 8,
+            basalCoveragePercent: 20,
+            estimatedBasalUnits: 17,
+            estimatedTotalUnits: 25,
+          },
+        }}
+      />,
+    );
+    expect(textAt(tree, 'daily-overview-insulin-total')).toBe('26 U');
+    expect(textAt(tree, 'daily-overview-insulin-delta')).toBe('+1 U');
+    expect(allText(tree)).toContain('Estimated total');
+    const graphics = tree.root
+      .findAllByType(InsulinSplitGraphic)
+      .filter(node => node.props.maximum !== undefined);
+    expect(graphics.map(node => node.props.insulin)).toEqual([
+      {basalUnits: 18, bolusUnits: 8},
+      {basalUnits: 17, bolusUnits: 8},
+    ]);
+  });
+
   it('identifies partial-day coverage and its captured cutoff', () => {
     const overview = {
       ...base,
@@ -502,7 +578,9 @@ describe('Daily overview visual cards', () => {
       />,
     );
     expect(textAt(tree, 'daily-overview-insulin-basal')).toBe('1.3 U');
-    expect(textAt(tree, 'daily-overview-insulin-recorded-bolus')).toBe('4 U');
+    expect(textAt(tree, 'daily-overview-insulin-recorded-subtotal')).toBe(
+      '5.3 U',
+    );
     expect(allText(tree)).toContain('Recorded subtotal');
     expect(allText(tree)).toContain('40% of the time covered by basal records');
     expect(
@@ -534,4 +612,80 @@ describe('Daily overview visual cards', () => {
       old.root.findAllByProps({testID: 'daily-overview-insulin-total'}),
     ).toHaveLength(0);
   });
+
+  it.each([false, true])(
+    'includes partial temp basal in the daily comparison with estimate=%s',
+    estimated => {
+      const insulinSummary = {
+        quality: 'partial' as const,
+        basalUnits: 1.8,
+        bolusUnits: 2,
+        basalCoveredMs: 3_600_000,
+        basalCoveragePercent: 33,
+        ...(estimated
+          ? {estimatedBasalUnits: 3.8, estimatedTotalUnits: 5.8}
+          : {}),
+      };
+      const history: DailyInsulinComparisonPresentation = {
+        ...comparison,
+        yesterday: {
+          ...insulinSummary,
+          basalUnits: 1,
+          ...(estimated
+            ? {estimatedBasalUnits: 3, estimatedTotalUnits: 5}
+            : {}),
+        },
+      };
+      const tree = mount(
+        <DailyOverviewCard
+          id="insulin"
+          overview={{...base, insulinSummary}}
+          locale="he"
+          rangeStyle="ring"
+          thresholds={thresholds}
+          insulinComparison={history}
+        />,
+      );
+      expect(textAt(tree, 'daily-overview-insulin-delta')).toBe('+0.8 U');
+      expect(
+        textAt(
+          tree,
+          estimated
+            ? 'daily-overview-insulin-estimated-total'
+            : 'daily-overview-insulin-recorded-subtotal',
+        ),
+      ).toBe(estimated ? '5.8 U' : '3.8 U');
+      expect(allText(tree)).toContain(
+        estimated ? 'סה״כ משוער' : 'סכום מתועד · כיסוי בזאל חלקי',
+      );
+      expect(allText(tree)).toContain('33% מהזמן מכוסה בתיעוד בזאל');
+      const graphics = tree.root
+        .findAllByType(InsulinSplitGraphic)
+        .filter(node => node.props.maximum !== undefined);
+      expect(graphics.map(node => node.props.insulin)).toEqual([
+        {basalUnits: estimated ? 3.8 : 1.8, bolusUnits: 2},
+        {basalUnits: estimated ? 3 : 1, bolusUnits: 2},
+      ]);
+      if (estimated) {
+        expect(textAt(tree, 'daily-overview-insulin-estimated-basal')).toBe(
+          '3.8 U',
+        );
+        expect(textAt(tree, 'daily-overview-insulin-basal')).toBe('1.8 U');
+        const estimatedAmount = tree.root
+          .findAllByProps({testID: 'daily-overview-insulin-estimated-basal'})
+          .find(node => node.type === Text)!;
+        const recordedAmount = tree.root
+          .findAllByProps({testID: 'daily-overview-insulin-basal'})
+          .find(node => node.type === Text)!;
+        expect(
+          StyleSheet.flatten(estimatedAmount.props.style).fontSize,
+        ).toBeGreaterThan(
+          StyleSheet.flatten(recordedAmount.props.style).fontSize,
+        );
+        expect(
+          textAt(tree, 'daily-overview-insulin-estimate-recorded-subtotal'),
+        ).toBe('סכום חלקי מתועד: 3.8 U');
+      }
+    },
+  );
 });

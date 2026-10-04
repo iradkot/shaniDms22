@@ -60,34 +60,96 @@ export const getDailyInsulinComparisonWindows = ({
   };
 };
 
+const validUnits = (value: number | undefined): value is number =>
+  value !== undefined && Number.isFinite(value) && value >= 0;
+
+const finiteSum = (basal: number | undefined, bolus: number | undefined) => {
+  if (!validUnits(basal) || !validUnits(bolus)) {
+    return undefined;
+  }
+  const total = basal + bolus;
+  return Number.isFinite(total) ? total : undefined;
+};
+
+interface ComparableInsulin {
+  readonly quality: 'available' | 'partial' | 'unavailable';
+  readonly basalUnits?: number;
+  readonly bolusUnits?: number;
+  readonly basalEstimated?: boolean;
+  readonly basalCoveragePercent?: number;
+  readonly estimatedBasalUnits?: number;
+  readonly estimatedTotalUnits?: number;
+}
+
+const explicitEstimatedTotal = (value: ComparableInsulin) => {
+  const total = finiteSum(value.estimatedBasalUnits, value.bolusUnits);
+  return total !== undefined &&
+    validUnits(value.estimatedTotalUnits) &&
+    Math.abs(total - value.estimatedTotalUnits) <=
+      Math.max(1e-6, value.estimatedTotalUnits * 1e-9)
+    ? total
+    : undefined;
+};
+
+const recordedSum = (value: ComparableInsulin) =>
+  value.basalEstimated
+    ? undefined
+    : finiteSum(value.basalUnits, value.bolusUnits);
+
+const completeSum = (value: ComparableInsulin) =>
+  value.quality === 'available' && (value.basalCoveragePercent ?? 100) === 100
+    ? recordedSum(value)
+    : undefined;
+
+const comparableTotal = (value: ComparableInsulin) =>
+  completeSum(value) ?? explicitEstimatedTotal(value);
+
 const totals = (
   summary: DailyInsulinSourceSummary | undefined,
 ): DailyInsulinComparisonTotals | undefined => {
   if (!summary || summary.quality === 'unavailable') {
     return undefined;
   }
-  const valid = (value: number | undefined): value is number =>
-    value !== undefined && Number.isFinite(value) && value >= 0;
-  const estimated = summary.quality === 'available' && summary.basalEstimated;
+  const legacyEstimated =
+    summary.quality === 'available' && summary.basalEstimated;
   const basalUnits =
-    !estimated && valid(summary.basalUnits) ? summary.basalUnits : undefined;
-  const bolusUnits = valid(summary.bolusUnits) ? summary.bolusUnits : undefined;
+    !legacyEstimated && validUnits(summary.basalUnits)
+      ? summary.basalUnits
+      : undefined;
+  const bolusUnits = validUnits(summary.bolusUnits)
+    ? summary.bolusUnits
+    : undefined;
   if (basalUnits === undefined && bolusUnits === undefined) {
     return undefined;
   }
+  const coverage =
+    summary.basalCoveragePercent ?? (summary.quality === 'available' ? 100 : 0);
+  const basalCoveragePercent =
+    !legacyEstimated &&
+    Number.isFinite(coverage) &&
+    coverage >= 0 &&
+    coverage <= 100
+      ? coverage
+      : 0;
+  const sum = finiteSum(basalUnits, bolusUnits);
   const complete =
     summary.quality === 'available' &&
-    basalUnits !== undefined &&
-    bolusUnits !== undefined &&
-    (summary.basalCoveragePercent ?? 100) === 100;
+    sum !== undefined &&
+    basalCoveragePercent === 100;
+  const estimatedTotalUnits = explicitEstimatedTotal(summary);
   return {
     quality: complete ? 'available' : 'partial',
     ...(basalUnits === undefined ? {} : {basalUnits}),
     ...(bolusUnits === undefined ? {} : {bolusUnits}),
-    ...(complete ? {totalUnits: basalUnits + bolusUnits} : {}),
-    basalCoveragePercent: estimated
-      ? 0
-      : summary.basalCoveragePercent ?? (complete ? 100 : 0),
+    ...(complete ? {totalUnits: sum} : {}),
+    ...(estimatedTotalUnits === undefined ||
+    summary.estimatedBasalUnits === undefined
+      ? {}
+      : {
+          estimatedBasalUnits: summary.estimatedBasalUnits,
+          estimatedTotalUnits,
+        }),
+    basalCoveragePercent,
     ...(summary.basalCoveredMs === undefined
       ? {}
       : {basalCoveredMs: summary.basalCoveredMs}),
@@ -108,39 +170,67 @@ export const buildDailyInsulinComparison = (
   );
   const yesterday = values[0];
   const allDays = previous.length === 7 && available.length === 7;
+  const mean = (
+    field:
+      | 'basalUnits'
+      | 'bolusUnits'
+      | 'basalCoveragePercent'
+      | 'basalCoveredMs'
+      | 'estimatedBasalUnits'
+      | 'estimatedTotalUnits',
+  ): number | undefined =>
+    allDays && available.every(value => validUnits(value[field]))
+      ? available.reduce(
+          (average, value, index) =>
+            average + (value[field]! - average) / (index + 1),
+          0,
+        )
+      : undefined;
+  const weekBasal = mean('basalUnits');
+  const weekBolus = mean('bolusUnits');
+  const weekCoverage = mean('basalCoveragePercent');
+  const weekCoveredMs = mean('basalCoveredMs');
   const completeBasal =
     allDays &&
     available.every(
       value =>
-        value.basalUnits !== undefined && value.basalCoveragePercent === 100,
+        value.quality === 'available' && value.basalCoveragePercent === 100,
     );
-  const completeBolus =
-    allDays && available.every(value => value.bolusUnits !== undefined);
-  const weekBasal = completeBasal
-    ? available.reduce(
-        (mean, value, index) => mean + (value.basalUnits! - mean) / (index + 1),
-        0,
-      )
+  const weekTotal = completeBasal ? finiteSum(weekBasal, weekBolus) : undefined;
+  const allComparable =
+    allDays && available.every(value => comparableTotal(value) !== undefined);
+  const someEstimated =
+    allComparable && available.some(value => completeSum(value) === undefined);
+  const weekEstimatedBasal = someEstimated
+    ? available.reduce((average, value, index) => {
+        const basal =
+          completeSum(value) !== undefined
+            ? value.basalUnits!
+            : value.estimatedBasalUnits!;
+        return average + (basal - average) / (index + 1);
+      }, 0)
     : undefined;
-  const weekBolus = completeBolus
-    ? available.reduce(
-        (mean, value, index) => mean + (value.bolusUnits! - mean) / (index + 1),
-        0,
-      )
+  const weekEstimatedTotal = someEstimated
+    ? finiteSum(weekEstimatedBasal, weekBolus)
     : undefined;
   const weekAverage: DailyInsulinComparisonTotals | undefined =
     weekBasal !== undefined || weekBolus !== undefined
       ? {
-          quality:
-            weekBasal !== undefined && weekBolus !== undefined
-              ? 'available'
-              : 'partial',
+          quality: weekTotal !== undefined ? 'available' : 'partial',
           ...(weekBasal === undefined ? {} : {basalUnits: weekBasal}),
           ...(weekBolus === undefined ? {} : {bolusUnits: weekBolus}),
-          ...(weekBasal !== undefined && weekBolus !== undefined
-            ? {totalUnits: weekBasal + weekBolus}
-            : {}),
-          basalCoveragePercent: completeBasal ? 100 : 0,
+          ...(weekTotal === undefined ? {} : {totalUnits: weekTotal}),
+          ...(weekEstimatedTotal === undefined ||
+          weekEstimatedBasal === undefined
+            ? {}
+            : {
+                estimatedBasalUnits: weekEstimatedBasal,
+                estimatedTotalUnits: weekEstimatedTotal,
+              }),
+          ...(weekCoveredMs === undefined
+            ? {}
+            : {basalCoveredMs: weekCoveredMs}),
+          basalCoveragePercent: weekCoverage ?? 0,
           basalEvidence: 'recorded',
         }
       : undefined;
@@ -158,19 +248,13 @@ export const buildDailyInsulinComparison = (
 };
 
 export interface RecordedInsulinComparison {
-  readonly metric: 'total' | 'bolus';
+  readonly metric: 'total' | 'estimatedTotal' | 'recordedSubtotal' | 'bolus';
   readonly currentUnits: number;
   readonly baselineUnits: number;
   readonly deltaUnits: number;
 }
-interface ComparableInsulin {
-  readonly quality: 'available' | 'partial' | 'unavailable';
-  readonly basalUnits?: number;
-  readonly bolusUnits?: number;
-  readonly basalEstimated?: boolean;
-  readonly basalCoveragePercent?: number;
-}
-/** All presentations choose the same recorded component; partial totals never compare. */
+
+/** Prefer total insulin, retaining known temp basal even with partial coverage. */
 export const selectRecordedInsulinComparison = (
   current: ComparableInsulin,
   baseline: ComparableInsulin | undefined,
@@ -182,26 +266,43 @@ export const selectRecordedInsulinComparison = (
   ) {
     return undefined;
   }
-  const valid = (value: number | undefined): value is number =>
-    value !== undefined && Number.isFinite(value) && value >= 0;
-  const complete = (value: ComparableInsulin): boolean =>
-    value.quality === 'available' &&
-    !value.basalEstimated &&
-    valid(value.basalUnits) &&
-    valid(value.bolusUnits) &&
-    (value.basalCoveragePercent ?? 100) === 100;
-  const metric = complete(current) && complete(baseline) ? 'total' : 'bolus';
-  if (!valid(current.bolusUnits) || !valid(baseline.bolusUnits)) {
+  const options = [
+    {
+      metric: 'total',
+      currentUnits: completeSum(current),
+      baselineUnits: completeSum(baseline),
+    },
+    {
+      metric: 'estimatedTotal',
+      currentUnits: comparableTotal(current),
+      baselineUnits: comparableTotal(baseline),
+    },
+    {
+      metric: 'recordedSubtotal',
+      currentUnits: recordedSum(current),
+      baselineUnits: recordedSum(baseline),
+    },
+    {
+      metric: 'bolus',
+      currentUnits: current.bolusUnits,
+      baselineUnits: baseline.bolusUnits,
+    },
+  ] as const;
+  const selected = options.find(
+    option =>
+      validUnits(option.currentUnits) && validUnits(option.baselineUnits),
+  );
+  if (
+    !selected ||
+    selected.currentUnits === undefined ||
+    selected.baselineUnits === undefined
+  ) {
     return undefined;
   }
-  const currentUnits =
-    current.bolusUnits + (metric === 'total' ? current.basalUnits! : 0);
-  const baselineUnits =
-    baseline.bolusUnits + (metric === 'total' ? baseline.basalUnits! : 0);
   return {
-    metric,
-    currentUnits,
-    baselineUnits,
-    deltaUnits: currentUnits - baselineUnits,
+    metric: selected.metric,
+    currentUnits: selected.currentUnits,
+    baselineUnits: selected.baselineUnits,
+    deltaUnits: selected.currentUnits - selected.baselineUnits,
   };
 };

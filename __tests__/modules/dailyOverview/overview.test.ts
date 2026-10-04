@@ -158,6 +158,34 @@ describe('Daily Overview domain', () => {
     });
     expect(partial).not.toHaveProperty('totalUnits');
   });
+
+  it('keeps explicit estimates separate from recorded subtotal and coverage', () => {
+    const period = getLocalDayPeriod(new Date(2026, 8, 28).getTime());
+    const source = {
+      quality: 'partial' as const,
+      basalUnits: 1.8,
+      bolusUnits: 2,
+      basalCoveredMs: 3_600_000,
+      basalCoveragePercent: 33,
+      estimatedBasalUnits: 3.8,
+      estimatedTotalUnits: 5.8,
+    };
+    const summarize = (insulinSummary: typeof source) =>
+      buildDailyOverview({
+        period,
+        thresholds,
+        expectedSampleIntervalMs: 300_000,
+        source: {glucoseSamples: [], insulinSummary},
+      }).insulinSummary;
+    expect(summarize(source)).toEqual(source);
+    expect(summarize(source)).not.toHaveProperty('totalUnits');
+    expect(() =>
+      summarize({...source, estimatedBasalUnits: Number.NaN}),
+    ).toThrow(DailyOverviewInputError);
+    expect(() => summarize({...source, estimatedTotalUnits: 99})).toThrow(
+      DailyOverviewInputError,
+    );
+  });
   it('uses elapsed-day coverage and excludes future readings while preserving selected-day identity', () => {
     const asOfMs = new Date(2026, 8, 28, 3, 15).getTime();
     const period = getLocalDayPeriod(asOfMs);

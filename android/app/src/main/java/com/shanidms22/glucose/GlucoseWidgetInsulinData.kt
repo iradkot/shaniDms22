@@ -18,6 +18,9 @@ internal data class WidgetInsulinStats(
   val basalCoveragePercent: Double = 100.0,
   val basalCoveredMs: Long = 0,
   val basalEvidence: String = "recorded",
+  // A profile/rate reconstruction is separate from the recorded amount and its coverage.
+  val estimatedBasalUnits: Double? = null,
+  val estimatedTotalUnits: Double? = null,
 )
 
 internal fun widgetInsulinStats(

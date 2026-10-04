@@ -41,6 +41,9 @@ export const HOME_COPY = {
     basal: 'בזאל',
     bolus: 'בולוס',
     total: 'סה״כ',
+    sameHours: 'השוואה לאותן שעות בכל יום',
+    insulinTotalIncomplete:
+      'תיעוד הבזאל חלקי. הסכום המתועד עשוי להיות נמוך מהכמות שניתנה.',
     week: '7 הימים המלאים האחרונים',
     mean: 'ממוצע סוכר',
     daysAvailable: 'ימים עם נתונים',
@@ -115,6 +118,9 @@ export const HOME_COPY = {
     basal: 'Basal',
     bolus: 'Bolus',
     total: 'Total',
+    sameHours: 'Compared over the same hours each day',
+    insulinTotalIncomplete:
+      'Basal records are incomplete. The recorded amount may be lower than insulin delivered.',
     week: 'Last 7 complete days',
     mean: 'Mean glucose',
     daysAvailable: 'days with data',

@@ -1,7 +1,13 @@
 import React from 'react';
 import {Pressable, Text} from 'react-native';
 import renderer, {act} from 'react-test-renderer';
-import type {DailyOverviewPeriod} from 'app/modules/dailyOverview';
+import {
+  buildDailyInsulinComparison,
+  getDailyInsulinComparisonWindows,
+  type DailyOverviewPeriod,
+  type DailyInsulinSourceSummary,
+  type DailyInsulinComparisonRequest,
+} from 'app/modules/dailyOverview';
 import {
   PersonalHomeView,
   type PersonalHomeViewProps,
@@ -96,14 +102,280 @@ describe('Personal Home editor', () => {
     tree!.root.findAllByType(HomeWidget).map(node => node.props.id);
   const has = (testID: string) =>
     tree!.root.findAllByProps({testID}).length > 0;
-  const graphHours = () =>
-    tree!.root.findByType(GlucoseMiniChart).props.hours;
+  const graphHours = () => tree!.root.findByType(GlucoseMiniChart).props.hours;
+  const insulinCard = () =>
+    tree!.root
+      .findAllByType(HomeWidget)
+      .find(node => node.props.id === 'daily-insulin')!;
+  const insulinText = () =>
+    insulinCard()
+      .findAllByType(Text)
+      .map(node => node.props.children)
+      .flat(Infinity)
+      .join(' ');
 
   afterEach(() => {
     act(() => tree?.unmount());
     tree = undefined;
     jest.restoreAllMocks();
   });
+
+  it('shows recorded daily bolus when basal delivery is incomplete', async () => {
+    await mount({
+      sources: {
+        dailyOverview: {
+          loadDailyOverview: async () => ({
+            glucoseSamples: [],
+            insulinSummary: {
+              quality: 'partial',
+              bolusUnits: 8.2,
+              basalCoveredMs: 0,
+              basalCoveragePercent: 0,
+            },
+          }),
+        },
+      },
+    });
+    const text = insulinText();
+    expect(text).toContain('8.2');
+    expect(text).toContain('בולוס מתועד');
+    expect(text).not.toContain('הנתונים אינם זמינים כרגע');
+  });
+
+  it.each<{
+    summary: DailyInsulinSourceSummary;
+    primary: string;
+    expected: string;
+    total: boolean;
+  }>([
+    {
+      summary: {quality: 'available', basalUnits: 8, bolusUnits: 4},
+      primary: 'home-insulin-total',
+      expected: '12 U',
+      total: true,
+    },
+    {
+      summary: {
+        quality: 'available',
+        basalUnits: 8,
+        bolusUnits: 4,
+        estimatedBasalUnits: 10,
+        estimatedTotalUnits: 14,
+      },
+      primary: 'home-insulin-total',
+      expected: '12 U',
+      total: true,
+    },
+    {
+      summary: {
+        quality: 'partial',
+        bolusUnits: 0,
+        basalCoveredMs: 0,
+        basalCoveragePercent: 0,
+      },
+      primary: 'home-insulin-recorded-bolus',
+      expected: '0 U',
+      total: false,
+    },
+    {
+      summary: {
+        quality: 'partial',
+        basalUnits: 1.3,
+        bolusUnits: 4,
+        basalCoveredMs: 7_200_000,
+        basalCoveragePercent: 40,
+      },
+      primary: 'home-insulin-recorded-subtotal',
+      expected: '5.3 U',
+      total: false,
+    },
+    {
+      summary: {
+        quality: 'partial',
+        basalUnits: 1.3,
+        basalCoveredMs: 7_200_000,
+        basalCoveragePercent: 40,
+      },
+      primary: 'home-insulin-recorded-basal',
+      expected: '1.3 U',
+      total: false,
+    },
+    {
+      summary: {
+        quality: 'available',
+        basalUnits: 100,
+        bolusUnits: 4,
+        basalEstimated: true,
+      },
+      primary: 'home-insulin-recorded-bolus',
+      expected: '4 U',
+      total: false,
+    },
+  ])(
+    'preserves recorded amounts and complete-total boundaries: $summary',
+    async ({summary, primary, expected, total}) => {
+      await mount({
+        sources: {
+          dailyOverview: {
+            loadDailyOverview: async () => ({
+              glucoseSamples: [],
+              insulinSummary: summary,
+            }),
+          },
+        },
+      });
+      expect(
+        insulinCard()
+          .findAllByProps({testID: primary})
+          .find(node => node.type === Text)!.props.children,
+      ).toBe(expected);
+      expect(
+        insulinCard().findAllByProps({testID: 'home-insulin-total'}).length > 0,
+      ).toBe(total);
+      if (summary.quality === 'partial' && summary.basalUnits !== undefined) {
+        expect(insulinText()).toContain('1.3 U');
+        expect(insulinText()).toContain('40');
+        expect(insulinText()).toContain('סכום חלקי מתועד');
+      }
+      if (summary.quality === 'available' && summary.basalEstimated) {
+        expect(insulinText()).not.toContain('100 U');
+      }
+    },
+  );
+
+  it('shows yesterday and the seven-day mean for matching recorded bolus hours', async () => {
+    const compare = jest.fn(async (request: DailyInsulinComparisonRequest) =>
+      buildDailyInsulinComparison(
+        getDailyInsulinComparisonWindows(request),
+        Array.from({length: 7}, (_, index) => ({
+          quality: 'partial' as const,
+          bolusUnits: index === 0 ? 6 : 7.4,
+          basalCoveredMs: 0,
+          basalCoveragePercent: 0,
+        })),
+      ),
+    );
+    await mount({
+      sources: {
+        dailyOverview: {
+          loadDailyOverview: async () => ({
+            glucoseSamples: [],
+            insulinSummary: {
+              quality: 'partial',
+              bolusUnits: 8,
+              basalCoveredMs: 0,
+              basalCoveragePercent: 0,
+            },
+          }),
+          loadDailyInsulinComparison: compare,
+        },
+      },
+    });
+    expect(compare).toHaveBeenCalledWith({
+      period: {
+        startMs: new Date(2026, 8, 8).getTime(),
+        endMs: new Date(2026, 8, 9).getTime(),
+      },
+      asOfMs: now(),
+    });
+    const textAt = (testID: string) =>
+      insulinCard()
+        .findAllByProps({testID})
+        .find(node => node.type === Text)!.props.children;
+    expect(textAt('home-insulin-yesterday-value')).toBe('6 U');
+    expect(textAt('home-insulin-yesterday-delta')).toBe('+2 U');
+    expect(textAt('home-insulin-weekAverage-value')).toBe('7.2 U');
+    expect(textAt('home-insulin-weekAverage-delta')).toBe('+0.8 U');
+    expect(insulinText()).toContain('00:00–16:00');
+    expect(insulinText()).toContain('השוואה לאותן שעות בכל יום');
+  });
+
+  it('keeps today visible when comparison history fails', async () => {
+    await mount({
+      sources: {
+        dailyOverview: {
+          loadDailyOverview: async () => ({
+            glucoseSamples: [],
+            insulinSummary: {
+              quality: 'partial',
+              bolusUnits: 8,
+              basalCoveredMs: 0,
+              basalCoveragePercent: 0,
+            },
+          }),
+          loadDailyInsulinComparison: async () => {
+            throw new Error('History offline');
+          },
+        },
+      },
+    });
+    expect(insulinText()).toContain('8 U');
+    expect(insulinText()).toContain('אין נתוני אינסולין זמינים להשוואה הזאת.');
+    expect(insulinText()).not.toContain('הנתונים אינם זמינים כרגע');
+  });
+
+  it.each([false, true])(
+    'keeps temp basal in home daily totals and comparisons with estimate=%s',
+    async estimated => {
+      const summary = {
+        quality: 'partial' as const,
+        basalUnits: 1.8,
+        bolusUnits: 2,
+        basalCoveredMs: 3_600_000,
+        basalCoveragePercent: 33,
+        ...(estimated
+          ? {estimatedBasalUnits: 3.8, estimatedTotalUnits: 5.8}
+          : {}),
+      };
+      const previous = {
+        ...summary,
+        basalUnits: 1,
+        ...(estimated ? {estimatedBasalUnits: 3, estimatedTotalUnits: 5} : {}),
+      };
+      await mount({
+        sources: {
+          dailyOverview: {
+            loadDailyOverview: async () => ({
+              glucoseSamples: [],
+              insulinSummary: summary,
+            }),
+            loadDailyInsulinComparison: async request =>
+              buildDailyInsulinComparison(
+                getDailyInsulinComparisonWindows(request),
+                Array.from({length: 7}, () => previous),
+              ),
+          },
+        },
+      });
+      const textAt = (testID: string) =>
+        insulinCard()
+          .findAllByProps({testID})
+          .find(node => node.type === Text)!.props.children;
+      expect(
+        textAt(
+          estimated
+            ? 'home-insulin-estimated-total'
+            : 'home-insulin-recorded-subtotal',
+        ),
+      ).toBe(estimated ? '5.8 U' : '3.8 U');
+      expect(textAt('home-insulin-yesterday-value')).toBe(
+        estimated ? '5 U' : '3 U',
+      );
+      expect(textAt('home-insulin-yesterday-delta')).toBe('+0.8 U');
+      expect(textAt('home-insulin-weekAverage-delta')).toBe('+0.8 U');
+      expect(insulinText()).toContain(
+        estimated ? 'סה״כ משוער' : 'סכום מתועד · כיסוי בזאל חלקי',
+      );
+      expect(insulinText()).toContain('1.8 U');
+      expect(insulinText()).toContain('33');
+      if (estimated) {
+        expect(insulinText()).toContain('בזאל משוער');
+        expect(insulinText()).toContain('3.8 U');
+        expect(textAt('home-insulin-estimated-basal')).toBe('3.8 U');
+        expect(textAt('home-insulin-basal')).toBe('1.8 U');
+      }
+    },
+  );
 
   it('adds every widget, supports an empty design, and cancels without saving', async () => {
     await mount();
@@ -114,13 +386,17 @@ describe('Personal Home editor', () => {
     }
     expect(widgetIds()).toEqual(HOME_WIDGET_IDS);
     for (const id of HOME_WIDGET_IDS) {
-      expect(button(`home-toggle-${id}`).props.accessibilityState.checked).toBe(true);
+      expect(button(`home-toggle-${id}`).props.accessibilityState.checked).toBe(
+        true,
+      );
       await press(`home-toggle-${id}`);
     }
     expect(widgetIds()).toEqual([]);
     expect(tree!.root.findAllByType(ReorderList)).toHaveLength(0);
     for (const id of HOME_WIDGET_IDS) {
-      expect(button(`home-toggle-${id}`).props.accessibilityState.checked).toBe(false);
+      expect(button(`home-toggle-${id}`).props.accessibilityState.checked).toBe(
+        false,
+      );
     }
     expect(button('home-save').props.disabled).toBe(false);
     await press('home-cancel');
@@ -142,7 +418,9 @@ describe('Personal Home editor', () => {
       tree!.root.findByType(ReorderList).props.onReorder(order);
     });
     expect(widgetIds()).toEqual(order);
-    expect(tree!.root.findAllByType(HomeWidget).every(node => node.props.preview)).toBe(true);
+    expect(
+      tree!.root.findAllByType(HomeWidget).every(node => node.props.preview),
+    ).toBe(true);
     expect(has('home-open-chat')).toBe(false);
     expect(jest.mocked(load).mock.calls).toHaveLength(loadsBeforeEditing);
     expect(props.onSave).not.toHaveBeenCalled();
@@ -164,7 +442,14 @@ describe('Personal Home editor', () => {
     const custom: StoredHomePreferences = {
       ...DEFAULT_HOME_PREFERENCES,
       hiddenWidgets: ['time-in-range', 'daily-insulin', 'weekly-insulin'],
-      widgetOrder: ['chat', 'weekly-glucose', 'glucose-graph', 'time-in-range', 'daily-insulin', 'weekly-insulin'],
+      widgetOrder: [
+        'chat',
+        'weekly-glucose',
+        'glucose-graph',
+        'time-in-range',
+        'daily-insulin',
+        'weekly-insulin',
+      ],
       glucoseWindowHours: 'full-day',
     };
     await mount({value: custom});
@@ -186,7 +471,8 @@ describe('Personal Home editor', () => {
   it('retains a failed design for retry and disables conflicting controls during persistence', async () => {
     const first = deferred();
     const retry = deferred();
-    const onSave = jest.fn()
+    const onSave = jest
+      .fn()
       .mockImplementationOnce(() => first.promise)
       .mockImplementationOnce(() => retry.promise);
     await mount({onSave});
@@ -197,8 +483,13 @@ describe('Personal Home editor', () => {
       pending = button('home-save').props.onPress();
     });
     for (const id of [
-      'home-save', 'home-cancel', 'home-reset', 'home-window-6',
-      'home-mode-modules', 'home-toggle-chat', 'home-tab-modules',
+      'home-save',
+      'home-cancel',
+      'home-reset',
+      'home-window-6',
+      'home-mode-modules',
+      'home-toggle-chat',
+      'home-tab-modules',
     ]) {
       expect(button(id).props.disabled).toBe(true);
     }
@@ -235,7 +526,10 @@ describe('Personal Home editor', () => {
     await press('home-customize');
     await press('home-window-12');
     await press('home-toggle-chat');
-    const incoming = {...DEFAULT_HOME_PREFERENCES, glucoseWindowHours: 'full-day'} as const;
+    const incoming = {
+      ...DEFAULT_HOME_PREFERENCES,
+      glucoseWindowHours: 'full-day',
+    } as const;
     await rerender({value: incoming});
     expect(graphHours()).toBe(12);
     expect(widgetIds()).not.toContain('chat');
@@ -278,7 +572,9 @@ describe('Personal Home editor', () => {
     await mount({value: {...DEFAULT_HOME_PREFERENCES, mode: 'modules'}});
     expect(has('all-tools-content')).toBe(true);
     expect(widgetIds()).toEqual([]);
-    expect(props.sources.dailyOverview!.loadDailyOverview).not.toHaveBeenCalled();
+    expect(
+      props.sources.dailyOverview!.loadDailyOverview,
+    ).not.toHaveBeenCalled();
     await press('home-tab-personal');
     expect(widgetIds()).toEqual(visibleDefaults);
     expect(props.onSave).not.toHaveBeenCalled();
@@ -355,7 +651,9 @@ describe('Personal Home editor', () => {
     expect(has('home-editor')).toBe(true);
     expect(button('home-save').props.disabled).toBe(true);
     // The host can publish a durable value before the save promise settles.
-    await rerender({value: {...DEFAULT_HOME_PREFERENCES, glucoseWindowHours: 12}});
+    await rerender({
+      value: {...DEFAULT_HOME_PREFERENCES, glucoseWindowHours: 12},
+    });
     expect(has('home-editor')).toBe(true);
     await act(async () => {
       write.resolve();
