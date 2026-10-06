@@ -1,6 +1,7 @@
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
 import {Pressable, Text} from 'react-native';
+import Svg, {Path} from 'react-native-svg';
 import {
   ProductImplementationRegistry,
   coreProductImplementationRegistry,
@@ -75,6 +76,54 @@ describe('Product Implementation Registry', () => {
         focus: expect.objectContaining({kind: 'period'}),
       }),
     );
+    act(() => tree!.unmount());
+  });
+
+  it('shows the AGP plot through the Android daily-patterns destination', async () => {
+    const destination = resolveDestinationTarget(
+      coreDestinationRegistry,
+      createStoredDestinationTarget(
+        CORE_DESTINATION_IDS.trendsAgpDailyPatterns,
+      ),
+      undefined,
+      {platform: 'android'},
+    );
+    if (destination.status !== 'available') {
+      throw new Error('Expected AGP and Daily Patterns to be available.');
+    }
+    const rendered = coreProductImplementationRegistry.render({
+      destination,
+      request: {destination},
+      locale: 'he',
+      runtime: {platform: 'android'},
+      trendsRuntime: {
+        dataSource: {
+          loadGlucoseSamples: async period =>
+            Array.from({length: 24}, (_, hour) => ({
+              timestampMs: period.startMs + hour * 60 * 60 * 1000,
+              valueMgDl: 100 + hour * 2,
+            })),
+        },
+        thresholds: {
+          veryLowMaxMgDl: 54,
+          targetMinMgDl: 80,
+          targetMaxMgDl: 160,
+          highMaxMgDl: 250,
+        },
+      },
+      onOpenDestination: () => undefined,
+      onOpenDestinationRequest: () => undefined,
+      renderJournalUnavailable: () => null,
+    });
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(<>{rendered}</>);
+    });
+    const chart = tree!.root.findByProps({testID: 'agp-profile-chart'});
+    expect(chart.findByType(Svg)).toBeTruthy();
+    expect(
+      chart.findAllByType(Path).some(path => /M.*L/.test(path.props.d)),
+    ).toBe(true);
     act(() => tree!.unmount());
   });
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
 import {Pressable, Text} from 'react-native';
+import Svg, {Circle, Path} from 'react-native-svg';
 import type {
   TrendsDataSource,
   TrendsGlucoseSample,
@@ -59,6 +60,12 @@ describe('AgpModuleView', () => {
       startMs: 86 * DAY_MS,
       endMs: 100 * DAY_MS,
     });
+    // Exercise the actual destination: percentile rows alone are not an AGP chart.
+    const chart = tree!.root.findByProps({testID: 'agp-profile-chart'});
+    expect(chart.findByType(Svg)).toBeTruthy();
+    expect(
+      chart.findAllByType(Path).some(path => /M.*L/.test(path.props.d)),
+    ).toBe(true);
     expect(textValues(tree!)).toEqual(
       expect.arrayContaining([
         'AGP & daily patterns',
@@ -91,7 +98,9 @@ describe('AgpModuleView', () => {
           node.props.testID.startsWith('agp-day-'),
       ).length,
     ).toBeGreaterThanOrEqual(14);
-    expect(tree!.root.findByProps({testID: 'trends-evidence-metadata'})).toBeTruthy();
+    expect(
+      tree!.root.findByProps({testID: 'trends-evidence-metadata'}),
+    ).toBeTruthy();
     act(() => tree!.unmount());
   });
 
@@ -157,6 +166,9 @@ describe('AgpModuleView', () => {
       await Promise.resolve();
     });
     expect(textValues(tree!)).toContain('The AGP data could not be loaded.');
+    expect(
+      tree!.root.findAllByProps({testID: 'agp-profile-chart'}),
+    ).toHaveLength(0);
 
     const retry = tree!.root
       .findAllByProps({testID: 'agp-retry'})
@@ -169,6 +181,10 @@ describe('AgpModuleView', () => {
     expect(textValues(tree!)).toContain(
       'No valid readings are available for this period.',
     );
+    expect(
+      tree!.root.findByProps({testID: 'agp-profile-chart-empty'}),
+    ).toBeTruthy();
+    expect(tree!.root.findAllByType(Svg)).toHaveLength(0);
     act(() => tree!.unmount());
   });
 
@@ -177,7 +193,7 @@ describe('AgpModuleView', () => {
       const days = (period.endMs - period.startMs) / DAY_MS;
       return Array.from({length: days}, (_, index) => ({
         timestampMs: period.startMs + index * DAY_MS + HOUR_MS,
-        valueMgDl: 120,
+        valueMgDl: days === 7 ? 170 : 120,
       }));
     });
     let tree: renderer.ReactTestRenderer;
@@ -193,6 +209,9 @@ describe('AgpModuleView', () => {
       );
     });
 
+    const previousMedianY = tree!.root
+      .findByProps({testID: 'agp-profile-chart'})
+      .findByType(Circle).props.cy;
     await act(async () => {
       tree!.root.findByProps({testID: 'agp-range-7'}).props.onPress();
       await Promise.resolve();
@@ -208,6 +227,10 @@ describe('AgpModuleView', () => {
     expect(
       tree!.root.findByProps({testID: 'agp-range-7'}).props.accessibilityState,
     ).toEqual({selected: true});
+    const selectedMedianY = tree!.root
+      .findByProps({testID: 'agp-profile-chart'})
+      .findByType(Circle).props.cy;
+    expect(selectedMedianY).toBeLessThan(previousMedianY);
     act(() => tree!.unmount());
   });
 

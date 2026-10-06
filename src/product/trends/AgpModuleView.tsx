@@ -28,6 +28,7 @@ import {
   productUiTokens,
 } from '../ui';
 import {TrendsEvidenceMetadataView} from './TrendsEvidenceMetadataView';
+import {AgpProfileChart} from './AgpProfileChart';
 
 const MINUTE_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
@@ -63,6 +64,7 @@ const COPY = {
     periodLabel: 'Date range',
     utcOffset: 'UTC offset',
     hourly: 'Hourly percentile bands',
+    chart: '24-hour AGP profile',
     outerBand: '10–90%',
     innerBand: '25–75%',
     median: 'Median',
@@ -96,6 +98,7 @@ const COPY = {
     periodLabel: 'טווח תאריכים',
     utcOffset: 'הפרש מ־UTC',
     hourly: 'טווחי אחוזונים לפי שעה',
+    chart: 'פרופיל AGP לאורך היממה',
     outerBand: '10–90%',
     innerBand: '25–75%',
     median: 'חציון',
@@ -424,6 +427,7 @@ export const AgpModuleView = ({
           {RANGE_DAYS.map(days => (
             <Pressable
               accessibilityRole="tab"
+              aria-selected={days === rangeDays}
               accessibilityState={{selected: days === rangeDays}}
               key={days}
               onPress={() => setRangeDays(days)}
@@ -470,26 +474,6 @@ export const AgpModuleView = ({
         </View>
       ) : (
         <>
-          <ProductSection locale={locale} title={copy.evidence}>
-            <TrendsEvidenceMetadataView
-              locale={locale}
-              metadata={buildTrendsEvidenceMetadata({
-                period: state.profile.period,
-                coveragePercent: state.profile.quality.coveragePercent,
-                coverageQuality: state.profile.quality.coverageQuality,
-                daysWithData: state.profile.quality.daysWithData,
-                expectedSampleIntervalMs,
-                lastReadingTimestampMs:
-                  state.profile.quality.lastReadingTimestampMs,
-                targetRange: {
-                  minMgDl: thresholds.targetMinMgDl,
-                  maxMgDl: thresholds.targetMaxMgDl,
-                },
-                timeZoneOffsetMinutes,
-              })}
-            />
-          </ProductSection>
-
           <ProductSection locale={locale} title={copy.quality}>
             <View style={styles.qualityCard} testID="agp-data-quality">
               <Text style={styles.coverageValue}>
@@ -534,6 +518,14 @@ export const AgpModuleView = ({
             </View>
           </ProductSection>
 
+          <ProductSection locale={locale} title={copy.chart}>
+            <AgpProfileChart
+              locale={locale}
+              profile={state.profile}
+              thresholds={thresholds}
+            />
+          </ProductSection>
+
           <ProductSection locale={locale} title={copy.individualDays}>
             <Text style={[styles.sectionNote, rtl && styles.rtlText]}>
               {copy.individualDaysNote}
@@ -557,6 +549,25 @@ export const AgpModuleView = ({
                 />
               ))}
             </ResponsiveGrid>
+          </ProductSection>
+          <ProductSection locale={locale} title={copy.evidence}>
+            <TrendsEvidenceMetadataView
+              locale={locale}
+              metadata={buildTrendsEvidenceMetadata({
+                period: state.profile.period,
+                coveragePercent: state.profile.quality.coveragePercent,
+                coverageQuality: state.profile.quality.coverageQuality,
+                daysWithData: state.profile.quality.daysWithData,
+                expectedSampleIntervalMs,
+                lastReadingTimestampMs:
+                  state.profile.quality.lastReadingTimestampMs,
+                targetRange: {
+                  minMgDl: thresholds.targetMinMgDl,
+                  maxMgDl: thresholds.targetMaxMgDl,
+                },
+                timeZoneOffsetMinutes,
+              })}
+            />
           </ProductSection>
 
           <ProductSection locale={locale} title={copy.hourly}>
