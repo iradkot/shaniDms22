@@ -2,7 +2,7 @@ import React, {useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {StyleSheet, View} from 'react-native';
 import type {TrendsDataSource} from '../src/modules/trends';
-import {TrendsOverviewModuleView} from '../src/product/trends';
+import {AgpModuleView, TrendsOverviewModuleView} from '../src/product/trends';
 import './styles.css';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -69,21 +69,36 @@ function Preview() {
             ? 'תצוגת פיתוח · נתוני דמה בלבד'
             : 'Development preview · Synthetic data only')}
       </div>
-      <TrendsOverviewModuleView
-        locale={locale}
-        dataSource={source}
-        thresholds={thresholds}
-        now={now}
-        timeZoneOffsetMinutes={180}
-        showGri={params.get('gri') === '1'}
-        onOpenHypoInvestigation={() =>
-          setNavigationMessage(
-            locale === 'he'
-              ? 'דמו: מעבר לחקירת סוכר נמוך'
-              : 'Demo: Open low-glucose investigation',
-          )
-        }
-      />
+      {params.get('screen') === 'agp' ? (
+        <AgpModuleView
+          locale={locale}
+          dataSource={source}
+          thresholds={thresholds}
+          now={now}
+          timeZoneOffsetMinutes={180}
+          onOpenDay={() =>
+            setNavigationMessage(
+              locale === 'he' ? 'דמו: פתיחת גרף היום' : 'Demo: Open day graph',
+            )
+          }
+        />
+      ) : (
+        <TrendsOverviewModuleView
+          locale={locale}
+          dataSource={source}
+          thresholds={thresholds}
+          now={now}
+          timeZoneOffsetMinutes={180}
+          showGri={params.get('gri') === '1'}
+          onOpenHypoInvestigation={() =>
+            setNavigationMessage(
+              locale === 'he'
+                ? 'דמו: מעבר לחקירת סוכר נמוך'
+                : 'Demo: Open low-glucose investigation',
+            )
+          }
+        />
+      )}
     </View>
   );
 }

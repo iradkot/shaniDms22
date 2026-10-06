@@ -8,6 +8,8 @@ Android, iOS and Web views of a user's Nightscout glucose and therapy data.
   It identifies the existing loaders, calculators, time conventions and quality
   rules. Do not implement another insulin sum or Nightscout paging loop in a view.
 - [Product vocabulary](CONTEXT.md) and [architecture decisions](docs/adr/).
+- [Product feedback and priorities](docs/PRODUCT_FEEDBACK.md): recorded pilot
+  feedback, next development tasks and contributor access boundaries.
 - [Build and release](docs/BUILD_AND_RELEASE.md), [Web](docs/WEB_FRONTEND.md),
   [end-to-end checks](docs/E2E.md).
 - [Daily summary data contract](docs/DAILY_SUMMARY_DATA.md),
