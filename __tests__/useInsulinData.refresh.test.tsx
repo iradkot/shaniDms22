@@ -26,6 +26,7 @@ const contextWithBolus = (amount?: number): InsulinContext => ({
   basalProfileData: [{time: '00:00', value: 1}],
   carbTreatments: [],
   loadSamples: [{timestampMs: date.getTime(), iob: 1.2, cob: 18}],
+  recordedInsulin: {quality: 'partial', bolusUnits: amount ?? 0, basalCoveredMs: 0, basalCoveragePercent: 0},
   availability: {
     treatments: 'available',
     profile: 'available',
@@ -79,6 +80,7 @@ test('refresh updates all insulin context from the shared source and bypasses it
     expect.objectContaining({type: 'bolus', amount: 1.95}),
   ]);
   expect(latest.basalProfileData).toEqual([{time: '00:00', value: 1}]);
+  expect(latest.recordedInsulin).toMatchObject({quality: 'partial', bolusUnits: 1.95});
   expect(loadContext).toHaveBeenLastCalledWith(
     expect.objectContaining({forceRefresh: true}),
   );
@@ -101,6 +103,7 @@ test('an old owner response cannot replace the newly selected owner insulin cont
     });
   });
   expect(latest.insulinData).toEqual([]);
+  expect(latest.recordedInsulin).toEqual({quality: 'unavailable'});
   await act(async () => {
     nextOwner.resolve(contextWithBolus(2));
   });

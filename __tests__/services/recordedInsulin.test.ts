@@ -1,7 +1,35 @@
-import {buildRecordedInsulinSummary} from 'app/services/insulin/recordedInsulin';
+import {
+  buildRecordedInsulinSummary,
+  getFinalizedTreatmentInsulinUnits,
+} from 'app/services/insulin/recordedInsulin';
 import fixtures from '../fixtures/recorded-insulin.json';
 
 describe('recorded insulin evidence', () => {
+  it('does not label generic amounts, ambiguous boluses or unfinished delivery as delivered insulin', () => {
+    const created_at = '2026-09-27T00:00:00Z';
+    const observedAt = Date.parse('2026-09-27T00:30:00Z');
+    for (const record of [
+      {created_at, eventType: 'Profile Switch', amount: 150},
+      {created_at, eventType: 'Correction Bolus', insulin: 2, duration: 60},
+      {created_at, eventType: 'Combo Bolus', insulin: 2, duration: 10},
+      {created_at, eventType: 'Temp Basal', absolute: 3.2, duration: 10},
+    ])
+      expect(
+        getFinalizedTreatmentInsulinUnits(record, observedAt),
+      ).toBeUndefined();
+    expect(
+      getFinalizedTreatmentInsulinUnits(
+        {
+          created_at,
+          eventType: 'Temp Basal',
+          deliveredUnits: 0.05,
+          amount: 5,
+          duration: 10,
+        },
+        observedAt,
+      ),
+    ).toBe(0.05);
+  });
   it.each(fixtures)('$name', fixture => {
     expect(
       buildRecordedInsulinSummary(

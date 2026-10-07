@@ -582,6 +582,8 @@ describe('Daily overview visual cards', () => {
       '5.3 U',
     );
     expect(allText(tree)).toContain('Recorded subtotal');
+    expect(textAt(tree, 'daily-overview-insulin-unavailable-total')).toBe('—');
+    expect(allText(tree)).toContain('Daily total unavailable');
     expect(allText(tree)).toContain('40% of the time covered by basal records');
     expect(
       tree.root.findAllByProps({testID: 'daily-overview-insulin-total'}),
@@ -646,7 +648,9 @@ describe('Daily overview visual cards', () => {
           insulinComparison={history}
         />,
       );
-      expect(textAt(tree, 'daily-overview-insulin-delta')).toBe('+0.8 U');
+      expect(textAt(tree, 'daily-overview-insulin-delta')).toBe(
+        estimated ? '+0.8 U' : '0 U',
+      );
       expect(
         textAt(
           tree,
@@ -656,16 +660,23 @@ describe('Daily overview visual cards', () => {
         ),
       ).toBe(estimated ? '5.8 U' : '3.8 U');
       expect(allText(tree)).toContain(
-        estimated ? 'סה״כ משוער' : 'סכום מתועד · כיסוי בזאל חלקי',
+        estimated ? 'סה״כ משוער' : 'השוואת בולוס מתועד',
       );
       expect(allText(tree)).toContain('33% מהזמן מכוסה בתיעוד בזאל');
       const graphics = tree.root
         .findAllByType(InsulinSplitGraphic)
         .filter(node => node.props.maximum !== undefined);
-      expect(graphics.map(node => node.props.insulin)).toEqual([
-        {basalUnits: estimated ? 3.8 : 1.8, bolusUnits: 2},
-        {basalUnits: estimated ? 3 : 1, bolusUnits: 2},
-      ]);
+      expect(graphics.map(node => node.props.insulin)).toEqual(
+        estimated
+          ? [
+              {basalUnits: 3.8, bolusUnits: 2},
+              {basalUnits: 3, bolusUnits: 2},
+            ]
+          : [
+              {basalUnits: 0, bolusUnits: 2},
+              {basalUnits: 0, bolusUnits: 2},
+            ],
+      );
       if (estimated) {
         expect(textAt(tree, 'daily-overview-insulin-estimated-basal')).toBe(
           '3.8 U',

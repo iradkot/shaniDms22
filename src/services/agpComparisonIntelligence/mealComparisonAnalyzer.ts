@@ -43,17 +43,24 @@ function buildMealInsight(
   const worse = (riseDelta ?? peakDelta ?? 0) > 0;
   const labelHe = mealLabel(meal.mealType, 'he');
   const labelEn = mealLabel(meal.mealType, 'en');
+  const completeBolusEvidence =
+    evidence.dataQuality.currentBolusEvidenceComplete &&
+    evidence.dataQuality.previousBolusEvidenceComplete;
 
-  const possibleDriversHe = [
-    'יחס פחמימות לא מתאים לחלון הזה',
-    'תזמון בולוס מאוחר או מוקדם מדי',
-    'הערכת פחמימות שונה בין התקופות',
-  ];
-  const possibleDriversEn = [
-    'Carb ratio mismatch in this window',
-    'Bolus timing too late or too early',
-    'Different carb estimation between periods',
-  ];
+  const possibleDriversHe = completeBolusEvidence
+    ? [
+        'יחס פחמימות לא מתאים לחלון הזה',
+        'תזמון בולוס מאוחר או מוקדם מדי',
+        'הערכת פחמימות שונה בין התקופות',
+      ]
+    : ['הערכת פחמימות שונה בין התקופות'];
+  const possibleDriversEn = completeBolusEvidence
+    ? [
+        'Carb ratio mismatch in this window',
+        'Bolus timing too late or too early',
+        'Different carb estimation between periods',
+      ]
+    : ['Different carb estimation between periods'];
 
   if ((timingDelta ?? 0) < -10) {
     possibleDriversHe.unshift(

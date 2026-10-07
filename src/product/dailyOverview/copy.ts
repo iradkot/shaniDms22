@@ -45,6 +45,9 @@ export const DAILY_OVERVIEW_COPY = {
     recordedBolus: 'Recorded bolus',
     recordedBasal: 'Recorded basal',
     recordedSubtotal: 'Recorded subtotal',
+    totalUnavailable: 'Daily total unavailable',
+    subtotalNote:
+      'This is only the recorded part. Loop may include scheduled basal that was not uploaded.',
     basalUnknown: 'No complete basal delivery record',
     componentUnknown: 'No complete record',
     basalCoverage: 'of the time covered by basal records',
@@ -136,6 +139,9 @@ export const DAILY_OVERVIEW_COPY = {
     recordedBolus: 'בולוס מתועד',
     recordedBasal: 'בזאל מתועד',
     recordedSubtotal: 'סכום חלקי מתועד',
+    totalUnavailable: 'הסך היומי אינו זמין',
+    subtotalNote:
+      'זהו רק החלק המתועד. Loop עשוי לכלול בזאל רגיל שלא נשלח למקור הנתונים.',
     basalUnknown: 'אין תיעוד מלא של בזאל שניתן',
     componentUnknown: 'אין תיעוד מלא',
     basalCoverage: 'מהזמן מכוסה בתיעוד בזאל',

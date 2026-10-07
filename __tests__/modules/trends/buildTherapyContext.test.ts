@@ -18,9 +18,14 @@ describe('buildTherapyContextSnapshot', () => {
       period,
       glucoseSamples: glucose,
       sourceReliability: 'reliable',
+      recordedInsulin: {quality: 'available', basalUnits: 8, bolusUnits: 3.5},
       treatments: [
         {timestampMs: start + hour, insulinUnits: 2, carbohydrateGrams: 10},
-        {timestampMs: start + 2 * hour, insulinUnits: 1.5, carbohydrateGrams: 5},
+        {
+          timestampMs: start + 2 * hour,
+          insulinUnits: 1.5,
+          carbohydrateGrams: 5,
+        },
         {timestampMs: period.endMs + 1, insulinUnits: 100},
       ],
       mealStartedAtMs: [start + hour, start + 4 * hour, period.endMs],
@@ -31,16 +36,40 @@ describe('buildTherapyContextSnapshot', () => {
     });
 
     expect(snapshot.totals).toEqual({
-      insulinUnits: 3.5,
+      insulinUnits: 11.5,
       carbohydrateGrams: 15,
       mealCount: 2,
       activityMinutes: 30,
       aidAvailabilityPercent: undefined,
     });
     expect(snapshot.aidModes).toEqual([]);
-    expect(
-      evaluateTherapyContextAvailability(snapshot.quality).available,
-    ).toBe(true);
+    expect(evaluateTherapyContextAvailability(snapshot.quality).available).toBe(
+      true,
+    );
+  });
+
+  it('cannot manufacture total insulin by summing incomplete treatment projection', () => {
+    const snapshot = buildTherapyContextSnapshot({
+      period,
+      glucoseSamples: glucose,
+      sourceReliability: 'reliable',
+      treatments: [{timestampMs: start + hour, insulinUnits: 99}],
+      mealStartedAtMs: [],
+      activities: [],
+      modeChanges: [],
+      recordedInsulin: {
+        quality: 'partial',
+        basalUnits: 6.8,
+        bolusUnits: 33.85,
+        basalCoveredMs: hour,
+        basalCoveragePercent: 30,
+      },
+    });
+    expect(snapshot.totals.insulinUnits).toBeUndefined();
+    expect(snapshot.insulinSummary).toMatchObject({
+      quality: 'partial',
+      bolusUnits: 33.85,
+    });
   });
 
   it('shows open-versus-closed observations only with exposure in both modes', () => {
@@ -79,4 +108,3 @@ describe('buildTherapyContextSnapshot', () => {
     });
   });
 });
-

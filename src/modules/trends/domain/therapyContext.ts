@@ -1,6 +1,7 @@
 import type {TrendsEvidenceMetadata} from './evidence';
 import type {TrendsPeriod} from './overview';
 import {TrendsOverviewInputError, assertTrendsPeriod} from './sampleSet';
+import type {DailyInsulinSourceSummary} from '../../dailyOverview';
 
 export const THERAPY_CONTEXT_MIN_COVERAGE_PERCENT = 70;
 
@@ -62,6 +63,8 @@ export interface TherapyContextSnapshot {
   readonly quality: TherapyContextQualityGateInput;
   readonly evidence: TrendsEvidenceMetadata;
   readonly totals: TherapyContextTotals;
+  /** Canonical recorded-dose evidence, distinct from CGM coverage and therapy classification. */
+  readonly insulinSummary?: DailyInsulinSourceSummary;
   readonly aidModes: readonly ObservedAidModeSummary[];
 }
 

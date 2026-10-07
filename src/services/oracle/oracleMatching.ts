@@ -1,5 +1,7 @@
 import {BgSample} from 'app/types/day_bgs.types';
 import {calculateFractionInInclusiveRange} from 'app/utils/glucose/timeInRange';
+import {buildRecordedInsulinSummary} from 'app/services/insulin/recordedInsulin';
+import {MAX_NIGHTSCOUT_TIMESTAMP_MS} from 'app/utils/nightscoutTimestamp';
 import {
   OracleCachedBgEntry,
   OracleCachedDeviceStatus,
@@ -332,7 +334,68 @@ function computeTir(
   );
 }
 
-function summarizeActions(actions: {insulin: number; carbs: number}): {
+function summarizeRecordedActions(
+  relevant: OracleCachedTreatment[],
+  startMs: number,
+) {
+  const endMs = startMs + ORACLE_ACTION_WINDOW_MIN * ORACLE_MINUTE_MS + 1;
+  const records = relevant.map(t => ({
+    _id: t.sourceRecordId,
+    created_at: t.ts,
+    endDate: t.endTs ?? t.ts,
+    deleted: t.deleted,
+    eventType: t.insulinBasis === 'none' ? '' : 'Bolus',
+    ...(t.insulinBasis === 'recorded-bolus' ? {deliveredUnits: t.insulin} : {}),
+  }));
+  // Cache normalization already established completion at its observation time.
+  const summary = buildRecordedInsulinSummary(
+    records,
+    {startMs, endMs},
+    MAX_NIGHTSCOUT_TIMESTAMP_MS,
+  );
+  const bolusUnits =
+    summary.quality === 'unavailable' ? undefined : summary.bolusUnits;
+  let carbs = 0;
+  let bolusCount = 0;
+  let carbsCount = 0;
+  const markers: Array<{tMin: number; kind: 'insulin' | 'carbs'}> = [];
+  for (const t of relevant) {
+    const tMin = Math.max(0, Math.round((t.ts - startMs) / ORACLE_MINUTE_MS));
+    if (
+      t.insulinBasis === 'recorded-bolus' &&
+      typeof t.insulin === 'number' &&
+      t.insulin > 0 &&
+      !t.deleted
+    ) {
+      bolusCount += 1;
+      markers.push({tMin, kind: 'insulin'});
+    }
+    if (
+      !t.deleted &&
+      t.ts >= startMs &&
+      typeof t.carbs === 'number' &&
+      Number.isFinite(t.carbs) &&
+      t.carbs > 0
+    ) {
+      carbs += t.carbs;
+      carbsCount += 1;
+      markers.push({tMin, kind: 'carbs'});
+    }
+  }
+  return {
+    actions30m: {
+      insulin: bolusUnits === undefined ? null : Number(bolusUnits.toFixed(2)),
+      carbs: Number(carbs.toFixed(2)),
+    },
+    actionCounts30m: {
+      boluses: bolusUnits === undefined ? null : bolusCount,
+      carbs: carbsCount,
+    },
+    ...(markers.length ? {actionMarkers: markers} : {}),
+  };
+}
+
+function summarizeActions(actions: {insulin: number | null; carbs: number}): {
   key: string;
   title: string;
   actionSummary: string;
@@ -340,32 +403,41 @@ function summarizeActions(actions: {insulin: number; carbs: number}): {
   const insulin = actions.insulin;
   const carbs = actions.carbs;
 
+  if (insulin === null) {
+    return {
+      key: 'insulin.unknown',
+      title: 'Recorded bolus unavailable',
+      actionSummary:
+        'Delivered bolus amounts could not be verified in the first 30m',
+    };
+  }
+
   if (insulin > 0) {
     if (insulin < 1) {
       return {
         key: 'insulin.tiny',
-        title: 'Small insulin (recorded)',
-        actionSummary: `Total insulin recorded in first 30m: ${insulin.toFixed(1)}u`,
+        title: 'Small bolus (recorded)',
+        actionSummary: `Bolus recorded in first 30m: ${insulin.toFixed(1)}U`,
       };
     }
     if (insulin >= 1 && insulin <= 2) {
       return {
         key: 'insulin.small',
-        title: 'Moderate insulin (recorded)',
-        actionSummary: `Total insulin recorded in first 30m: ${insulin.toFixed(1)}u`,
+        title: 'Moderate bolus (recorded)',
+        actionSummary: `Bolus recorded in first 30m: ${insulin.toFixed(1)}U`,
       };
     }
     if (insulin > 3) {
       return {
         key: 'insulin.large',
-        title: 'Higher insulin (recorded)',
-        actionSummary: `Total insulin recorded in first 30m: ${insulin.toFixed(1)}u`,
+        title: 'Higher bolus (recorded)',
+        actionSummary: `Bolus recorded in first 30m: ${insulin.toFixed(1)}U`,
       };
     }
     return {
       key: 'insulin.other',
-      title: 'Insulin (recorded)',
-      actionSummary: `Total insulin recorded in first 30m: ${insulin.toFixed(1)}u`,
+      title: 'Bolus (recorded)',
+      actionSummary: `Bolus recorded in first 30m: ${insulin.toFixed(1)}U`,
     };
   }
 
@@ -379,8 +451,8 @@ function summarizeActions(actions: {insulin: number; carbs: number}): {
 
   return {
     key: 'none',
-    title: 'No recorded carbs/insulin',
-    actionSummary: 'No carbs/insulin recorded in first 30m',
+    title: 'No recorded carbs/bolus',
+    actionSummary: 'No carbs/bolus recorded in first 30m',
   };
 }
 
@@ -391,7 +463,7 @@ function buildStrategies(matches: OracleMatchTrace[]): OracleStrategyCard[] {
   >();
 
   for (const m of matches) {
-    const actions = m.actions30m ?? {insulin: 0, carbs: 0};
+    const actions = m.actions30m ?? {insulin: null, carbs: 0};
     const meta = summarizeActions(actions);
     const existing = groups.get(meta.key);
     if (existing) existing.traces.push(m);
@@ -497,6 +569,9 @@ export function computeOracleInsights(params: {
   const sortedTreatments = isSortedBy(treatmentsClean, t => t.ts)
     ? treatmentsClean
     : [...treatmentsClean].sort((a, b) => a.ts - b.ts);
+  const intervalTreatments = sortedTreatments.filter(
+    t => typeof t.endTs === 'number' && t.endTs > t.ts,
+  );
   const sortedDeviceStatus = isSortedBy(deviceStatusClean, d => d.ts)
     ? deviceStatusClean
     : [...deviceStatusClean].sort((a, b) => a.ts - b.ts);
@@ -586,36 +661,19 @@ export function computeOracleInsights(params: {
     const actionEndTs = t0 + ORACLE_ACTION_WINDOW_MIN * ORACLE_MINUTE_MS;
     const startIdx = lowerBoundByTs(sortedTreatments, t0);
     const endIdx2 = lowerBoundByTs(sortedTreatments, actionEndTs + 1);
-    const relevant = sortedTreatments.slice(startIdx, endIdx2);
-    let insulin = 0;
-    let carbs = 0;
-    let bolusCount = 0;
-    let carbsCount = 0;
-    const markers: Array<{tMin: number; kind: 'insulin' | 'carbs'}> = [];
-    for (const t of relevant) {
-      const tMin = Math.round((t.ts - t0) / ORACLE_MINUTE_MS);
-      if (tMin < 0 || tMin > ORACLE_ACTION_WINDOW_MIN) continue;
-      if (typeof t.insulin === 'number' && t.insulin > 0) {
-        insulin += t.insulin;
-        bolusCount += 1;
-        markers.push({tMin, kind: 'insulin'});
-      }
-      if (typeof t.carbs === 'number' && t.carbs > 0) {
-        carbs += t.carbs;
-        carbsCount += 1;
-        markers.push({tMin, kind: 'carbs'});
-      }
-    }
+    const relevant = [
+      ...intervalTreatments.filter(t => t.ts < t0 && t.endTs! > t0),
+      ...sortedTreatments.slice(startIdx, endIdx2),
+    ];
+    const recordedActions = summarizeRecordedActions(relevant, t0);
 
     matches.push({
       ...trace,
       iob: typeof matchLoad.iob === 'number' ? matchLoad.iob : null,
       cob: typeof matchLoad.cob === 'number' ? matchLoad.cob : null,
       ...(relevant.length ? {treatments30m: relevant} : {}),
-      actions30m: {insulin: Number(insulin.toFixed(2)), carbs: Number(carbs.toFixed(2))},
-      actionCounts30m: {boluses: bolusCount, carbs: carbsCount},
+      ...recordedActions,
       tir2h,
-      ...(markers.length ? {actionMarkers: markers} : {}),
     });
   }
 
@@ -748,6 +806,9 @@ export async function computeOracleInsightsProgressive(
   const sortedTreatments = isSortedBy(treatmentsClean, t => t.ts)
     ? treatmentsClean
     : [...treatmentsClean].sort((a, b) => a.ts - b.ts);
+  const intervalTreatments = sortedTreatments.filter(
+    t => typeof t.endTs === 'number' && t.endTs > t.ts,
+  );
   const sortedDeviceStatus = isSortedBy(deviceStatusClean, d => d.ts)
     ? deviceStatusClean
     : [...deviceStatusClean].sort((a, b) => a.ts - b.ts);
@@ -912,36 +973,19 @@ export async function computeOracleInsightsProgressive(
     const actionEndTs = t0 + ORACLE_ACTION_WINDOW_MIN * ORACLE_MINUTE_MS;
     const startIdx = lowerBoundByTs(sortedTreatments, t0);
     const endIdx2 = lowerBoundByTs(sortedTreatments, actionEndTs + 1);
-    const relevant = sortedTreatments.slice(startIdx, endIdx2);
-    let insulin = 0;
-    let carbs = 0;
-    let bolusCount = 0;
-    let carbsCount = 0;
-    const markers: Array<{tMin: number; kind: 'insulin' | 'carbs'}> = [];
-    for (const t of relevant) {
-      const tMin = Math.round((t.ts - t0) / ORACLE_MINUTE_MS);
-      if (tMin < 0 || tMin > ORACLE_ACTION_WINDOW_MIN) continue;
-      if (typeof t.insulin === 'number' && t.insulin > 0) {
-        insulin += t.insulin;
-        bolusCount += 1;
-        markers.push({tMin, kind: 'insulin'});
-      }
-      if (typeof t.carbs === 'number' && t.carbs > 0) {
-        carbs += t.carbs;
-        carbsCount += 1;
-        markers.push({tMin, kind: 'carbs'});
-      }
-    }
+    const relevant = [
+      ...intervalTreatments.filter(t => t.ts < t0 && t.endTs! > t0),
+      ...sortedTreatments.slice(startIdx, endIdx2),
+    ];
+    const recordedActions = summarizeRecordedActions(relevant, t0);
 
     matches.push({
       ...trace,
       iob: typeof matchLoad.iob === 'number' ? matchLoad.iob : null,
       cob: typeof matchLoad.cob === 'number' ? matchLoad.cob : null,
       ...(relevant.length ? {treatments30m: relevant} : {}),
-      actions30m: {insulin: Number(insulin.toFixed(2)), carbs: Number(carbs.toFixed(2))},
-      actionCounts30m: {boluses: bolusCount, carbs: carbsCount},
+      ...recordedActions,
       tir2h,
-      ...(markers.length ? {actionMarkers: markers} : {}),
     });
 
     scanned += 1;

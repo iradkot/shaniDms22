@@ -44,6 +44,7 @@ const source = (): TherapyContextDataSource => ({
       activityMinutes: 95,
       aidAvailabilityPercent: 88,
     },
+    insulinSummary: {quality: 'available', basalUnits: 180, bolusUnits: 30},
     aidModes: [
       {mode: 'closed-loop', observedHours: 220, targetRangePercent: 74},
       {mode: 'open-loop', observedHours: 30, targetRangePercent: 61},
@@ -69,7 +70,7 @@ describe('TherapyContextModuleView', () => {
       tree!.root.findByProps({testID: 'trends-evidence-metadata'}),
     ).toBeTruthy();
     expect(allText(tree!)).toEqual(
-      expect.stringContaining('Insulin recorded 210 U'),
+      expect.stringContaining('Recorded total 210 U'),
     );
     expect(allText(tree!)).toEqual(
       expect.stringContaining('Closed Loop periods 220 hours · 74% in range'),
@@ -118,7 +119,7 @@ describe('TherapyContextModuleView', () => {
       );
     });
     expect(load).toHaveBeenCalledTimes(1);
-    expect(allText(tree!)).toContain('Insulin recorded 210 U');
+    expect(allText(tree!)).toContain('Recorded total 210 U');
     act(() => tree!.unmount());
   });
 
@@ -147,7 +148,42 @@ describe('TherapyContextModuleView', () => {
     expect(
       tree!.root.findByProps({testID: 'therapy-context-unavailable'}),
     ).toBeTruthy();
-    expect(allText(tree!)).not.toContain('Insulin recorded 210 U');
+    expect(allText(tree!)).not.toContain('Recorded total 210 U');
+    act(() => tree!.unmount());
+  });
+
+  it('shows delivered insulin subtotal and basal coverage instead of an incomplete total', async () => {
+    const validSource = source();
+    const dataSource: TherapyContextDataSource = {
+      loadTherapyContext: async period => ({
+        ...(await validSource.loadTherapyContext(period)),
+        insulinSummary: {
+          quality: 'partial',
+          basalUnits: 6.8,
+          bolusUnits: 33.85,
+          basalCoveredMs: 1,
+          basalCoveragePercent: 30,
+        },
+        totals: {
+          insulinUnits: undefined,
+          carbohydrateGrams: 420,
+          mealCount: 18,
+          activityMinutes: 95,
+          aidAvailabilityPercent: 88,
+        },
+      }),
+    };
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(
+        <TherapyContextModuleView dataSource={dataSource} locale="en" />,
+      );
+    });
+    expect(allText(tree!)).toContain('Recorded subtotal 40.65 U');
+    expect(allText(tree!)).toContain(
+      '30% of the time covered by basal records',
+    );
+    expect(allText(tree!)).not.toContain('Insulin recorded 40.65 U');
     act(() => tree!.unmount());
   });
 });

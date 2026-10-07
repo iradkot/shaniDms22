@@ -8,6 +8,7 @@ import kotlin.math.floor
 import kotlin.math.roundToLong
 
 private data class BasalSchedule(val zone: TimeZone, val rates: List<Pair<Int, Double>>)
+private data class EffectiveBasalSchedule(val start: Long, val schedule: BasalSchedule)
 private data class BasalControl(
   val start: Long, val end: Long?, val restore: Boolean = false,
   val programmedRate: Double? = null,
@@ -19,15 +20,42 @@ private data class ActualBasal(val start: Long, val end: Long, val rate: Double)
 internal fun withWidgetBasalEstimate(
   recorded: WidgetInsulinStats?, treatments: JSONArray?, profile: JSONObject?,
   startMs: Long, endMs: Long, observedAtMs: Long, zone: TimeZone,
+  treatmentObservedAtMs: (JSONObject) -> Long = { observedAtMs },
 ): WidgetInsulinStats? {
   if (recorded == null) return null
-  val basal = estimateWidgetBasal(treatments, profile, startMs, endMs, observedAtMs, zone)
+  val basal = estimateWidgetBasal(treatments, profile, startMs, endMs, observedAtMs, zone, treatmentObservedAtMs)
   val total = if (basal != null && recorded.totalBolus != null) (basal + recorded.totalBolus).takeIf { it.isFinite() } else null
   return recorded.copy(estimatedBasalUnits = basal, estimatedTotalUnits = total)
 }
 
 internal fun validWidgetBasalProfile(profile: JSONObject?, asOfMs: Long, zone: TimeZone): Boolean =
-  parseBasalSchedule(profile, asOfMs, zone) != null
+  parseBasalSchedules(profile, asOfMs, asOfMs, zone) != null
+
+private fun parseBasalSchedules(
+  profile: JSONObject?, startMs: Long, endMs: Long, zone: TimeZone,
+): List<EffectiveBasalSchedule>? {
+  if (profile == null) return null
+  val history = profile.optJSONArray("basalProfileHistory") ?: return parseBasalSchedule(profile, startMs, zone)
+    ?.let { listOf(EffectiveBasalSchedule(startMs, it)) }
+  if (history.length() == 0) return null
+  val verifiedThrough = widgetParseTimestamp(profile.opt("basalProfileHistoryThroughMs")) ?: return null
+  if (endMs - 1 > verifiedThrough) return null
+  val schedules = mutableMapOf<Long, BasalSchedule>()
+  for (index in 0 until history.length()) {
+    val row = history.optJSONObject(index) ?: return null
+    val effective = widgetParseTimestamp(row.opt("startDate")) ?: return null
+    if (effective > verifiedThrough) return null
+    val schedule = parseBasalSchedule(row, effective, zone) ?: return null
+    val previous = schedules[effective]
+    if (previous != null && previous != schedule) return null
+    schedules[effective] = schedule
+  }
+  val sorted = schedules.toSortedMap().map { EffectiveBasalSchedule(it.key, it.value) }
+  val carryIn = sorted.indexOfLast { it.start <= startMs }
+  if (carryIn < 0) return null
+  // Historical caches cover a full date, while comparisons use a moving matched cutoff.
+  return sorted.drop(carryIn).filter { it.start <= endMs }
+}
 
 private fun parseBasalSchedule(profile: JSONObject?, asOfMs: Long, fallbackZone: TimeZone): BasalSchedule? {
   if (profile == null) return null
@@ -72,9 +100,10 @@ private fun parseBasalSchedule(profile: JSONObject?, asOfMs: Long, fallbackZone:
 private fun estimateWidgetBasal(
   treatments: JSONArray?, profile: JSONObject?, startMs: Long, endMs: Long,
   observedAtMs: Long, zone: TimeZone,
+  treatmentObservedAtMs: (JSONObject) -> Long,
 ): Double? {
   if (treatments == null || endMs <= startMs || endMs > observedAtMs) return null
-  val schedule = parseBasalSchedule(profile, startMs, zone) ?: return null
+  val schedule = parseBasalSchedules(profile, startMs, endMs, zone) ?: return null
   val byIdentity = linkedMapOf<String, JSONObject>()
   for (index in 0 until treatments.length()) {
     val row = treatments.optJSONObject(index) ?: return null
@@ -90,13 +119,14 @@ private fun estimateWidgetBasal(
   for (row in byIdentity.values) {
     if (row.opt("isValid") == false || row.opt("deleted") == true) continue
     val type = row.optString("eventType", "")
-    if (Regex("^(Profile ?Switch|Profile ?Change)$", RegexOption.IGNORE_CASE).matches(type)) {
-      val changedAt = widgetTreatmentTimestamp(row) ?: return null
-      val duration = if (row.isNull("duration")) 0.0 else numeric(row.opt("duration")) ?: return null
-      if (duration < 0) return null
-      val switchEnd = if (duration == 0.0) Long.MAX_VALUE else basalControlEnd(row, changedAt) ?: return null
+    if (Regex("^Profile\\s*(Switch|Change)$", RegexOption.IGNORE_CASE).matches(type)) {
+      val changedAt = widgetTreatmentTimestamp(row) ?: widgetParseTimestamp(row.opt("date")) ?: return null
+      if (changedAt >= endMs) continue
+      val explicitLifetime = !row.isNull("endDate") || !row.isNull("endTime") || !row.isNull("duration")
+      val switchEnd = if (explicitLifetime) basalControlEnd(row, changedAt) ?: return null else changedAt
       // defaultProfile does not prove which profile/percentage an active switch selected.
-      if (changedAt < endMs && switchEnd > startMs) return null
+      if (switchEnd <= changedAt || switchEnd > startMs) return null
+      continue
     }
     val isBasal = type.equals("Temp Basal", true) || type.equals("Basal", true)
     val suspended = Regex("^(Suspend\\s*Pump|Pump\\s*Suspend)$", RegexOption.IGNORE_CASE).matches(type)
@@ -116,7 +146,8 @@ private fun estimateWidgetBasal(
     }
     if (end == null || end < start) { controls.add(BasalControl(start, null)); continue }
     if (end == start) { controls.add(BasalControl(start, start, restore = true)); continue }
-    val completed = row.opt("isMutable") != true && row.opt("mutable") != true && end <= observedAtMs
+    val completed = row.opt("isMutable") != true && row.opt("mutable") != true &&
+      end <= minOf(observedAtMs, treatmentObservedAtMs(row))
     val loop = row.optString("enteredBy", "").startsWith("loop://", true)
     val hasRecorded = !row.isNull("deliveredUnits") || (loop && !row.isNull("amount"))
     val recordedAmount = if (!row.isNull("deliveredUnits")) numeric(row.opt("deliveredUnits")) else if (loop) numeric(row.opt("amount")) else null
@@ -141,9 +172,17 @@ private fun estimateWidgetBasal(
   }
   val actuals = recordedIntervals.sortedBy { it.start }
   if (actuals.zipWithNext().any { (a, b) -> a.end > b.start }) return null
-  val sorted = controls.sortedBy { it.start }
-  // Two incompatible commands at the same instant do not identify a unique rate.
-  if (sorted.zipWithNext().any { (a, b) -> a.start == b.start && a != b }) return null
+  val sorted = mutableListOf<BasalControl>()
+  for (control in controls.sortedBy { it.start }) {
+    val previous = sorted.lastOrNull()
+    if (previous == null || previous.start != control.start) sorted.add(control)
+    else if (previous != control) {
+      // Conflicting commands identify no unique programmed rate. Completed actual
+      // delivery can still resolve that time; uncovered portions remain unknown.
+      val until = maxOf(previous.end ?: Long.MAX_VALUE, control.end ?: Long.MAX_VALUE)
+      sorted[sorted.lastIndex] = BasalControl(control.start, until.takeUnless { it == Long.MAX_VALUE })
+    }
+  }
   var cursor = startMs
   var total = 0.0
   var index = 0
@@ -172,8 +211,21 @@ private fun estimateWidgetBasal(
 }
 
 /** Wall-clock schedule with actual elapsed durations, including repeated/skipped DST hours. */
-private fun integrateSchedule(schedule: BasalSchedule?, start: Long, end: Long): Double? {
-  if (schedule == null) return null
+private fun integrateSchedule(schedules: List<EffectiveBasalSchedule>, start: Long, end: Long): Double? {
+  var cursor = start
+  var total = 0.0
+  while (cursor < end) {
+    val index = schedules.indexOfLast { it.start <= cursor }
+    if (index < 0) return null
+    val until = minOf(end, schedules.getOrNull(index + 1)?.start ?: end)
+    val value = integrateSingleSchedule(schedules[index].schedule, cursor, until) ?: return null
+    total += value
+    cursor = until
+  }
+  return total.takeIf { it.isFinite() }
+}
+
+private fun integrateSingleSchedule(schedule: BasalSchedule, start: Long, end: Long): Double? {
   var cursor = start
   var total = 0.0
   val clock = Calendar.getInstance(schedule.zone)

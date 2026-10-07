@@ -143,7 +143,9 @@ export const DailyInsulinCard = ({
       ? insulin.basal
       : undefined;
   const split =
-    graphBasal !== undefined && insulin.bolus !== undefined
+    (insulin.total !== undefined || insulin.estimatedTotal !== undefined) &&
+    graphBasal !== undefined &&
+    insulin.bolus !== undefined
       ? {basalUnits: graphBasal, bolusUnits: insulin.bolus}
       : undefined;
   if (compact) {
@@ -153,7 +155,11 @@ export const DailyInsulinCard = ({
           <InsulinSplitGraphic insulin={split} miniature rtl={rtl} />
         ) : null}
         <Text style={styles.compactValue}>
-          {primary ? `${primary.label} · ${units(primary.value)}` : copy.noData}
+          {insulin.total === undefined && insulin.estimatedTotal === undefined
+            ? copy.totalUnavailable
+            : primary
+            ? `${primary.label} · ${units(primary.value)}`
+            : copy.noData}
         </Text>
       </View>
     );
@@ -170,12 +176,33 @@ export const DailyInsulinCard = ({
         testID="daily-overview-insulin-period"
       />
       <View testID="daily-overview-insulin-metrics">
-        {primary ? (
+        {insulin.total === undefined && insulin.estimatedTotal === undefined ? (
           <View style={[row, styles.hero]}>
+            <Text style={[styles.heroLabel, align]}>
+              {copy.totalUnavailable}
+            </Text>
+            <Text
+              style={styles.total}
+              testID="daily-overview-insulin-unavailable-total">
+              —
+            </Text>
+          </View>
+        ) : null}
+        {primary ? (
+          <View
+            style={[
+              row,
+              (insulin.total !== undefined ||
+                insulin.estimatedTotal !== undefined) &&
+                styles.hero,
+            ]}>
             <Text style={[styles.heroLabel, align]}>{primary.label}</Text>
             <Text
               style={[
-                styles.total,
+                insulin.total !== undefined ||
+                insulin.estimatedTotal !== undefined
+                  ? styles.total
+                  : styles.note,
                 primary.id === 'recorded-bolus' && styles.bolus,
               ]}
               testID={`daily-overview-insulin-${primary.id}`}>
@@ -239,7 +266,11 @@ export const DailyInsulinCard = ({
           </View>
         ) : null}
         {insulin.total === undefined ? (
-          <Text style={[styles.incomplete, align]}>{copy.totalIncomplete}</Text>
+          <Text style={[styles.incomplete, align]}>
+            {insulin.estimatedTotal === undefined
+              ? copy.subtotalNote
+              : copy.totalIncomplete}
+          </Text>
         ) : insulin.total === 0 ? (
           <Text style={[styles.note, align]}>{copy.noRatio}</Text>
         ) : null}

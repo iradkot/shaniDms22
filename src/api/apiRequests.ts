@@ -1,11 +1,17 @@
-import {nightscoutInstance} from 'app/api/shaniNightscoutInstances';
+import {
+  nightscoutInstance,
+  getNightscoutConfigurationRevision,
+} from 'app/api/shaniNightscoutInstances';
 import {decodeNightscoutGlucose as decodeBgSample} from './nightscoutGlucose';
 import {getFormattedStartEndOfDay} from 'app/utils/datetime.utils';
 import {ProfileDataType} from 'app/types/insulin.types';
 import {BgSample} from 'app/types/day_bgs.types';
 import {bgSortFunction} from 'app/utils/bg.utils';
 import {DeviceStatusEntry} from 'app/types/deviceStatus.types';
-import {requestNightscoutRecords} from './nightscoutRecords';
+import {
+  requestNightscoutRecords,
+  requestNightscoutRecordsWithMetadata,
+} from './nightscoutRecords';
 import {requestCompleteNightscoutRange} from './nightscoutRangeRecords';
 import {
   assertActiveNightscoutCacheScope,
@@ -260,6 +266,7 @@ export const fetchTreatmentsForDateRangeUncached = async (
       `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${limit}`,
     count,
     MAX_TREATMENTS_COUNT,
+    true,
   );
 };
 
@@ -443,6 +450,7 @@ export const fetchTreatmentsForDateRangeWithMetadata = async (
         `/api/v1/treatments?find[created_at][$gte]=${startIso}&find[created_at][$lte]=${endIso}&count=${limit}`,
       count,
       MAX_TREATMENTS_COUNT,
+      true,
     );
     if (cacheScope) {
       assertActiveNightscoutCacheScope(cacheScope);
@@ -452,7 +460,7 @@ export const fetchTreatmentsForDateRangeWithMetadata = async (
       try {
         await writeNightscoutRangeCache({
           scope: cacheScope,
-          resource: 'treatments.v2',
+          resource: 'treatments.v3',
           startMs: startDate.getTime(),
           endMs: endDate.getTime(),
           fetchedAtMs,
@@ -476,7 +484,7 @@ export const fetchTreatmentsForDateRangeWithMetadata = async (
       try {
         const cached = await readNightscoutRangeCache({
           scope: cacheScope,
-          resource: 'treatments.v2',
+          resource: 'treatments.v3',
           startMs: startDate.getTime(),
           endMs: endDate.getTime(),
           decodeRecord: decodeObjectRecord,
@@ -549,4 +557,110 @@ export const getUserProfileFromNightscout = async (
   // Nightscout's profile route already sorts startDate newest first.
   const apiUrl = `/api/v1/profiles?find[startDate][$lte]=${asOfIso}&count=1`;
   return (await requestNightscoutRecords(apiUrl)) as unknown as ProfileDataType;
+};
+
+/** Carry-in plus every effective profile update; saturation or malformed transport fails closed. */
+export const getBasalProfileHistoryFromNightscout = async (
+  start: Date,
+  through: Date,
+): Promise<Record<string, unknown>[]> => {
+  const startMs = +start;
+  const throughMs = +through;
+  if (![startMs, throughMs].every(Number.isFinite) || throughMs < startMs) {
+    throw new Error('Invalid basal profile history range.');
+  }
+  const scope = getActiveNightscoutCacheScope();
+  const revision = getNightscoutConfigurationRevision();
+  const read = async (path: string) => {
+    const response = await requestNightscoutRecordsWithMetadata(path);
+    if (scope) {
+      assertActiveNightscoutCacheScope(scope);
+    }
+    if (getNightscoutConfigurationRevision() !== revision) {
+      throw new Error(
+        'Nightscout source changed while loading profile history.',
+      );
+    }
+    if (response.records.length !== response.receivedCount) {
+      throw new Error('Invalid basal profile history response.');
+    }
+    return response;
+  };
+  const readLatest = async (asOfMs: number) => {
+    const response = await read(
+      `/api/v1/profiles?find[startDate][$lte]=${new Date(
+        asOfMs,
+      ).toISOString()}&count=2`,
+    );
+    const times = response.records.map(row =>
+      Date.parse(String(row.startDate)),
+    );
+    if (
+      response.receivedCount > 2 ||
+      times.some(time => !Number.isFinite(time) || time > asOfMs) ||
+      (times.length === 2 && times[0]! < times[1]!)
+    ) {
+      throw new Error('Invalid latest basal profile history response.');
+    }
+    if (times.length < 2 || times[0] !== times[1]) {
+      return response.records.slice(0, 1);
+    }
+    // A count-one probe can hide a conflicting profile at the same instant.
+    // Preserve every tied upload so the shared history decoder can reject ambiguity.
+    const effectiveIso = new Date(times[0]!).toISOString();
+    for (let count = 100; ; count = Math.min(count * 2, 1000)) {
+      const tied = await read(
+        `/api/v1/profiles?find[startDate][$gte]=${effectiveIso}&find[startDate][$lte]=${effectiveIso}&count=${count}`,
+      );
+      if (
+        !tied.records.length ||
+        tied.receivedCount > count ||
+        tied.records.some(row => Date.parse(String(row.startDate)) !== times[0])
+      ) {
+        throw new Error('Invalid same-time basal profile history response.');
+      }
+      if (tied.receivedCount < count) {
+        return tied.records;
+      }
+      if (count === 1000) {
+        throw new Error('Incomplete same-time basal profile history.');
+      }
+    }
+  };
+  const latest = await readLatest(throughMs);
+  const latestMs = Date.parse(String(latest[0]?.startDate));
+  if (!latest.length) {
+    return [];
+  }
+  if (latestMs <= startMs) {
+    return latest;
+  }
+  const carryIn = await readLatest(startMs);
+  if (!carryIn.length) {
+    return [];
+  }
+  for (let count = 100; count <= 10_000; count *= 10) {
+    const updates = await read(
+      `/api/v1/profiles?find[startDate][$gt]=${start.toISOString()}&find[startDate][$lte]=${through.toISOString()}&count=${count}`,
+    );
+    if (updates.receivedCount < count) {
+      if (
+        updates.records.some(row => {
+          const effectiveMs = Date.parse(String(row.startDate));
+          return (
+            !Number.isFinite(effectiveMs) ||
+            effectiveMs <= startMs ||
+            effectiveMs > throughMs
+          );
+        }) ||
+        !updates.records.some(
+          row => Date.parse(String(row.startDate)) === latestMs,
+        )
+      ) {
+        throw new Error('Invalid or incomplete effective profile history.');
+      }
+      return [...carryIn, ...updates.records];
+    }
+  }
+  throw new Error('Incomplete basal profile history range.');
 };

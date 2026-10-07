@@ -37,6 +37,10 @@ import {
 import {isE2E} from '../../../utils/e2e';
 import {makeE2EBgSamplesForRange} from '../../../utils/e2eFixtures';
 import {loadCalendarGlucoseRange} from '../../nightscout/loadCalendarGlucoseRange';
+import {
+  deduplicateInsulinRecords,
+  getFinalizedTreatmentInsulinUnits,
+} from '../../../services/insulin/recordedInsulin';
 
 interface NativeDayGraphGlucoseRecord {
   readonly _id?: string;
@@ -289,50 +293,59 @@ const treatmentItems = (
   values: readonly unknown[],
   sourceId: string,
   locale: 'en' | 'he',
+  observedAtMs: number,
 ): readonly DayGraphTimelineItem[] => {
   const items: DayGraphTimelineItem[] = [];
-  values.forEach((value: unknown, index: number) => {
-    const item = record(value);
-    if (!item) {
-      return;
-    }
-    const timestampMs = timestamp(item);
-    if (timestampMs === undefined) {
-      return;
-    }
-    const identity = {
-      sourceId,
-      recordId: recordId(item, 'treatment', timestampMs, index),
-    };
-    const carbohydratesGrams = finiteNumber(item.carbs);
-    if (carbohydratesGrams !== undefined && carbohydratesGrams > 0) {
+  deduplicateInsulinRecords(
+    values
+      .map(record)
+      .filter((item): item is Record<string, unknown> => item !== undefined),
+  )
+    .filter(item => item.isValid !== false && item.deleted !== true)
+    .forEach((value: unknown, index: number) => {
+      const item = record(value);
+      if (!item) {
+        return;
+      }
+      const timestampMs = timestamp(item);
+      if (timestampMs === undefined) {
+        return;
+      }
+      const identity = {
+        sourceId,
+        recordId: recordId(item, 'treatment', timestampMs, index),
+      };
+      const carbohydratesGrams = finiteNumber(item.carbs);
+      if (carbohydratesGrams !== undefined && carbohydratesGrams > 0) {
+        items.push({
+          kind: 'external-carb',
+          identity,
+          sourceLabel: 'Nightscout',
+          timestampMs,
+          title:
+            text(item.eventType) ??
+            (locale === 'he' ? 'פחמימות חיצוניות' : 'External carbohydrates'),
+          carbohydratesGrams,
+        });
+        return;
+      }
+      const eventType = text(item.eventType);
+      const insulinUnits = getFinalizedTreatmentInsulinUnits(
+        item,
+        observedAtMs,
+      );
+      if (insulinUnits === undefined && eventType === undefined) {
+        return;
+      }
       items.push({
-        kind: 'external-carb',
+        kind: 'treatment',
         identity,
         sourceLabel: 'Nightscout',
         timestampMs,
-        title:
-          text(item.eventType) ??
-          (locale === 'he' ? 'פחמימות חיצוניות' : 'External carbohydrates'),
-        carbohydratesGrams,
+        title: eventType ?? (locale === 'he' ? 'טיפול' : 'Treatment'),
+        ...(insulinUnits === undefined ? {} : {detail: `${insulinUnits} U`}),
       });
-      return;
-    }
-    const insulinUnits =
-      finiteNumber(item.insulin) ?? finiteNumber(item.amount);
-    const eventType = text(item.eventType);
-    if (insulinUnits === undefined && eventType === undefined) {
-      return;
-    }
-    items.push({
-      kind: 'treatment',
-      identity,
-      sourceLabel: 'Nightscout',
-      timestampMs,
-      title: eventType ?? (locale === 'he' ? 'טיפול' : 'Treatment'),
-      ...(insulinUnits === undefined ? {} : {detail: `${insulinUnits} U`}),
     });
-  });
   return items;
 };
 
@@ -414,7 +427,9 @@ const emptyContext = (now: number): InsulinContext => ({
 const resolveInsulinLoader = (
   dependencies: NativeDayGraphDataSourceDependencies,
 ): InsulinContextLoader => {
-  if (dependencies.loadInsulinContext) {return dependencies.loadInsulinContext;}
+  if (dependencies.loadInsulinContext) {
+    return dependencies.loadInsulinContext;
+  }
   if (
     !(
       dependencies.fetchTreatmentRange ||
@@ -424,8 +439,9 @@ const resolveInsulinLoader = (
       dependencies.fetchProfile ||
       dependencies.extractBasalProfile
     )
-  )
-    {return loadInsulinContext;}
+  ) {
+    return loadInsulinContext;
+  }
   const now = dependencies.now ?? Date.now;
   const fresh = <T>(records: readonly T[]): NightscoutRangeResult<T> => ({
     records,
@@ -473,7 +489,12 @@ export const createNativeDayGraphTimelineLoader = (
       ? emptyContext((dependencies.now ?? Date.now)())
       : await loadContext({startMs: period.dayStartMs, endMs: period.dayEndMs});
     return [
-      ...treatmentItems(context.treatments, sourceId, locale),
+      ...treatmentItems(
+        context.treatments,
+        sourceId,
+        locale,
+        context.treatmentObservedAtMs ?? context.freshness.fetchedAtMs,
+      ),
       ...journalItems(dependencies.journal, period, locale),
     ];
   };
@@ -499,19 +520,21 @@ export const createNativeDayGraphDataSource = (
     start: Date,
     end: Date,
   ): Promise<NightscoutRangeResult<NativeDayGraphGlucoseRecord>> => {
-    if (useE2EFixtures)
-      {return fresh<NativeDayGraphGlucoseRecord>(
+    if (useE2EFixtures) {
+      return fresh<NativeDayGraphGlucoseRecord>(
         fixtureGlucoseRecords(start, end),
-      );}
-    if (dependencies.fetchGlucoseRange)
-      {return dependencies.fetchGlucoseRange(start, end);}
-    if (dependencies.fetchGlucoseRecords)
-      {return fresh(await dependencies.fetchGlucoseRecords(start, end));}
+      );
+    }
+    if (dependencies.fetchGlucoseRange) {
+      return dependencies.fetchGlucoseRange(start, end);
+    }
+    if (dependencies.fetchGlucoseRecords) {
+      return fresh(await dependencies.fetchGlucoseRecords(start, end));
+    }
     return fetchBgDataForDateRangeWithMetadata(start, end);
   };
   const loadGlucoseForecast = createGlucoseForecastLoader({
-    getScopeKey: () =>
-      `${sourceId}:${getNightscoutConfigurationRevision()}`,
+    getScopeKey: () => `${sourceId}:${getNightscoutConfigurationRevision()}`,
     now,
     readGlucose: async (startMs, endMs) => {
       const range = await loadGlucoseRange(new Date(startMs), new Date(endMs));
@@ -521,10 +544,15 @@ export const createNativeDayGraphDataSource = (
       return range.records.map(sample => ({ts: sample.date, sgv: sample.sgv}));
     },
     readDeviceStatus: async (startMs, endMs) => {
-      if (useE2EFixtures) {return [];}
+      if (useE2EFixtures) {
+        return [];
+      }
       const start = new Date(startMs);
       const end = new Date(endMs);
-      if (dependencies.fetchDeviceStatusRecords && !dependencies.fetchDeviceStatusRange) {
+      if (
+        dependencies.fetchDeviceStatusRecords &&
+        !dependencies.fetchDeviceStatusRange
+      ) {
         return dependencies.fetchDeviceStatusRecords(start, end);
       }
       const range = await (
@@ -537,31 +565,43 @@ export const createNativeDayGraphDataSource = (
       return range.records;
     },
     readContextEvents: (startMs, endMs): readonly ForecastContextEvent[] => {
-      if (!dependencies.journal) {return [];}
+      if (!dependencies.journal) {
+        return [];
+      }
       const query = {
         timeRange: {fromInclusive: startMs, toExclusive: endMs},
       };
       return [
-        ...dependencies.journal.meals.getListSnapshot(query).items.map(meal => ({
-          kind: 'meal' as const,
-          ts: meal.mealStart,
-          ...forecastRecordedAt(meal.updatedAt ?? meal.createdAt),
-          ...(meal.mealCarbohydrates === undefined
-            ? {}
-            : {carbsGrams: meal.mealCarbohydrates.grams}),
-        })),
-        ...dependencies.journal.activities.getListSnapshot(query).items.map(activity => ({
-          kind: 'activity' as const,
-          ts: activity.startedAt,
-          ...forecastRecordedAt(activity.updatedAt ?? activity.createdAt),
-          ...(activity.endedAt === undefined ? {} : {endMs: activity.endedAt}),
-        })),
+        ...dependencies.journal.meals
+          .getListSnapshot(query)
+          .items.map(meal => ({
+            kind: 'meal' as const,
+            ts: meal.mealStart,
+            ...forecastRecordedAt(meal.updatedAt ?? meal.createdAt),
+            ...(meal.mealCarbohydrates === undefined
+              ? {}
+              : {carbsGrams: meal.mealCarbohydrates.grams}),
+          })),
+        ...dependencies.journal.activities
+          .getListSnapshot(query)
+          .items.map(activity => ({
+            kind: 'activity' as const,
+            ts: activity.startedAt,
+            ...forecastRecordedAt(activity.updatedAt ?? activity.createdAt),
+            ...(activity.endedAt === undefined
+              ? {}
+              : {endMs: activity.endedAt}),
+          })),
       ];
     },
     onSnapshot: snapshot => {
-      if (useE2EFixtures) {return;}
+      if (useE2EFixtures) {
+        return;
+      }
       const baseUrl = getNightscoutBaseUrl();
-      if (baseUrl) {publishAndroidGlucoseForecast(baseUrl, snapshot);}
+      if (baseUrl) {
+        publishAndroidGlucoseForecast(baseUrl, snapshot);
+      }
     },
   });
   return {
@@ -616,7 +656,12 @@ export const createNativeDayGraphDataSource = (
       return {
         glucoseSamples: glucoseSamples(glucoseRange.records, sourceId),
         timelineItems: suppliedTimeline ?? [
-          ...treatmentItems(context.treatments, sourceId, locale),
+          ...treatmentItems(
+            context.treatments,
+            sourceId,
+            locale,
+            context.treatmentObservedAtMs ?? context.freshness.fetchedAtMs,
+          ),
           ...journalItems(dependencies.journal, period, locale),
         ],
         activeLoadSamples: context.loadSamples.map(sample => ({

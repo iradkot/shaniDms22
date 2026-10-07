@@ -472,10 +472,156 @@ export class NightscoutUpstream {
     }
   }
 
-  range(
+  async range(
     credential: NightscoutCredential,
     range: NightscoutRangeRequest,
   ): Promise<unknown> {
+    if (range.kind === 'profile' && range.profileHistory === true) {
+      const read = async (
+        throughMs: number,
+        count: number,
+        afterMs?: number,
+        effectiveAtMs?: number,
+      ) => {
+        // Plural profiles exposes effective history; singular profile is latest-only.
+        const url = apiUrl(credential.url, 'api/v1/profiles.json');
+        url.searchParams.set(
+          'find[startDate][$lte]',
+          new Date(throughMs).toISOString(),
+        );
+        if (afterMs !== undefined) {
+          url.searchParams.set(
+            'find[startDate][$gt]',
+            new Date(afterMs).toISOString(),
+          );
+        }
+        if (effectiveAtMs !== undefined) {
+          url.searchParams.set(
+            'find[startDate][$gte]',
+            new Date(effectiveAtMs).toISOString(),
+          );
+        }
+        url.searchParams.set('count', String(count));
+        const rows = await this.request(credential, url);
+        if (!Array.isArray(rows)) {
+          throw new NightscoutUpstreamError(
+            502,
+            'invalid_nightscout_response',
+            'Nightscout returned invalid profile history',
+          );
+        }
+        if (
+          rows.some(row => {
+            if (typeof row !== 'object' || row === null || Array.isArray(row)) {
+              return true;
+            }
+            const effectiveMs = Date.parse(
+              String((row as Record<string, unknown>).startDate),
+            );
+            return (
+              !Number.isFinite(effectiveMs) ||
+              effectiveMs > throughMs ||
+              (afterMs !== undefined && effectiveMs <= afterMs) ||
+              (effectiveAtMs !== undefined && effectiveMs !== effectiveAtMs)
+            );
+          }) ||
+          rows.length > count
+        ) {
+          throw new NightscoutUpstreamError(
+            502,
+            'invalid_nightscout_response',
+            'Nightscout returned invalid effective profile history',
+          );
+        }
+        return rows;
+      };
+      const readLatest = async (asOfMs: number) => {
+        const rows = await read(asOfMs, 2);
+        const times = rows.map(row =>
+          Date.parse(String((row as Record<string, unknown>).startDate)),
+        );
+        if (times.length === 2 && times[0]! < times[1]!) {
+          throw new NightscoutUpstreamError(
+            502,
+            'invalid_nightscout_response',
+            'Nightscout returned unsorted effective profile history',
+          );
+        }
+        if (times.length < 2 || times[0] !== times[1]) {
+          return rows.slice(0, 1);
+        }
+        // Fetch every tied upload; the client decoder must see any conflicting schedules.
+        for (let count = 100; ; count = Math.min(count * 2, 1000)) {
+          const tied = await read(times[0]!, count, undefined, times[0]);
+          if (!tied.length) {
+            throw new NightscoutUpstreamError(
+              502,
+              'invalid_nightscout_response',
+              'Nightscout returned empty same-time profile history',
+            );
+          }
+          if (tied.length < count) {
+            return tied;
+          }
+          if (count === 1000) {
+            throw new NightscoutUpstreamError(
+              502,
+              'incomplete_nightscout_profile_history',
+              'Nightscout returned incomplete same-time profile history',
+            );
+          }
+        }
+      };
+      const throughMs = range.endMs - 1;
+      const latest = await readLatest(throughMs);
+      const latestRow = latest[0] as Record<string, unknown> | undefined;
+      const latestMs =
+        typeof latestRow?.startDate === 'string'
+          ? Date.parse(latestRow.startDate)
+          : Number.NaN;
+      if (!latest.length) {
+        return [];
+      }
+      if (!Number.isFinite(latestMs) || latestMs > throughMs) {
+        throw new NightscoutUpstreamError(
+          502,
+          'invalid_nightscout_response',
+          'Nightscout returned invalid effective profile history',
+        );
+      }
+      if (latestMs <= range.startMs) {
+        return latest;
+      }
+      const carryIn = await readLatest(range.startMs);
+      if (!carryIn.length) {
+        return [];
+      }
+      for (let count = 100; count <= 10_000; count *= 10) {
+        const updates = await read(throughMs, count, range.startMs);
+        if (updates.length < count) {
+          if (
+            !updates.some(
+              row =>
+                Date.parse(
+                  String((row as Record<string, unknown>).startDate),
+                ) === latestMs,
+            )
+          ) {
+            throw new NightscoutUpstreamError(
+              502,
+              'incomplete_nightscout_profile_history',
+              'Nightscout returned incomplete profile history',
+            );
+          }
+          return [...carryIn, ...updates];
+        }
+      }
+      throw new NightscoutUpstreamError(
+        502,
+        'incomplete_nightscout_profile_history',
+        'Nightscout returned incomplete profile history',
+      );
+    }
     return this.request(credential, rangeUrl(credential, range));
   }
 }

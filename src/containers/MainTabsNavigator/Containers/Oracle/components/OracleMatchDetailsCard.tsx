@@ -1,6 +1,6 @@
 import React, {useMemo, useState} from 'react';
 import {Pressable, View} from 'react-native';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 
 import {OracleMatchTrace, OracleSeriesPoint} from 'app/services/oracle/oracleTypes';
 import OracleGhostGraph from 'app/components/charts/OracleGhostGraph/OracleGhostGraph';
@@ -105,7 +105,6 @@ export function OracleMatchDetailsCard(props: {
   testID?: string;
 }): React.JSX.Element {
   const {match, width, currentSeries, medianSeries} = props;
-  const theme = useTheme() as ThemeType;
   const {language} = useAppLanguage();
   const [viewMode, setViewMode] = useState<'chart' | 'ghost'>('chart');
   const [cursorTimeMs, setCursorTimeMs] = useState<number | null>(null);
@@ -174,7 +173,7 @@ export function OracleMatchDetailsCard(props: {
     return cursorTimeMs != null
       ? tr(language, 'oracle.loadAtCursor', {text: parts.join(' • ')})
       : tr(language, 'oracle.load', {text: parts.join(' • ')});
-  }, [cursorTimeMs, loadSampleAtCursor]);
+  }, [cursorTimeMs, language, loadSampleAtCursor]);
 
   const xTickLabelFormatter = useMemo(() => {
     return (d: Date) => {
@@ -282,8 +281,8 @@ export function OracleMatchDetailsCard(props: {
 
       <CardSubtle>
         {tr(language, 'oracle.bolusCarbsSummary', {
-          boluses: match.actionCounts30m?.boluses ?? 0,
-          insulin: match.actions30m?.insulin?.toFixed?.(1) ?? '0.0',
+          boluses: match.actionCounts30m?.boluses ?? '—',
+          insulin: match.actions30m?.insulin?.toFixed?.(1) ?? '—',
           carbs: match.actions30m?.carbs != null ? Math.round(match.actions30m.carbs) : 0,
         })}
       </CardSubtle>

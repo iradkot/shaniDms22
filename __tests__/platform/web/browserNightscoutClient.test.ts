@@ -35,6 +35,141 @@ class MemoryStorage {
 }
 
 describe('BrowserNightscoutClient', () => {
+  it('preserves invalid duration and newest actual dose when normalizing chart records', async () => {
+    const at = Date.parse('2026-10-07T10:00:00Z');
+    const client = new BrowserNightscoutClient({
+      api: {
+        requestJson: jest.fn(async () => ({
+          version: 1,
+          data: [
+            {
+              _id: 'invalid',
+              eventType: 'Correction Bolus',
+              created_at: new Date(at).toISOString(),
+              insulin: 5,
+              duration: 'bad',
+            },
+            {
+              _id: 'dose',
+              eventType: 'Correction Bolus',
+              created_at: new Date(at).toISOString(),
+              insulin: 5,
+              deliveredUnits: 5,
+              srvModified: 1,
+            },
+            {
+              _id: 'dose',
+              eventType: 'Correction Bolus',
+              created_at: new Date(at).toISOString(),
+              insulin: 5,
+              deliveredUnits: 0.05,
+              srvModified: 2,
+            },
+          ],
+        })),
+      },
+      storage: new MemoryStorage(),
+      sourceId: 'source-1',
+      workspaceId: 'workspace-1',
+      now: () => at + 1000,
+    });
+    const range = await client.readTreatments(at, at + 1000);
+    expect(range.records).toHaveLength(2);
+    expect(range.records.find(item => item._id === 'invalid')?.duration).toBe(
+      -1,
+    );
+    expect(
+      range.records.find(item => item._id === 'dose')?.deliveredUnits,
+    ).toBe(0.05);
+  });
+  it('rejects malformed raw treatment rows rather than certifying an empty insulin history', async () => {
+    const at = Date.parse('2026-10-07T10:00:00Z');
+    const client = new BrowserNightscoutClient({
+      api: {requestJson: jest.fn(async () => ({version: 1, data: [null]}))},
+      storage: new MemoryStorage(),
+      sourceId: 'source-1',
+      workspaceId: 'workspace-1',
+      now: () => at,
+    });
+    await expect(client.readRecordedTreatments(at - 1000, at)).rejects.toThrow(
+      'malformed',
+    );
+  });
+  it('keeps profile history range completeness and original cache observation time', async () => {
+    const startMs = Date.parse('2026-10-07T00:00:00Z');
+    const throughMs = startMs + 3_600_000;
+    let nowMs = throughMs + 1000;
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({
+        version: 1,
+        data: [
+          {
+            startDate: new Date(startMs - 1000).toISOString(),
+            defaultProfile: 'Default',
+            store: {
+              Default: {timezone: 'UTC', basal: [{time: '00:00', value: 1}]},
+            },
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error('offline'));
+    const client = new BrowserNightscoutClient({
+      api: {requestJson},
+      storage: new MemoryStorage(),
+      sourceId: 'source-1',
+      workspaceId: 'workspace-1',
+      now: () => nowMs,
+    });
+    const fresh = await client.readBasalProfileHistory(startMs, throughMs);
+    expect(fresh).toMatchObject({
+      complete: true,
+      freshness: {kind: 'fresh', fetchedAtMs: nowMs},
+    });
+    expect(requestJson.mock.calls[0]?.[1].body).toMatchObject({
+      kind: 'profile',
+      profileHistory: true,
+      startMs,
+      endMs: throughMs + 1,
+    });
+    nowMs += 30_000;
+    expect(
+      await client.readBasalProfileHistory(startMs, throughMs),
+    ).toMatchObject({
+      complete: false,
+      freshness: {kind: 'stale', fetchedAtMs: fresh.freshness.fetchedAtMs},
+    });
+  });
+
+  it('never silently removes an invalid profile update from a complete history', async () => {
+    const startMs = Date.parse('2026-10-07T00:00:00Z');
+    const client = new BrowserNightscoutClient({
+      api: {
+        requestJson: async () => ({
+          version: 1,
+          data: [
+            {
+              startDate: new Date(startMs - 1000).toISOString(),
+              defaultProfile: 'Default',
+              store: {Default: {basal: [{time: '00:00', value: 1}]}},
+            },
+            {
+              startDate: new Date(startMs + 1000).toISOString(),
+              defaultProfile: 'Default',
+              store: {},
+            },
+          ],
+        }),
+      },
+      storage: new MemoryStorage(),
+      sourceId: 'source-1',
+      workspaceId: 'workspace-1',
+    });
+    await expect(
+      client.readBasalProfileHistory(startMs, startMs + 3_600_000),
+    ).rejects.toThrow('incomplete or invalid profile history');
+  });
+
   it.each(recordedFixtures)(
     'preserves recorded-calculator evidence through browser transport: $name',
     async fixture => {
@@ -195,7 +330,10 @@ describe('BrowserNightscoutClient', () => {
       })
       .mockRejectedValueOnce(new Error('offline'));
     const client = new BrowserNightscoutClient({
-      api: {requestJson}, storage, sourceId: 'source-1', workspaceId: 'workspace-1',
+      api: {requestJson},
+      storage,
+      sourceId: 'source-1',
+      workspaceId: 'workspace-1',
       now: () => 1_700_000_100_000,
     });
     await expect(
@@ -224,7 +362,10 @@ describe('BrowserNightscoutClient', () => {
         }),
       });
     const client = new BrowserNightscoutClient({
-      api: {requestJson}, storage, sourceId: 'source-1', workspaceId: 'workspace-1',
+      api: {requestJson},
+      storage,
+      sourceId: 'source-1',
+      workspaceId: 'workspace-1',
       now: () => 1_700_000_100_000,
     });
     await client.readEntries(1_699_999_900_000, 1_700_000_100_000);
@@ -571,17 +712,48 @@ describe('BrowserNightscoutClient', () => {
 
   it('preserves paired OpenAPS field clocks through decoding and cache serialization', async () => {
     const nowMs = Date.parse('2026-09-29T12:00:00Z');
-    const requestJson = jest.fn().mockResolvedValueOnce({version: 1, data: [{
-      created_at: new Date(nowMs - 60_000).toISOString(),
-      openaps: {
-        iob: {iob: -0.25, timestamp: new Date(nowMs - 20 * 60_000).toISOString()},
-        suggested: {COB: 0, timestamp: new Date(nowMs - 2 * 60_000).toISOString()},
-      },
-    }]}).mockRejectedValueOnce(new Error('offline'));
-    const client = new BrowserNightscoutClient({api: {requestJson}, storage: new MemoryStorage(), sourceId: 'source-1', workspaceId: 'workspace-1', now: () => nowMs});
-    const live = await client.readDeviceStatuses(nowMs - 2 * 60 * 60_000, nowMs);
-    expect(live.records[0]).toMatchObject({iobUnits: -0.25, iobTimestampMs: nowMs - 20 * 60_000, cobGrams: 0, cobTimestampMs: nowMs - 2 * 60_000});
-    const cached = await client.readDeviceStatuses(nowMs - 2 * 60 * 60_000, nowMs);
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({
+        version: 1,
+        data: [
+          {
+            created_at: new Date(nowMs - 60_000).toISOString(),
+            openaps: {
+              iob: {
+                iob: -0.25,
+                timestamp: new Date(nowMs - 20 * 60_000).toISOString(),
+              },
+              suggested: {
+                COB: 0,
+                timestamp: new Date(nowMs - 2 * 60_000).toISOString(),
+              },
+            },
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error('offline'));
+    const client = new BrowserNightscoutClient({
+      api: {requestJson},
+      storage: new MemoryStorage(),
+      sourceId: 'source-1',
+      workspaceId: 'workspace-1',
+      now: () => nowMs,
+    });
+    const live = await client.readDeviceStatuses(
+      nowMs - 2 * 60 * 60_000,
+      nowMs,
+    );
+    expect(live.records[0]).toMatchObject({
+      iobUnits: -0.25,
+      iobTimestampMs: nowMs - 20 * 60_000,
+      cobGrams: 0,
+      cobTimestampMs: nowMs - 2 * 60_000,
+    });
+    const cached = await client.readDeviceStatuses(
+      nowMs - 2 * 60 * 60_000,
+      nowMs,
+    );
     expect(cached.records).toEqual(live.records);
     expect(cached.freshness.kind).toBe('stale');
   });
@@ -641,8 +813,11 @@ describe('BrowserNightscoutClient', () => {
       })
       .mockRejectedValueOnce(new Error('offline'));
     const client = new BrowserNightscoutClient({
-      api: {requestJson}, storage, sourceId: 'source-1',
-      workspaceId: 'workspace-1', now: () => nowMs,
+      api: {requestJson},
+      storage,
+      sourceId: 'source-1',
+      workspaceId: 'workspace-1',
+      now: () => nowMs,
     });
     const live = await client.readDeviceStatuses(startMs, nowMs);
     expect(live.records[0]?.forecastStatus).toEqual({
@@ -673,7 +848,8 @@ describe('BrowserNightscoutClient', () => {
       loop: {predicted: {startDate: created_at, values: [120, 122]}},
     });
     expect(withPrediction?.forecastStatus?.loopPrediction).toEqual({
-      startMs: Date.parse(created_at), values: [120, 122],
+      startMs: Date.parse(created_at),
+      values: [120, 122],
     });
     expect(
       decodeBrowserNightscoutDeviceStatus({
@@ -821,21 +997,43 @@ describe('BrowserNightscoutClient', () => {
 
   it('preserves valid second-level raw profile times before estimate reconstruction', async () => {
     const client = new BrowserNightscoutClient({
-      api: {requestJson: async () => ({version: 1, data: [{
-        defaultProfile: 'Default', startDate: '2026-01-01T00:00:00Z',
-        store: {Default: {timezone: 'UTC', basal: [
-          {time: '00:00', timeAsSeconds: 0, value: 1},
-          {time: '00:00:30', timeAsSeconds: 30, value: 2},
-        ]}},
-      }]})},
-      storage: new MemoryStorage(), sourceId: 'source-1', workspaceId: 'workspace-1',
+      api: {
+        requestJson: async () => ({
+          version: 1,
+          data: [
+            {
+              defaultProfile: 'Default',
+              startDate: '2026-01-01T00:00:00Z',
+              store: {
+                Default: {
+                  timezone: 'UTC',
+                  basal: [
+                    {time: '00:00', timeAsSeconds: 0, value: 1},
+                    {time: '00:00:30', timeAsSeconds: 30, value: 2},
+                  ],
+                },
+              },
+            },
+          ],
+        }),
+      },
+      storage: new MemoryStorage(),
+      sourceId: 'source-1',
+      workspaceId: 'workspace-1',
     });
-    expect((await client.readBasalProfile(Date.parse('2026-10-04T00:00:00Z'))).records).toEqual([{
-      timeZone: 'UTC', effectiveFromMs: Date.parse('2026-01-01T00:00:00Z'), entries: [
-        {secondsFromMidnight: 0, rateUnitsPerHour: 1},
-        {secondsFromMidnight: 30, rateUnitsPerHour: 2},
-      ],
-    }]);
+    expect(
+      (await client.readBasalProfile(Date.parse('2026-10-04T00:00:00Z')))
+        .records,
+    ).toEqual([
+      {
+        timeZone: 'UTC',
+        effectiveFromMs: Date.parse('2026-01-01T00:00:00Z'),
+        entries: [
+          {secondsFromMidnight: 0, rateUnitsPerHour: 1},
+          {secondsFromMidnight: 30, rateUnitsPerHour: 2},
+        ],
+      },
+    ]);
   });
 
   it('deduplicates only the same external identity while keeping identical separate treatments', async () => {

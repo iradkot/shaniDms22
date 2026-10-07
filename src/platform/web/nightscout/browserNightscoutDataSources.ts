@@ -28,9 +28,18 @@ import {
 import {projectNightscoutTherapyContext} from '../../nightscout/therapyContextProjection';
 import {mapNightscoutTreatmentsToInsulinDataEntries} from '../../../utils/nightscoutTreatments.utils';
 import {createRecordedInsulinDataSource} from '../../../services/insulin/createRecordedInsulinDataSource';
+import {buildEstimatedBasalProfileHistoryFromSchedules} from '../../../services/insulin/estimatedBasalProfile';
+import {
+  buildRecordedInsulinSummary,
+  deduplicateInsulinRecords,
+  getFinalizedTreatmentInsulinUnits,
+} from '../../../services/insulin/recordedInsulin';
 import {loadCalendarGlucoseRange} from '../../nightscout/loadCalendarGlucoseRange';
 import type {CurrentDataSource} from '../../../modules/currentData';
-import {createBrowserCurrentDataSource, type BrowserCurrentDataClient} from './browserCurrentDataSource';
+import {
+  createBrowserCurrentDataSource,
+  type BrowserCurrentDataClient,
+} from './browserCurrentDataSource';
 import {
   createGlucoseForecastLoader,
   type ForecastContextEvent,
@@ -50,39 +59,42 @@ const treatmentTimeline = (
   values: readonly BrowserNightscoutTreatment[],
   sourceId: string,
   locale: DestinationLocale,
+  observedAtMs: number,
 ): readonly DayGraphTimelineItem[] => {
   const result: DayGraphTimelineItem[] = [];
-  values.forEach((item, index) => {
-    const timestampMs = treatmentTimestampMs(item);
-    if (timestampMs === undefined) {
-      return;
-    }
-    const identity = {sourceId, recordId: recordId(item, timestampMs, index)};
-    if (item.carbs !== undefined && item.carbs > 0) {
+  deduplicateInsulinRecords(values.map(item => ({...item})))
+    .filter(item => item.isValid !== false && item.deleted !== true)
+    .forEach((item, index) => {
+      const timestampMs = treatmentTimestampMs(item);
+      if (timestampMs === undefined) {
+        return;
+      }
+      const identity = {sourceId, recordId: recordId(item, timestampMs, index)};
+      if (item.carbs !== undefined && item.carbs > 0) {
+        result.push({
+          kind: 'external-carb',
+          identity,
+          sourceLabel: 'Nightscout',
+          timestampMs,
+          title:
+            item.eventType ?? (locale === 'he' ? 'פחמימות' : 'Carbohydrates'),
+          carbohydratesGrams: item.carbs,
+        });
+        return;
+      }
+      const insulin = getFinalizedTreatmentInsulinUnits(item, observedAtMs);
+      if (insulin === undefined && item.eventType === undefined) {
+        return;
+      }
       result.push({
-        kind: 'external-carb',
+        kind: 'treatment',
         identity,
         sourceLabel: 'Nightscout',
         timestampMs,
-        title:
-          item.eventType ?? (locale === 'he' ? 'פחמימות' : 'Carbohydrates'),
-        carbohydratesGrams: item.carbs,
+        title: item.eventType ?? (locale === 'he' ? 'טיפול' : 'Treatment'),
+        ...(insulin === undefined ? {} : {detail: `${insulin} U`}),
       });
-      return;
-    }
-    const insulin = item.insulin ?? item.amount;
-    if (insulin === undefined && item.eventType === undefined) {
-      return;
-    }
-    result.push({
-      kind: 'treatment',
-      identity,
-      sourceLabel: 'Nightscout',
-      timestampMs,
-      title: item.eventType ?? (locale === 'he' ? 'טיפול' : 'Treatment'),
-      ...(insulin === undefined ? {} : {detail: `${insulin} U`}),
     });
-  });
   return result;
 };
 
@@ -143,9 +155,13 @@ const activeLoadSamples = (
 
 const insulinEvents = (
   values: readonly BrowserNightscoutTreatment[],
+  observedAtMs: number,
 ): readonly DayGraphInsulinEvent[] => {
   const result: DayGraphInsulinEvent[] = [];
-  mapNightscoutTreatmentsToInsulinDataEntries([...values]).forEach(entry => {
+  mapNightscoutTreatmentsToInsulinDataEntries(
+    [...values],
+    observedAtMs,
+  ).forEach(entry => {
     if (entry.type === 'bolus') {
       const timestampMs = Date.parse(entry.timestamp ?? '');
       if (entry.amount !== undefined && Number.isFinite(timestampMs)) {
@@ -255,12 +271,16 @@ export const createBrowserNightscoutDataSources = (input: {
             ? {}
             : {carbsGrams: meal.mealCarbohydrates.grams}),
         })),
-        ...input.journal.activities.getListSnapshot(query).items.map(activity => ({
-          kind: 'activity' as const,
-          ts: activity.startedAt,
-          recordedAtMs: activity.updatedAt,
-          ...(activity.endedAt === undefined ? {} : {endMs: activity.endedAt}),
-        })),
+        ...input.journal.activities
+          .getListSnapshot(query)
+          .items.map(activity => ({
+            kind: 'activity' as const,
+            ts: activity.startedAt,
+            recordedAtMs: activity.updatedAt,
+            ...(activity.endedAt === undefined
+              ? {}
+              : {endMs: activity.endedAt}),
+          })),
       ];
     },
   });
@@ -334,7 +354,12 @@ export const createBrowserNightscoutDataSources = (input: {
           ...(record.device === undefined ? {} : {device: record.device}),
         })),
         timelineItems: [
-          ...treatmentTimeline(chartTreatments, input.sourceId, input.locale),
+          ...treatmentTimeline(
+            chartTreatments,
+            input.sourceId,
+            input.locale,
+            treatments?.freshness.fetchedAtMs ?? Date.now(),
+          ),
           ...journalTimeline(
             input.journal,
             period.dayStartMs,
@@ -347,7 +372,10 @@ export const createBrowserNightscoutDataSources = (input: {
             item.timestampMs < period.dayEndMs,
         ),
         activeLoadSamples: activeLoadSamples(deviceStatuses?.records ?? []),
-        insulinEvents: insulinEvents(chartTreatments),
+        insulinEvents: insulinEvents(
+          chartTreatments,
+          treatments?.freshness.fetchedAtMs ?? Date.now(),
+        ),
         basalSchedule: (profile?.records[0]?.entries ??
           []) satisfies readonly DayGraphBasalScheduleEntry[],
         freshness: stale
@@ -385,22 +413,19 @@ export const createBrowserNightscoutDataSources = (input: {
       );
       return {...range, records: range.records.map(record => ({...record}))};
     },
-    fetchBasalProfile: async asOf => {
-      const range = await input.client.readBasalProfile(asOf.getTime());
-      const selected = range.records[0];
-      // The browser proxy currently returns the latest profile. It is usable
-      // for history only if its explicit effective date precedes this window.
-      const eligible = range.complete !== false && selected?.effectiveFromMs !== undefined && selected.effectiveFromMs <= asOf.getTime();
+    fetchBasalProfile: async (asOf, through) => {
+      const range = await input.client.readBasalProfileHistory(+asOf, +through);
+      const profile =
+        range.complete === true
+          ? buildEstimatedBasalProfileHistoryFromSchedules(
+              range.records,
+              +asOf,
+              +through,
+            )
+          : undefined;
       return {
         freshness: range.freshness,
-        ...(eligible ? {profile: {
-          entries: selected.entries.map(entry => ({
-            time: `${String(Math.floor(entry.secondsFromMidnight / 3600)).padStart(2, '0')}:${String(Math.floor((entry.secondsFromMidnight % 3600) / 60)).padStart(2, '0')}:${String(entry.secondsFromMidnight % 60).padStart(2, '0')}`,
-            timeAsSeconds: entry.secondsFromMidnight,
-            value: entry.rateUnitsPerHour,
-          })),
-          ...(selected.timeZone === undefined ? {} : {timeZone: selected.timeZone}),
-        }} : {}),
+        ...(profile ? {profile} : {}),
       };
     },
   });
@@ -422,7 +447,10 @@ export const createBrowserNightscoutDataSources = (input: {
           startMs: period.startMs - 5 * MINUTE_MS,
           endMs: cutoff,
         }),
-        recordedInsulin.loadWindow({...period, endMs: cutoff}, {includeEstimates: true}),
+        recordedInsulin.loadWindow(
+          {...period, endMs: cutoff},
+          {includeEstimates: true},
+        ),
       ]);
       input.client.assertCurrentSource?.();
       return {
@@ -432,7 +460,9 @@ export const createBrowserNightscoutDataSources = (input: {
       };
     },
     async loadDailyInsulinComparison(request) {
-      return (await recordedInsulin.loadDailyBundle(request, {includeEstimates: true})).comparison;
+      return (
+        await recordedInsulin.loadDailyBundle(request, {includeEstimates: true})
+      ).comparison;
     },
   };
   const previousDaySummary: PreviousDaySummaryDataSource = {
@@ -450,6 +480,7 @@ export const createBrowserNightscoutDataSources = (input: {
           treatments?.records ?? [],
           input.sourceId,
           input.locale,
+          treatments?.freshness.fetchedAtMs ?? Date.now(),
         ),
         ...journalTimeline(
           input.journal,
@@ -489,10 +520,27 @@ export const createBrowserNightscoutDataSources = (input: {
   };
   const therapyContext: TherapyContextDataSource = {
     async loadTherapyContext(period) {
-      const [glucoseSamples, treatments] = await Promise.all([
-        trends.loadGlucoseSamples(period),
-        input.client.readTreatments(period.startMs - DAY_MS, period.endMs),
+      const [glucose, treatments] = await Promise.all([
+        input.client.readEntries(period.startMs, period.endMs),
+        input.client.readRecordedTreatments(
+          period.startMs - DAY_MS,
+          period.endMs,
+        ),
       ]);
+      input.client.assertCurrentSource?.();
+      if (
+        treatments.freshness.kind !== 'fresh' ||
+        treatments.complete === false
+      ) {
+        throw new Error(
+          'Therapy Context requires fresh, complete treatment history.',
+        );
+      }
+      if (glucose.freshness.kind !== 'fresh' || glucose.complete === false) {
+        throw new Error(
+          'Therapy Context requires fresh, complete glucose history.',
+        );
+      }
       const projected = projectNightscoutTherapyContext(treatments.records);
       const timeRange = {
         fromInclusive: period.startMs,
@@ -504,9 +552,17 @@ export const createBrowserNightscoutDataSources = (input: {
       }).items;
       return buildTherapyContextSnapshot({
         period,
-        glucoseSamples,
+        glucoseSamples: glucose.records.map(record => ({
+          timestampMs: record.date,
+          valueMgDl: record.sgv,
+        })),
         sourceReliability: 'reliable',
         treatments: projected.treatments,
+        recordedInsulin: buildRecordedInsulinSummary(
+          treatments.records,
+          period,
+          treatments.freshness.fetchedAtMs,
+        ),
         mealStartedAtMs: meals.map(meal => meal.mealStart),
         activities: activities.map(activity => ({
           startedAtMs: activity.startedAt,
@@ -552,10 +608,13 @@ export const loadBrowserCurrentSnapshot = async (input: {
   readonly nowMs?: number;
 }): Promise<CurrentSnapshotViewModel> => {
   try {
-    const source = input.currentDataSource ?? (input.client && createBrowserCurrentDataSource({
-      client: input.client,
-      ...(input.nowMs === undefined ? {} : {now: () => input.nowMs!}),
-    }));
+    const source =
+      input.currentDataSource ??
+      (input.client &&
+        createBrowserCurrentDataSource({
+          client: input.client,
+          ...(input.nowMs === undefined ? {} : {now: () => input.nowMs!}),
+        }));
     if (!source) {
       throw new Error('Current data source is unavailable.');
     }
@@ -571,18 +630,16 @@ export const loadBrowserCurrentSnapshot = async (input: {
             : 'No glucose reading is available yet.',
       };
     }
-    const ageMinutes = Math.max(0, Math.floor((current.glucose.ageMs ?? 0) / 60_000));
+    const ageMinutes = Math.max(
+      0,
+      Math.floor((current.glucose.ageMs ?? 0) / 60_000),
+    );
     const stale = current.glucose.status !== 'fresh';
     const offline = current.glucose.reason === 'cached-after-read-failure';
     const measurement = (value: number): string =>
       Number(value.toFixed(2)).toString();
     return {
-      status:
-        offline
-          ? 'offline'
-          : stale
-          ? 'stale'
-          : 'ready',
+      status: offline ? 'offline' : stale ? 'stale' : 'ready',
       target: input.target,
       glucoseLabel: `${Math.round(latest.sgv)} mg/dL`,
       ...(latest.direction === undefined
@@ -604,14 +661,13 @@ export const loadBrowserCurrentSnapshot = async (input: {
           : `${ageMinutes} min ago`,
       ...(stale
         ? {
-            message:
-              offline
-                ? input.locale === 'he'
-                  ? 'אין חיבור כרגע. מוצג הנתון האחרון.'
-                  : 'Offline now. Showing the last reading.'
-                : input.locale === 'he'
-                ? 'הנתון האחרון אינו עדכני.'
-                : 'The latest reading is not up to date.',
+            message: offline
+              ? input.locale === 'he'
+                ? 'אין חיבור כרגע. מוצג הנתון האחרון.'
+                : 'Offline now. Showing the last reading.'
+              : input.locale === 'he'
+              ? 'הנתון האחרון אינו עדכני.'
+              : 'The latest reading is not up to date.',
           }
         : {}),
     };

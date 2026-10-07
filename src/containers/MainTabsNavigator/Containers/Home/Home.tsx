@@ -7,7 +7,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import DateNavigatorRow from 'app/containers/MainTabsNavigator/Containers/Home/components/dateNavigatorRow/DateNavigatorRow';
 import StatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/StatsRow';
 import InsulinStatsRow from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinStatsRow';
-import {computeInsulinStats} from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinDataCalculations';
+import {recordedInsulinBridgeStats} from 'app/containers/MainTabsNavigator/Containers/Home/components/InsulinStatsRow/InsulinDataCalculations';
 import {useDebouncedState} from 'app/hooks/useDebouncedState';
 import {ThemeType} from 'app/types/theme';
 import {useNavigation} from '@react-navigation/native';
@@ -343,6 +343,7 @@ const Home: React.FC = () => {
     insulinData,
     basalProfileData,
     carbTreatments,
+    recordedInsulin,
     isLoading: insulinIsLoading,
     getUpdatedInsulinData,
   } = useInsulinData(debouncedCurrentDate);
@@ -1017,22 +1018,9 @@ const Home: React.FC = () => {
     todayYmd,
   ]);
 
-  // ── InsulinStatsRow needs startOfDay / endOfDay ───────────────────────
-  const startOfDay = useMemo(() => {
-    const d = new Date(debouncedCurrentDate);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, [debouncedCurrentDate]);
-
-  const endOfDay = useMemo(() => {
-    const d = new Date(debouncedCurrentDate);
-    d.setHours(23, 59, 59, 999);
-    return d;
-  }, [debouncedCurrentDate]);
-
   const widgetInsulinStats = useMemo(
-    () => computeInsulinStats(insulinData, basalProfileData, startOfDay, endOfDay),
-    [basalProfileData, endOfDay, insulinData, startOfDay],
+    () => recordedInsulinBridgeStats(recordedInsulin),
+    [recordedInsulin],
   );
 
   useEffect(() => {
@@ -1045,6 +1033,9 @@ const Home: React.FC = () => {
 
     updateAndroidGlucoseLiveSurface({
       enrichedBg: liveBgSample,
+      currentData: liveSnapshot?.currentData,
+      sourceBaseUrl: liveSnapshot?.sourceBaseUrl,
+      configurationRevision: liveSnapshot?.configurationRevision,
       predictions: liveSnapshot?.predictions,
       recentBgSamples: listBgData,
       insulinStats: widgetInsulinStats,
@@ -1060,6 +1051,9 @@ const Home: React.FC = () => {
     liveBgSample,
     liveSnapshot?.predictions,
     widgetInsulinStats,
+    liveSnapshot?.currentData,
+    liveSnapshot?.sourceBaseUrl,
+    liveSnapshot?.configurationRevision,
   ]);
 
   const [showDailySummaryAlert, setShowDailySummaryAlert] = useState(false);
@@ -1385,10 +1379,8 @@ const Home: React.FC = () => {
           <>
             <StatsRow bgData={bgData} />
             <InsulinStatsRow
-              insulinData={insulinData}
-              basalProfileData={basalProfileData}
-              startDate={startOfDay}
-              endDate={endOfDay}
+              summary={recordedInsulin}
+              locale={language}
             />
           </>
         ) : null}

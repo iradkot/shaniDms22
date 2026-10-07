@@ -359,13 +359,15 @@ describe('Personal Home editor', () => {
         ),
       ).toBe(estimated ? '5.8 U' : '3.8 U');
       expect(textAt('home-insulin-yesterday-value')).toBe(
-        estimated ? '5 U' : '3 U',
+        estimated ? '5 U' : '2 U',
       );
-      expect(textAt('home-insulin-yesterday-delta')).toBe('+0.8 U');
-      expect(textAt('home-insulin-weekAverage-delta')).toBe('+0.8 U');
-      expect(insulinText()).toContain(
-        estimated ? 'סה״כ משוער' : 'סכום מתועד · כיסוי בזאל חלקי',
+      expect(textAt('home-insulin-yesterday-delta')).toBe(
+        estimated ? '+0.8 U' : '0 U',
       );
+      expect(textAt('home-insulin-weekAverage-delta')).toBe(
+        estimated ? '+0.8 U' : '0 U',
+      );
+      expect(insulinText()).toContain(estimated ? 'סה״כ משוער' : 'בולוס מתועד');
       expect(insulinText()).toContain('1.8 U');
       expect(insulinText()).toContain('33');
       if (estimated) {

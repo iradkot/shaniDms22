@@ -95,8 +95,8 @@ export type AgpMealComparison = {
 };
 
 export type AgpCorrectionComparison = {
-  currentCount: number;
-  previousCount: number;
+  currentCount: number | null;
+  previousCount: number | null;
   currentAvgDrop3h: number | null;
   previousAvgDrop3h: number | null;
   currentLowAfterCorrectionPct: number | null;
@@ -157,6 +157,8 @@ export type AgpComparisonEvidence = {
   dataQuality: {
     currentCoveragePct: number;
     previousCoveragePct: number;
+    currentBolusEvidenceComplete: boolean;
+    previousBolusEvidenceComplete: boolean;
     warnings: string[];
   };
 };

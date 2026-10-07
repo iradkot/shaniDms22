@@ -10,7 +10,8 @@ import {
 export type ModeledInsulinRangeMetrics = {
   readonly basalEstimated: true;
   totalBasal: number;
-  totalTempBasal: number;
+  /** Null when the verified total has no temp subtotal on the same basis. */
+  totalTempBasal: number | null;
   totalBolus: number;
   totalInsulin: number;
   totalCarbs: number;
@@ -53,6 +54,9 @@ export function hasUsableModeledInsulinContext(
   return (
     context.availability.treatments === 'available' &&
     context.availability.profile === 'available' &&
+    (context.recordedInsulin === undefined ||
+      (context.recordedInsulin.quality !== 'unavailable' &&
+        context.recordedInsulin.bolusUnits !== undefined)) &&
     hasUsableModeledBasalProfile(context.basalProfileData)
   );
 }
@@ -72,21 +76,65 @@ export function calculateModeledInsulinContextMetrics(
       'Modeled insulin totals require current, valid treatment and basal-profile data.',
     );
   }
-  const {totalBasal, totalBolus} = calculateTotalInsulin(
+  const legacyTotals = calculateTotalInsulin(
     context.insulinData,
     context.basalProfileData,
     start,
     end,
   );
+  const period = context.recordedInsulinPeriod;
+  const summary = context.recordedInsulin;
+  let {totalBasal, totalBolus} = legacyTotals;
+  if (period) {
+    if (period.startMs !== start.getTime() || period.endMs !== end.getTime()) {
+      throw new Error(
+        'Insulin totals require the same observed cutoff as their source summary.',
+      );
+    }
+    const usableSummary =
+      summary && summary.quality !== 'unavailable' ? summary : undefined;
+    const completeRecorded =
+      usableSummary?.quality === 'available' &&
+      usableSummary.basalCoveragePercent === 100;
+    const basal = completeRecorded
+      ? usableSummary.basalUnits
+      : usableSummary?.estimatedBasalUnits;
+    const bolus = usableSummary?.bolusUnits;
+    if (
+      basal === undefined ||
+      bolus === undefined ||
+      !Number.isFinite(basal + bolus) ||
+      basal < 0 ||
+      bolus < 0
+    ) {
+      throw new Error(
+        'Insulin totals require a complete recorded total or a verified basal estimate.',
+      );
+    }
+    const statedTotal = completeRecorded
+      ? basal + bolus
+      : usableSummary?.estimatedTotalUnits;
+    if (
+      statedTotal === undefined ||
+      !Number.isFinite(statedTotal) ||
+      Math.abs(statedTotal - basal - bolus) > 1e-6
+    ) {
+      throw new Error('Insulin total does not match its verified components.');
+    }
+    totalBasal = basal;
+    totalBolus = bolus;
+  }
   const timeline = buildBasalDeliveryTimeline({
     insulinData: context.insulinData,
     basalProfile: context.basalProfileData,
     startDate: start,
     endDate: end,
   });
-  const totalTempBasal = sumBasalDelivery(
-    timeline.filter(segment => segment.source === 'tempBasal'),
-  );
+  const totalTempBasal = period
+    ? null
+    : sumBasalDelivery(
+        timeline.filter(segment => segment.source === 'tempBasal'),
+      );
   const totalCarbs = context.carbTreatments.reduce(
     (sum, item) => sum + item.carbs,
     0,

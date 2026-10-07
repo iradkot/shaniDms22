@@ -38,12 +38,23 @@ export const calculateTotalInsulin = (
       !Number.isFinite(timestampMs) ||
       !Number.isFinite(amount) ||
       amount <= 0 ||
-      timestampMs < startMs ||
       timestampMs >= endMs
     ) {
       return total;
     }
-    return total + amount;
+    const deliveryEndMs = entry.endTime
+      ? Date.parse(entry.endTime)
+      : timestampMs;
+    if (!Number.isFinite(deliveryEndMs) || deliveryEndMs < timestampMs)
+      return total;
+    if (deliveryEndMs > timestampMs) {
+      const overlap =
+        Math.min(deliveryEndMs, endMs) - Math.max(timestampMs, startMs);
+      return overlap > 0
+        ? total + (amount * overlap) / (deliveryEndMs - timestampMs)
+        : total;
+    }
+    return timestampMs >= startMs ? total + amount : total;
   }, 0);
 
   return {totalBasal, totalBolus: totalBolusInsulin};

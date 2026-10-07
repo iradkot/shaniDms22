@@ -1,4 +1,8 @@
 import {WebApiError, type AuthenticatedWebApiClient} from '../api';
+import {
+  parseInsulinNumber,
+  deduplicateInsulinRecords,
+} from '../../../services/insulin/recordedInsulin';
 import type {IndexedDbKeyValueStore} from '../storage';
 import {
   decodeForecastDeviceStatus,
@@ -350,9 +354,16 @@ export const decodeBrowserNightscoutTreatment = (
   const carbs = numeric('carbs');
   const insulin = numeric('insulin');
   const amount = value.amount == null ? undefined : numeric('amount') ?? -1;
-  const rate = bounded(value.rate, 0, 50);
-  const absolute = bounded(value.absolute, 0, 50);
-  const duration = bounded(value.duration, 0, 24 * 60);
+  const rate =
+    value.rate == null ? undefined : parseInsulinNumber(value.rate) ?? -1;
+  const absolute =
+    value.absolute == null
+      ? undefined
+      : parseInsulinNumber(value.absolute) ?? -1;
+  const duration =
+    value.duration == null
+      ? undefined
+      : parseInsulinNumber(value.duration) ?? -1;
   const notes = text(value.notes, 2_000);
   const profile = text(value.profile, 512);
   const app = text(value.app, 160);
@@ -445,31 +456,39 @@ export const decodeBrowserNightscoutDeviceStatus = (
     openaps === undefined ? undefined : nestedRecord(openaps, 'suggested');
   const enacted =
     openaps === undefined ? undefined : nestedRecord(openaps, 'enacted');
-  const openapsMeal = openaps === undefined ? undefined : nestedRecord(openaps, 'meal');
-  const openapsCob = openaps === undefined ? undefined : nestedRecord(openaps, 'cob');
+  const openapsMeal =
+    openaps === undefined ? undefined : nestedRecord(openaps, 'meal');
+  const openapsCob =
+    openaps === undefined ? undefined : nestedRecord(openaps, 'cob');
   // A value and its clock must come from the same payload. Upload time is not a load clock.
-  const iobPayload = value.iobUnits !== undefined || value.iobTimestampMs !== undefined
-    ? {value: value.iobUnits, timestamp: value.iobTimestampMs}
-    : loopIob !== undefined ? {value: loopIob.iob, timestamp: loopIob.timestamp}
-    : {value: openapsIob?.iob, timestamp: openapsIob?.timestamp};
-  const cobPayload = value.cobGrams !== undefined || value.cobTimestampMs !== undefined
-    ? {value: value.cobGrams, timestamp: value.cobTimestampMs}
-    : loopCob !== undefined ? {value: loopCob.cob, timestamp: loopCob.timestamp}
-    : openapsMeal !== undefined ? {value: openapsMeal.cob, timestamp: openapsMeal.timestamp}
-    : openapsCob !== undefined ? {value: openapsCob.cob, timestamp: openapsCob.timestamp}
-    : suggested?.COB !== undefined ? {value: suggested.COB, timestamp: suggested.timestamp}
-    : {value: enacted?.COB, timestamp: enacted?.timestamp};
+  const iobPayload =
+    value.iobUnits !== undefined || value.iobTimestampMs !== undefined
+      ? {value: value.iobUnits, timestamp: value.iobTimestampMs}
+      : loopIob !== undefined
+      ? {value: loopIob.iob, timestamp: loopIob.timestamp}
+      : {value: openapsIob?.iob, timestamp: openapsIob?.timestamp};
+  const cobPayload =
+    value.cobGrams !== undefined || value.cobTimestampMs !== undefined
+      ? {value: value.cobGrams, timestamp: value.cobTimestampMs}
+      : loopCob !== undefined
+      ? {value: loopCob.cob, timestamp: loopCob.timestamp}
+      : openapsMeal !== undefined
+      ? {value: openapsMeal.cob, timestamp: openapsMeal.timestamp}
+      : openapsCob !== undefined
+      ? {value: openapsCob.cob, timestamp: openapsCob.timestamp}
+      : suggested?.COB !== undefined
+      ? {value: suggested.COB, timestamp: suggested.timestamp}
+      : {value: enacted?.COB, timestamp: enacted?.timestamp};
   const fieldTimestamp = (raw: unknown): number | undefined => {
-    const parsed = number(raw) ?? (typeof raw === 'string' ? Date.parse(raw) : undefined);
-    return parsed !== undefined && Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+    const parsed =
+      number(raw) ?? (typeof raw === 'string' ? Date.parse(raw) : undefined);
+    return parsed !== undefined && Number.isSafeInteger(parsed) && parsed > 0
+      ? parsed
+      : undefined;
   };
   const iobTimestampMs = fieldTimestamp(iobPayload.timestamp);
   const cobTimestampMs = fieldTimestamp(cobPayload.timestamp);
-  const iobUnits = bounded(
-    iobPayload.value,
-    -100,
-    100,
-  );
+  const iobUnits = bounded(iobPayload.value, -100, 100);
   const bolusIobUnits = bounded(
     value.bolusIobUnits ?? loopIob?.bolusIob ?? openapsIob?.bolusiob,
     -100,
@@ -480,21 +499,19 @@ export const decodeBrowserNightscoutDeviceStatus = (
     -100,
     100,
   );
-  const cobGrams = bounded(
-    cobPayload.value,
-    0,
-    1_000,
-  );
+  const cobGrams = bounded(cobPayload.value, 0, 1_000);
   const decodedForecast = decodeForecastDeviceStatus(
     value.forecastStatus ?? value,
   );
-  const forecastStatus = decodedForecast && (
-    decodedForecast.loopPrediction !== undefined ||
-    decodedForecast.iobUnits !== undefined ||
-    decodedForecast.cobGrams !== undefined ||
-    decodedForecast.iobTimestampMs !== undefined ||
-    decodedForecast.cobTimestampMs !== undefined
-  ) ? decodedForecast : undefined;
+  const forecastStatus =
+    decodedForecast &&
+    (decodedForecast.loopPrediction !== undefined ||
+      decodedForecast.iobUnits !== undefined ||
+      decodedForecast.cobGrams !== undefined ||
+      decodedForecast.iobTimestampMs !== undefined ||
+      decodedForecast.cobTimestampMs !== undefined)
+      ? decodedForecast
+      : undefined;
   if (
     iobUnits === undefined &&
     bolusIobUnits === undefined &&
@@ -511,11 +528,15 @@ export const decodeBrowserNightscoutDeviceStatus = (
     createdAtMs,
     ...(id === undefined ? {} : {_id: id}),
     ...(iobUnits === undefined ? {} : {iobUnits}),
-    ...(iobPayload.timestamp === undefined ? {} : {iobTimestampMs: iobTimestampMs ?? null}),
+    ...(iobPayload.timestamp === undefined
+      ? {}
+      : {iobTimestampMs: iobTimestampMs ?? null}),
     ...(bolusIobUnits === undefined ? {} : {bolusIobUnits}),
     ...(basalIobUnits === undefined ? {} : {basalIobUnits}),
     ...(cobGrams === undefined ? {} : {cobGrams}),
-    ...(cobPayload.timestamp === undefined ? {} : {cobTimestampMs: cobTimestampMs ?? null}),
+    ...(cobPayload.timestamp === undefined
+      ? {}
+      : {cobTimestampMs: cobTimestampMs ?? null}),
     ...(forecastStatus === undefined ? {} : {forecastStatus}),
   };
 };
@@ -535,13 +556,22 @@ const decodeBrowserNightscoutBasalProfile = (
       ? (store[defaultProfile] as Record<string, unknown>)
       : undefined;
   const normalized = Array.isArray(value.entries);
-  const timeZone = normalized ? value.timeZone : selected?.timezone ?? value.timezone;
-  if (timeZone !== undefined && (typeof timeZone !== 'string' || timeZone.trim() === '')) {
+  const timeZone = normalized
+    ? value.timeZone
+    : selected?.timezone ?? value.timezone;
+  if (
+    timeZone !== undefined &&
+    (typeof timeZone !== 'string' || timeZone.trim() === '')
+  ) {
     return null;
   }
   const effectiveFromMs = normalized
-    ? (typeof value.effectiveFromMs === 'number' ? value.effectiveFromMs : undefined)
-    : (typeof value.startDate === 'string' ? Date.parse(value.startDate) : undefined);
+    ? typeof value.effectiveFromMs === 'number'
+      ? value.effectiveFromMs
+      : undefined
+    : typeof value.startDate === 'string'
+    ? Date.parse(value.startDate)
+    : undefined;
   const basal = normalized ? value.entries : selected?.basal;
   if (!Array.isArray(basal)) {
     return null;
@@ -555,9 +585,14 @@ const decodeBrowserNightscoutBasalProfile = (
       const match =
         time === undefined ? null : /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(time);
       const parsedSeconds =
-        match === null || Number(match[1]) > 23 || Number(match[2]) > 59 || Number(match[3] ?? 0) > 59
+        match === null ||
+        Number(match[1]) > 23 ||
+        Number(match[2]) > 59 ||
+        Number(match[3] ?? 0) > 59
           ? undefined
-          : Number(match[1]) * 60 * 60 + Number(match[2]) * 60 + Number(match[3] ?? 0);
+          : Number(match[1]) * 60 * 60 +
+            Number(match[2]) * 60 +
+            Number(match[3] ?? 0);
       const secondsFromMidnight = bounded(
         normalized
           ? entry.secondsFromMidnight
@@ -586,9 +621,12 @@ const decodeBrowserNightscoutBasalProfile = (
     new Set(entries.map(entry => entry.secondsFromMidnight)).size !==
       entries.length
     ? null
-    : {entries,
+    : {
+        entries,
         ...(typeof timeZone === 'string' ? {timeZone} : {}),
-        ...(effectiveFromMs !== undefined && Number.isFinite(effectiveFromMs) ? {effectiveFromMs} : {}),
+        ...(effectiveFromMs !== undefined && Number.isFinite(effectiveFromMs)
+          ? {effectiveFromMs}
+          : {}),
       };
 };
 
@@ -661,7 +699,10 @@ const decodeStatus = (value: unknown): BrowserNightscoutStatus => {
   const displayLabel = text(value.displayLabel, 160);
   return {
     configured: value.configured,
-    ...(value.authType === 'access-token' || value.authType === 'legacy-api-secret' ? {authType: value.authType} : {}),
+    ...(value.authType === 'access-token' ||
+    value.authType === 'legacy-api-secret'
+      ? {authType: value.authType}
+      : {}),
     ...(sourceId === undefined ? {} : {sourceId}),
     ...(workspaceId === undefined ? {} : {workspaceId}),
     ...(displayLabel === undefined ? {} : {displayLabel}),
@@ -704,7 +745,12 @@ export class BrowserNightscoutClient {
     return decodeStatus(
       await api.requestJson('/v1/vault/nightscout/provision', {
         method: 'POST',
-        body: {version: 1, url: input.url, apiKey: input.apiKey, authType: 'access-token'},
+        body: {
+          version: 1,
+          url: input.url,
+          apiKey: input.apiKey,
+          authType: 'access-token',
+        },
       }),
     );
   }
@@ -749,7 +795,7 @@ export class BrowserNightscoutClient {
       endMs,
       value => (isRecord(value) ? {...value} : null),
       signal,
-      'recorded',
+      'recorded-v2',
     );
   }
 
@@ -764,21 +810,13 @@ export class BrowserNightscoutClient {
       endMs,
       decodeBrowserNightscoutTreatment,
       signal,
+      'chart-delivery-v2',
     );
-    const seen = new Set<string>();
     return {
       ...result,
-      records: result.records.filter(record => {
-        const id = record._id ?? record.identifier;
-        if (id === undefined) {
-          return true;
-        }
-        if (seen.has(id)) {
-          return false;
-        }
-        seen.add(id);
-        return true;
-      }),
+      records: deduplicateInsulinRecords(
+        result.records.map(item => ({...item})),
+      ),
     };
   }
 
@@ -888,13 +926,29 @@ export class BrowserNightscoutClient {
     );
   }
 
+  /** Complete effective history for a reconstruction, with an inclusive through instant. */
+  async readBasalProfileHistory(
+    startMs: number,
+    throughMs: number,
+    signal?: AbortSignal,
+  ): Promise<BrowserNightscoutRange<BrowserNightscoutBasalProfile>> {
+    return this.readRange(
+      'profile',
+      startMs,
+      throughMs + 1,
+      decodeBrowserNightscoutBasalProfile,
+      signal,
+      'profile-history',
+    );
+  }
+
   private async readRange<T>(
     resource: BrowserNightscoutResource,
     startMs: number,
     endMs: number,
     decode: (value: unknown) => T | null,
     signal?: AbortSignal,
-    cacheVariant?: 'recorded',
+    cacheVariant?: 'recorded-v2' | 'profile-history' | 'chart-delivery-v2',
   ): Promise<BrowserNightscoutRange<T>> {
     if (
       !Number.isSafeInteger(startMs) ||
@@ -922,6 +976,9 @@ export class BrowserNightscoutClient {
             workspaceId: this.options.workspaceId,
             startMs,
             endMs,
+            ...(cacheVariant === 'profile-history'
+              ? {profileHistory: true}
+              : {}),
           },
           ...(signal === undefined ? {} : {signal}),
         }),
@@ -936,6 +993,17 @@ export class BrowserNightscoutClient {
         throw new Error(`Nightscout returned an incomplete ${resource} range.`);
       }
       const records = value.map(decode).filter((row): row is T => row !== null);
+      if (cacheVariant === 'recorded-v2' && records.length !== value.length) {
+        throw new Error('Nightscout returned malformed treatment records.');
+      }
+      if (
+        cacheVariant === 'profile-history' &&
+        (value.length >= 10_001 || records.length !== value.length)
+      ) {
+        throw new Error(
+          'Nightscout returned an incomplete or invalid profile history.',
+        );
+      }
       const fetchedAtMs = this.now();
       await this.storeCache(key, {
         schemaVersion: 2,
@@ -951,7 +1019,8 @@ export class BrowserNightscoutClient {
       return {
         records,
         freshness: {kind: 'fresh', fetchedAtMs},
-        ...(['entries', 'treatments'].includes(resource)
+        ...(['entries', 'treatments'].includes(resource) ||
+        cacheVariant === 'profile-history'
           ? {complete: true}
           : {}),
       };
@@ -993,7 +1062,8 @@ export class BrowserNightscoutClient {
       return {
         records,
         freshness: {kind: 'stale', fetchedAtMs: cached.fetchedAtMs},
-        ...(['entries', 'treatments'].includes(resource)
+        ...(['entries', 'treatments'].includes(resource) ||
+        cacheVariant === 'profile-history'
           ? {complete: false}
           : {}),
       };

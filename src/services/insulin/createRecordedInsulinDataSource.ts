@@ -55,7 +55,7 @@ export interface RecordedInsulinDataSourceDependencies {
     start: Date,
     end: Date,
   ) => Promise<RecordedTreatmentRange>;
-  /** Schedule effective at start, verified unchanged through the second instant. */
+  /** Complete effective history from start through the second instant. */
   readonly fetchBasalProfile?: (
     asOf: Date,
     through: Date,

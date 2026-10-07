@@ -1,6 +1,7 @@
 import {
   buildOracleMatchDetailsPayload,
   oracleMatchToCgmGraphData,
+  oracleTreatmentsToCgmInputs,
 } from 'app/services/oracle/oracleCgmGraphAdapter';
 import type {OracleMatchTrace} from 'app/services/oracle/oracleTypes';
 import {ORACLE_MINUTE_MS} from 'app/services/oracle/oracleConstants';
@@ -17,7 +18,7 @@ function makeMatch(overrides?: Partial<OracleMatchTrace>): OracleMatchTrace {
       {tMin: 1, sgv: 130},
     ],
     treatments30m: [
-      {ts: 1_700_000_000_000 + 5 * ORACLE_MINUTE_MS, insulin: 1.25},
+      {ts: 1_700_000_000_000 + 5 * ORACLE_MINUTE_MS, eventType: 'Correction Bolus', insulinBasis: 'recorded-bolus', insulin: 1.25},
       {ts: 1_700_000_000_000 + 12 * ORACLE_MINUTE_MS, carbs: 18},
       // ignored: non-positive
       {ts: 1_700_000_000_000 + 20 * ORACLE_MINUTE_MS, carbs: 0, insulin: 0},
@@ -93,5 +94,16 @@ describe('oracleCgmGraphAdapter', () => {
 
     expect(data.foodItems).toEqual([]);
     expect(data.insulinData).toEqual([]);
+  });
+
+  test('omits unknown or old unqualified values and preserves completed interval delivery', () => {
+    const ts = 1_700_000_000_000;
+    const graph = oracleTreatmentsToCgmInputs({idPrefix: 'evidence', treatments: [
+      {ts, eventType: 'Temp Basal', insulin: 3.2},
+      {ts: ts + ORACLE_MINUTE_MS, eventType: 'Correction Bolus', insulinBasis: 'unknown-bolus', insulin: 5},
+      {ts: ts + 2 * ORACLE_MINUTE_MS, endTs: ts + 22 * ORACLE_MINUTE_MS, eventType: 'Extended Bolus', insulinBasis: 'recorded-bolus', insulin: 0.5},
+    ]});
+    expect(graph.insulinData).toHaveLength(1);
+    expect(graph.insulinData[0]).toMatchObject({type: 'bolus', amount: 0.5, duration: 20, startTime: new Date(ts + 2 * ORACLE_MINUTE_MS).toISOString(), endTime: new Date(ts + 22 * ORACLE_MINUTE_MS).toISOString()});
   });
 });

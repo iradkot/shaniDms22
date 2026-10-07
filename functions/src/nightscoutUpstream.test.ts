@@ -13,6 +13,202 @@ const credential = {
   apiSecretSha1: 'a'.repeat(40),
 };
 
+test('reads complete effective profile history instead of latest-only singular profile', async () => {
+  const startMs = Date.parse('2026-10-07T00:00:00Z');
+  const rows = [-1, 1, 2].map(hour => ({
+    startDate: new Date(startMs + hour * 3_600_000).toISOString(),
+    defaultProfile: 'Default',
+    store: {Default: {basal: [{time: '00:00', value: hour === 2 ? 2 : 1}]}},
+  }));
+  const urls: URL[] = [];
+  const upstream = new NightscoutUpstream(
+    async () => [{address: '8.8.8.8', family: 4}],
+    async url => {
+      urls.push(url);
+      const through = Date.parse(
+        url.searchParams.get('find[startDate][$lte]')!,
+      );
+      const after = url.searchParams.has('find[startDate][$gt]')
+        ? Date.parse(url.searchParams.get('find[startDate][$gt]')!)
+        : -Infinity;
+      return rows
+        .filter(
+          row =>
+            +new Date(row.startDate) <= through &&
+            +new Date(row.startDate) > after,
+        )
+        .reverse()
+        .slice(0, Number(url.searchParams.get('count')));
+    },
+  );
+  assert.deepEqual(
+    await upstream.range(credential, {
+      version: 1,
+      kind: 'profile',
+      profileHistory: true,
+      startMs,
+      endMs: startMs + 3 * 3_600_000,
+    }),
+    [rows[0], rows[2], rows[1]],
+  );
+  assert.equal(urls.length, 3);
+  assert.ok(urls.every(url => url.pathname === '/api/v1/profiles.json'));
+  assert.equal(
+    urls[2]?.searchParams.get('find[startDate][$gt]'),
+    new Date(startMs).toISOString(),
+  );
+  assert.equal(
+    urls[2]?.searchParams.get('find[startDate][$lte]'),
+    new Date(startMs + 3 * 3_600_000 - 1).toISOString(),
+  );
+});
+
+test('profile history fails closed on a saturated bounded history', async () => {
+  const startMs = Date.parse('2026-10-07T00:00:00Z');
+  const upstream = new NightscoutUpstream(
+    async () => [{address: '8.8.8.8', family: 4}],
+    async url =>
+      Array.from({length: Number(url.searchParams.get('count'))}, () => ({
+        startDate: new Date(
+          url.searchParams.has('find[startDate][$gt]')
+            ? startMs + 3_600_000
+            : Date.parse(url.searchParams.get('find[startDate][$lte]')!),
+        ).toISOString(),
+      })),
+  );
+  await assert.rejects(
+    upstream.range(credential, {
+      version: 1,
+      kind: 'profile',
+      profileHistory: true,
+      startMs,
+      endMs: startMs + 3 * 3_600_000,
+    }),
+    error =>
+      error instanceof NightscoutUpstreamError &&
+      error.code === 'incomplete_nightscout_profile_history',
+  );
+});
+
+for (const hasUpdate of [false, true]) {
+  test(`same-time carry-in uploads are all preserved (intraday update=${hasUpdate})`, async () => {
+    const startMs = Date.parse('2026-10-07T00:00:00Z');
+    const effective = new Date(startMs - 3_600_000).toISOString();
+    const rows = [
+      {
+        startDate: effective,
+        store: {Default: {basal: [{time: '00:00', value: 1}]}},
+      },
+      {
+        startDate: effective,
+        store: {Default: {basal: [{time: '00:00', value: 2}]}},
+      },
+      ...(hasUpdate
+        ? [{startDate: new Date(startMs + 3_600_000).toISOString()}]
+        : []),
+    ];
+    const urls: URL[] = [];
+    const upstream = new NightscoutUpstream(
+      async () => [{address: '8.8.8.8', family: 4}],
+      async url => {
+        urls.push(url);
+        const through = Date.parse(
+          url.searchParams.get('find[startDate][$lte]')!,
+        );
+        const after = url.searchParams.has('find[startDate][$gt]')
+          ? Date.parse(url.searchParams.get('find[startDate][$gt]')!)
+          : -Infinity;
+        const atOrAfter = url.searchParams.has('find[startDate][$gte]')
+          ? Date.parse(url.searchParams.get('find[startDate][$gte]')!)
+          : -Infinity;
+        return rows
+          .filter(row => {
+            const effectiveMs = Date.parse(row.startDate);
+            return (
+              effectiveMs <= through &&
+              effectiveMs > after &&
+              effectiveMs >= atOrAfter
+            );
+          })
+          .sort(
+            (left, right) =>
+              Date.parse(right.startDate) - Date.parse(left.startDate),
+          )
+          .slice(0, Number(url.searchParams.get('count')));
+      },
+    );
+    const result = (await upstream.range(credential, {
+      version: 1,
+      kind: 'profile',
+      profileHistory: true,
+      startMs,
+      endMs: startMs + 3 * 3_600_000,
+    })) as typeof rows;
+    assert.equal(result.length, rows.length);
+    assert.equal(result.filter(row => row.startDate === effective).length, 2);
+    const tiedRead = urls.find(url =>
+      url.searchParams.has('find[startDate][$gte]'),
+    );
+    assert.equal(
+      tiedRead?.searchParams.get('find[startDate][$gte]'),
+      effective,
+    );
+    assert.equal(
+      tiedRead?.searchParams.get('find[startDate][$lte]'),
+      effective,
+    );
+  });
+}
+
+test('same-time history fails closed at the shared 1000-row maximum', async () => {
+  const startMs = Date.parse('2026-10-07T00:00:00Z');
+  const effective = new Date(startMs - 3_600_000).toISOString();
+  const counts: number[] = [];
+  const upstream = new NightscoutUpstream(
+    async () => [{address: '8.8.8.8', family: 4}],
+    async url => {
+      const count = Number(url.searchParams.get('count'));
+      if (url.searchParams.has('find[startDate][$gte]')) counts.push(count);
+      return Array.from({length: count}, () => ({startDate: effective}));
+    },
+  );
+  await assert.rejects(
+    upstream.range(credential, {
+      version: 1,
+      kind: 'profile',
+      profileHistory: true,
+      startMs,
+      endMs: startMs + 3 * 3_600_000,
+    }),
+    error =>
+      error instanceof NightscoutUpstreamError &&
+      error.code === 'incomplete_nightscout_profile_history',
+  );
+  assert.deepEqual(counts, [100, 200, 400, 800, 1000]);
+});
+
+test('failed equality read never falls back to the truncated latest probe', async () => {
+  const startMs = Date.parse('2026-10-07T00:00:00Z');
+  const row = {startDate: new Date(startMs - 3_600_000).toISOString()};
+  const upstream = new NightscoutUpstream(
+    async () => [{address: '8.8.8.8', family: 4}],
+    async url => {
+      if (url.searchParams.has('find[startDate][$gte]'))
+        throw new Error('equality offline');
+      return [row, row];
+    },
+  );
+  await assert.rejects(
+    upstream.range(credential, {
+      version: 1,
+      kind: 'profile',
+      profileHistory: true,
+      startMs,
+      endMs: startMs + 3 * 3_600_000,
+    }),
+  );
+});
+
 test('validates subject permissions and forwards the raw token for actual glucose access', async () => {
   const accessToken = 'shani-0123456789abcdef';
   const calls: URL[] = [];

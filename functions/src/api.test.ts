@@ -575,6 +575,42 @@ test('proxies a bounded Nightscout range without exposing its credential', async
   assert.equal(setup.nightscoutCalls.range.length, 1);
 });
 
+test('forwards the optional profile history request only for a bounded profile range', async () => {
+  const setup = dependencies();
+  await setup.nightscoutVault.put('user-1', {
+    url: 'https://nightscout.example/',
+    apiSecretSha1: 'a'.repeat(40),
+  });
+  const response = new CapturedResponse();
+  await setup.handler(
+    request('/v1/nightscout/range', {
+      version: 1,
+      kind: 'profile',
+      profileHistory: true,
+      ...rangeIdentity(),
+      startMs: 1_700_000_000_000,
+      endMs: 1_700_086_400_000,
+    }),
+    response,
+  );
+  assert.equal(response.statusCode, 200);
+  assert.equal(setup.nightscoutCalls.range[0]?.request.profileHistory, true);
+  const invalid = new CapturedResponse();
+  await setup.handler(
+    request('/v1/nightscout/range', {
+      version: 1,
+      kind: 'entries',
+      profileHistory: true,
+      ...rangeIdentity(),
+      startMs: 1_700_000_000_000,
+      endMs: 1_700_086_400_000,
+    }),
+    invalid,
+  );
+  assert.equal(invalid.statusCode, 400);
+  assert.equal(setup.nightscoutCalls.range.length, 1);
+});
+
 test('rejects an excessive Nightscout range before proxying', async () => {
   const setup = dependencies();
   await setup.nightscoutVault.put('user-1', {

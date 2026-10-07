@@ -152,9 +152,9 @@ describe('native insulin evidence is consistent between legacy UI and AI', () =>
       new Date(endMs),
     );
     expect(metrics).toMatchObject({
-      totalBasal: 1.5,
+      totalBasal: expect.closeTo(1.5, 9),
       totalBolus: 1.25,
-      totalInsulin: 2.75,
+      totalInsulin: expect.closeTo(2.75, 9),
     });
 
     const evidence = await runAiAnalystTool(scope, 'getInsulinDeliveryStats', {
@@ -168,9 +168,9 @@ describe('native insulin evidence is consistent between legacy UI and AI', () =>
         basalEstimated: true,
         totals: {
           bolusU: 1.25,
-          basalU: 1.5,
-          tempBasalU: 1,
-          totalU: metrics.totalInsulin,
+          basalU: expect.closeTo(1.5, 9),
+          tempBasalU: null,
+          totalU: expect.closeTo(metrics.totalInsulin, 9),
         },
       },
     });
@@ -182,21 +182,119 @@ describe('native insulin evidence is consistent between legacy UI and AI', () =>
     ).toHaveLength(1);
     expect(
       resources.filter(resource => resource.startsWith('profile')),
-    ).toHaveLength(1);
+    ).toHaveLength(2); // Chart schedule plus verified delivery-summary history.
+  });
+
+  it('passes the original insulin observation and completeness into AI period comparisons', async () => {
+    doseRecords = [
+      {
+        _id: 'unfinished-comparison-dose',
+        eventType: 'Correction Bolus',
+        created_at: timestamp,
+        insulin: 2,
+        duration: 60,
+      },
+    ];
+    const comparison = await runAiAnalystTool(
+      scope,
+      'analyzeAgpPeriodComparison',
+      {
+        currentStart: new Date(startMs).toISOString(),
+        currentEnd: new Date(endMs).toISOString(),
+        previousStart: new Date(startMs - 86_400_000).toISOString(),
+        previousEnd: new Date(endMs - 86_400_000).toISOString(),
+      },
+    );
+    expect(comparison).toMatchObject({
+      ok: true,
+      result: {
+        dataQuality: {currentBolusEvidenceComplete: false},
+        corrections: {currentCount: null, currentAvgDrop3h: null},
+      },
+    });
+  });
+
+  it('keeps an unverified temp-basal breakdown null when the delivered total uses recorded evidence', async () => {
+    doseRecords = [{eventType: 'Temp Basal', enteredBy: 'loop://phone', created_at: new Date(startMs).toISOString(), duration: 60, rate: 1, amount: 0.8}];
+    const evidence = await runAiAnalystTool(scope, 'getInsulinDeliveryStats', {
+      startDate: new Date(startMs).toISOString(), endDate: new Date(endMs).toISOString(),
+    });
+    expect(evidence).toMatchObject({ok: true, result: {
+      tempBasalBreakdown: {quality: 'unavailable', explanation: expect.stringContaining('Null means unknown, not zero')},
+      totals: {basalU: 0.8, tempBasalU: null, totalU: 0.8},
+      dailyAverages: {tempBasalU: null}, ratio: {tempBasalPercent: null},
+    }});
+  });
+
+  it('clips completed interval boluses to the requested range and allocates their hourly delivery', async () => {
+    const rangeStart = startMs + 30 * 60_000;
+    const rangeEnd = endMs + 30 * 60_000;
+    jest.spyOn(Date, 'now').mockReturnValue(endMs + 60 * 60_000);
+    doseRecords = [
+      {_id: 'completed-interval', eventType: 'Extended Bolus', created_at: new Date(startMs + 15 * 60_000).toISOString(), endDate: new Date(endMs + 45 * 60_000).toISOString(), deliveredUnits: 6, insulin: 9},
+      {_id: 'outside-request', eventType: 'Correction Bolus', created_at: new Date(startMs + 20 * 60_000).toISOString(), insulin: 7},
+    ];
+    const evidence = await runAiAnalystTool(scope, 'getInsulinDeliveryStats', {
+      startDate: new Date(rangeStart).toISOString(), endDate: new Date(rangeEnd).toISOString(),
+    });
+    expect(evidence).toMatchObject({ok: true, result: {
+      totals: {bolusU: 4},
+      counts: {bolusCount: 1},
+      patterns: {hourlyBolusDistribution: [
+        {hour: new Date(startMs).getHours(), totalU: 2},
+        {hour: new Date(endMs).getHours(), totalU: 2},
+      ].sort((a, b) => a.hour - b.hour)},
+    }});
+  });
+
+  it('keeps rounded hourly amounts equal to the bolus total for small completed interval doses', async () => {
+    const rangeStart = startMs + 30 * 60_000;
+    const rangeEnd = endMs + 30 * 60_000;
+    jest.spyOn(Date, 'now').mockReturnValue(endMs + 60 * 60_000);
+    doseRecords = [{eventType: 'Extended Bolus', created_at: new Date(rangeStart).toISOString(), endDate: new Date(rangeEnd).toISOString(), deliveredUnits: 0.05, insulin: 0.5}];
+    const evidence = await runAiAnalystTool(scope, 'getInsulinDeliveryStats', {
+      startDate: new Date(rangeStart).toISOString(), endDate: new Date(rangeEnd).toISOString(),
+    });
+    const firstHour = new Date(startMs).getHours();
+    const secondHour = new Date(endMs).getHours();
+    expect(evidence).toMatchObject({ok: true, result: {
+      totals: {bolusU: 0.05},
+      patterns: {hourlyBolusDistribution: [
+        {hour: firstHour, totalU: firstHour < secondHour ? 0.03 : 0.02},
+        {hour: secondHour, totalU: firstHour < secondHour ? 0.02 : 0.03},
+      ].sort((a, b) => a.hour - b.hour)},
+    }});
   });
 
   it('reuses recorded dose rules for AI bolus totals without another treatment read', async () => {
-    const dose = {_id: 'one-dose', syncIdentifier: '', eventType: 'Correction Bolus', insulin: 2,
-      deliveredUnits: 0.4, created_at: timestamp};
+    const dose = {
+      _id: 'one-dose',
+      syncIdentifier: '',
+      eventType: 'Correction Bolus',
+      insulin: 2,
+      deliveredUnits: 0.4,
+      created_at: timestamp,
+    };
     doseRecords = [dose, {...dose}];
     const range = {startMs: endMs - 86_400_000, endMs};
     const context = await loadInsulinContext(range);
-    const evidence = await runAiAnalystTool(scope, 'getInsulinSummary', {rangeDays: 1});
-    expect(context.recordedInsulin).toMatchObject({quality: 'partial', bolusUnits: 0.4});
-    expect(evidence).toMatchObject({ok: true, result: {
-      totals: {bolusU: 0.4}, recordedInsulin: {quality: 'partial', bolusUnits: 0.4},
-    }});
-    expect(resources.filter(resource => resource.startsWith('treatments'))).toHaveLength(1);
+    const evidence = await runAiAnalystTool(scope, 'getInsulinSummary', {
+      rangeDays: 1,
+    });
+    expect(context.recordedInsulin).toMatchObject({
+      quality: 'partial',
+      bolusUnits: 0.4,
+    });
+    expect(evidence).toMatchObject({
+      ok: true,
+      result: {
+        totals: {bolusU: 0.4},
+        recordedInsulin: {quality: 'partial', bolusUnits: 0.4},
+      },
+    });
+    expect(
+      resources.filter(resource => resource.startsWith('treatments')),
+    ).toHaveLength(1);
   });
 
   it('does not tell AI that insulin delivery was zero when treatments could not be loaded', async () => {

@@ -10,6 +10,67 @@
   "cases": [
     {"name": "schedule fills uncovered time", "records": [], "expectedBasalUnits": 3},
     {
+      "name": "verified profile uploads integrate repeated and changed effective rates",
+      "profile": {
+        "entries": [{"time": "00:00", "value": 1}], "timeZone": "UTC", "verifiedThroughMs": 1790478000000,
+        "history": [
+          {"startMs": 1790463600000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 1}]},
+          {"startMs": 1790470800000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 1}]},
+          {"startMs": 1790474400000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 2}]}
+        ]
+      },
+      "records": [], "expectedBasalUnits": 4
+    },
+    {
+      "name": "recorded delivery crossing profile upload boundaries is counted once",
+      "profile": {
+        "entries": [{"time": "00:00", "value": 1}], "timeZone": "UTC", "verifiedThroughMs": 1790478000000,
+        "history": [
+          {"startMs": 1790463600000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 1}]},
+          {"startMs": 1790470800000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 1}]},
+          {"startMs": 1790474400000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 2}]}
+        ]
+      },
+      "records": [{"eventType": "Temp Basal", "created_at": "2026-09-27T00:30:00Z", "duration": 120, "absolute": 4, "deliveredUnits": 1.6}],
+      "expectedBasalUnits": 3.1, "expectedRecordedBasalUnits": 1.6
+    },
+    {
+      "name": "percentage temp follows changed profile upload rates",
+      "profile": {
+        "entries": [{"time": "00:00", "value": 1}], "timeZone": "UTC", "verifiedThroughMs": 1790478000000,
+        "history": [
+          {"startMs": 1790463600000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 1}]},
+          {"startMs": 1790474400000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 2}]}
+        ]
+      },
+      "records": [{"eventType": "Temp Basal", "created_at": "2026-09-27T00:00:00Z", "duration": 180, "percent": 50}],
+      "expectedBasalUnits": 6
+    },
+    {
+      "name": "complete cached day history does not apply updates after a matched cutoff",
+      "profile": {
+        "entries": [{"time": "00:00", "value": 1}], "timeZone": "UTC", "verifiedThroughMs": 1790553599999,
+        "history": [
+          {"startMs": 1790463600000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 1}]},
+          {"startMs": 1790474400000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 2}]},
+          {"startMs": 1790481600000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 3}]}
+        ]
+      },
+      "records": [], "expectedBasalUnits": 4
+    },
+    {
+      "name": "verified default profile uploads cannot resolve profile switch selection",
+      "profile": {
+        "entries": [{"time": "00:00", "value": 1}], "timeZone": "UTC", "verifiedThroughMs": 1790478000000,
+        "history": [
+          {"startMs": 1790463600000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 1}]},
+          {"startMs": 1790474400000, "timeZone": "UTC", "entries": [{"time": "00:00", "value": 2}]}
+        ]
+      },
+      "records": [{"eventType": "Profile Switch", "created_at": "2026-09-27T01:00:00Z", "profile": "Other"}],
+      "expectedBasalUnits": null
+    },
+    {
       "name": "temporary absolute basal replaces the schedule",
       "records": [{"eventType": "Temp Basal", "created_at": "2026-09-27T01:00:00Z", "duration": 60, "absolute": 2}],
       "expectedBasalUnits": 4
@@ -142,6 +203,31 @@
       "profile": {"timeZone": "Unknown/Timezone", "entries": [{"time": "00:00", "value": 1}]},
       "records": [],
       "expectedBasalUnits": null
+    },
+    {
+      "name": "explicitly expired carry-in profile switch permits the verified default schedule",
+      "records": [{"eventType": "Profile Switch", "created_at": "2026-09-26T22:00:00Z", "endDate": "2026-09-26T23:00:00Z", "profile": "Other"}],
+      "expectedBasalUnits": 3
+    },
+    {
+      "name": "complete recorded delivery wins over conflicting same-time programmed controls",
+      "records": [
+        {"_id": "conflicting-temp-one", "eventType": "Temp Basal", "created_at": "2026-09-27T00:00:00Z", "duration": 180, "absolute": 1},
+        {"_id": "conflicting-temp-two", "eventType": "Temp Basal", "created_at": "2026-09-27T00:00:00Z", "duration": 180, "absolute": 2},
+        {"_id": "actual-basal", "eventType": "Basal", "created_at": "2026-09-27T00:00:00Z", "duration": 180, "deliveredUnits": 0.8}
+      ],
+      "expectedBasalUnits": 0.8,
+      "expectedRecordedBasalUnits": 0.8
+    },
+    {
+      "name": "partial recorded delivery cannot resolve conflicting controls in uncovered time",
+      "records": [
+        {"_id": "conflicting-temp-one", "eventType": "Temp Basal", "created_at": "2026-09-27T00:00:00Z", "duration": 180, "absolute": 1},
+        {"_id": "conflicting-temp-two", "eventType": "Temp Basal", "created_at": "2026-09-27T00:00:00Z", "duration": 180, "absolute": 2},
+        {"_id": "actual-basal", "eventType": "Basal", "created_at": "2026-09-27T00:00:00Z", "duration": 60, "deliveredUnits": 0.8}
+      ],
+      "expectedBasalUnits": null,
+      "expectedRecordedBasalUnits": 0.8
     }
   ]
 }

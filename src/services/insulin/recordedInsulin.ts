@@ -29,6 +29,11 @@ export const parseInsulinNumber = (value: unknown): number | undefined => {
       : NaN;
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 };
+/** An invalid explicit delivery must never fall back to the requested dose. */
+export const getRecordedBolusUnits = (record: Treatment): number | undefined =>
+  record.deliveredUnits != null
+    ? parseInsulinNumber(record.deliveredUnits)
+    : parseInsulinNumber(record.insulin);
 export const getInsulinStartMs = (record: Treatment): number => {
   for (const value of [record.created_at, record.timestamp, record.date]) {
     const parsed = timestamp(value);
@@ -62,10 +67,50 @@ export const getInsulinEndMs = (record: Treatment, startMs: number): number => {
     : NaN;
 };
 
-export const deduplicateInsulinRecords = (
-  records: readonly Treatment[],
-): Treatment[] => {
-  const byId = new Map<string, Treatment>();
+/** Same completion rules for charts, timelines and recorded amount summaries. */
+export const getFinalizedRecordedBolus = (
+  record: Treatment,
+  observedAtMs: number,
+) => {
+  const type = typeof record.eventType === 'string' ? record.eventType : '';
+  const startMs = getInsulinStartMs(record);
+  const endMs = getInsulinEndMs(record, startMs);
+  const units = getRecordedBolusUnits(record);
+  if (
+    !/bolus/i.test(type) ||
+    record.isValid === false ||
+    record.deleted === true ||
+    record.isMutable === true ||
+    record.mutable === true ||
+    units === undefined ||
+    ![startMs, endMs, observedAtMs].every(Number.isFinite) ||
+    endMs < startMs ||
+    endMs > observedAtMs ||
+    record.type === 'dual' ||
+    /combo/i.test(type) ||
+    ((/extended/i.test(type) || record.type === 'square') && endMs === startMs)
+  )
+    return undefined;
+  return {startMs, endMs, units};
+};
+
+/** A generic treatment's amount may be a percentage or command, not insulin U. */
+export const getFinalizedTreatmentInsulinUnits = (
+  record: Treatment,
+  observedAtMs: number,
+): number | undefined => {
+  const bolus = getFinalizedRecordedBolus(record, observedAtMs);
+  if (bolus) return bolus.units;
+  const startMs = getInsulinStartMs(record);
+  const endMs = getInsulinEndMs(record, startMs);
+  return getRecordedBasalIntervals([record], {startMs, endMs}, observedAtMs)[0]
+    ?.units;
+};
+
+export const deduplicateInsulinRecords = <T extends Treatment>(
+  records: readonly T[],
+): T[] => {
+  const byId = new Map<string, T>();
   records.forEach((record, index) => {
     const identity = [
       record.syncIdentifier,
@@ -235,10 +280,7 @@ export const buildRecordedInsulinSummary = (
       if (!overlaps) {
         continue;
       }
-      const amount =
-        record.deliveredUnits != null
-          ? parseInsulinNumber(record.deliveredUnits)
-          : parseInsulinNumber(record.insulin);
+      const amount = getRecordedBolusUnits(record);
       if (
         amount === undefined ||
         !Number.isFinite(end) ||

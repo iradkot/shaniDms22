@@ -1,6 +1,12 @@
 import {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import {FoodItemDTO} from 'app/types/food.types';
 import {parseTagsFromNotes} from 'app/services/mealTagService';
+import {
+  deduplicateInsulinRecords,
+  getInsulinStartMs,
+  getRecordedBolusUnits,
+  getFinalizedRecordedBolus,
+} from 'app/services/insulin/recordedInsulin';
 
 function insulinEntryStartMs(entry: InsulinDataEntry): number {
   const raw = entry.startTime ?? entry.timestamp;
@@ -30,18 +36,19 @@ function finiteNumber(value: unknown): number | null {
 }
 
 function treatmentTimestamp(treatment: any): string | undefined {
-  for (const value of [treatment?.created_at, treatment?.timestamp]) {
-    if (typeof value === 'string' && Number.isFinite(Date.parse(value))) {
-      return new Date(Date.parse(value)).toISOString();
-    }
-  }
-  return undefined;
+  const startMs = getInsulinStartMs(treatment);
+  return Number.isFinite(startMs) ? new Date(startMs).toISOString() : undefined;
 }
 
 export function mapNightscoutTreatmentsToInsulinDataEntries(
   treatments: any[] | null | undefined,
+  observedAtMs: number = Date.now(),
 ): InsulinDataEntry[] {
-  const sourceTreatments = treatments ?? [];
+  const sourceTreatments = deduplicateInsulinRecords(
+    (treatments ?? []).filter(
+      t => t !== null && typeof t === 'object' && !Array.isArray(t),
+    ),
+  ).filter(t => t.isValid !== false && t.deleted !== true);
   const resumeTimes = sourceTreatments
     .filter((t: any) => /^(Resume Pump|Pump Resume)$/i.test(t?.eventType ?? ''))
     .map(treatmentTimestamp)
@@ -51,7 +58,7 @@ export function mapNightscoutTreatmentsToInsulinDataEntries(
   const mapped = sourceTreatments
     .map((t: any) => {
       const timestamp = treatmentTimestamp(t);
-      const insulin = finiteNumber(t?.insulin) ?? finiteNumber(t?.amount);
+      const insulin = getRecordedBolusUnits(t);
       const eventType = typeof t?.eventType === 'string' ? t.eventType : '';
 
       if (
@@ -60,10 +67,22 @@ export function mapNightscoutTreatmentsToInsulinDataEntries(
         insulin > 0 &&
         /bolus/i.test(eventType)
       ) {
+        const dose = getFinalizedRecordedBolus(t, observedAtMs);
+        if (!dose) {
+          return null;
+        }
+        const {startMs, endMs} = dose;
         return {
           type: 'bolus',
           amount: insulin,
           timestamp,
+          ...(endMs > startMs
+            ? {
+                startTime: timestamp,
+                endTime: new Date(endMs).toISOString(),
+                duration: (endMs - startMs) / 60_000,
+              }
+            : {}),
         } satisfies InsulinDataEntry;
       }
 
@@ -179,7 +198,10 @@ export function filterInsulinDataToRange(
       return false;
     }
     if (entry.type === 'bolus') {
-      return entryStartMs >= startMs && entryStartMs <= endMs;
+      const entryEndMs = insulinEntryEndMs(entry, entryStartMs);
+      return entryEndMs > entryStartMs
+        ? entryStartMs <= endMs && entryEndMs > startMs
+        : entryStartMs >= startMs && entryStartMs <= endMs;
     }
     const entryEndMs = insulinEntryEndMs(entry, entryStartMs);
     return entryEndMs === entryStartMs

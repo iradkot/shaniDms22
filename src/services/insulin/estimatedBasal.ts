@@ -10,6 +10,14 @@ import {
 export interface EstimatedBasalProfile {
   entries: readonly {time: string; timeAsSeconds?: number; value: number}[];
   timeZone?: string;
+  /** Complete effective schedules: a carry-in at/before start plus every later update. */
+  history?: readonly {
+    startMs: number;
+    entries: EstimatedBasalProfile['entries'];
+    timeZone?: string;
+  }[];
+  /** Inclusive upper bound checked by the profile transport. */
+  verifiedThroughMs?: number;
 }
 
 type Period = {startMs: number; endMs: number};
@@ -203,7 +211,8 @@ const buildControls = (
     if (startMs >= period.endMs) {
       continue;
     }
-    // The caller supplies an as-of schedule, not an intraday profile history.
+    // Default-profile upload history does not resolve treatment Profile Switch
+    // selection, percentages or temporary restoration semantics.
     if (profileChange) {
       const hasLifetime =
         record.endDate != null ||
@@ -344,6 +353,53 @@ export const buildEstimatedBasalUnits = (
     !Number.isFinite(new Date(endMs).getTime())
   ) {
     return undefined;
+  }
+  if (profile?.history !== undefined) {
+    const history = profile.history;
+    if (
+      !Array.isArray(history) ||
+      !history.length ||
+      !Number.isFinite(profile.verifiedThroughMs) ||
+      profile.verifiedThroughMs! < endMs - 1 ||
+      history.some(
+        (entry, index) =>
+          !entry ||
+          typeof entry !== 'object' ||
+          !Number.isFinite(entry.startMs) ||
+          entry.startMs > profile.verifiedThroughMs! ||
+          (index > 0 && entry.startMs <= history[index - 1]!.startMs) ||
+          !parseSchedule(entry) ||
+          !buildClock(entry.timeZone),
+      ) ||
+      history[0]!.startMs > startMs
+    ) {
+      return undefined;
+    }
+    let total = 0;
+    for (let index = 0; index < history.length; index++) {
+      const current = history[index]!;
+      const left = Math.max(startMs, current.startMs);
+      const right = Math.min(endMs, history[index + 1]?.startMs ?? endMs);
+      if (right <= left) {
+        continue;
+      }
+      const units = buildEstimatedBasalUnits(
+        records,
+        {startMs: left, endMs: right},
+        observedAtMs,
+        {
+          entries: current.entries,
+          ...(current.timeZone === undefined
+            ? {}
+            : {timeZone: current.timeZone}),
+        },
+      );
+      if (units === undefined || !Number.isFinite(total + units)) {
+        return undefined;
+      }
+      total += units;
+    }
+    return total;
   }
   const schedule = parseSchedule(profile);
   const clock = buildClock(profile?.timeZone);

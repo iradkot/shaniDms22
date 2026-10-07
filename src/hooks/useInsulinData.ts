@@ -95,6 +95,7 @@ export const useInsulinData = (date: Date) => {
     carbTreatments: context?.carbTreatments ?? [],
     deviceStatus: context?.deviceStatus ?? [],
     loadSamples: context?.loadSamples ?? [],
+    recordedInsulin: context?.recordedInsulin ?? {quality: 'unavailable' as const},
     availability: context?.availability ?? unavailable,
     isLoading,
     error,

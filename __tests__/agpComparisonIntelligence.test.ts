@@ -16,6 +16,199 @@ const range = {
 };
 
 describe('AGP comparison intelligence', () => {
+  it.each(['current', 'previous'] as const)(
+    'retains glucose patterns but withholds insulin drivers when %s bolus evidence is missing',
+    async missing => {
+      const evidence = buildAgpComparisonEvidence({
+        currentRange: range.current,
+        previousRange: range.previous,
+        currentBgData: buildPeriodSamples(range.current.start, 60, 215),
+        previousBgData: buildPeriodSamples(range.previous.start, 130, 130),
+        currentTreatments: missing === 'current' ? undefined : [],
+        previousTreatments: missing === 'previous' ? undefined : [],
+      });
+      const result = await runAgpComparisonOrchestra({evidence});
+      const patterns = result.insights.filter(item =>
+        item.id.startsWith('agp-'),
+      );
+      expect(patterns.length).toBeGreaterThan(0);
+      for (const pattern of patterns) {
+        expect(pattern.possibleDriversEn.join(' ')).not.toMatch(
+          /bolus|correction|insulin|basal|carb ratio/i,
+        );
+        expect(pattern.possibleDriversHe.join(' ')).not.toMatch(
+          /בולוס|תיקון|אינסולין|בזאל|יחס פחמימות/,
+        );
+      }
+    },
+  );
+
+  it.each([
+    {name: 'missing transport', currentTreatments: undefined},
+    {
+      name: 'incomplete transport',
+      currentTreatments: [],
+      currentTreatmentsComplete: false,
+    },
+    {name: 'malformed transport row', currentTreatments: [null]},
+  ])('does not turn $name into a known zero correction count', input => {
+    const evidence = buildAgpComparisonEvidence({
+      currentRange: range.current,
+      previousRange: range.previous,
+      currentBgData: [],
+      previousBgData: [],
+      previousTreatments: [],
+      ...input,
+    });
+    expect(evidence.corrections.currentCount).toBeNull();
+    expect(evidence.corrections.previousCount).toBe(0);
+    expect(evidence.dataQuality.currentBolusEvidenceComplete).toBe(false);
+    expect(evidence.dataQuality.previousBolusEvidenceComplete).toBe(true);
+  });
+
+  it('uses the original treatment observation even after an extended bolus would have ended', () => {
+    const startMs = +range.current.start;
+    const evidence = buildAgpComparisonEvidence({
+      currentRange: range.current,
+      previousRange: range.previous,
+      currentBgData: [],
+      previousBgData: [],
+      previousTreatments: [],
+      currentTreatmentsObservedAtMs: startMs + 12.5 * 3_600_000,
+      currentTreatments: [
+        {
+          eventType: 'Extended Bolus',
+          created_at: new Date(startMs + 12 * 3_600_000).toISOString(),
+          duration: 60,
+          insulin: 2,
+        },
+      ],
+    });
+    expect(evidence.corrections.currentCount).toBeNull();
+    expect(evidence.dataQuality.currentBolusEvidenceComplete).toBe(false);
+  });
+
+  it('excludes pre-period corrections and carbs while retaining a nearby carry-in bolus for meal timing', () => {
+    const startMs = +range.current.start;
+    const mealMs = startMs + 10 * 60_000;
+    const evidence = buildAgpComparisonEvidence({
+      currentRange: range.current,
+      previousRange: range.previous,
+      currentBgData: [sample(mealMs, 120), sample(mealMs + 3_600_000, 160)],
+      previousBgData: [],
+      previousTreatments: [],
+      currentTreatments: [
+        {
+          eventType: 'Correction Bolus',
+          created_at: new Date(startMs - 2 * 3_600_000).toISOString(),
+          insulin: 1,
+        },
+        {
+          eventType: 'Bolus',
+          created_at: new Date(startMs - 10 * 60_000).toISOString(),
+          insulin: 2,
+        },
+        {
+          eventType: 'Carb Correction',
+          created_at: new Date(mealMs).toISOString(),
+          carbs: 20,
+        },
+        {
+          eventType: 'Carb Correction',
+          created_at: new Date(startMs - 20 * 60_000).toISOString(),
+          carbs: 50,
+        },
+      ],
+    });
+    expect(evidence.corrections.currentCount).toBe(0);
+    expect(
+      evidence.meals.reduce((sum, item) => sum + item.currentCount, 0),
+    ).toBe(1);
+    expect(
+      evidence.meals.find(item => item.currentCount === 1)?.examples[0],
+    ).toMatchObject({
+      carbsG: 20,
+      bolusU: 2,
+      minutesFromBolusToCarbs: -20,
+    });
+  });
+
+  it('withholds correction conclusions when a bolus is unknown while retaining glucose comparisons', async () => {
+    const currentStart = +range.current.start;
+    const previousStart = +range.previous.start;
+    const correctionTreatments = (startMs: number) =>
+      [8, 16].map(hour => ({
+        eventType: 'Correction Bolus',
+        created_at: new Date(startMs + hour * 3_600_000).toISOString(),
+        insulin: 1,
+      }));
+    const correctionSamples = (startMs: number, after: number) =>
+      [8, 16].flatMap(hour => [
+        sample(startMs + hour * 3_600_000, 180),
+        sample(startMs + (hour + 3) * 3_600_000, after),
+      ]);
+    const evidence = buildAgpComparisonEvidence({
+      currentRange: range.current,
+      previousRange: range.previous,
+      currentBgData: correctionSamples(currentStart, 100),
+      previousBgData: correctionSamples(previousStart, 160),
+      currentTreatments: [
+        ...correctionTreatments(currentStart),
+        {
+          eventType: 'Correction Bolus',
+          created_at: new Date(currentStart + 9 * 3_600_000).toISOString(),
+        },
+      ],
+      previousTreatments: correctionTreatments(previousStart),
+    });
+    expect(evidence.corrections.currentCount).toBeNull();
+    expect(evidence.corrections.currentAvgDrop3h).toBeNull();
+    expect(evidence.dataQuality.warnings.join(' ')).toContain('bolus');
+    expect(evidence.current.sampleCount).toBe(4);
+    expect(
+      (await runAgpComparisonOrchestra({evidence})).insights.some(
+        item => item.category === 'correction',
+      ),
+    ).toBe(false);
+  });
+
+  it('retains meal glucose and carb comparisons without inventing insulin timing when a bolus is unfinished', async () => {
+    const currentStart = +range.current.start;
+    const previousStart = +range.previous.start;
+    const evidence = buildAgpComparisonEvidence({
+      currentRange: range.current,
+      previousRange: range.previous,
+      currentBgData: mealResponseSamples(currentStart, 110, 230),
+      previousBgData: mealResponseSamples(previousStart, 110, 155),
+      currentTreatments: [
+        ...mealTreatments(currentStart),
+        {
+          eventType: 'Bolus',
+          created_at: new Date(currentStart + 12 * 3_600_000).toISOString(),
+          insulin: 5,
+          isMutable: true,
+        },
+      ],
+      previousTreatments: mealTreatments(previousStart),
+    });
+    const lunch = evidence.meals.find(item => item.mealType === 'lunch')!;
+    expect(lunch.currentAvgBolusMinutesBefore).toBeNull();
+    expect(lunch.currentAvgCarbs).toBe(45);
+    expect(lunch.currentAvgRise).toBeGreaterThan(lunch.previousAvgRise!);
+    expect(
+      lunch.examples.every(
+        item => item.bolusU === null && item.minutesFromBolusToCarbs === null,
+      ),
+    ).toBe(true);
+    const meal = (await runAgpComparisonOrchestra({evidence})).insights.find(
+      item => item.category === 'meal',
+    )!;
+    expect(meal).toBeDefined();
+    expect(meal.possibleDriversEn.join(' ')).not.toMatch(
+      /bolus|carb ratio|insulin/i,
+    );
+  });
+
   it('detects a meaningful AGP segment difference and related settings diff', async () => {
     const previousBgData = buildPeriodSamples(range.previous.start, 130, 130);
     const currentBgData = buildPeriodSamples(range.current.start, 130, 215);
