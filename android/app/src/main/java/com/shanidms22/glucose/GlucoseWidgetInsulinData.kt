@@ -47,6 +47,7 @@ private data class RecordedBasalEvent(val timeMs: Long, val intervalIndex: Int, 
  */
 internal fun calculateWidgetInsulinStats(
   treatments: JSONArray?, startMs: Long, endMs: Long, observedAtMs: Long = endMs,
+  treatmentObservedAtMs: (JSONObject) -> Long = { observedAtMs },
 ): WidgetInsulinStats? {
   if (treatments == null || endMs <= startMs) return null
   val byIdentity = linkedMapOf<String, JSONObject>()
@@ -66,6 +67,7 @@ internal fun calculateWidgetInsulinStats(
     val type = row.optString("eventType", "")
     val start = widgetTreatmentTimestamp(row) ?: widgetParseTimestamp(row.opt("date"))
     val end = start?.let { recordedEndTime(row, it) }
+    val observed = minOf(observedAtMs, treatmentObservedAtMs(row))
     val mutable = row.opt("isMutable") == true || row.opt("mutable") == true
     if (type.contains("bolus", true)) {
       if (start == null) { bolusKnown = false; continue }
@@ -75,7 +77,7 @@ internal fun calculateWidgetInsulinStats(
       val overlaps = start < endMs && (end == null || end < start || if (interval) end > startMs else start >= startMs)
       if (!overlaps) continue
       val amount = if (!row.isNull("deliveredUnits")) nonnegative(row.opt("deliveredUnits")) else nonnegative(row.opt("insulin"))
-      if (amount == null || end == null || end < start || mutable || end > observedAtMs || bolusType == "dual" || type.contains("combo", true)) {
+      if (amount == null || end == null || end < start || mutable || end > observed || bolusType == "dual" || type.contains("combo", true)) {
         bolusKnown = false; continue
       }
       if (requiresDuration && !interval) { bolusKnown = false; continue }
@@ -85,7 +87,7 @@ internal fun calculateWidgetInsulinStats(
       continue
     }
     if (!type.equals("Temp Basal", true) && !type.equals("Basal", true)) continue
-    if (start == null || end == null || end <= start || mutable || end > observedAtMs || start >= endMs || end <= startMs) continue
+    if (start == null || end == null || end <= start || mutable || end > observed || start >= endMs || end <= startMs) continue
     val loop = row.optString("enteredBy", "").startsWith("loop://", true)
     val amount = if (!row.isNull("deliveredUnits")) nonnegative(row.opt("deliveredUnits")) else if (loop) nonnegative(row.opt("amount")) else null
     if (amount == null || !amount.isFinite() || !basalFingerprints.add("$start:$end:$amount")) continue

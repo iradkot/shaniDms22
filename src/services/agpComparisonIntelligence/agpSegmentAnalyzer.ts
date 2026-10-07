@@ -40,41 +40,41 @@ function buildSegmentInsight(
 
   const possibleDriversHe: string[] = [];
   const possibleDriversEn: string[] = [];
+  const completeBolusEvidence =
+    evidence.dataQuality.currentBolusEvidenceComplete &&
+    evidence.dataQuality.previousBolusEvidenceComplete;
 
   if (segment.key === 'overnight' || segment.key === 'bedtime') {
-    possibleDriversHe.push(
-      'בזאל/יעד לילה שונים',
-      'תיקון מאוחר או ספיגה מאוחרת מארוחת ערב',
-    );
-    possibleDriversEn.push(
-      'Different overnight basal/target',
-      'Late correction or delayed dinner absorption',
-    );
+    if (completeBolusEvidence) {
+      possibleDriversHe.push('בזאל/יעד לילה שונים', 'תיקון מאוחר');
+      possibleDriversEn.push(
+        'Different overnight basal/target',
+        'Late correction',
+      );
+    }
+    possibleDriversHe.push('ספיגה מאוחרת מארוחת ערב');
+    possibleDriversEn.push('Delayed dinner absorption');
   } else if (
     segment.key === 'breakfast' ||
     segment.key === 'midday' ||
     segment.key === 'evening'
   ) {
-    possibleDriversHe.push(
-      'תזמון בולוס',
-      'יחס פחמימות',
-      'הערכת פחמימות או ספיגה ארוכה',
-    );
-    possibleDriversEn.push(
-      'Bolus timing',
-      'Carb ratio',
-      'Carb estimate or prolonged absorption',
-    );
+    if (completeBolusEvidence) {
+      possibleDriversHe.push('תזמון בולוס', 'יחס פחמימות');
+      possibleDriversEn.push('Bolus timing', 'Carb ratio');
+    }
+    possibleDriversHe.push('הערכת פחמימות או ספיגה ארוכה');
+    possibleDriversEn.push('Carb estimate or prolonged absorption');
   } else {
-    possibleDriversHe.push('רגישות לאינסולין', 'תיקונים', 'שינוי פעילות/שגרה');
-    possibleDriversEn.push(
-      'Insulin sensitivity',
-      'Corrections',
-      'Activity/routine change',
-    );
+    if (completeBolusEvidence) {
+      possibleDriversHe.push('רגישות לאינסולין', 'תיקונים');
+      possibleDriversEn.push('Insulin sensitivity', 'Corrections');
+    }
+    possibleDriversHe.push('שינוי פעילות/שגרה');
+    possibleDriversEn.push('Activity/routine change');
   }
 
-  if (!isHigher && (lowDelta ?? 0) > 3) {
+  if (completeBolusEvidence && !isHigher && (lowDelta ?? 0) > 3) {
     possibleDriversHe.unshift('יותר מדי אינסולין פעיל בחלון הזה');
     possibleDriversEn.unshift('More active insulin than needed in this window');
   }

@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {
-  fetchTreatmentsForDateRangeUncached,
+  fetchTreatmentsForDateRangeWithMetadata,
   getUserProfileFromNightscout,
 } from 'app/api/apiRequests';
 import {useAiSettings} from 'app/contexts/AiSettingsContext';
@@ -106,6 +106,7 @@ export function useAgpComparisonInsights(params: {
 
     try {
       updateProgress('טוען ארוחות, תיקונים ותכניות...');
+      const requestedObservedAtMs = Date.now();
       const [
         currentTreatments,
         previousTreatments,
@@ -114,12 +115,14 @@ export function useAgpComparisonInsights(params: {
         currentLoopMode,
         previousLoopMode,
       ] = await Promise.all([
-        fetchTreatmentsForDateRangeUncached(
-          params.currentDateRange.start,
+        fetchTreatmentsForDateRangeWithMetadata(
+          new Date(params.currentDateRange.start.getTime() - 24 * 60 * 60_000),
           params.currentDateRange.end,
         ),
-        fetchTreatmentsForDateRangeUncached(
-          params.comparisonDateRange.start,
+        fetchTreatmentsForDateRangeWithMetadata(
+          new Date(
+            params.comparisonDateRange.start.getTime() - 24 * 60 * 60_000,
+          ),
           params.comparisonDateRange.end,
         ),
         getUserProfileFromNightscout(
@@ -146,8 +149,22 @@ export function useAgpComparisonInsights(params: {
         previousRange: params.comparisonDateRange,
         currentBgData: params.currentBgData,
         previousBgData: params.previousBgData,
-        currentTreatments,
-        previousTreatments,
+        currentTreatments: [...currentTreatments.records],
+        previousTreatments: [...previousTreatments.records],
+        currentTreatmentsObservedAtMs: Math.min(
+          requestedObservedAtMs,
+          currentTreatments.freshness.fetchedAtMs,
+        ),
+        previousTreatmentsObservedAtMs: Math.min(
+          requestedObservedAtMs,
+          previousTreatments.freshness.fetchedAtMs,
+        ),
+        currentTreatmentsComplete:
+          currentTreatments.complete !== false &&
+          currentTreatments.freshness.kind === 'fresh',
+        previousTreatmentsComplete:
+          previousTreatments.complete !== false &&
+          previousTreatments.freshness.kind === 'fresh',
         currentProfile,
         previousProfile,
         currentLoopMode,

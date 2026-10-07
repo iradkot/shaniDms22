@@ -29,10 +29,11 @@ internal object WidgetDailySummaryStore {
   private const val PREFS = "glucose_live_prefs"
   private const val KEY_ACCOUNT = "daily_account_v1"
   private const val KEY_SUMMARY = "daily_summary_v1"
-  private const val KEY_HISTORY = "daily_history_estimated_v3"
-  private const val KEY_HISTORY_ATTEMPT = "daily_history_attempt_estimated_v3"
-  private const val KEY_ATTEMPT_DAY = "daily_history_attempt_day_estimated_v3"
-  private const val KEY_ATTEMPT_ZONE = "daily_history_attempt_zone_estimated_v3"
+  // Rebuild histories persisted before carry-in profile ambiguity was checked.
+  private const val KEY_HISTORY = "daily_history_estimated_v4"
+  private const val KEY_HISTORY_ATTEMPT = "daily_history_attempt_estimated_v4"
+  private const val KEY_ATTEMPT_DAY = "daily_history_attempt_day_estimated_v4"
+  private const val KEY_ATTEMPT_ZONE = "daily_history_attempt_zone_estimated_v4"
 
   fun read(context: Context): WidgetDailySummary? = GlucoseWidgetCredentialStore.withConfigurationLock {
     val configuration = GlucoseWidgetCredentialStore.readSyncConfiguration(context) as? WidgetSyncConfiguration.Ready ?: return@withConfigurationLock null
@@ -142,7 +143,7 @@ internal fun fetchWidgetDailySummary(
   }
   // First publish today's recorded doses. Profile/history failures cannot delay that first view.
   if (todayTreatments != null) {
-    // A new profile upload later today invalidates a single-profile reconstruction of today.
+    // Load the effective profile and any changes through today's current cutoff.
     loadProfile(dayStart, now, refresh = true)
     today = calculateWidgetInsulinComparison(todayTreatments, now, zone, includeHistory = false, profilesByDayStart = profiles)
     if (today != null) onProgress(WidgetDailySyncResult(WidgetDailySummary(dayStart, now, low, high, range, today), null, null))
@@ -166,7 +167,12 @@ internal fun fetchWidgetDailySummary(
   val treatments = if (todayTreatments != null && history != null) mergeWidgetRows(history.treatments, todayTreatments) else todayTreatments
   // A failed historical request must not erase independently fetched today's recorded doses.
   val comparison = if (history != null) {
-    calculateWidgetInsulinComparison(treatments, now, zone, includeHistory = true, profilesByDayStart = profiles)?.copy(today = today?.today) ?: today
+    // mergeWidgetRows preserves the winning row object. Fresh revisions establish
+    // a new observation, while elapsed time cannot finalize an unchanged cached dose.
+    val freshRows = todayTreatments?.let { rows -> (0 until rows.length()).mapNotNull { rows.optJSONObject(it) }.toSet() }.orEmpty()
+    val historicalObservedAt = history.fetchedAtMs
+    calculateWidgetInsulinComparison(treatments, now, zone, includeHistory = true, profilesByDayStart = profiles,
+      treatmentObservedAtMs = { row -> if (row in freshRows) now else historicalObservedAt })?.copy(today = today?.today) ?: today
   } else today
   return WidgetDailySyncResult(WidgetDailySummary(dayStart, now, low, high, range, comparison), history, attempt)
 }
@@ -183,10 +189,51 @@ internal fun fetchWidgetBasalProfile(
   fun encode(value: String) = URLEncoder.encode(value, "UTF-8")
   // Nightscout's profile default sort is startDate descending, including older v1 servers.
   if (throughMs < asOfMs) return null
-  val url = "${baseUrl.trimEnd('/')}/api/v1/profiles?${encode("find[startDate][\$lte]")}=${encode(widgetIsoUtc(throughMs))}&count=1"
-  val rows = runCatching { fetch(url, secret) }.getOrNull() ?: return null
-  if (rows.length() != 1) return null
-  return rows.optJSONObject(0)?.takeIf { validWidgetBasalProfile(it, asOfMs, zone) }
+  fun latest(cutoff: Long): JSONObject? {
+    // Two rows establish whether the latest effective time is unique. A tied
+    // timestamp requires every row at that time, not an arbitrary first profile.
+    val url = "${baseUrl.trimEnd('/')}/api/v1/profiles?${encode("find[startDate][\$lte]")}=${encode(widgetIsoUtc(cutoff))}&count=2"
+    val rows = runCatching { fetch(url, secret) }.getOrNull() ?: return null
+    if (rows.length() !in 1..2) return null
+    val newest = rows.optJSONObject(0) ?: return null
+    val effective = widgetParseTimestamp(newest.opt("startDate")) ?: return null
+    if (effective > cutoff || !validWidgetBasalProfile(newest, effective, zone)) return null
+    if (rows.length() == 1) return newest
+    val previous = rows.optJSONObject(1) ?: return null
+    val previousStart = widgetParseTimestamp(previous.opt("startDate")) ?: return null
+    if (previousStart > effective) return null
+    if (previousStart < effective) return newest
+    val atEffectiveTime = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "profiles", "startDate",
+      widgetIsoUtc(effective), widgetIsoUtc(effective)), secret, pageSize = 100, maxPages = 10, fetch = fetch) ?: return null
+    if (atEffectiveTime.length() == 0) return null
+    for (index in 0 until atEffectiveTime.length()) {
+      val row = atEffectiveTime.optJSONObject(index) ?: return null
+      if (widgetParseTimestamp(row.opt("startDate")) != effective) return null
+    }
+    val history = JSONObject().put("basalProfileHistory", atEffectiveTime).put("basalProfileHistoryThroughMs", cutoff)
+    if (!validWidgetBasalProfile(history, cutoff, zone)) return null
+    return atEffectiveTime.optJSONObject(0)
+  }
+  val newest = latest(throughMs) ?: return null
+  val newestStart = widgetParseTimestamp(newest.opt("startDate")) ?: return null
+  // A latest record effective before midnight already proves there were no later updates.
+  if (newestStart <= asOfMs) return newest
+  val carryIn = latest(asOfMs) ?: return null
+  val changes = fetchCompleteWidgetPages(widgetRangeQuery(baseUrl, "profiles", "startDate", widgetIsoUtc(asOfMs + 1), widgetIsoUtc(throughMs)),
+    secret, pageSize = 100, maxPages = 10, fetch = fetch) ?: return null
+  if (changes.length() == 0) return null
+  val history = JSONArray().put(carryIn)
+  var foundNewest = false
+  for (index in 0 until changes.length()) {
+    val row = changes.optJSONObject(index) ?: return null
+    val effective = widgetParseTimestamp(row.opt("startDate")) ?: return null
+    if (effective <= asOfMs || effective > throughMs) return null
+    if (effective == newestStart) foundNewest = true
+    history.put(row)
+  }
+  if (!foundNewest) return null
+  return JSONObject().put("basalProfileHistory", history).put("basalProfileHistoryThroughMs", throughMs)
+    .takeIf { validWidgetBasalProfile(it, asOfMs, zone) }
 }
 
 internal fun widgetDailyProgressPreservesData(previous: WidgetDailySummary?, incoming: WidgetDailySummary): Boolean =

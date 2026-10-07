@@ -22,6 +22,15 @@ import {
   isNightscoutCacheSourceDeleted,
   type NightscoutCacheScope,
 } from 'app/services/nightscoutCacheScope';
+import {
+  deduplicateInsulinRecords,
+  getFinalizedRecordedBolus,
+  getInsulinEndMs,
+  getInsulinStartMs,
+  parseInsulinNumber,
+} from 'app/services/insulin/recordedInsulin';
+import {parseNightscoutTimestampMs} from 'app/utils/nightscoutTimestamp';
+import {mapNightscoutTreatmentsToInsulinDataEntries} from 'app/utils/nightscoutTreatments.utils';
 
 const ORACLE_CACHE_ENTRIES_RESOURCE = 'oracle.entries.v2';
 // Older windows could contain an unverified, truncated Nightscout prefix.
@@ -104,26 +113,95 @@ function uniqAndSortByTs<T extends {ts: number}>(items: T[]): T[] {
   return merged;
 }
 
-function parseTreatmentTsMs(t: any): number | null {
-  if (typeof t?.mills === 'number' && Number.isFinite(t.mills)) {
-    return t.mills;
+function normalizeTreatment(
+  raw: Record<string, unknown>,
+  observedAtMs: number,
+  previousById: ReadonlyMap<string, OracleCachedTreatment>,
+): OracleCachedTreatment | null {
+  const record: Record<string, unknown> = {
+    ...raw,
+    timestamp: raw.timestamp ?? raw.mills,
+  };
+  const identity = [record.syncIdentifier, record.identifier, record._id].find(
+    value => typeof value === 'string' && value.trim().length > 0,
+  );
+  const sourceRecordId =
+    typeof identity === 'string' ? identity.trim() : undefined;
+  const deleted = record.deleted === true || record.isValid === false;
+  const eventType =
+    typeof record.eventType === 'string' ? record.eventType : undefined;
+  let ts = getInsulinStartMs(record);
+  if (!Number.isFinite(ts) && deleted && sourceRecordId) {
+    ts = previousById.get(sourceRecordId)?.ts ?? NaN;
   }
-  if (typeof t?.created_at === 'string') {
-    const ms = Date.parse(t.created_at);
-    return Number.isFinite(ms) ? ms : null;
+  if (!Number.isFinite(ts)) {
+    if (!deleted && /bolus/i.test(eventType ?? '')) {
+      throw new Error('Oracle treatments contain an invalid bolus timestamp.');
+    }
+    return null;
   }
-  if (typeof t?.timestamp === 'string') {
-    const ms = Date.parse(t.timestamp);
-    return Number.isFinite(ms) ? ms : null;
-  }
-  return null;
+  const revision = parseNightscoutTimestampMs(record.srvModified);
+  const modifiedMs = Number.isFinite(revision)
+    ? revision
+    : parseNightscoutTimestampMs(record.modified_at);
+  const mappedBolus = mapNightscoutTreatmentsToInsulinDataEntries(
+    [record],
+    observedAtMs,
+  ).find(entry => entry.type === 'bolus');
+  const finalized = getFinalizedRecordedBolus(record, observedAtMs);
+  const endTs = getInsulinEndMs(record, ts);
+  const insulin = deleted ? undefined : mappedBolus?.amount ?? finalized?.units;
+  const carbs = deleted ? undefined : parseInsulinNumber(record.carbs);
+  return {
+    ts,
+    insulinBasis:
+      deleted || !/bolus/i.test(eventType ?? '')
+        ? 'none'
+        : insulin !== undefined
+        ? 'recorded-bolus'
+        : 'unknown-bolus',
+    ...(sourceRecordId ? {sourceRecordId} : {}),
+    ...(Number.isFinite(modifiedMs) ? {sourceModifiedMs: modifiedMs} : {}),
+    ...(deleted ? {deleted: true} : {}),
+    ...(Number.isFinite(endTs) && endTs > ts ? {endTs} : {}),
+    ...(insulin !== undefined ? {insulin} : {}),
+    ...(carbs !== undefined ? {carbs} : {}),
+    ...(eventType !== undefined ? {eventType} : {}),
+  };
 }
 
-function clampNonNegativeNumber(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return undefined;
-  }
-  return Math.max(0, value);
+function mergeTreatments(
+  previous: OracleCachedTreatment[],
+  incoming: OracleCachedTreatment[],
+): OracleCachedTreatment[] {
+  const keyed = (items: OracleCachedTreatment[]) => {
+    const occurrences = new Map<string, number>();
+    return items.map(item => {
+      // This is only overlap bookkeeping, not a claimed external identity.
+      // Equal anonymous rows within one response retain their multiplicity.
+      const fingerprint = JSON.stringify([
+        item.ts,
+        item.endTs,
+        item.eventType,
+        item.insulinBasis,
+        item.insulin,
+        item.carbs,
+        item.deleted,
+      ]);
+      const occurrence = occurrences.get(fingerprint) ?? 0;
+      occurrences.set(fingerprint, occurrence + 1);
+      return {
+        _id: item.sourceRecordId
+          ? `identified:${item.sourceRecordId}`
+          : `anonymous:${fingerprint}:${occurrence}`,
+        srvModified: item.sourceModifiedMs,
+        item,
+      };
+    });
+  };
+  return deduplicateInsulinRecords([...keyed(previous), ...keyed(incoming)])
+    .map(record => record.item)
+    .sort((a, b) => a.ts - b.ts);
 }
 
 const oracleCacheKeys = (scope: NightscoutCacheScope) => ({
@@ -166,11 +244,27 @@ export async function loadOracleCache(scope: NightscoutCacheScope): Promise<{
       : [];
     const meta = rawMeta ? (JSON.parse(rawMeta) as OracleCacheMeta) : null;
 
+    // Old caches lost delivered amounts, identities and event units. Refetch them
+    // before either matching or a graph can interpret the old values as doses.
+    if (
+      meta?.version !== 3 ||
+      !Array.isArray(treatments) ||
+      treatments.some(
+        t =>
+          !t ||
+          !['recorded-bolus', 'unknown-bolus', 'none'].includes(
+            t.insulinBasis ?? '',
+          ),
+      )
+    ) {
+      return {entries: [], treatments: [], deviceStatus: [], meta: null};
+    }
+
     return {
       entries: Array.isArray(entries) ? entries : [],
       treatments: Array.isArray(treatments) ? treatments : [],
       deviceStatus: Array.isArray(deviceStatus) ? deviceStatus : [],
-      meta: meta && meta.version === 2 ? meta : null,
+      meta,
     };
   } catch (e) {
     console.warn('loadOracleCache: Failed reading cache', e);
@@ -254,10 +348,17 @@ export async function syncOracleCache(params: {
 
   const chunkMs = Math.max(1, chunkDays) * DAY_MS;
   const totalSpan = Math.max(0, fetchEndMs - fetchStartMs);
-  const chunkCount = Math.max(1, Math.ceil(totalSpan / chunkMs));
+  const observationChunkCount = Math.max(1, Math.ceil(totalSpan / chunkMs));
+  const treatmentChunkCount = Math.max(
+    1,
+    Math.ceil(Math.max(0, nowMs - startMs) / chunkMs),
+  );
+  const chunkCount = Math.max(observationChunkCount, treatmentChunkCount);
 
-  // Work units: 3 fetches per chunk + 1 save.
-  const workTotal = chunkCount * 3 + 1;
+  // Glucose/load observations are incremental. Treatments are mutable historical
+  // facts: every successful refresh replaces a complete range, so an old dose's
+  // revision or hard deletion cannot remain hidden behind a recent event window.
+  const workTotal = observationChunkCount * 2 + treatmentChunkCount + 1;
   let workDone = 0;
 
   const report = (
@@ -265,6 +366,7 @@ export async function syncOracleCache(params: {
     chunkIndex: number,
     rangeStartMs: number,
     rangeEndMs: number,
+    stageChunkCount: number = chunkCount,
   ) => {
     const percent = clampPercent01(workDone / workTotal);
     const stageLabel =
@@ -280,12 +382,12 @@ export async function syncOracleCache(params: {
         ? 'Saving Oracle cache…'
         : `Fetching ${stageLabel} (${
             chunkIndex + 1
-          }/${chunkCount}) • ${formatRange(rangeStartMs, rangeEndMs)}`;
+          }/${stageChunkCount}) • ${formatRange(rangeStartMs, rangeEndMs)}`;
 
     params.onProgress?.({
       stage,
       chunkIndex,
-      chunkCount,
+      chunkCount: stageChunkCount,
       workDone,
       workTotal,
       percent,
@@ -296,7 +398,12 @@ export async function syncOracleCache(params: {
   };
 
   const fetchedSlimAll: OracleCachedBgEntry[] = [];
-  const fetchedTreatmentsSlimAll: OracleCachedTreatment[] = [];
+  let fetchedTreatmentsSlimAll: OracleCachedTreatment[] = [];
+  const previousTreatmentsById = new Map(
+    cachedTreatments
+      .filter(t => t.sourceRecordId)
+      .map(t => [t.sourceRecordId!, t] as const),
+  );
   const fetchedDeviceStatusSlimAll: OracleCachedDeviceStatus[] = [];
 
   for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
@@ -309,91 +416,117 @@ export async function syncOracleCache(params: {
     const fetchStart = new Date(rangeStartMs);
     const fetchEnd = new Date(rangeEndMs);
 
-    report('bg', chunkIndex, rangeStartMs, rangeEndMs);
-    const fetched = await fetchBgDataForDateRangeUncached(
-      fetchStart,
-      fetchEnd,
-      {
-        // For 90 days we expect ~26k points; keep some slack.
-        count: 100000,
-      },
-    );
-    assertActiveScope(scope);
-    fetchedSlimAll.push(
-      ...fetched
-        .filter(e => typeof e?.date === 'number' && typeof e?.sgv === 'number')
-        .map(e => ({date: e.date, sgv: e.sgv})),
-    );
-    workDone += 1;
+    if (chunkIndex < observationChunkCount) {
+      report('bg', chunkIndex, rangeStartMs, rangeEndMs, observationChunkCount);
+      const fetched = await fetchBgDataForDateRangeUncached(
+        fetchStart,
+        fetchEnd,
+        {
+          // For 90 days we expect ~26k points; keep some slack.
+          count: 100000,
+        },
+      );
+      assertActiveScope(scope);
+      fetchedSlimAll.push(
+        ...fetched
+          .filter(
+            e => typeof e?.date === 'number' && typeof e?.sgv === 'number',
+          )
+          .map(e => ({date: e.date, sgv: e.sgv})),
+      );
+      workDone += 1;
+    }
 
     if (params.shouldAbort?.()) {
       throw new Error('Oracle cache sync aborted');
     }
-    report('treatments', chunkIndex, rangeStartMs, rangeEndMs);
-    const fetchedTreatments = await fetchTreatmentsForDateRangeUncached(
-      fetchStart,
-      fetchEnd,
-    );
-    assertActiveScope(scope);
-    const fetchedTreatmentsSlim: OracleCachedTreatment[] = fetchedTreatments
-      .map(t => {
-        const ts = parseTreatmentTsMs(t);
-        if (ts == null) {
-          return null;
+    if (chunkIndex < treatmentChunkCount) {
+      const treatmentStartMs =
+        startMs + chunkIndex * chunkMs - (chunkIndex === 0 ? DAY_MS : 0);
+      const treatmentEndMs = Math.min(
+        nowMs,
+        startMs + (chunkIndex + 1) * chunkMs,
+      );
+      report(
+        'treatments',
+        chunkIndex,
+        treatmentStartMs,
+        treatmentEndMs,
+        treatmentChunkCount,
+      );
+      const fetchedTreatments = await fetchTreatmentsForDateRangeUncached(
+        new Date(treatmentStartMs),
+        new Date(treatmentEndMs),
+      );
+      assertActiveScope(scope);
+      const fetchedTreatmentsSlim = deduplicateInsulinRecords(
+        fetchedTreatments.filter(
+          t => t && typeof t === 'object' && !Array.isArray(t),
+        ),
+      )
+        .map(t => normalizeTreatment(t, nowMs, previousTreatmentsById))
+        .filter((t): t is OracleCachedTreatment => t !== null);
+      for (const t of fetchedTreatmentsSlim) {
+        if (t.sourceRecordId) {
+          previousTreatmentsById.set(t.sourceRecordId, t);
         }
-        const insulin =
-          clampNonNegativeNumber(t?.insulin) ??
-          clampNonNegativeNumber(t?.amount);
-        const carbs = clampNonNegativeNumber(t?.carbs);
-        const eventType =
-          typeof t?.eventType === 'string' ? t.eventType : undefined;
-        return {
-          ts,
-          ...(insulin != null ? {insulin} : {}),
-          ...(carbs != null ? {carbs} : {}),
-          ...(eventType !== undefined ? {eventType} : {}),
-        } satisfies OracleCachedTreatment;
-      })
-      .filter(Boolean) as OracleCachedTreatment[];
-    fetchedTreatmentsSlimAll.push(...fetchedTreatmentsSlim);
-    workDone += 1;
+      }
+      fetchedTreatmentsSlimAll = mergeTreatments(
+        fetchedTreatmentsSlimAll.filter(
+          t =>
+            t.sourceRecordId ||
+            t.ts < treatmentStartMs ||
+            t.ts > treatmentEndMs,
+        ),
+        fetchedTreatmentsSlim,
+      );
+      workDone += 1;
+    }
 
     if (params.shouldAbort?.()) {
       throw new Error('Oracle cache sync aborted');
     }
-    report('deviceStatus', chunkIndex, rangeStartMs, rangeEndMs);
-    const fetchedDeviceStatus = await fetchDeviceStatusForDateRangeUncached(
-      fetchStart,
-      fetchEnd,
-    );
-    assertActiveScope(scope);
-    const fetchedDeviceStatusSlim: OracleCachedDeviceStatus[] =
-      fetchedDeviceStatus
-        .map(s => {
-          const ts = getDeviceStatusTimestampMs(s);
-          if (typeof ts !== 'number' || !Number.isFinite(ts)) {
-            return null;
-          }
-          const load = extractLoad(s);
-          if (
-            load.iob == null &&
-            load.cob == null &&
-            load.iobBolus == null &&
-            load.iobBasal == null
-          ) {
-            return null;
-          }
-          return {
-            ts,
-            ...(load.iob != null ? {iob: load.iob} : {}),
-            ...(load.iobBolus != null ? {iobBolus: load.iobBolus} : {}),
-            ...(load.iobBasal != null ? {iobBasal: load.iobBasal} : {}),
-            ...(load.cob != null ? {cob: load.cob} : {}),
-          } satisfies OracleCachedDeviceStatus;
-        })
-        .filter(Boolean) as OracleCachedDeviceStatus[];
-    fetchedDeviceStatusSlimAll.push(...fetchedDeviceStatusSlim);
-    workDone += 1;
+    if (chunkIndex < observationChunkCount) {
+      report(
+        'deviceStatus',
+        chunkIndex,
+        rangeStartMs,
+        rangeEndMs,
+        observationChunkCount,
+      );
+      const fetchedDeviceStatus = await fetchDeviceStatusForDateRangeUncached(
+        fetchStart,
+        fetchEnd,
+      );
+      assertActiveScope(scope);
+      const fetchedDeviceStatusSlim: OracleCachedDeviceStatus[] =
+        fetchedDeviceStatus
+          .map(s => {
+            const ts = getDeviceStatusTimestampMs(s);
+            if (typeof ts !== 'number' || !Number.isFinite(ts)) {
+              return null;
+            }
+            const load = extractLoad(s);
+            if (
+              load.iob == null &&
+              load.cob == null &&
+              load.iobBolus == null &&
+              load.iobBasal == null
+            ) {
+              return null;
+            }
+            return {
+              ts,
+              ...(load.iob != null ? {iob: load.iob} : {}),
+              ...(load.iobBolus != null ? {iobBolus: load.iobBolus} : {}),
+              ...(load.iobBasal != null ? {iobBasal: load.iobBasal} : {}),
+              ...(load.cob != null ? {cob: load.cob} : {}),
+            } satisfies OracleCachedDeviceStatus;
+          })
+          .filter(Boolean) as OracleCachedDeviceStatus[];
+      fetchedDeviceStatusSlimAll.push(...fetchedDeviceStatusSlim);
+      workDone += 1;
+    }
   }
 
   const mergedAll = uniqAndSortByDate([
@@ -401,10 +534,12 @@ export async function syncOracleCache(params: {
     ...fetchedSlimAll,
   ]).filter(e => e.date >= startMs && e.date <= nowMs);
 
-  const mergedTreatments = uniqAndSortByTs([
-    ...cachedTreatments,
-    ...fetchedTreatmentsSlimAll,
-  ]).filter(t => t.ts >= startMs && t.ts <= nowMs);
+  // Only fresh, complete reads reach this point. Absence from the authoritative
+  // range is deletion evidence, including for records that previously had an ID.
+  // Keep an interval starting in carry-in when its delivery overlaps the range.
+  const mergedTreatments = fetchedTreatmentsSlimAll.filter(
+    t => t.ts <= nowMs && (t.ts >= startMs || (t.endTs ?? t.ts) > startMs),
+  );
 
   const mergedDeviceStatus = uniqAndSortByTs([
     ...cachedDeviceStatus,
@@ -412,7 +547,7 @@ export async function syncOracleCache(params: {
   ]).filter(s => s.ts >= startMs && s.ts <= nowMs);
 
   const meta: OracleCacheMeta = {
-    version: 2,
+    version: 3,
     lastSyncedMs: nowMs,
   };
 

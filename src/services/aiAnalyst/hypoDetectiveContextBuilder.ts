@@ -2,6 +2,7 @@ import {fetchBgDataForDateRangeUncached, fetchTreatmentsForDateRangeUncached} fr
 import {enrichBgSamplesWithDeviceStatusForRange} from 'app/utils/stackedChartsData.utils';
 import {extractHypoEvents} from 'app/containers/MainTabsNavigator/Containers/Trends/utils/hypoInvestigation.utils';
 import {BgSample} from 'app/types/day_bgs.types';
+import {buildRecordedInsulinSummary, deduplicateInsulinRecords, getInsulinStartMs} from 'app/services/insulin/recordedInsulin';
 
 function clampInt(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.trunc(v)));
@@ -28,44 +29,43 @@ function summarizeTreatmentsWindow(params: {
   treatments: any[];
   fromMs: number;
   toMs: number;
+  observedAtMs: number;
 }): {
-  bolusU: number;
-  bolusCount: number;
+  bolusU: number | null;
+  bolusCount: number | null;
   carbsG: number;
   carbsCount: number;
   tempBasalCount: number;
 } {
-  const {treatments, fromMs, toMs} = params;
+  const {treatments, fromMs, toMs, observedAtMs} = params;
+  const period = {startMs: fromMs, endMs: toMs + 1};
+  const records = deduplicateInsulinRecords((treatments ?? []).filter(t =>
+    t && typeof t === 'object' && !Array.isArray(t),
+  )).filter(t => t.isValid !== false && t.deleted !== true);
+  const recorded = buildRecordedInsulinSummary(records, period, observedAtMs);
+  const bolusU = recorded.quality === 'unavailable' ? undefined : recorded.bolusUnits;
 
-  let bolusU = 0;
   let bolusCount = 0;
   let carbsG = 0;
   let carbsCount = 0;
   let tempBasalCount = 0;
 
-  for (const t of treatments ?? []) {
-    const createdAt = t?.created_at;
-    const ts = typeof createdAt === 'string' ? Date.parse(createdAt) : NaN;
+  for (const t of records) {
+    if (/bolus/i.test(String(t.eventType ?? ''))) {
+      const dose = buildRecordedInsulinSummary([t], period, observedAtMs);
+      if (dose.quality !== 'unavailable' && dose.bolusUnits !== undefined && dose.bolusUnits > 0) {
+        bolusCount += 1;
+      }
+    }
+    const ts = getInsulinStartMs(t);
     if (!Number.isFinite(ts) || ts < fromMs || ts > toMs) continue;
 
     const eventType = t?.eventType;
-
-    // Bolus
-    if (
-      typeof t?.insulin === 'number' &&
-      Number.isFinite(t.insulin) &&
-      ['Bolus', 'Meal Bolus', 'Correction Bolus', 'Combo Bolus'].includes(eventType)
-    ) {
-      bolusU += Math.max(0, t.insulin);
-      bolusCount += 1;
-      continue;
-    }
 
     // Carbs
     if (typeof t?.carbs === 'number' && Number.isFinite(t.carbs) && t.carbs > 0) {
       carbsG += t.carbs;
       carbsCount += 1;
-      continue;
     }
 
     // Temp basal / pump actions (best-effort)
@@ -76,8 +76,8 @@ function summarizeTreatmentsWindow(params: {
   }
 
   return {
-    bolusU: Number(bolusU.toFixed(2)),
-    bolusCount,
+    bolusU: bolusU === undefined ? null : Number(bolusU.toFixed(2)),
+    bolusCount: bolusU === undefined ? null : bolusCount,
     carbsG: Math.round(carbsG),
     carbsCount,
     tempBasalCount,
@@ -136,7 +136,11 @@ export async function buildHypoDetectiveContext(params: {
     .slice(0, maxEvents);
 
   onProgress?.('Fetching treatments…');
-  const treatments = await fetchTreatmentsForDateRangeUncached(new Date(startMs), new Date(endMs));
+  // Include the earliest event's two-hour context and the one-day delivery carry-in.
+  const treatments = await fetchTreatmentsForDateRangeUncached(
+    new Date(startMs - 26 * 60 * 60_000),
+    new Date(endMs),
+  );
 
   onProgress?.('Summarizing events…');
   const outEvents = severe.map(e => {
@@ -149,18 +153,21 @@ export async function buildHypoDetectiveContext(params: {
       treatments,
       fromMs: e.nadirMs - 60 * 60_000,
       toMs: e.nadirMs,
+      observedAtMs: endMs,
     });
 
     const carbsWindow = summarizeTreatmentsWindow({
       treatments,
       fromMs: e.nadirMs - 2 * 60 * 60_000,
       toMs: e.nadirMs,
+      observedAtMs: endMs,
     });
 
     const tempBasalWindow = summarizeTreatmentsWindow({
       treatments,
       fromMs: e.nadirMs - 2 * 60 * 60_000,
       toMs: e.nadirMs,
+      observedAtMs: endMs,
     });
 
     return {

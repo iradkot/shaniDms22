@@ -22,6 +22,7 @@ export async function requestCompleteNightscoutRange(
   buildUrl: (count: number) => string,
   initialCount: number,
   maxCount = MAX_NIGHTSCOUT_RANGE_COUNT,
+  rejectMalformedRecords = false,
 ): Promise<Record<string, unknown>[]> {
   if (
     !Number.isSafeInteger(initialCount) ||
@@ -49,6 +50,12 @@ export async function requestCompleteNightscoutRange(
     const response = await requestNightscoutRecordsWithMetadata(path);
     assertCurrent();
     if (response.receivedCount < count) {
+      if (
+        rejectMalformedRecords &&
+        response.records.length !== response.receivedCount
+      ) {
+        throw new Error('Nightscout returned malformed treatment records.');
+      }
       return response.records;
     }
     if (count >= maxCount) {

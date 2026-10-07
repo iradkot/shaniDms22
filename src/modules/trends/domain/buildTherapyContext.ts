@@ -1,6 +1,7 @@
 import {buildTrendsEvidenceMetadata} from './evidence';
 import type {TrendsGlucoseSample, TrendsPeriod} from './overview';
 import {prepareTrendsSampleSet} from './sampleSet';
+import type {DailyInsulinSourceSummary} from '../../dailyOverview';
 import type {
   ObservedAidModeSummary,
   TherapyContextSnapshot,
@@ -33,6 +34,7 @@ export interface BuildTherapyContextSnapshotInput {
   readonly glucoseSamples: readonly TrendsGlucoseSample[];
   readonly sourceReliability: TherapyContextSourceReliability;
   readonly treatments: readonly TherapyTreatmentFact[];
+  readonly recordedInsulin?: DailyInsulinSourceSummary;
   readonly mealStartedAtMs: readonly number[];
   readonly activities: readonly TherapyActivityFact[];
   /** Include the most recent known change before period.startMs when available. */
@@ -94,7 +96,9 @@ const lastChangeAtOrBefore = (
 interface ModeExposure {
   readonly openMs: number;
   readonly closedMs: number;
-  readonly modeAt: (timestampMs: number) => TherapyModeChange['mode'] | undefined;
+  readonly modeAt: (
+    timestampMs: number,
+  ) => TherapyModeChange['mode'] | undefined;
 }
 
 const buildModeExposure = (
@@ -116,7 +120,10 @@ const buildModeExposure = (
     cursor = endMs;
   };
   ordered.forEach(change => {
-    if (change.timestampMs <= period.startMs || change.timestampMs >= period.endMs) {
+    if (
+      change.timestampMs <= period.startMs ||
+      change.timestampMs >= period.endMs
+    ) {
       return;
     }
     accumulate(change.timestampMs);
@@ -236,8 +243,24 @@ export const buildTherapyContextSnapshot = (
     return total + Math.max(0, endMs - startMs) / 60_000;
   }, 0);
 
+  const insulinSummary = input.recordedInsulin ?? {
+    quality: 'unavailable' as const,
+  };
+  const recordedTotal =
+    insulinSummary.quality === 'available' &&
+    !insulinSummary.basalEstimated &&
+    (insulinSummary.basalCoveragePercent ?? 100) === 100 &&
+    Number.isFinite(insulinSummary.basalUnits) &&
+    insulinSummary.basalUnits >= 0 &&
+    Number.isFinite(insulinSummary.bolusUnits) &&
+    insulinSummary.bolusUnits >= 0 &&
+    Number.isFinite(insulinSummary.basalUnits + insulinSummary.bolusUnits)
+      ? roundTo(insulinSummary.basalUnits + insulinSummary.bolusUnits)
+      : undefined;
+
   return {
     period: input.period,
+    insulinSummary,
     quality: {
       sourceReliability: input.sourceReliability,
       coveragePercent: prepared.coveragePercent,
@@ -253,12 +276,7 @@ export const buildTherapyContextSnapshot = (
       timeZoneOffsetMinutes,
     }),
     totals: {
-      insulinUnits: roundTo(
-        treatments.reduce(
-          (total, treatment) => total + positiveOrZero(treatment.insulinUnits),
-          0,
-        ),
-      ),
+      insulinUnits: recordedTotal,
       carbohydrateGrams: roundTo(
         treatments.reduce(
           (total, treatment) =>

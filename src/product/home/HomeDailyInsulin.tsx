@@ -68,6 +68,16 @@ export function HomeDailyInsulin({
   const hasComparisons = comparisons.some(item => item.selected);
   return (
     <View style={s.body}>
+      {insulin.total === undefined && insulin.estimatedTotal === undefined ? (
+        <View>
+          <Text style={[s.note, rtl]}>{daily.totalUnavailable}</Text>
+          <Text
+            style={[s.big, locale === 'he' && s.numericRtl]}
+            testID="home-insulin-unavailable-total">
+            —
+          </Text>
+        </View>
+      ) : null}
       <Text style={[s.note, rtl]}>
         {insulin.total !== undefined
           ? daily.recordedTotal
@@ -93,7 +103,12 @@ export function HomeDailyInsulin({
             ? 'home-insulin-recorded-bolus'
             : 'home-insulin-recorded-basal'
         }
-        style={[s.big, locale === 'he' && s.numericRtl]}>
+        style={[
+          insulin.total !== undefined || insulin.estimatedTotal !== undefined
+            ? s.big
+            : s.amount,
+          locale === 'he' && s.numericRtl,
+        ]}>
         {units(value)}
       </Text>
       <View style={row}>
@@ -162,7 +177,11 @@ export function HomeDailyInsulin({
         </View>
       ) : null}
       {insulin.total === undefined ? (
-        <Text style={[s.note, rtl]}>{c.insulinTotalIncomplete}</Text>
+        <Text style={[s.note, rtl]}>
+          {insulin.estimatedTotal === undefined
+            ? daily.subtotalNote
+            : c.insulinTotalIncomplete}
+        </Text>
       ) : null}
       {comparison && comparison.kind !== 'unavailable' ? (
         <View style={s.comparison} testID="home-insulin-comparison">

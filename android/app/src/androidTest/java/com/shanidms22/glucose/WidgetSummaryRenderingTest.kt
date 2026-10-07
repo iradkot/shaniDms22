@@ -89,6 +89,26 @@ class WidgetSummaryRenderingTest {
       assertFalse("Missing insulin is not zero", Regex("(?<![0-9])0(?:\\.0)?\\s*U").containsMatchIn(visibleText))
     })
 
+  @Test fun estimatedTotalsPreserveRecordedEvidenceInEnglishAndHebrew() {
+    for (language in listOf("en", "he")) render("default-estimated-$language", Size(250, 250), language = language,
+      build = { context, options ->
+        val stats = widgetInsulinStats(1.0, 2.0, 30.0, 60_000, "partial")
+          .copy(estimatedBasalUnits = 4.0, estimatedTotalUnits = 6.0)
+        views(context, options, fixture().copy(insulin = WidgetInsulinComparison(stats, null, null, 0)))
+      },
+      verify = { root ->
+        val headline = root.findViewById<TextView>(R.id.summary_insulin_total)
+        assertTrue("Estimated total must visibly carry its approximation sign", plainText(headline).contains("≈"))
+        assertTrue("Estimated total retains its amount", unitsPattern(6).containsMatchIn(plainText(headline)))
+        val basal = root.findViewById<TextView>(R.id.summary_basal)
+        assertTrue("Basal uses the estimate basis", plainText(basal).contains("≈") && unitsPattern(4).containsMatchIn(plainText(basal)))
+        val coverage = root.findViewById<TextView>(R.id.summary_insulin_coverage)
+        assertTrue("Recorded basal remains visible separately", unitsPattern(1).containsMatchIn(plainText(coverage)))
+        assertTrue("Recorded time coverage remains 30%", plainText(coverage).contains("30%"))
+        listOf(headline, basal, coverage).forEach { assertTextFullyVisible(root, it, "Insulin evidence") }
+      })
+  }
+
   @Test fun enlargedFontKeepsPrimaryMetricsVisible() = render("large-font-en", Size(340, 360), fontScale = 1.3f,
     build = { context, options -> views(context, options, fixture()) },
     verify = { root -> assertReadable(root, "82", "26") })
@@ -115,17 +135,19 @@ class WidgetSummaryRenderingTest {
       val coverage = textViews(insulinPanel).firstOrNull { text ->
         val value = plainText(text)
         Regex("(?<![0-9])20(?:\\.0)?%").containsMatchIn(value) &&
-          Regex("cover|records", RegexOption.IGNORE_CASE).containsMatchIn(value)
+          Regex("cover|record", RegexOption.IGNORE_CASE).containsMatchIn(value)
       }
       assertTrue("Basal coverage must visibly say 20%, independently of glucose coverage", coverage != null)
       assertTextFullyVisible(root, coverage!!, "Basal coverage")
 
       val title = root.findViewById<TextView>(R.id.summary_insulin_title)
-      assertTrue("The 8 U headline must identify today's recorded bolus", plainText(title).contains("Bolus today"))
-      assertTextFullyVisible(root, title, "Today's bolus label")
+      assertTrue("Missing total must be explicit", plainText(title).contains("Total unavailable"))
+      assertTextFullyVisible(root, title, "Missing insulin total label")
       val today = root.findViewById<TextView>(R.id.summary_insulin_total)
-      assertTrue("Today's bolus must remain 8 U", unitsPattern(8).containsMatchIn(plainText(today)))
-      assertTextFullyVisible(root, today, "Today's bolus amount")
+      assertTrue("A recorded subtotal is not a complete insulin total", plainText(today).contains("—"))
+      assertTextFullyVisible(root, today, "Missing total amount")
+      assertTrue("Recorded subtotal must remain separately visible", plainText(coverage).contains("Recorded") &&
+        unitsPattern(10).containsMatchIn(plainText(coverage)))
 
       val comparisonPanel = root.findViewById<View>(R.id.summary_comparison_button)
       val baseline = textViews(comparisonPanel).firstOrNull { unitsPattern(6).containsMatchIn(plainText(it)) }
@@ -136,8 +158,8 @@ class WidgetSummaryRenderingTest {
         val value = plainText(it)
         value.contains("Bolus", ignoreCase = true) && value.contains("yesterday", ignoreCase = true)
       })
-      assertFalse("Partial basal and bolus must not be presented as a complete 10 U total",
-        textViews(insulinPanel).any { unitsPattern(10).containsMatchIn(plainText(it)) })
+      assertFalse("Partial basal and bolus must not be presented as a complete 10 U headline",
+        unitsPattern(10).containsMatchIn(plainText(today)))
     })
 
   @Test fun partialBasalShowsRecordedBolusAndComparesBolusOnly() = render("partial-recorded-en", Size(340, 300),
@@ -149,7 +171,8 @@ class WidgetSummaryRenderingTest {
     },
     verify = { root ->
       assertReadable(root, "82", "8.0")
-      assertTrue(root.findViewById<TextView>(R.id.summary_insulin_title).text.contains("Bolus today"))
+      assertTrue(root.findViewById<TextView>(R.id.summary_insulin_title).text.contains("Total unavailable"))
+      assertTrue(root.findViewById<TextView>(R.id.summary_insulin_total).text.contains("—"))
       assertTrue(Regex("partial|subtotal|incomplete", RegexOption.IGNORE_CASE)
         .containsMatchIn(plainText(root.findViewById(R.id.summary_basal))))
       assertTrue(root.findViewById<TextView>(R.id.summary_comparison_title).text.contains("Bolus"))
@@ -190,8 +213,9 @@ class WidgetSummaryRenderingTest {
       assertFalse("Coverage must not claim exactly 100%", textViews(root).any {
         Regex("(?<![0-9<])100%").containsMatchIn(plainText(it))
       })
-      assertTrue("Bolus remains 8 U instead of a partial 8.2 U total", unitsPattern(8)
-        .containsMatchIn(plainText(root.findViewById(R.id.summary_insulin_total))))
+      assertTrue("Total remains unavailable instead of a partial 8.2 U total", plainText(root.findViewById(R.id.summary_insulin_total)).contains("—"))
+      assertTrue("Known bolus remains separately visible", unitsPattern(8)
+        .containsMatchIn(plainText(root.findViewById(R.id.summary_bolus))))
     })
 
   @Test fun absentBasalEvidenceStaysUnknownWhileRecordedZeroRemainsZero() {
@@ -205,8 +229,9 @@ class WidgetSummaryRenderingTest {
         assertTrue("Absent basal evidence must show an unknown amount", plainText(basal).contains("—"))
         assertFalse("No basal evidence is not a known zero dose", unitsPattern(0).containsMatchIn(plainText(basal)))
         assertTextFullyVisible(root, basal, "Unknown basal")
+        assertTrue("Total stays unknown without basal", plainText(root.findViewById(R.id.summary_insulin_total)).contains("—"))
         assertTrue("Known bolus survives absent basal evidence", unitsPattern(8)
-          .containsMatchIn(plainText(root.findViewById(R.id.summary_insulin_total))))
+          .containsMatchIn(plainText(root.findViewById(R.id.summary_bolus))))
       })
     render("default-recorded-zero-basal-en", Size(250, 250),
       build = { context, options ->
@@ -229,12 +254,12 @@ class WidgetSummaryRenderingTest {
     verify = { root ->
       assertReadable(root, "82")
       val basal = root.findViewById<TextView>(R.id.summary_compact_split_legend)
-      assertTrue("Minimum widget must preserve known basal 2 U", unitsPattern(2).containsMatchIn(plainText(basal)))
-      assertTrue("Minimum widget must distinguish partial basal", plainText(basal).contains("partial", ignoreCase = true))
-      assertTextFullyVisible(root, basal, "Compact partial basal")
+      assertTrue("Minimum widget must preserve the recorded subtotal", unitsPattern(10).containsMatchIn(plainText(basal)))
+      assertTrue("Minimum widget must identify the recorded basis", plainText(basal).contains("Recorded", ignoreCase = true))
+      assertTextFullyVisible(root, basal, "Compact recorded subtotal")
       val bolus = root.findViewById<TextView>(R.id.summary_insulin_total)
-      assertTrue("Compact headline must identify the known bolus amount", plainText(bolus).contains("Bolus") && unitsPattern(8).containsMatchIn(plainText(bolus)))
-      assertTextFullyVisible(root, bolus, "Compact recorded bolus")
+      assertTrue("Compact headline must show the total is unavailable", plainText(bolus).contains("Total") && plainText(bolus).contains("—"))
+      assertTextFullyVisible(root, bolus, "Compact missing total")
       assertFalse("A partial compact widget cannot show an unlabeled complete insulin ratio",
         images(root).any { it.id == R.id.summary_insulin_split })
     })

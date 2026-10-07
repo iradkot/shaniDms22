@@ -25,6 +25,42 @@ function bg(date: number, values: Partial<BgSample> = {}): BgSample {
 }
 
 describe('chart data integrity', () => {
+  it('uses actual interrupted bolus delivery and the latest revision everywhere', () => {
+    const dose = {
+      eventType: 'Correction Bolus',
+      created_at: '2026-01-01T12:00:00Z',
+      syncIdentifier: 'dose',
+      insulin: 0.5,
+    };
+    expect(
+      mapNightscoutTreatmentsToInsulinDataEntries([
+        {...dose, deliveredUnits: 0.5, srvModified: 1},
+        {...dose, deliveredUnits: 0.05, srvModified: 2},
+        {...dose, syncIdentifier: 'deleted', deleted: true},
+        {...dose, syncIdentifier: 'invalid', deliveredUnits: -1},
+        {...dose, syncIdentifier: 'mutable', isMutable: true},
+      ]),
+    ).toEqual([expect.objectContaining({type: 'bolus', amount: 0.05})]);
+  });
+  it('keeps delivery duration so range totals can split a bolus crossing midnight', () => {
+    expect(
+      mapNightscoutTreatmentsToInsulinDataEntries([
+        {
+          eventType: 'Correction Bolus',
+          created_at: '2026-01-01T23:30:00Z',
+          duration: 60,
+          insulin: 2,
+        },
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        type: 'bolus',
+        amount: 2,
+        duration: 60,
+        endTime: '2026-01-02T00:30:00.000Z',
+      }),
+    ]);
+  });
   it('does not interpret a percentage temp basal as units per hour', () => {
     expect(
       mapNightscoutTreatmentsToInsulinDataEntries([

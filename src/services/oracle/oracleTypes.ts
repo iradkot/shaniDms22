@@ -6,6 +6,13 @@ export type OracleCachedTreatment = {
   /** Timestamp (ms) of the treatment event. */
   ts: number;
   eventType?: string;
+  /** Stable Nightscout identity and revision, retained across incremental syncs. */
+  sourceRecordId?: string;
+  sourceModifiedMs?: number;
+  deleted?: boolean;
+  /** Only finalized recorded bolus U belong in insulin; basal rates never do. */
+  insulinBasis?: 'recorded-bolus' | 'unknown-bolus' | 'none';
+  endTs?: number;
   insulin?: number;
   carbs?: number;
 };
@@ -20,7 +27,7 @@ export type OracleCachedDeviceStatus = {
 };
 
 export type OracleCacheMeta = {
-  version: 2;
+  version: 3;
   /** Timestamp (ms) the cache was last synced up to. */
   lastSyncedMs: number;
 };
@@ -85,12 +92,13 @@ export type OracleMatchTrace = {
   treatments30m?: OracleCachedTreatment[];
   /** Treatment summary in first 30 minutes. */
   actions30m?: {
-    insulin: number;
+    /** Recorded bolus U only; null means an observed bolus cannot be resolved. */
+    insulin: number | null;
     carbs: number;
   };
   /** Counts of treatment events in first 30 minutes. */
   actionCounts30m?: {
-    boluses: number;
+    boluses: number | null;
     carbs: number;
   };
   /** Time-in-range for 0..2h (0..1). */

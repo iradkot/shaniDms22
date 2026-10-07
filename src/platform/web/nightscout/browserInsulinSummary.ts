@@ -41,7 +41,10 @@ export const buildBrowserModeledInsulinSummary = (
     return {quality: 'unavailable'};
   }
   const totals = calculateTotalInsulin(
-    mapNightscoutTreatmentsToInsulinDataEntries([...treatments.records]),
+    mapNightscoutTreatmentsToInsulinDataEntries(
+      [...treatments.records],
+      treatments.freshness.fetchedAtMs,
+    ),
     entries.map(entry => ({
       time: `${String(Math.floor(entry.secondsFromMidnight / 3600)).padStart(
         2,

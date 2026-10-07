@@ -13,6 +13,54 @@ class WidgetBasalEstimateTest {
   private val start = widgetParseTimestamp("2026-09-27T00:00:00Z")!!
   private val hour = 3_600_000L
 
+  @Test fun `expired profile switch explicit end does not require duration`() {
+    val rows = JSONArray().put(event(start - 2 * hour, "Profile Switch")
+      .put("endDate", widgetIsoUtc(start - hour)))
+    assertEquals(3.0, estimate(rows).estimatedBasalUnits!!, 0.000001)
+  }
+
+  @Test fun `completed actual delivery overrides simultaneous conflicting programmed controls`() {
+    val rows = JSONArray().put(temp(start, 180, 1.0)).put(temp(start, 180, 2.0))
+      .put(temp(start, 180, 9.0).put("deliveredUnits", 0.8))
+    assertEquals(0.8, estimate(rows).estimatedBasalUnits!!, 0.000001)
+    rows.getJSONObject(2).put("duration", 60)
+    assertNull(estimate(rows).estimatedBasalUnits)
+  }
+
+  @Test fun `closed historical profile history ignores valid changes after matched cutoff`() {
+    val history = JSONObject().put("basalProfileHistoryThroughMs", start + 24 * hour).put("basalProfileHistory", JSONArray()
+      .put(profile(1.0))
+      .put(profile(2.0).put("startDate", widgetIsoUtc(start + 2 * hour)))
+      .put(profile(3.0).put("startDate", widgetIsoUtc(start + 4 * hour))))
+    val result = estimate(JSONArray(), history)
+    assertEquals(4.0, result.estimatedBasalUnits!!, 0.000001)
+  }
+
+  @Test fun `profile history rejects missing carry in and conflicting same time schedules`() {
+    val noCarryIn = JSONObject().put("basalProfileHistoryThroughMs", start + 3 * hour).put("basalProfileHistory", JSONArray()
+      .put(profile(2.0).put("startDate", widgetIsoUtc(start + hour))))
+    assertNull(estimate(JSONArray(), noCarryIn).estimatedBasalUnits)
+    val conflicting = JSONObject().put("basalProfileHistoryThroughMs", start + 3 * hour).put("basalProfileHistory", JSONArray()
+      .put(profile(1.0)).put(profile(2.0)))
+    assertNull(estimate(JSONArray(), conflicting).estimatedBasalUnits)
+    val identical = JSONObject().put("basalProfileHistoryThroughMs", start + 3 * hour).put("basalProfileHistory", JSONArray()
+      .put(profile(1.0)).put(profile(1.0)))
+    assertEquals(3.0, estimate(JSONArray(), identical).estimatedBasalUnits!!, 0.000001)
+    identical.remove("basalProfileHistoryThroughMs")
+    assertNull(estimate(JSONArray(), identical).estimatedBasalUnits)
+    identical.put("basalProfileHistoryThroughMs", start + hour)
+    assertNull(estimate(JSONArray(), identical).estimatedBasalUnits)
+  }
+
+  @Test fun `completed delivery wins across effective profile history changes`() {
+    val history = JSONObject().put("basalProfileHistoryThroughMs", start + 3 * hour).put("basalProfileHistory", JSONArray().put(profile(1.0))
+      .put(profile(2.0).put("startDate", widgetIsoUtc(start + hour))))
+    val rows = JSONArray().put(temp(start + hour / 2, 120, 9.0).put("deliveredUnits", 0.8))
+    val result = estimate(rows, history)
+    assertEquals(0.8, result.totalBasal!!, 0.000001)
+    assertEquals(2.3, result.estimatedBasalUnits!!, 0.000001)
+  }
+
   @Test fun `all shared estimated basal fixtures match TypeScript calculations`() {
     val file = listOf("../../__tests__/fixtures/estimated-basal.json", "../__tests__/fixtures/estimated-basal.json", "__tests__/fixtures/estimated-basal.json")
       .map { java.io.File(it) }.first { it.isFile }
@@ -27,9 +75,16 @@ class WidgetBasalEstimateTest {
       val extraRows = case.getJSONArray("records")
       for (row in 0 until extraRows.length()) rows.put(extraRows.getJSONObject(row))
       val settings = case.optJSONObject("profile") ?: fixture.getJSONObject("profile")
-      val basalProfile = JSONObject().put("startDate", "2026-01-01T00:00:00Z")
+      fun rawProfile(selected: JSONObject, effective: Any) = JSONObject().put("startDate", effective)
         .put("defaultProfile", "Default").put("store", JSONObject().put("Default", JSONObject()
-          .put("timezone", settings.getString("timeZone")).put("basal", settings.getJSONArray("entries"))))
+          .put("timezone", selected.getString("timeZone")).put("basal", selected.getJSONArray("entries"))))
+      val basalProfile = settings.optJSONArray("history")?.let { history ->
+        JSONObject().put("basalProfileHistoryThroughMs", settings.getLong("verifiedThroughMs"))
+          .put("basalProfileHistory", JSONArray().apply { for (i in 0 until history.length()) {
+            val item = history.getJSONObject(i)
+            put(rawProfile(item, item.getLong("startMs")))
+          } })
+      } ?: rawProfile(settings, "2026-01-01T00:00:00Z")
       val recorded = calculateWidgetInsulinStats(rows, from, until, observed)!!
       val result = withWidgetBasalEstimate(recorded, rows, basalProfile, from, until, observed, utc)!!
       assertEquals(name, 2.0, result.totalBolus!!, 0.000001)
@@ -53,10 +108,9 @@ class WidgetBasalEstimateTest {
       .put(bolus(start, 2.0)).put(bolus(previous, 2.0))
     val actual = calculateWidgetInsulinComparison(treatments, start + 3 * hour, utc)!!
     val subtotal = widgetInsulinValues(actual.today, actual.yesterday)!!
-    assertEquals(WidgetInsulinBasis.PARTIAL, subtotal.basis)
-    assertEquals(3.8, subtotal.today, 0.000001)
-    assertEquals(3.0, subtotal.baseline, 0.000001)
-    assertEquals(0.8, subtotal.today - subtotal.baseline, 0.000001)
+    assertEquals(WidgetInsulinBasis.BOLUS, subtotal.basis)
+    assertEquals(2.0, subtotal.today, 0.000001)
+    assertEquals(2.0, subtotal.baseline, 0.000001)
     val estimated = calculateWidgetInsulinComparison(treatments, start + 3 * hour, utc,
       profilesByDayStart = mapOf(start to profile(1.0), previous to profile(1.0)))!!
     assertEquals(1.8, estimated.today!!.totalBasal!!, 0.000001)
@@ -261,8 +315,8 @@ class WidgetBasalEstimateTest {
     val missing = calculateWidgetInsulinComparison(treatments, start + 3 * hour, utc, profilesByDayStart = profiles)!!
     assertNull(missing.weekAverage!!.estimatedTotalUnits)
     assertEquals(0.4, missing.weekAverage!!.totalBasal!!, 0.000001)
-    assertEquals(WidgetInsulinBasis.PARTIAL, widgetInsulinValues(missing.today, missing.weekAverage)!!.basis)
-    assertEquals(0.6, widgetInsulinValues(missing.today, missing.weekAverage)!!.let { it.today - it.baseline }, 0.000001)
+    assertEquals(WidgetInsulinBasis.BOLUS, widgetInsulinValues(missing.today, missing.weekAverage)!!.basis)
+    assertEquals(0.0, widgetInsulinValues(missing.today, missing.weekAverage)!!.let { it.today - it.baseline }, 0.000001)
   }
 
   @Test fun `production loads as of profiles after today's recorded progress and reuses historical profiles`() {
@@ -283,7 +337,7 @@ class WidgetBasalEstimateTest {
         else -> {
           assertEquals("/api/v1/profiles", uri.path)
           if (requests.count { it.contains("profiles") } == 1) beforeFirstProfile = recordedProgress
-          assertEquals("1", params["count"])
+          assertEquals("2", params["count"])
           assertTrue(params.keys.none { it.startsWith("sort[") })
           val cutoff = widgetParseTimestamp(params.getValue("find[startDate][\$lte]"))!!
           val profileDay = widgetStartOfDayMs(cutoff, utc)

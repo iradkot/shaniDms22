@@ -10,6 +10,7 @@ import {
   type TrendsRangeThresholds,
 } from '../../../modules/trends';
 import {projectNightscoutTherapyContext} from '../../nightscout/therapyContextProjection';
+import {buildRecordedInsulinSummary} from '../../../services/insulin/recordedInsulin';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -34,16 +35,29 @@ export const createNativeTherapyContextDataSource = (
     dependencies.loadTreatments ?? fetchTreatmentsForDateRangeWithMetadata;
   return {
     async loadTherapyContext(period) {
-      const [glucoseSamples, treatmentRange] = await Promise.all([
-        dependencies.glucoseDataSource.loadGlucoseSamples(period),
+      const [glucose, treatmentRange] = await Promise.all([
+        dependencies.glucoseDataSource.loadGlucoseSnapshot
+          ? dependencies.glucoseDataSource.loadGlucoseSnapshot(period)
+          : dependencies.glucoseDataSource
+              .loadGlucoseSamples(period)
+              .then(samples => ({
+                samples,
+                freshness: {kind: 'unknown' as const},
+              })),
         loadTreatments(
           new Date(period.startMs - DAY_MS),
-          new Date(period.endMs),
+          new Date(period.endMs - 1),
         ),
       ]);
-      const projected = projectNightscoutTherapyContext(
-        treatmentRange.records,
-      );
+      if (
+        treatmentRange.freshness.kind !== 'fresh' ||
+        treatmentRange.complete === false
+      ) {
+        throw new Error(
+          'Therapy Context requires fresh, complete treatment history.',
+        );
+      }
+      const projected = projectNightscoutTherapyContext(treatmentRange.records);
       const timeRange = {
         fromInclusive: period.startMs,
         toExclusive: period.endMs,
@@ -55,9 +69,15 @@ export const createNativeTherapyContextDataSource = (
         [];
       return buildTherapyContextSnapshot({
         period,
-        glucoseSamples,
-        sourceReliability: 'reliable',
+        glucoseSamples: glucose.samples,
+        sourceReliability:
+          glucose.freshness.kind === 'fresh' ? 'reliable' : 'unverified',
         treatments: projected.treatments,
+        recordedInsulin: buildRecordedInsulinSummary(
+          treatmentRange.records,
+          period,
+          treatmentRange.freshness.fetchedAtMs,
+        ),
         mealStartedAtMs: meals.map(meal => meal.mealStart),
         activities: activities.map(activity => ({
           startedAtMs: activity.startedAt,

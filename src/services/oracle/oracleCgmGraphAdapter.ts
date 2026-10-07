@@ -2,6 +2,8 @@ import {BgSample} from 'app/types/day_bgs.types';
 import {TrendDirectionString} from 'app/types/notifications';
 import {InsulinDataEntry} from 'app/types/insulin.types';
 import {FoodItemDTO} from 'app/types/food.types';
+import {mapNightscoutTreatmentsToInsulinDataEntries} from 'app/utils/nightscoutTreatments.utils';
+import {MAX_NIGHTSCOUT_TIMESTAMP_MS} from 'app/utils/nightscoutTimestamp';
 
 import {
   OracleCachedTreatment,
@@ -26,6 +28,7 @@ function toBgSample(params: {ts: number; sgv: number}): BgSample {
 }
 
 function stableTreatmentId(prefix: string, t: OracleCachedTreatment): string {
+  if (t.sourceRecordId) return `${prefix}-${t.sourceRecordId}`;
   const insulin = typeof t.insulin === 'number' ? t.insulin : 0;
   const carbs = typeof t.carbs === 'number' ? t.carbs : 0;
   const kind = insulin > 0 ? 'insulin' : carbs > 0 ? 'carbs' : 'other';
@@ -90,7 +93,7 @@ export function oracleTreatmentsToCgmInputs(params: {
   const insulinData: InsulinDataEntry[] = [];
 
   for (const t of treatments) {
-    if (!t || !Number.isFinite(t.ts)) continue;
+    if (!t || !Number.isFinite(t.ts) || t.deleted) continue;
 
     if (typeof t.carbs === 'number' && Number.isFinite(t.carbs) && t.carbs > 0) {
       foodItems.push({
@@ -104,12 +107,13 @@ export function oracleTreatmentsToCgmInputs(params: {
       });
     }
 
-    if (typeof t.insulin === 'number' && Number.isFinite(t.insulin) && t.insulin > 0) {
-      insulinData.push({
-        type: 'bolus',
-        amount: t.insulin,
-        timestamp: new Date(t.ts).toISOString(),
-      });
+    if (t.insulinBasis === 'recorded-bolus') {
+      insulinData.push(...mapNightscoutTreatmentsToInsulinDataEntries([{
+        created_at: t.ts,
+        endDate: t.endTs ?? t.ts,
+        eventType: t.eventType,
+        deliveredUnits: t.insulin,
+      }], MAX_NIGHTSCOUT_TIMESTAMP_MS).filter(entry => entry.type === 'bolus'));
     }
   }
 

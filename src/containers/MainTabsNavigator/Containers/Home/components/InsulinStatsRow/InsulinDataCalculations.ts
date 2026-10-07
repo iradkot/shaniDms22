@@ -1,40 +1,26 @@
-import { InsulinDataEntry, BasalProfile } from 'app/types/insulin.types';
-import { calculateTotalInsulin } from 'app/utils/insulin.utils/calculateTotalInsulin';
+import type {DailyInsulinSourceSummary} from 'app/modules/dailyOverview';
+import {recordedInsulinDisplay} from 'app/product/dailyOverview/dailyOverviewPresentation';
 
-export interface InsulinStats {
-  totalBasal: number;
-  totalBolus: number;
-  totalInsulin: number;
-  basalBolusRatio: number;
-}
+/** Present the shared raw-dose calculation; charts and profiles never establish delivery. */
+export const computeInsulinStats = (summary: DailyInsulinSourceSummary) =>
+  recordedInsulinDisplay(summary);
 
-/**
- * Computes insulin statistics from insulin and basal profile data.
- * @param insulinData - Array of insulin data entries.
- * @param basalProfileData - Basal profile data.
- * @param startDate - Start date of the period.
- * @param endDate - End date of the period.
- * @returns Computed insulin statistics.
- */
-export const computeInsulinStats = (
-  insulinData: InsulinDataEntry[],
-  basalProfileData: BasalProfile,
-  startDate: Date,
-  endDate: Date
-): InsulinStats => {
-  const { totalBasal, totalBolus } = calculateTotalInsulin(
-    insulinData,
-    basalProfileData,
-    startDate,
-    endDate
-  );
-  const totalInsulin = totalBasal + totalBolus;
-  const basalBolusRatio = totalBolus > 0 ? totalBasal / totalInsulin : 0;
-
+/** The older native bridge has no quality labels, so it accepts complete recorded facts only. */
+export const recordedInsulinBridgeStats = (
+  summary: DailyInsulinSourceSummary,
+) => {
+  const insulin = computeInsulinStats(summary);
+  if (
+    insulin.total === undefined ||
+    insulin.basal === undefined ||
+    insulin.bolus === undefined
+  ) {
+    return undefined;
+  }
   return {
-    totalInsulin,
-    totalBasal,
-    totalBolus,
-    basalBolusRatio,
+    totalBasal: insulin.basal,
+    totalBolus: insulin.bolus,
+    totalInsulin: insulin.total,
+    basalBolusRatio: insulin.total > 0 ? insulin.basal / insulin.total : 0,
   };
 };

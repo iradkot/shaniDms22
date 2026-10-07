@@ -42,6 +42,7 @@ import {buildLoopModeSummary} from 'app/services/aiAnalyst/loopModeSummaryTool';
 import {TimeValueEntry} from 'app/types/insulin.types';
 import {loadInsulinContext} from 'app/services/insulin/insulinDataSource';
 import {calculateModeledInsulinContextMetrics} from 'app/services/insulin/insulinRangeMetrics';
+import {buildBolusRangeDistribution} from 'app/services/insulin/bolusRangeDistribution';
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {DEFAULT_NIGHT_WINDOW} from 'app/constants/GLUCOSE_WINDOWS';
 import type {TirThresholds} from 'app/types/loopAnalysis.types';
@@ -1265,6 +1266,16 @@ export async function runAiAnalystTool(
           previousBgData,
           currentTreatments: [...currentContext.treatments],
           previousTreatments: [...previousContext.treatments],
+          currentTreatmentsObservedAtMs: currentContext.treatmentObservedAtMs,
+          previousTreatmentsObservedAtMs: previousContext.treatmentObservedAtMs,
+          currentTreatmentsComplete:
+            currentContext.availability.treatments === 'available' &&
+            currentContext.recordedInsulin?.quality !== 'unavailable' &&
+            currentContext.recordedInsulin?.bolusUnits !== undefined,
+          previousTreatmentsComplete:
+            previousContext.availability.treatments === 'available' &&
+            previousContext.recordedInsulin?.quality !== 'unavailable' &&
+            previousContext.recordedInsulin?.bolusUnits !== undefined,
           currentProfile: currentContext.profileData,
           previousProfile: previousContext.profileData,
           currentLoopMode,
@@ -1308,27 +1319,16 @@ export async function runAiAnalystTool(
         const insulinEntries = context.insulinData;
         const metrics = calculateModeledInsulinContextMetrics(context, new Date(startMs), new Date(endMs));
 
-        // This legacy tool models scheduled/temporary basal; it cannot prove delivery.
-        const boluses = insulinEntries.filter(e => e.type === 'bolus');
+        const bolusDistribution = buildBolusRangeDistribution(insulinEntries, {startMs, endMs});
         const totalBolus = metrics.totalBolus;
         const totalTempBasal = metrics.totalTempBasal;
         const totalDaily = metrics.totalInsulin;
-
+        if (bolusDistribution.totalUnits !== Math.round(totalBolus * 100) / 100) {
+          throw new Error('Bolus distribution does not match the verified total.');
+        }
         const days = Math.max(1, (endMs - startMs) / (24 * 60 * 60 * 1000));
         const avgDailyBolus = totalBolus / days;
-        const avgDailyTempBasal = totalTempBasal / days;
-
-        // Hourly bolus distribution
-        const hourlyBolus: Record<number, number> = {};
-        boluses.forEach(b => {
-          if (b.timestamp) {
-            const hour = new Date(b.timestamp).getHours();
-            hourlyBolus[hour] = (hourlyBolus[hour] ?? 0) + (b.amount ?? 0);
-          }
-        });
-
-        const peakBolusHour = Object.entries(hourlyBolus)
-          .sort((a, b) => b[1] - a[1])[0]?.[0];
+        const avgDailyTempBasal = totalTempBasal === null ? null : totalTempBasal / days;
 
         return {
           ok: true,
@@ -1340,32 +1340,33 @@ export async function runAiAnalystTool(
             },
             calculation: 'profile-model',
             basalEstimated: metrics.basalEstimated,
+            tempBasalBreakdown: totalTempBasal === null
+              ? {quality: 'unavailable', explanation: 'The verified insulin total has no matching temp-basal subtotal. Null means unknown, not zero.'}
+              : {quality: 'estimated', explanation: 'Calculated from programmed temp-basal rates and one basal schedule.'},
             totals: {
               bolusU: Math.round(totalBolus * 100) / 100,
               basalU: Math.round(metrics.totalBasal * 100) / 100,
-              tempBasalU: Math.round(totalTempBasal * 100) / 100,
+              tempBasalU: totalTempBasal === null ? null : Math.round(totalTempBasal * 100) / 100,
               totalU: Math.round(totalDaily * 100) / 100,
             },
             dailyAverages: {
               bolusU: Math.round(avgDailyBolus * 100) / 100,
               basalU: Math.round(metrics.totalBasal / days * 100) / 100,
-              tempBasalU: Math.round(avgDailyTempBasal * 100) / 100,
+              tempBasalU: avgDailyTempBasal === null ? null : Math.round(avgDailyTempBasal * 100) / 100,
               totalU: Math.round(totalDaily / days * 100) / 100,
             },
             ratio: {
               bolusPercent: totalDaily > 0 ? Math.round((totalBolus / totalDaily) * 1000) / 10 : 0,
               basalPercent: totalDaily > 0 ? Math.round((metrics.totalBasal / totalDaily) * 1000) / 10 : 0,
-              tempBasalPercent: totalDaily > 0 ? Math.round((totalTempBasal / totalDaily) * 1000) / 10 : 0,
+              tempBasalPercent: totalTempBasal === null ? null : totalDaily > 0 ? Math.round((totalTempBasal / totalDaily) * 1000) / 10 : 0,
             },
             counts: {
-              bolusCount: boluses.length,
-              avgBolusesPerDay: Math.round((boluses.length / days) * 10) / 10,
+              bolusCount: bolusDistribution.count,
+              avgBolusesPerDay: Math.round((bolusDistribution.count / days) * 10) / 10,
             },
             patterns: {
-              peakBolusHour: peakBolusHour ? parseInt(peakBolusHour) : null,
-              hourlyBolusDistribution: Object.entries(hourlyBolus)
-                .map(([h, u]) => ({hour: parseInt(h), totalU: Math.round(u * 100) / 100}))
-                .sort((a, b) => a.hour - b.hour),
+              peakBolusHour: bolusDistribution.peakLocalHour,
+              hourlyBolusDistribution: bolusDistribution.byLocalHour,
             },
             availability: context.availability,
           },

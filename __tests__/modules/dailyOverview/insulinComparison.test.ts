@@ -7,7 +7,43 @@ import {
 import {buildRecordedInsulinSummary} from 'app/services/insulin/recordedInsulin';
 
 describe('daily insulin comparisons', () => {
-  it('includes recorded temp basal in the comparison when bolus is unchanged and basal coverage is partial', () => {
+  it('does not compare a 30% basal subtotal with a more complete day as daily usage', () => {
+    expect(
+      selectRecordedInsulinComparison(
+        {
+          quality: 'partial',
+          basalUnits: 6.8,
+          bolusUnits: 33.85,
+          basalCoveragePercent: 30,
+        },
+        {
+          quality: 'partial',
+          basalUnits: 27.15,
+          bolusUnits: 33.85,
+          basalCoveragePercent: 90,
+        },
+      ),
+    ).toMatchObject({metric: 'bolus', deltaUnits: 0});
+  });
+  it('does not treat equal incomplete coverage as matching delivery intervals', () => {
+    expect(
+      selectRecordedInsulinComparison(
+        {
+          quality: 'partial',
+          basalUnits: 6.8,
+          bolusUnits: 33.85,
+          basalCoveragePercent: 30,
+        },
+        {
+          quality: 'partial',
+          basalUnits: 20,
+          bolusUnits: 33.85,
+          basalCoveragePercent: 30,
+        },
+      ),
+    ).toMatchObject({metric: 'bolus', deltaUnits: 0});
+  });
+  it('compares only known bolus when recorded basal coverage is partial', () => {
     const startMs = new Date(2026, 9, 4).getTime();
     const endMs = startMs + 3 * 3_600_000;
     const summary = (amount: number) =>
@@ -31,11 +67,11 @@ describe('daily insulin comparisons', () => {
       );
     const result = selectRecordedInsulinComparison(summary(1.8), summary(1));
     expect(result).toMatchObject({
-      metric: 'recordedSubtotal',
-      currentUnits: 3.8,
-      baselineUnits: 3,
+      metric: 'bolus',
+      currentUnits: 2,
+      baselineUnits: 2,
     });
-    expect(result?.deltaUnits).toBeCloseTo(0.8);
+    expect(result?.deltaUnits).toBe(0);
   });
   it('keeps a finite weekly mean when summing large source values would overflow', () => {
     const asOfMs = new Date(2026, 0, 15, 12).getTime();
@@ -180,7 +216,7 @@ describe('daily insulin comparisons', () => {
     });
   });
 
-  it('rejects implicit legacy estimates and compares known partial basal as a subtotal', () => {
+  it('rejects implicit legacy estimates and compares known bolus with partial basal', () => {
     const complete = {
       quality: 'available' as const,
       basalUnits: 4,
@@ -197,7 +233,7 @@ describe('daily insulin comparisons', () => {
         ...complete,
         basalCoveragePercent: 50,
       }),
-    ).toMatchObject({metric: 'recordedSubtotal'});
+    ).toMatchObject({metric: 'bolus'});
     expect(
       selectRecordedInsulinComparison(complete, {...complete, basalUnits: 3}),
     ).toMatchObject({metric: 'total', deltaUnits: 1});
@@ -267,13 +303,13 @@ describe('daily insulin comparisons', () => {
         ...source,
         estimatedTotalUnits: 99,
       })?.metric,
-    ).toBe('recordedSubtotal');
+    ).toBe('bolus');
     expect(
       selectRecordedInsulinComparison(source, {
         ...source,
         estimatedBasalUnits: Number.NaN,
       })?.metric,
-    ).toBe('recordedSubtotal');
+    ).toBe('bolus');
     expect(
       selectRecordedInsulinComparison(
         {quality: 'available', basalUnits: 1e308, bolusUnits: 1e308},

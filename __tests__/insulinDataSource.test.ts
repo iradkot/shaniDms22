@@ -6,6 +6,8 @@ import type {NightscoutRangeResult} from 'app/api/apiRequests';
 import type {DeviceStatusEntry} from 'app/types/deviceStatus.types';
 import type {ProfileDataType} from 'app/types/insulin.types';
 import {calculateTotalInsulin} from 'app/utils/insulin.utils/calculateTotalInsulin';
+import {buildRecordedInsulinSummary} from 'app/services/insulin/recordedInsulin';
+import {mapNightscoutTreatmentsToInsulinDataEntries} from 'app/utils/nightscoutTreatments.utils';
 
 const DAY_MS = 86_400_000;
 const startMs = Date.UTC(2026, 8, 6, 8);
@@ -81,6 +83,84 @@ function fixture() {
 }
 
 describe('shared insulin context source', () => {
+  it('adds a separate verified estimate to the legacy context without inventing recorded basal', async () => {
+    const fetchTreatments = jest.fn(async () => fresh([bolus(1.25)]));
+    const load = createInsulinContextLoader({
+      fetchTreatments,
+      fetchDeviceStatus: async () => fresh([]),
+      fetchProfile: async () => profile,
+      fetchBasalProfileHistory: async () => ({
+        profile: {entries: [{time: '00:00', value: 1}]},
+        freshness: {kind: 'fresh', fetchedAtMs: endMs},
+      }),
+      getScopeKey: () => 'fixture',
+      now: () => endMs,
+    });
+    const result = await load(request);
+    expect(result.recordedInsulin).toMatchObject({
+      quality: 'partial',
+      basalCoveragePercent: 0,
+      bolusUnits: 1.25,
+    });
+    expect(result.recordedInsulin?.estimatedTotalUnits).toBeCloseTo(2.25);
+    expect(result.recordedInsulin).not.toHaveProperty('basalUnits');
+    expect(fetchTreatments).toHaveBeenCalledTimes(1);
+  });
+  it('keeps interval bolus totals consistent across the recorded and chart paths at midnight', () => {
+    const records = [
+      {
+        eventType: 'Correction Bolus',
+        created_at: iso(startMs - 30 * 60_000),
+        duration: 60,
+        deliveredUnits: 2,
+        insulin: 3,
+      },
+    ];
+    const normalized = mapNightscoutTreatmentsToInsulinDataEntries(
+      records,
+      endMs,
+    );
+    const modeled = calculateTotalInsulin(
+      normalized,
+      [{time: '00:00', value: 0}],
+      new Date(startMs),
+      new Date(endMs),
+    );
+    const recorded = buildRecordedInsulinSummary(records, request, endMs);
+    expect(modeled.totalBolus).toBe(1);
+    expect(recorded.bolusUnits).toBe(modeled.totalBolus);
+  });
+  it('calculates recorded coverage through the observed cutoff, not future hours of today', async () => {
+    const f = fixture();
+    f.fetchTreatments.mockResolvedValueOnce(
+      fresh([
+        bolus(1.25),
+        {
+          eventType: 'Temp Basal',
+          created_at: iso(startMs),
+          duration: 60,
+          deliveredUnits: 1,
+        },
+      ]),
+    );
+    const result = await f.load({startMs, endMs: endMs + DAY_MS});
+    expect(result.recordedInsulin).toMatchObject({
+      quality: 'available',
+      basalUnits: 1,
+      bolusUnits: 1.25,
+      basalCoveragePercent: 100,
+    });
+  });
+  it('does not mark a truncated treatment snapshot as reliable', async () => {
+    const f = fixture();
+    f.fetchTreatments.mockResolvedValueOnce({
+      ...fresh([bolus(1.25)]),
+      complete: false,
+    });
+    const result = await f.load(request);
+    expect(result.availability.treatments).toBe('unavailable');
+    expect(result.recordedInsulin).toEqual({quality: 'unavailable'});
+  });
   it('shares an in-flight fetch and completed cache between chart and AI readers, with independent normalized results', async () => {
     const f = fixture();
     const treatments =

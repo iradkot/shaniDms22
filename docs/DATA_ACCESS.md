@@ -64,7 +64,8 @@ Use the returned quality state instead of inventing defaults:
 `basalUnits ?? 0` to make a total. A basal subtotal from 80% of a day is not an
 estimate for 100% of that day. Comparisons prefer complete recorded totals, then
 complete or estimated totals with an estimate label when either side is modeled,
-then known recorded basal-plus-bolus subtotals, then clearly labeled bolus only.
+then clearly labeled bolus only. Partial basal sums cannot be compared as usage:
+equal coverage percentages do not establish matching recorded time spans.
 The seven-day average requires all seven periods for the selected basis. A mix of
 complete and estimated daily totals remains an estimate, never a recorded total.
 
@@ -73,10 +74,16 @@ with a midnight entry, unique times and consistent textual/numeric times. Profil
 timezone controls schedule integration; absent timezone uses the device clock.
 Native daily profile reads check through
 the cutoff (through the full date for reusable past-day profiles) and accept a
-schedule only if it was effective before the window. Unresolved profile changes
-disable estimates. The browser proxy currently returns the latest profile, so Web
-estimates additionally require its explicit effective date to precede the window.
+carry-in schedule plus every effective update through the window. Integration
+splits at actual profile updates; unchanged re-uploads remain usable. The browser
+proxy supports the same complete history contract using `profileHistory: true`.
+Unresolved Profile Switch treatments disable estimates.
 Missing or stale profiles preserve recorded amounts without creating an estimate.
+If no complete recorded total or valid estimate exists, show a missing daily
+total and smaller recorded components with coverage. Do not imply a daily ratio.
+Legacy charts normalize boluses using the same delivered-unit precedence,
+latest-revision deduplication, validity and completed-interval rules. Clip doses
+crossing a range boundary by delivery interval, not only their start timestamp.
 
 Both native and browser Previous Day Summary use the recorded loader. That older
 screen's contract accepts only complete totals, so partial insulin is unavailable
@@ -219,6 +226,35 @@ fetch a profile to make an incomplete recorded summary appear complete.
 response is unsaturated, stop at the safety bound, reject a truncated range.
 `skip` is not implemented by the relevant v1 list endpoints. Cached and uncached
 glucose readers share the same complete transport and decoder.
+
+Insulin readers also reject malformed raw rows instead of dropping them into a
+known-empty response. Treatment cache version 3 discards older decoded snapshots;
+browser chart/delivery cache variants preserve invalid duration as unknown.
+
+Home, Therapy Context, Hypo Detective, timeline markers and Oracle use the same
+delivered-dose, identity, deletion and completion rules in `recordedInsulin.ts`.
+Oracle cache schema 3 preserves source dose identities and original observation
+times. Treatments are mutable: each successful refresh reads the complete analysis
+range plus a one-day carry-in and replaces its cached treatment facts. This catches
+older revisions and hard deletions, while glucose and device-status reads remain
+incremental. Failed treatment refreshes preserve the old facts and observation
+time; they do not establish current delivery. Anonymous rows retain their distinct
+multiplicity across chunk boundaries.
+
+AGP comparisons pass each treatment snapshot's original observation time and
+transport completeness. Unknown bolus quantities suppress correction-response
+and meal insulin/timing conclusions, including insulin-specific AGP pattern
+drivers. Glucose and carbohydrate comparisons remain
+available, with a data-quality warning describing the missing insulin evidence.
+
+Hypo Detective keeps malformed dose timestamps as unknown evidence and reads
+the earliest event's two-hour context plus the one-day delivery carry-in.
+
+AI delivery statistics use `buildBolusRangeDistribution` to allocate completed interval boluses over the requested
+window and local-hour boundaries. Their hourly amounts must add up to the range
+bolus total. A temporary-basal breakdown from an older single-profile model must
+not be compared to a total from verified profile history or recorded delivery;
+that breakdown stays unknown until compatible evidence is available.
 
 ## Adding or changing a calculation
 

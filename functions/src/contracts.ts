@@ -57,6 +57,7 @@ export interface NightscoutRangeRequest {
   readonly kind: NightscoutRangeKind;
   readonly startMs: number;
   readonly endMs: number;
+  readonly profileHistory?: true;
 }
 
 export interface AuthenticatedNightscoutRangeRequest
@@ -341,6 +342,7 @@ export const decodeNightscoutRangeRequest = (
     'workspaceId',
     'startMs',
     'endMs',
+    'profileHistory',
   ]);
   const startMs = finiteTimestamp(input.startMs);
   const endMs = finiteTimestamp(input.endMs);
@@ -352,7 +354,9 @@ export const decodeNightscoutRangeRequest = (
   if (
     !['entries', 'treatments', 'profile', 'devicestatus'].includes(kind) ||
     endMs < startMs ||
-    endMs - startMs > maximumRangeMs
+    endMs - startMs > maximumRangeMs ||
+    (input.profileHistory !== undefined &&
+      (input.profileHistory !== true || kind !== 'profile' || endMs <= startMs))
   ) {
     throw new ApiContractError(400, 'invalid_range', 'Invalid Nightscout range');
   }
@@ -363,5 +367,6 @@ export const decodeNightscoutRangeRequest = (
     workspaceId: opaqueIdentity(input.workspaceId),
     startMs,
     endMs,
+    ...(input.profileHistory === true ? {profileHistory: true as const} : {}),
   };
 };

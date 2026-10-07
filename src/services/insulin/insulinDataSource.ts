@@ -27,6 +27,11 @@ import {
 import {getActiveNightscoutCacheScope} from '../nightscoutCacheScope';
 import type {DailyInsulinSourceSummary} from '../../modules/dailyOverview';
 import {buildRecordedInsulinSummary} from './recordedInsulin';
+import {buildEstimatedBasalUnits} from './estimatedBasal';
+import {
+  fetchEstimatedBasalProfileRange,
+  type RecordedBasalProfileRange,
+} from './recordedInsulinDataSource';
 
 export type InsulinDataAvailability = 'available' | 'stale' | 'unavailable';
 export interface InsulinContextRequest {
@@ -54,6 +59,11 @@ export interface InsulinContext {
   /** Canonical recorded amounts from the same raw snapshot, including carry-in.
    * Optional for older injected adapters; absence means unknown, never zero. */
   readonly recordedInsulin?: DailyInsulinSourceSummary;
+  readonly treatmentObservedAtMs?: number;
+  readonly recordedInsulinPeriod?: {
+    readonly startMs: number;
+    readonly endMs: number;
+  };
   readonly availability: {
     readonly treatments: InsulinDataAvailability;
     readonly deviceStatus: InsulinDataAvailability;
@@ -75,6 +85,11 @@ export interface InsulinContextDependencies {
     end: Date,
   ) => Promise<NightscoutRangeResult<DeviceStatusEntry>>;
   readonly fetchProfile: (asOfIso: string) => Promise<ProfileDataType>;
+  /** Optional verified effective history for the same recorded summary window. */
+  readonly fetchBasalProfileHistory?: (
+    asOf: Date,
+    through: Date,
+  ) => Promise<RecordedBasalProfileRange>;
   readonly extractBasalProfile?: (payload: ProfileDataType) => BasalProfile;
   /** Opaque account/source identity including a credential/session revision. */
   readonly getScopeKey: () => string;
@@ -151,18 +166,30 @@ export const createInsulinContextLoader = (
     if (!work) {
       work = (async (): Promise<InsulinContext> => {
         // The carry-in window is shared: callers must not fetch their own basal lookback.
-        const [treatmentsResult, statusesResult, profileResult] =
-          await Promise.allSettled([
-            dependencies.fetchTreatments(
-              new Date(startMs - DAY_MS),
-              new Date(endMs - 1),
-            ),
-            dependencies.fetchDeviceStatus(
-              new Date(startMs),
-              new Date(endMs - 1),
-            ),
-            dependencies.fetchProfile(new Date(asOfMs).toISOString()),
-          ]);
+        const requestedObservedAtMs = now();
+        const [
+          treatmentsResult,
+          statusesResult,
+          profileResult,
+          basalHistoryResult,
+        ] = await Promise.allSettled([
+          dependencies.fetchTreatments(
+            new Date(startMs - DAY_MS),
+            new Date(endMs - 1),
+          ),
+          dependencies.fetchDeviceStatus(
+            new Date(startMs),
+            new Date(endMs - 1),
+          ),
+          dependencies.fetchProfile(new Date(asOfMs).toISOString()),
+          dependencies.fetchBasalProfileHistory &&
+          Math.min(endMs, requestedObservedAtMs) > startMs
+            ? dependencies.fetchBasalProfileHistory(
+                new Date(startMs),
+                new Date(Math.min(endMs, requestedObservedAtMs) - 1),
+              )
+            : Promise.resolve(undefined),
+        ]);
         assertCurrent();
         const treatments =
           treatmentsResult.status === 'fulfilled'
@@ -189,7 +216,7 @@ export const createInsulinContextLoader = (
         const resourceAvailability = <T>(
           result: PromiseSettledResult<NightscoutRangeResult<T>>,
         ): InsulinDataAvailability =>
-          result.status === 'rejected'
+          result.status === 'rejected' || result.value.complete === false
             ? 'unavailable'
             : result.value.freshness.kind === 'stale'
             ? 'stale'
@@ -222,17 +249,53 @@ export const createInsulinContextLoader = (
             return [sample];
           })
           .sort((left, right) => left.timestampMs - right.timestampMs);
+        const observedAtMs =
+          treatmentsResult.status === 'fulfilled'
+            ? Math.min(treatmentsResult.value.freshness.fetchedAtMs, now())
+            : now();
+        const recordedPeriod = {
+          startMs,
+          endMs: Math.min(endMs, observedAtMs, requestedObservedAtMs),
+        };
+        let recordedInsulin: DailyInsulinSourceSummary =
+          treatmentsResult.status === 'fulfilled' &&
+          treatmentsResult.value.freshness.kind === 'fresh' &&
+          treatmentsResult.value.complete !== false
+            ? buildRecordedInsulinSummary(
+                treatments,
+                recordedPeriod,
+                observedAtMs,
+              )
+            : {quality: 'unavailable'};
+        if (
+          recordedInsulin.quality === 'partial' &&
+          recordedInsulin.bolusUnits !== undefined &&
+          basalHistoryResult.status === 'fulfilled' &&
+          basalHistoryResult.value?.freshness.kind === 'fresh' &&
+          basalHistoryResult.value.profile
+        ) {
+          const estimatedBasalUnits = buildEstimatedBasalUnits(
+            treatments,
+            recordedPeriod,
+            observedAtMs,
+            basalHistoryResult.value.profile,
+          );
+          if (
+            estimatedBasalUnits !== undefined &&
+            Number.isFinite(estimatedBasalUnits + recordedInsulin.bolusUnits)
+          ) {
+            recordedInsulin = {
+              ...recordedInsulin,
+              estimatedBasalUnits,
+              estimatedTotalUnits:
+                estimatedBasalUnits + recordedInsulin.bolusUnits,
+            };
+          }
+        }
         const context: InsulinContext = {
-          recordedInsulin:
-            treatmentsResult.status === 'fulfilled' &&
-            treatmentsResult.value.freshness.kind === 'fresh' &&
-            treatmentsResult.value.complete !== false
-              ? buildRecordedInsulinSummary(
-                  treatments,
-                  {startMs, endMs},
-                  Math.min(treatmentsResult.value.freshness.fetchedAtMs, now()),
-                )
-              : {quality: 'unavailable'},
+          recordedInsulin,
+          treatmentObservedAtMs: observedAtMs,
+          recordedInsulinPeriod: recordedPeriod,
           treatments: treatments.filter(
             item =>
               treatmentTime(item) >= startMs && treatmentTime(item) < endMs,
@@ -240,7 +303,12 @@ export const createInsulinContextLoader = (
           deviceStatus,
           profileData,
           insulinData: filterInsulinDataToRange(
-            mapNightscoutTreatmentsToInsulinDataEntries([...treatments]),
+            mapNightscoutTreatmentsToInsulinDataEntries(
+              [...treatments],
+              treatmentsResult.status === 'fulfilled'
+                ? Math.min(treatmentsResult.value.freshness.fetchedAtMs, now())
+                : now(),
+            ),
             startMs,
             endMs - 1,
           ),
@@ -285,6 +353,7 @@ export const loadInsulinContext: InsulinContextLoader =
     fetchTreatments: fetchTreatmentsForDateRangeWithMetadata,
     fetchDeviceStatus: fetchDeviceStatusForDateRangeWithMetadata,
     fetchProfile: getUserProfileFromNightscout,
+    fetchBasalProfileHistory: fetchEstimatedBasalProfileRange,
     getScopeKey: () =>
       `${
         getActiveNightscoutCacheScope()?.sourceIdentity ?? 'unconfigured'

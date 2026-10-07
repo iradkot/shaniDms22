@@ -70,3 +70,70 @@ test('identifies profile-derived totals as modeled even when the inputs are fres
     basalEstimated: true,
   });
 });
+
+test('does not treat an unknown or unfinished bolus amount as zero in a modeled total', () => {
+  expect(() =>
+    calculateInsulinContextMetrics(
+      {...context(), recordedInsulin: {quality: 'partial', basalUnits: 1}},
+      start,
+      end,
+    ),
+  ).toThrow();
+});
+
+test('uses the same verified history estimate as daily summaries instead of an old single schedule', () => {
+  const withHistory = {
+    ...context(),
+    recordedInsulinPeriod: {startMs: start.getTime(), endMs: end.getTime()},
+    recordedInsulin: {
+      quality: 'partial' as const,
+      bolusUnits: 2,
+      estimatedBasalUnits: 4,
+      estimatedTotalUnits: 6,
+    },
+  };
+  expect(calculateInsulinContextMetrics(withHistory, start, end)).toMatchObject(
+    {totalBasal: 4, totalBolus: 2, totalInsulin: 6, totalTempBasal: null},
+  );
+  expect(() =>
+    calculateInsulinContextMetrics(
+      {...withHistory, recordedInsulin: {quality: 'partial', bolusUnits: 2}},
+      start,
+      end,
+    ),
+  ).toThrow();
+  expect(() =>
+    calculateInsulinContextMetrics(
+      withHistory,
+      start,
+      new Date(end.getTime() + 1),
+    ),
+  ).toThrow();
+  expect(() =>
+    calculateInsulinContextMetrics(
+      {
+        ...withHistory,
+        recordedInsulin: {
+          ...withHistory.recordedInsulin,
+          estimatedTotalUnits: 99,
+        },
+      },
+      start,
+      end,
+    ),
+  ).toThrow();
+});
+
+test('does not attach an old programmed temp-basal subtotal to verified recorded basal delivery', () => {
+  const base = {
+    ...context(),
+    insulinData: [{type: 'tempBasal' as const, rate: 1, duration: 60, startTime: start.toISOString(), endTime: end.toISOString()}],
+  };
+  const verified: InsulinContext = {
+    ...base,
+    recordedInsulinPeriod: {startMs: start.getTime(), endMs: end.getTime()},
+    recordedInsulin: {quality: 'available', basalUnits: 0.8, bolusUnits: 0, basalEvidence: 'recorded', basalCoveredMs: end.getTime() - start.getTime(), basalCoveragePercent: 100},
+  };
+  expect(calculateInsulinContextMetrics(verified, start, end)).toMatchObject({totalBasal: 0.8, totalTempBasal: null, totalInsulin: 0.8});
+  expect(calculateInsulinContextMetrics(base, start, end)).toMatchObject({totalBasal: 1, totalTempBasal: 1});
+});

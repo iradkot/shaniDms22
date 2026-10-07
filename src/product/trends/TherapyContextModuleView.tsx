@@ -23,6 +23,11 @@ import {
   productUiTokens,
 } from '../ui';
 import {TrendsEvidenceMetadataView} from './TrendsEvidenceMetadataView';
+import {DAILY_OVERVIEW_COPY} from '../dailyOverview/copy';
+import {
+  formatDailyValue,
+  recordedInsulinDisplay,
+} from '../dailyOverview/dailyOverviewPresentation';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RANGE_DAYS = [14, 30, 90] as const;
@@ -123,10 +128,12 @@ const FactCard = ({
   label,
   locale,
   value,
+  detail,
 }: {
   readonly label: string;
   readonly locale: DestinationLocale;
   readonly value: string;
+  readonly detail?: string;
 }) => (
   <View style={styles.factCard}>
     <Text style={[styles.factLabel, locale === 'he' && styles.rtlText]}>
@@ -135,6 +142,11 @@ const FactCard = ({
     <Text style={[styles.factValue, locale === 'he' && styles.rtlText]}>
       {value}
     </Text>
+    {detail ? (
+      <Text style={[styles.factLabel, locale === 'he' && styles.rtlText]}>
+        {detail}
+      </Text>
+    ) : null}
   </View>
 );
 
@@ -226,15 +238,51 @@ export const TherapyContextModuleView = ({
     value: string | undefined,
   ): readonly {readonly label: string; readonly value: string}[] =>
     value === undefined ? [] : [{label, value}];
+  const insulinFacts = (): readonly {
+    readonly label: string;
+    readonly value: string;
+    readonly detail?: string;
+  }[] => {
+    if (state.kind !== 'ready') {
+      return [];
+    }
+    const summary = state.snapshot.insulinSummary;
+    const daily = DAILY_OVERVIEW_COPY[locale];
+    const insulin = recordedInsulinDisplay(summary ?? {quality: 'unavailable'});
+    const value =
+      insulin.total ?? insulin.subtotal ?? insulin.bolus ?? insulin.basal;
+    const label =
+      insulin.total !== undefined
+        ? daily.recordedTotal
+        : insulin.subtotal !== undefined
+        ? daily.recordedSubtotal
+        : insulin.bolus !== undefined
+        ? daily.recordedBolus
+        : insulin.basal !== undefined
+        ? insulin.basalComplete
+          ? daily.recordedBasal
+          : daily.recordedSubtotal
+        : copy.insulin;
+    const units = (amount: number | undefined) =>
+      amount === undefined ? '—' : `${formatDailyValue(amount)} U`;
+    const detail = [
+      `${daily.recordedBasal}: ${units(insulin.basal)}`,
+      `${daily.recordedBolus}: ${units(insulin.bolus)}`,
+      ...(!insulin.basalComplete && insulin.basalCoveragePercent !== undefined
+        ? [
+            `${formatDailyValue(insulin.basalCoveragePercent)}% ${
+              daily.basalCoverage
+            }`,
+          ]
+        : []),
+      ...(insulin.total === undefined ? [daily.totalIncomplete] : []),
+    ].join(' · ');
+    return [{label, value: units(value), detail}];
+  };
   const facts =
     state.kind === 'ready'
       ? [
-          ...optionalFact(
-            copy.insulin,
-            state.snapshot.totals.insulinUnits === undefined
-              ? undefined
-              : `${state.snapshot.totals.insulinUnits} U`,
-          ),
+          ...insulinFacts(),
           ...optionalFact(
             copy.carbs,
             state.snapshot.totals.carbohydrateGrams === undefined
@@ -339,12 +387,7 @@ export const TherapyContextModuleView = ({
             ) : (
               <ResponsiveGrid locale={locale} testID="therapy-context-facts">
                 {facts.map(fact => (
-                  <FactCard
-                    key={fact.label}
-                    label={fact.label}
-                    locale={locale}
-                    value={fact.value}
-                  />
+                  <FactCard key={fact.label} locale={locale} {...fact} />
                 ))}
               </ResponsiveGrid>
             )}

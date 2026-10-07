@@ -96,7 +96,7 @@ describe('shared Nightscout insulin transport', () => {
     const adapter = jest.fn<ReturnType<AxiosAdapter>, Parameters<AxiosAdapter>>(
       async config => ({
         config,
-        data: [record, null, 4],
+        data: [record],
         status: 200,
         statusText: 'OK',
         headers: {},
@@ -110,5 +110,20 @@ describe('shared Nightscout insulin transport', () => {
     expect(raw).toEqual([record]);
     expect(range.records).toEqual(raw);
     expect(adapter).toHaveBeenCalledTimes(1);
+  });
+  it('rejects malformed treatment rows instead of certifying a known zero or incomplete dose history', async () => {
+    nightscoutInstance.defaults.adapter = async config => ({
+      config,
+      data: [null],
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+    await expect(
+      fetchTreatmentsForDateRangeUncached(start, end),
+    ).rejects.toThrow('malformed');
+    await expect(
+      fetchTreatmentsForDateRangeWithMetadata(start, end),
+    ).rejects.toThrow('malformed');
   });
 });

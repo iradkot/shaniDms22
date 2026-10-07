@@ -5,7 +5,11 @@ export function analyzeCorrections(
   evidence: AgpComparisonEvidence,
 ): AgpComparisonInsight[] {
   const corrections = evidence.corrections;
-  if (!hasMeaningfulCorrectionSignal(corrections)) {
+  if (
+    !evidence.dataQuality.currentBolusEvidenceComplete ||
+    !evidence.dataQuality.previousBolusEvidenceComplete ||
+    !hasMeaningfulCorrectionSignal(corrections)
+  ) {
     return [];
   }
 
@@ -107,8 +111,8 @@ export function analyzeCorrections(
 
 function correctionConfidence(evidence: AgpComparisonEvidence) {
   const enoughCorrections =
-    evidence.corrections.currentCount >= 5 &&
-    evidence.corrections.previousCount >= 5;
+    (evidence.corrections.currentCount ?? 0) >= 5 &&
+    (evidence.corrections.previousCount ?? 0) >= 5;
   const enoughCoverage =
     evidence.dataQuality.currentCoveragePct >= 70 &&
     evidence.dataQuality.previousCoveragePct >= 70;

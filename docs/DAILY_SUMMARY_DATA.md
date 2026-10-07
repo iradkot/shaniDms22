@@ -47,8 +47,10 @@ An available recorded summary requires known bolus and complete basal coverage.
 A partial summary preserves known components and coverage. Its basal-plus-bolus
 sum is a recorded subtotal, not the full daily amount. Valid explicit estimates
 add separate estimated basal and total fields without promoting recorded quality.
-Comparisons prefer recorded totals, then total estimates, then known recorded
-subtotals, then bolus only. Mixed complete/estimated totals are labeled estimates.
+Comparisons prefer recorded totals, then total estimates, then bolus only.
+Partial recorded basal spans cannot be compared as daily usage: equal coverage
+percentages do not establish that the same hours were observed. Mixed
+complete/estimated totals are labeled estimates.
 The weekly average requires all seven days for the basis being compared.
 
 Reconstruction overlays completed delivered basal amounts before filling gaps
@@ -57,12 +59,28 @@ so the same interval is never counted twice. Unfinished/mutable doses contribute
 only programmed rates to the estimate, never recorded delivery. Schedules require
 a midnight entry, unique times and matching textual/numeric times. Schedule
 integration uses the profile timezone and actual elapsed time across DST.
-Invalid or ambiguous controls and unresolved profile changes disable the estimate.
+Effective profile history supplies the carry-in schedule and every update through
+the cutoff. Re-uploading a profile during the day no longer removes the estimate.
+Actual schedule changes split the integration at their effective timestamps;
+a later schedule is never applied backwards. Native and browser history reads
+require an unsaturated response. Historical cached histories can extend through
+the full day, but reconstruction uses only the requested matched-time cutoff.
+Latest and carry-in probes retain equal-timestamp duplicates. Bounded complete
+reads of that timestamp expose conflicting schedules, which disable the estimate;
+identical duplicates remain usable. The browser feeds normalized schedules directly
+to the shared typed history builder rather than reconstructing raw Nightscout JSON.
+Invalid or ambiguous controls and unresolved Profile Switch treatments disable the estimate.
 Profile failures leave the recorded subtotal available.
 
 The widget shows recorded basal subtotals even when coverage is partial. Its partial
 basal bar represents recorded time coverage, not an insulin ratio; the adjacent
 label identifies this. Compact widgets omit that bar but retain the subtotal.
+When no complete total or valid estimate is available, the headline says total
+unavailable with a dash. Smaller recorded components/subtotals and their coverage
+remain visible. A partial subtotal never becomes the headline daily total or a
+basal/bolus ratio. The legacy Home row, Day Graph and Therapy Context also use the
+canonical raw recorded-dose amount and revision rules; interrupted boluses use
+delivered units, not the programmed amount. IOB stays a separate current value.
 Comparison amounts remain visible when the widget is too short for comparison
 charts. Coverage just below 100% is displayed as `<100%`, never rounded to complete.
 With a valid total estimate, basal/bolus amounts and ratios use that same estimate
@@ -72,6 +90,10 @@ Old native cached insulin without recorded evidence is discarded. Glucose can
 remain available independently when insulin history fails.
 Native cache schema 3 keeps recorded and estimated fields separate. Older schema 2
 today facts remain usable, while historical comparisons are rebuilt.
+Profile-history cache version 4 discards earlier snapshots that could hide
+same-effective-time conflicts. Cached historical treatments retain their original
+observation time per record; a winning fresh revision receives the new observation.
+A dose cannot become finalized solely because the clock advances between refreshes.
 
 ## Glucose interval contract
 
@@ -115,3 +137,17 @@ for reconstruction and schedule-validation parity.
 
 `__tests__/fixtures/daily-glucose-intervals.json` is also consumed by both platforms.
 It covers irregular cadence, gaps, carry-in, duplicate timestamps and short windows.
+
+## Missing basal estimate regression
+
+A recorded subtotal with incomplete basal coverage cannot establish a full daily
+amount or be compared directly with another application's complete total.
+Standard Loop does not export scheduled basal or its screen's daily total in
+device status.
+
+Synthetic production-transport regressions reproduce an additional cause of a
+missing estimate: selecting only the latest intraday profile then rejecting its
+effective date because it is after midnight. Tests now replay carry-in profiles,
+unchanged re-uploads and genuine rate changes on native, browser and the widget.
+Synthetic regressions verify these rules; reconciling an individual day's total
+still requires the complete source history and the same observation cutoff.

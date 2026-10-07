@@ -254,7 +254,7 @@ export interface RecordedInsulinComparison {
   readonly deltaUnits: number;
 }
 
-/** Prefer total insulin, retaining known temp basal even with partial coverage. */
+/** Partial basal spans may describe different hours; their sums cannot measure a usage change. */
 export const selectRecordedInsulinComparison = (
   current: ComparableInsulin,
   baseline: ComparableInsulin | undefined,
@@ -276,11 +276,6 @@ export const selectRecordedInsulinComparison = (
       metric: 'estimatedTotal',
       currentUnits: comparableTotal(current),
       baselineUnits: comparableTotal(baseline),
-    },
-    {
-      metric: 'recordedSubtotal',
-      currentUnits: recordedSum(current),
-      baselineUnits: recordedSum(baseline),
     },
     {
       metric: 'bolus',

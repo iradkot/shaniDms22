@@ -515,6 +515,7 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
             kind: input.kind,
             startMs: input.startMs,
             endMs: input.endMs,
+            ...(input.profileHistory === true ? {profileHistory: true} : {}),
           },
         );
         response.status(200).json({version: 1, data});

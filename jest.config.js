@@ -4,10 +4,10 @@ module.exports = {
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-native-url-polyfill|react-native-reanimated)/)',
   ],
   testPathIgnorePatterns: [
-    '<rootDir>/__tests__/mocks/',
-    '<rootDir>/CgmGraph/',
+    '[/\\\\]__tests__[/\\\\]mocks[/\\\\]',
+    '[/\\\\]CgmGraph[/\\\\]',
     // Cloud Functions use Node's test runner and are verified separately.
-    '<rootDir>/functions/',
+    '[/\\\\]functions[/\\\\]',
   ],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
 };

@@ -1,6 +1,7 @@
 import {cgmRange, CGM_STATUS_CODES} from 'app/constants/PLAN_CONFIG';
 import {BgSample} from 'app/types/day_bgs.types';
 import {ProfileDataType, TimeValueEntry} from 'app/types/insulin.types';
+import {buildRecordedInsulinSummary} from 'app/services/insulin/recordedInsulin';
 import {
   mapNightscoutTreatmentsToCarbFoodItems,
   mapNightscoutTreatmentsToInsulinDataEntries,
@@ -87,6 +88,11 @@ export type BuildComparisonEvidenceParams = {
   previousBgData: BgSample[];
   currentTreatments?: unknown[];
   previousTreatments?: unknown[];
+  /** Preserve the original transport observation; later reads cannot prove dose completion. */
+  currentTreatmentsObservedAtMs?: number | undefined;
+  previousTreatmentsObservedAtMs?: number | undefined;
+  currentTreatmentsComplete?: boolean;
+  previousTreatmentsComplete?: boolean;
   currentProfile?: ProfileDataType | null;
   previousProfile?: ProfileDataType | null;
   currentLoopMode?: AgpLoopModePeriodSummary | null;
@@ -111,11 +117,33 @@ export function buildAgpComparisonEvidence(
     compareSegment(window, current.bgSamples, previous.bgSamples),
   ).sort((a, b) => b.significanceScore - a.significanceScore);
 
+  const nowMs = Date.now();
+  const currentObservedAtMs = params.currentTreatmentsObservedAtMs ?? nowMs;
+  const previousObservedAtMs = params.previousTreatmentsObservedAtMs ?? nowMs;
+  const currentBolusEvidenceComplete = hasCompleteBolusEvidence(
+    params.currentTreatments,
+    current.range,
+    currentObservedAtMs,
+    params.currentTreatmentsComplete,
+  );
+  const previousBolusEvidenceComplete = hasCompleteBolusEvidence(
+    params.previousTreatments,
+    previous.range,
+    previousObservedAtMs,
+    params.previousTreatmentsComplete,
+  );
+
   const meals = buildMealComparisons({
     currentBgData: current.bgSamples,
     previousBgData: previous.bgSamples,
     currentTreatments: params.currentTreatments ?? [],
     previousTreatments: params.previousTreatments ?? [],
+    currentRange: current.range,
+    previousRange: previous.range,
+    currentObservedAtMs,
+    previousObservedAtMs,
+    currentBolusEvidenceComplete,
+    previousBolusEvidenceComplete,
   });
 
   const corrections = buildCorrectionComparison({
@@ -123,6 +151,12 @@ export function buildAgpComparisonEvidence(
     previousBgData: previous.bgSamples,
     currentTreatments: params.currentTreatments ?? [],
     previousTreatments: params.previousTreatments ?? [],
+    currentRange: current.range,
+    previousRange: previous.range,
+    currentObservedAtMs,
+    previousObservedAtMs,
+    currentBolusEvidenceComplete,
+    previousBolusEvidenceComplete,
   });
 
   return {
@@ -139,9 +173,47 @@ export function buildAgpComparisonEvidence(
       params.currentLoopMode ?? null,
       params.previousLoopMode ?? null,
     ),
-    dataQuality: buildDataQuality(current, previous),
+    dataQuality: buildDataQuality(
+      current,
+      previous,
+      currentBolusEvidenceComplete,
+      previousBolusEvidenceComplete,
+    ),
   };
 }
+
+function hasCompleteBolusEvidence(
+  treatments: unknown[] | undefined,
+  range: AgpPeriodEvidence['range'],
+  observedAtMs: number,
+  complete: boolean | undefined,
+): boolean {
+  if (
+    !Array.isArray(treatments) ||
+    complete === false ||
+    treatments.some(
+      row => !row || typeof row !== 'object' || Array.isArray(row),
+    )
+  ) {
+    return false;
+  }
+  // AGP date-range endpoints are inclusive; the canonical insulin window is exclusive.
+  const summary = buildRecordedInsulinSummary(
+    treatments as Record<string, unknown>[],
+    {...range, endMs: range.endMs + 1},
+    observedAtMs,
+  );
+  return summary.quality !== 'unavailable' && summary.bolusUnits !== undefined;
+}
+
+type InsulinComparisonInputs = {
+  currentRange: AgpPeriodEvidence['range'];
+  previousRange: AgpPeriodEvidence['range'];
+  currentObservedAtMs: number;
+  previousObservedAtMs: number;
+  currentBolusEvidenceComplete: boolean;
+  previousBolusEvidenceComplete: boolean;
+};
 
 function buildLoopModeComparison(
   current: AgpLoopModePeriodSummary | null,
@@ -269,19 +341,27 @@ function buildSegmentStats(
   };
 }
 
-function buildMealComparisons(params: {
-  currentBgData: BgSample[];
-  previousBgData: BgSample[];
-  currentTreatments: unknown[];
-  previousTreatments: unknown[];
-}): AgpMealComparison[] {
+function buildMealComparisons(
+  params: InsulinComparisonInputs & {
+    currentBgData: BgSample[];
+    previousBgData: BgSample[];
+    currentTreatments: unknown[];
+    previousTreatments: unknown[];
+  },
+): AgpMealComparison[] {
   const currentMeals = buildMealEvents(
     params.currentBgData,
     params.currentTreatments,
+    params.currentRange,
+    params.currentObservedAtMs,
+    params.currentBolusEvidenceComplete,
   );
   const previousMeals = buildMealEvents(
     params.previousBgData,
     params.previousTreatments,
+    params.previousRange,
+    params.previousObservedAtMs,
+    params.previousBolusEvidenceComplete,
   );
 
   return (['breakfast', 'lunch', 'dinner', 'snack'] as const).map(mealType => {
@@ -315,10 +395,14 @@ function buildMealComparisons(params: {
 function buildMealEvents(
   bgSamples: BgSample[],
   treatments: unknown[],
+  range: AgpPeriodEvidence['range'],
+  observedAtMs: number,
+  bolusEvidenceComplete: boolean,
 ): AgpMealEvent[] {
   const carbItems = mapNightscoutTreatmentsToCarbFoodItems(treatments as any[]);
   const insulinEntries = mapNightscoutTreatmentsToInsulinDataEntries(
-    treatments as any[],
+    bolusEvidenceComplete ? (treatments as any[]) : [],
+    observedAtMs,
   );
   const boluses = insulinEntries
     .filter(entry => entry.type === 'bolus' && typeof entry.amount === 'number')
@@ -329,6 +413,9 @@ function buildMealEvents(
     .filter(b => Number.isFinite(b.ts) && b.amount > 0);
 
   return carbItems
+    .filter(
+      item => item.timestamp >= range.startMs && item.timestamp <= range.endMs,
+    )
     .map(item => {
       const mealTime = item.timestamp;
       const relatedBoluses = boluses.filter(
@@ -366,24 +453,36 @@ function buildMealEvents(
     .filter(event => event.bgAtMeal != null || event.peakBg != null);
 }
 
-function buildCorrectionComparison(params: {
-  currentBgData: BgSample[];
-  previousBgData: BgSample[];
-  currentTreatments: unknown[];
-  previousTreatments: unknown[];
-}): AgpCorrectionComparison {
-  const current = buildCorrectionEvents(
-    params.currentBgData,
-    params.currentTreatments,
-  );
-  const previous = buildCorrectionEvents(
-    params.previousBgData,
-    params.previousTreatments,
-  );
+function buildCorrectionComparison(
+  params: InsulinComparisonInputs & {
+    currentBgData: BgSample[];
+    previousBgData: BgSample[];
+    currentTreatments: unknown[];
+    previousTreatments: unknown[];
+  },
+): AgpCorrectionComparison {
+  const current = params.currentBolusEvidenceComplete
+    ? buildCorrectionEvents(
+        params.currentBgData,
+        params.currentTreatments,
+        params.currentRange,
+        params.currentObservedAtMs,
+      )
+    : [];
+  const previous = params.previousBolusEvidenceComplete
+    ? buildCorrectionEvents(
+        params.previousBgData,
+        params.previousTreatments,
+        params.previousRange,
+        params.previousObservedAtMs,
+      )
+    : [];
 
   return {
-    currentCount: current.length,
-    previousCount: previous.length,
+    currentCount: params.currentBolusEvidenceComplete ? current.length : null,
+    previousCount: params.previousBolusEvidenceComplete
+      ? previous.length
+      : null,
     currentAvgDrop3h: avgNullable(current.map(c => c.drop3h)),
     previousAvgDrop3h: avgNullable(previous.map(c => c.drop3h)),
     currentLowAfterCorrectionPct: eventPct(current, c => c.lowAfter),
@@ -391,10 +490,16 @@ function buildCorrectionComparison(params: {
   };
 }
 
-function buildCorrectionEvents(bgSamples: BgSample[], treatments: unknown[]) {
+function buildCorrectionEvents(
+  bgSamples: BgSample[],
+  treatments: unknown[],
+  range: AgpPeriodEvidence['range'],
+  observedAtMs: number,
+) {
   const carbItems = mapNightscoutTreatmentsToCarbFoodItems(treatments as any[]);
   const insulinEntries = mapNightscoutTreatmentsToInsulinDataEntries(
     treatments as any[],
+    observedAtMs,
   );
   return insulinEntries
     .filter(entry => entry.type === 'bolus' && typeof entry.amount === 'number')
@@ -403,6 +508,7 @@ function buildCorrectionEvents(bgSamples: BgSample[], treatments: unknown[]) {
       return {ts, amount: entry.amount ?? 0};
     })
     .filter(b => Number.isFinite(b.ts) && b.amount > 0)
+    .filter(b => b.ts >= range.startMs && b.ts <= range.endMs)
     .filter(b => {
       const nearbyCarbs = carbItems.some(
         c => Math.abs(c.timestamp - b.ts) <= 45 * 60_000,
@@ -562,6 +668,8 @@ function parseScheduleMinute(raw: unknown): number | null {
 function buildDataQuality(
   current: AgpPeriodEvidence,
   previous: AgpPeriodEvidence,
+  currentBolusEvidenceComplete: boolean,
+  previousBolusEvidenceComplete: boolean,
 ) {
   const currentDays = Math.max(
     1,
@@ -586,7 +694,23 @@ function buildDataQuality(
   if (previousCoveragePct < 70) {
     warnings.push('Previous period has limited CGM coverage.');
   }
-  return {currentCoveragePct, previousCoveragePct, warnings};
+  if (!currentBolusEvidenceComplete) {
+    warnings.push(
+      'Current period has incomplete recorded bolus evidence; insulin timing and correction conclusions are unavailable.',
+    );
+  }
+  if (!previousBolusEvidenceComplete) {
+    warnings.push(
+      'Previous period has incomplete recorded bolus evidence; insulin timing and correction conclusions are unavailable.',
+    );
+  }
+  return {
+    currentCoveragePct,
+    previousCoveragePct,
+    currentBolusEvidenceComplete,
+    previousBolusEvidenceComplete,
+    warnings,
+  };
 }
 
 function validSamples(samples: BgSample[]) {
@@ -715,8 +839,8 @@ export function hasMeaningfulCorrectionSignal(
   corrections: AgpCorrectionComparison,
 ) {
   return (
-    corrections.currentCount >= 2 &&
-    corrections.previousCount >= 2 &&
+    (corrections.currentCount ?? 0) >= 2 &&
+    (corrections.previousCount ?? 0) >= 2 &&
     (Math.abs(
       (corrections.currentAvgDrop3h ?? 0) -
         (corrections.previousAvgDrop3h ?? 0),

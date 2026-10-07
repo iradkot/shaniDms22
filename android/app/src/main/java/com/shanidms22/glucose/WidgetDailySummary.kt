@@ -87,11 +87,12 @@ internal fun calculateWidgetInsulinComparison(
   treatments: JSONArray?, nowMs: Long, zone: TimeZone = TimeZone.getDefault(),
   includeHistory: Boolean = true,
   profilesByDayStart: Map<Long, JSONObject?> = emptyMap(),
+  treatmentObservedAtMs: (JSONObject) -> Long = { nowMs },
 ): WidgetInsulinComparison? {
   val windows = widgetComparisonWindows(nowMs, zone)
   fun stats(window: WidgetDayWindow) = withWidgetBasalEstimate(
-    calculateWidgetInsulinStats(treatments, window.startMs, window.endMs, nowMs), treatments,
-    profilesByDayStart[window.startMs], window.startMs, window.endMs, nowMs, zone,
+    calculateWidgetInsulinStats(treatments, window.startMs, window.endMs, nowMs, treatmentObservedAtMs), treatments,
+    profilesByDayStart[window.startMs], window.startMs, window.endMs, nowMs, zone, treatmentObservedAtMs,
   )
   val today = stats(windows[0])
   val previous = if (includeHistory) windows.drop(1).map {

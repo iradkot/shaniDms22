@@ -11,6 +11,36 @@ class WidgetWeeklyInsulinComparisonTest {
   private val start = widgetParseTimestamp("2026-09-27T00:00:00Z")!!
   private val hour = 3_600_000L
 
+  @Test fun `different recorded basal coverage compares known bolus instead of incomplete totals`() {
+    val rows = JSONArray().put(event(start, "Correction Bolus").put("insulin", 2.0))
+      .put(event(start - 24 * hour, "Correction Bolus").put("insulin", 2.0))
+      .put(event(start, "Temp Basal").put("duration", 60).put("deliveredUnits", 1.0))
+      .put(event(start - 24 * hour, "Temp Basal").put("duration", 120).put("deliveredUnits", 2.0))
+    val comparison = calculateWidgetInsulinComparison(rows, start + 3 * hour, zone)!!
+    val values = widgetInsulinValues(comparison.today, comparison.yesterday)!!
+    assertEquals(WidgetInsulinBasis.BOLUS, values.basis)
+    assertEquals(2.0, values.today, 0.000001)
+    assertEquals(2.0, values.baseline, 0.000001)
+  }
+
+  @Test fun `unknown recorded basal coverage cannot support a subtotal comparison`() {
+    val today = widgetInsulinStats(6.8, 33.8, 30.0, 0, "partial")
+    val baseline = widgetInsulinStats(6.3, 33.8, 30.0, 0, "partial")
+    assertEquals(WidgetInsulinBasis.BOLUS, widgetInsulinValues(today, baseline)!!.basis)
+  }
+
+  @Test fun `equal basal coverage in different spans is not a comparable insulin total`() {
+    val rows = JSONArray().put(event(start, "Correction Bolus").put("insulin", 2.0))
+      .put(event(start - 24 * hour, "Correction Bolus").put("insulin", 2.0))
+      .put(event(start, "Temp Basal").put("duration", 60).put("deliveredUnits", 1.0))
+      .put(event(start - 24 * hour + 2 * hour, "Temp Basal").put("duration", 60).put("deliveredUnits", 2.0))
+    val comparison = calculateWidgetInsulinComparison(rows, start + 3 * hour, zone)!!
+    assertEquals(comparison.today!!.basalCoveragePercent, comparison.yesterday!!.basalCoveragePercent, 0.0)
+    val values = widgetInsulinValues(comparison.today, comparison.yesterday)!!
+    assertEquals(WidgetInsulinBasis.BOLUS, values.basis)
+    assertEquals(values.today, values.baseline, 0.0)
+  }
+
   @Test fun `weekly total combines complete recorded day without profile and six estimated days`() {
     val comparison = calculateWidgetInsulinComparison(rows(), start + 3 * hour, zone,
       profilesByDayStart = profiles())!!
@@ -48,7 +78,7 @@ class WidgetWeeklyInsulinComparisonTest {
     assertNull(week.estimatedBasalUnits)
     assertNull(week.estimatedTotalUnits)
     assertEquals(9.0 / 7, week.totalBasal!!, 0.000001)
-    assertEquals(WidgetInsulinBasis.PARTIAL, widgetInsulinValues(comparison.today, week)!!.basis)
+    assertEquals(WidgetInsulinBasis.BOLUS, widgetInsulinValues(comparison.today, week)!!.basis)
   }
 
   @Test fun `unknown historical date never becomes a zero or a six date average`() {
