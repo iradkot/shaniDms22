@@ -4,13 +4,14 @@ The repository ships with a Fastlane lane (`ios beta`) that can now be triggered
 Actions to build and ship the iOS app to TestFlight. This document explains the configuration
 that is required to run the pipeline successfully and how to execute it.
 
-## Required GitHub Secrets
+## Required GitHub credentials
 
-Create the following encrypted repository Secrets before running the workflow. Signing keys,
-certificates, profiles, and passwords must never be stored as repository Variables. Values that
-contain binary content must be Base64 encoded before they are saved as Secrets.
+Configure the following repository credentials before running the workflow. Encrypted Secrets
+are preferred; existing repository Variables with the same names remain supported. For each
+name, the workflow uses the Secret when present and otherwise the Variable. Values that contain
+binary content must be Base64 encoded.
 
-| Secret | Description |
+| Secret or Variable | Description |
 | --- | --- |
 | `APPLE_CERTIFICATE_P12` | Base64 encoded distribution certificate exported as a `.p12` file. Generate the value with `base64 < certificate.p12 | pbcopy`. |
 | `APPLE_CERTIFICATE_PASSWORD` | Password used when exporting the distribution certificate above. |
@@ -21,12 +22,20 @@ contain binary content must be Base64 encoded before they are saved as Secrets.
 | `APP_STORE_CONNECT_PRIVATE_KEY` | Base64 encoded contents of the `.p8` private key associated with the App Store Connect API key. Use `base64 < AuthKey_XXXXXX.p8 | pbcopy`. |
 
 > **Note:** The workflow requires **all** of the values above. Double-check that `APPLE_CERTIFICATE_P12`
-> and `APP_STORE_CONNECT_KEY_ID` are present—without them the job will fail before the build starts.
+> and `APP_STORE_CONNECT_KEY_ID` are present as Secrets or Variables—without them the job will fail
+> before the build starts.
 
 `APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64` may replace the Base64 private key, but do not
-configure both forms. If signing material was ever stored as a repository Variable, rotate or
-reissue it, save the replacement as an encrypted Secret, and then delete the old Variable. Merely
-copying an already exposed value into Secrets does not rotate it.
+configure both forms.
+
+The entry workflow (`ios-beta.yml`) passes the resolved values as secret inputs to the reusable
+build workflow (`ios-beta-deploy.yml`). This registers them for masking before the runner logs
+step environments, including values supplied through Variables. The build workflow also masks
+the normalized Base64 private key and generated App Store Connect token.
+
+Earlier workflows logged Variable-sourced credentials without masking. Rotate or reissue those
+credentials, save the replacements as encrypted Secrets, and then delete the old Variables.
+Merely copying an exposed value into Secrets does not rotate it.
 
 The two non-secret runtime values below remain repository Variables. Keep the schema version at
 `0` until the matching Firebase rules have been deployed and verified.
@@ -49,12 +58,12 @@ Fastlane will pick them up automatically.
 
 ## Running the Workflow
 
-1. Push the latest code (including this workflow) to GitHub and ensure the secrets are configured.
+1. Push the latest code (including both workflows) to GitHub and ensure the credentials are configured.
 2. Navigate to **Actions → iOS Beta Deployment** in GitHub.
 3. Click **Run workflow**. The workflow always runs the reviewed `beta` lane.
 4. Monitor the job. The workflow will:
    - Run the full quality gate on a lower-cost Ubuntu runner.
-   - Fail early on macOS when a required encrypted Secret is missing.
+   - Fail early on macOS when a required credential is absent from both Secrets and Variables.
    - Install Node.js dependencies with Yarn.
    - Install Ruby gems (CocoaPods and Fastlane).
    - Decode and install the signing assets into a temporary keychain.
