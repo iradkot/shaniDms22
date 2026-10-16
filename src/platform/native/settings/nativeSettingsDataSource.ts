@@ -12,7 +12,9 @@ import type {
 import {
   SettingsDataSourceError,
   buildSettingsOverview,
+  isValidGlucoseRangeThresholds,
 } from '../../../modules/settings';
+import type {TrendsRangeThresholds} from '../../../modules/trends';
 import {
   CORE_DESTINATION_IDS,
   createStoredDestinationTarget,
@@ -29,6 +31,10 @@ import {
 
 export interface NativeSettingsDataSourceInput {
   readonly appInfo?: SettingsAppInfo;
+  readonly glucoseRanges?: {
+    readonly thresholds: TrendsRangeThresholds;
+    readonly save: (thresholds: TrendsRangeThresholds) => Promise<void>;
+  };
   readonly language: SettingsLanguage;
   readonly layout: PersonalizationLayout;
   readonly personalization: StoredProductPersonalization;
@@ -122,6 +128,7 @@ export const createNativeSettingsDataSource = (
   input: NativeSettingsDataSourceInput,
 ): SettingsDataSource => {
   let language = input.language;
+  let glucoseRanges = input.glucoseRanges?.thresholds;
   let aiEnabled = input.ai.enabled;
   let preMealAssistance = {
     enabled: input.preMealAssistance.enabled,
@@ -134,6 +141,7 @@ export const createNativeSettingsDataSource = (
     const profile = selectLayoutProfile(personalization, input.layout);
     return buildSettingsOverview({
       ...(input.appInfo === undefined ? {} : {appInfo: input.appInfo}),
+      ...(glucoseRanges === undefined ? {} : {glucoseRanges}),
       language,
       layout: input.layout,
       personalization: {
@@ -166,6 +174,25 @@ export const createNativeSettingsDataSource = (
   ): Promise<SettingsOverview> => {
     assertActive(request);
     switch (command.kind) {
+      case 'set-glucose-ranges': {
+        if (!isValidGlucoseRangeThresholds(command.thresholds)) {
+          throw new SettingsDataSourceError(
+            'invalid-glucose-ranges',
+            'Glucose boundaries must be increasing whole numbers from 20 to 600 mg/dL.',
+          );
+        }
+        if (!input.glucoseRanges) {
+          throw new SettingsDataSourceError(
+            'glucose-ranges-unavailable',
+            'Glucose range settings are not available.',
+          );
+        }
+        const next = {...command.thresholds};
+        await input.glucoseRanges.save(next);
+        assertActive(request);
+        glucoseRanges = next;
+        break;
+      }
       case 'set-language':
         await input.setLanguage(command.language);
         assertActive(request);

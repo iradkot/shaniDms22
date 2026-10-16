@@ -23,6 +23,24 @@ import java.util.UUID
 class WidgetDailySyncIntegrationTest {
   private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
+  @Test fun changingRangesImmediatelyInvalidatesAndRefreshesDailyTir() = withSource { context ->
+    val now = System.currentTimeMillis()
+    val source = GlucoseWidgetCredentialStore.readSyncConfiguration(context) as WidgetSyncConfiguration.Ready
+    val range = calculateWidgetDailyRange(parseValidWidgetEntries(readings(now)), widgetStartOfDayMs(now), now, 70, 200)
+    WidgetDailySummaryStore.save(context, source, WidgetDailySyncResult(
+      WidgetDailySummary(widgetStartOfDayMs(now), now, 70, 200, range, null), null, null))
+    assertEquals(100, WidgetDailySummaryStore.read(context)?.range?.inRangePercent)
+    var refreshes = 0
+    val refresh: (Context) -> Unit = { current ->
+      GlucoseWidgetSync.refreshDailyIfNeeded(current) { refreshes++ }
+    }
+    GlucoseWidgetUpdater.setThresholds(context, 110, 180, refresh)
+    assertNull(WidgetDailySummaryStore.read(context))
+    assertEquals(1, refreshes)
+    GlucoseWidgetUpdater.setThresholds(context, 110, 180, refresh)
+    assertEquals(1, refreshes)
+  }
+
   @Test fun emptyFreshSummaryStillRequestsForegroundRecovery() = withSource { context ->
     val now = System.currentTimeMillis()
     val source = GlucoseWidgetCredentialStore.readSyncConfiguration(context) as WidgetSyncConfiguration.Ready
@@ -151,7 +169,7 @@ class WidgetDailySyncIntegrationTest {
         context, "https://widget-test.invalid", "synthetic-read-token", true,
         "daily-widget-test-owner", "d".repeat(40),
       ).effectiveEnabled)
-      GlucoseWidgetUpdater.setThresholds(context, 70, 200)
+      GlucoseWidgetUpdater.setThresholds(context, 70, 200) { }
       block(context)
     } finally { context.cleanUp() }
   }

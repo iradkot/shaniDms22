@@ -2,6 +2,7 @@ import React, {useContext, useMemo} from 'react';
 import {Circle, G} from 'react-native-svg';
 import {xAccessor, yAccessor} from 'app/components/charts/CgmGraph/utils';
 import {glucoseChartColor} from '../../chartPalette';
+import {useGlucoseChartThresholds} from '../../GlucoseChartThresholdsContext';
 import {useTheme} from 'styled-components/native';
 import type {ThemeType} from 'app/types/theme';
 import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
@@ -15,6 +16,7 @@ type Props = {
 const CGMSamplesRenderer: React.FC<Props> = ({focusedSampleDateString}) => {
   const [{xScale, yScale, bgSamples: data}] = useContext(GraphStyleContext);
   const theme = useTheme() as ThemeType;
+  const thresholds = useGlucoseChartThresholds();
   // Data geometry is independent of the finger. Retaining these elements also
   // lets React skip reconciling every native SVG circle on each cursor update.
   const {marks, pointsByDate} = useMemo(() => {
@@ -30,7 +32,7 @@ const CGMSamplesRenderer: React.FC<Props> = ({focusedSampleDateString}) => {
       }
       const x = xScale(xAccessor(d));
       const y = yScale(yAccessor(d));
-      const color = glucoseChartColor(yAccessor(d), theme);
+      const color = glucoseChartColor(yAccessor(d), theme, thresholds);
 
       points.set(d.dateString, {x, y, color});
       return (
@@ -46,7 +48,7 @@ const CGMSamplesRenderer: React.FC<Props> = ({focusedSampleDateString}) => {
       );
     });
     return {marks: elements, pointsByDate: points};
-  }, [data, xScale, yScale, theme]);
+  }, [data, xScale, yScale, theme, thresholds]);
   const focused = focusedSampleDateString
     ? pointsByDate.get(focusedSampleDateString)
     : undefined;

@@ -1,3 +1,5 @@
+import type {TrendsRangeThresholds} from '../trends';
+
 export type SettingsLanguage = 'en' | 'he';
 
 export type SettingsLayout = 'phone' | 'tablet' | 'desktop';
@@ -37,6 +39,7 @@ export interface SettingsPersonalizationSummary {
 
 export interface SettingsOverviewInput {
   readonly appInfo?: SettingsAppInfo;
+  readonly glucoseRanges?: TrendsRangeThresholds;
   readonly language: SettingsLanguage;
   readonly layout: SettingsLayout;
   readonly personalization: SettingsPersonalizationSummary;
@@ -66,6 +69,7 @@ export interface SettingsOverviewInput {
 export interface SettingsOverview {
   readonly schemaVersion: 1;
   readonly appInfo?: SettingsAppInfo;
+  readonly glucoseRanges?: TrendsRangeThresholds;
   readonly language: SettingsLanguage;
   readonly layout: {
     readonly profile: SettingsLayout;
@@ -106,6 +110,10 @@ export type SettingsShortcut = 'chat' | 'updates';
 
 export type SettingsCommand =
   | {
+      readonly kind: 'set-glucose-ranges';
+      readonly thresholds: TrendsRangeThresholds;
+    }
+  | {
       readonly kind: 'set-language';
       readonly language: SettingsLanguage;
     }
@@ -142,7 +150,11 @@ export interface SettingsDataSource {
   ): Promise<SettingsOverview>;
 }
 
-export type SettingsDataSourceErrorCode = 'cancelled' | 'shortcut-limit';
+export type SettingsDataSourceErrorCode =
+  | 'cancelled'
+  | 'shortcut-limit'
+  | 'invalid-glucose-ranges'
+  | 'glucose-ranges-unavailable';
 
 export class SettingsDataSourceError extends Error {
   constructor(readonly code: SettingsDataSourceErrorCode, message: string) {

@@ -12,6 +12,8 @@ import type {LayoutChangeEvent} from 'react-native';
 import {useTheme} from 'styled-components/native';
 import StackedHomeCharts from '../../containers/MainTabsNavigator/Containers/Home/components/StackedHomeCharts';
 import {TouchProvider} from '../../components/charts/CgmGraph/contextStores/TouchContext';
+import {GlucoseChartThresholdsContext} from '../../components/charts/GlucoseChartThresholdsContext';
+import type {TrendsRangeThresholds} from '../../modules/trends';
 import type {DayGraphModel} from '../../modules/dayGraph';
 import type {ThemeType} from '../../types/theme';
 import {addOpacity} from '../../style/styling.utils';
@@ -91,6 +93,7 @@ const COPY = {
 export interface RichDayGraphChartProps {
   readonly locale: DestinationLocale;
   readonly model: DayGraphModel;
+  readonly rangeThresholds?: TrendsRangeThresholds;
   readonly forecast?: GlucoseForecastSnapshot | undefined;
   readonly forecastStatus?: 'loading' | 'error' | 'stale' | 'ready' | undefined;
   readonly selectedTimestampMs?: number | undefined;
@@ -102,6 +105,7 @@ export interface RichDayGraphChartProps {
 export const RichDayGraphChart = ({
   locale,
   model,
+  rangeThresholds,
   forecast: suppliedForecast,
   forecastStatus: suppliedForecastStatus,
   selectedTimestampMs,
@@ -461,42 +465,44 @@ export const RichDayGraphChart = ({
         </View>
       ) : null}
 
-      <TouchProvider>
-        <StackedHomeCharts
-          compact={compact}
-          onHeaderLayout={measureHeader}
-          onInsulinLayout={measureInsulin}
-          basalProfileData={chart.basalProfileData}
-          bgSamples={chart.bgSamples}
-          forecast={forecast}
-          loadSamples={chart.loadSamples}
-          dataAvailability={chart.dataAvailability}
-          cgmHeight={compact ? compactCgmHeight : 290}
-          chartMode={mode}
-          fallbackAnchorTimeMs={Math.max(
-            startMs,
-            Math.min(
-              focusedMs ?? chart.fallbackAnchorTimeMs ?? startMs,
-              endMs - 1,
-            ),
-          )}
-          foodItems={chart.foodItems}
-          insulinData={chart.insulinData}
-          locale={locale}
-          miniChartHeight={compact ? miniHeight : 112}
-          {...(compact
-            ? {margin: {top: 8, right: 15, bottom: 8, left: 50}}
-            : {})}
-          showFullScreenButton={!fullscreen && !compact}
-          onPressFullScreen={() => setFullscreen(true)}
-          testID="day-graph-rich-chart"
-          tooltipAlign="auto"
-          tooltipFullWidth
-          tooltipPlacement="panel"
-          width={chartWidth}
-          xDomain={xDomain}
-        />
-      </TouchProvider>
+      <GlucoseChartThresholdsContext.Provider value={rangeThresholds}>
+        <TouchProvider>
+          <StackedHomeCharts
+            compact={compact}
+            onHeaderLayout={measureHeader}
+            onInsulinLayout={measureInsulin}
+            basalProfileData={chart.basalProfileData}
+            bgSamples={chart.bgSamples}
+            forecast={forecast}
+            loadSamples={chart.loadSamples}
+            dataAvailability={chart.dataAvailability}
+            cgmHeight={compact ? compactCgmHeight : 290}
+            chartMode={mode}
+            fallbackAnchorTimeMs={Math.max(
+              startMs,
+              Math.min(
+                focusedMs ?? chart.fallbackAnchorTimeMs ?? startMs,
+                endMs - 1,
+              ),
+            )}
+            foodItems={chart.foodItems}
+            insulinData={chart.insulinData}
+            locale={locale}
+            miniChartHeight={compact ? miniHeight : 112}
+            {...(compact
+              ? {margin: {top: 8, right: 15, bottom: 8, left: 50}}
+              : {})}
+            showFullScreenButton={!fullscreen && !compact}
+            onPressFullScreen={() => setFullscreen(true)}
+            testID="day-graph-rich-chart"
+            tooltipAlign="auto"
+            tooltipFullWidth
+            tooltipPlacement="panel"
+            width={chartWidth}
+            xDomain={xDomain}
+          />
+        </TouchProvider>
+        </GlucoseChartThresholdsContext.Provider>
 
       {forecastStatus ? (
         <GlucoseForecastCard locale={locale} snapshot={forecast} status={forecastStatus} />

@@ -447,7 +447,7 @@ export async function runAiAnalystTool(
 
       case 'getHypoDetectiveContext': {
         const rangeDays = clampInt(args?.rangeDays, 1, 180, 60);
-        const lowThresholdMgdl = clampInt(args?.lowThresholdMgdl, 40, 120, 55);
+        const lowThresholdMgdl = clampInt(args?.lowThresholdMgdl, 20, 600, getTirThresholdsFromGlucoseSettings().veryLowMax);
         const maxEvents = clampInt(args?.maxEvents, 1, 30, 12);
 
         const {contextJson, debug} = await buildHypoDetectiveContext({
@@ -462,7 +462,8 @@ export async function runAiAnalystTool(
       case 'getGlycemicEvents': {
         const kind = args?.kind === 'hyper' ? 'hyper' : 'hypo';
         const rangeDays = clampInt(args?.rangeDays, 1, 180, 30);
-        const thresholdMgdl = clampInt(args?.thresholdMgdl, 40, 600, kind === 'hyper' ? 250 : 70);
+        const ranges = getTirThresholdsFromGlucoseSettings();
+        const thresholdMgdl = clampInt(args?.thresholdMgdl, 20, 600, kind === 'hyper' ? ranges.targetMax : ranges.targetMin);
         const maxEvents = clampInt(args?.maxEvents, 1, 200, 60);
 
         const endMs = Date.now();

@@ -21,6 +21,7 @@ import type {
 import {NightscoutConnectionCard} from './NightscoutConnectionCard';
 import {usePrivacyControls} from '../privacy/PrivacyControlsContext';
 import {AppVersionRow} from './AppVersionRow';
+import {GlucoseRangesCard} from './GlucoseRangesCard';
 
 const COPY = {
   en: {
@@ -306,7 +307,7 @@ export const SettingsModuleView = ({
 
   const apply = async (command: SettingsCommand) => {
     if (saving) {
-      return;
+      return false;
     }
     const sourceSequence = requestSequence.current;
     setSaving(true);
@@ -316,6 +317,7 @@ export const SettingsModuleView = ({
       if (requestSequence.current === sourceSequence) {
         setState({status: 'ready', overview});
       }
+      return requestSequence.current === sourceSequence;
     } catch (error) {
       if (requestSequence.current === sourceSequence) {
         setActionError(
@@ -325,6 +327,7 @@ export const SettingsModuleView = ({
             : copy.saveFailed,
         );
       }
+      return false;
     } finally {
       if (requestSequence.current === sourceSequence) {
         setSaving(false);
@@ -434,6 +437,15 @@ export const SettingsModuleView = ({
             />
           ) : null}
         </View>
+
+        {overview.glucoseRanges ? (
+          <GlucoseRangesCard
+            thresholds={overview.glucoseRanges}
+            locale={locale}
+            saving={saving}
+            onSave={thresholds => apply({kind: 'set-glucose-ranges', thresholds})}
+          />
+        ) : null}
 
         <ProductSection locale={locale} title={copy.hubOptions}>
           <View style={styles.card}>

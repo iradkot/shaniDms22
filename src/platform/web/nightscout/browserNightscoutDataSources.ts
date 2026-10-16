@@ -12,6 +12,7 @@ import {
   buildTherapyContextSnapshot,
   type TherapyContextDataSource,
   type TrendsDataSource,
+  type TrendsRangeThresholds,
 } from '../../../modules/trends';
 import type {DestinationLocale} from '../../../product/destinations';
 import type {CurrentSnapshotViewModel} from '../../../product/hub';
@@ -216,6 +217,7 @@ export const createBrowserNightscoutDataSources = (input: {
   readonly sourceId: string;
   readonly locale: DestinationLocale;
   readonly journal: JournalWorkspace;
+  readonly thresholds?: TrendsRangeThresholds;
   readonly now?: () => number;
 }): BrowserNightscoutDataSources => {
   const loadGlucoseSnapshot = async (
@@ -552,6 +554,10 @@ export const createBrowserNightscoutDataSources = (input: {
       }).items;
       return buildTherapyContextSnapshot({
         period,
+        ...(input.thresholds === undefined ? {} : {
+          targetMinMgDl: input.thresholds.targetMinMgDl,
+          targetMaxMgDl: input.thresholds.targetMaxMgDl,
+        }),
         glucoseSamples: glucose.records.map(record => ({
           timestampMs: record.date,
           valueMgDl: record.sgv,

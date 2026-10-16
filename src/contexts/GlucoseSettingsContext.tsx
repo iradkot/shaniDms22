@@ -14,15 +14,17 @@ import {DEFAULT_NIGHT_WINDOW} from 'app/constants/GLUCOSE_WINDOWS';
 import {setAndroidWidgetThresholds} from 'app/services/androidGlucoseLiveSurface';
 import {nativeNightscoutVaultAuthSession} from 'app/services/backend/nativeNightscoutVaultSync';
 import type {NightscoutVaultAuthSession} from 'app/services/backend/nightscoutVaultSynchronizer';
+import {DEFAULT_GLUCOSE_RANGE_THRESHOLDS, isValidGlucoseRangeThresholds} from 'app/modules/settings';
+import type {TrendsRangeThresholds} from 'app/modules/trends';
 
 export type GlucoseSettings = {
-  /** mg/dL; values <= this are considered severe low. */
+  /** mg/dL; values below this are considered very low. */
   severeHypo: number;
   /** mg/dL; values below this are considered low. */
   hypo: number;
   /** mg/dL; values above this are considered high. */
   hyper: number;
-  /** mg/dL; values >= this are considered severe high. */
+  /** mg/dL; values above this are considered very high. */
   severeHyper: number;
 
   /** Local time window start hour (0..23). */
@@ -40,6 +42,7 @@ type GlucoseSettingsContextValue = {
   settings: GlucoseSettings;
   isLoaded: boolean;
   setSetting: <K extends keyof GlucoseSettings>(key: K, value: GlucoseSettings[K]) => void;
+  saveRanges: (thresholds: TrendsRangeThresholds) => Promise<void>;
   resetToDefaults: () => void;
 };
 
@@ -49,10 +52,10 @@ const scopedStorageKey = (userId: string | null): string =>
   `${STORAGE_KEY}:${encodeURIComponent(userId?.trim() || 'signed-out')}`;
 
 const DEFAULT_SETTINGS: GlucoseSettings = {
-  severeHypo: cgmRange[CGM_STATUS_CODES.EXTREME_LOW] as number,
-  hypo: cgmRange.TARGET.min,
-  hyper: cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number,
-  severeHyper: cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] as number,
+  severeHypo: DEFAULT_GLUCOSE_RANGE_THRESHOLDS.veryLowMaxMgDl,
+  hypo: DEFAULT_GLUCOSE_RANGE_THRESHOLDS.targetMinMgDl,
+  hyper: DEFAULT_GLUCOSE_RANGE_THRESHOLDS.targetMaxMgDl,
+  severeHyper: DEFAULT_GLUCOSE_RANGE_THRESHOLDS.highMaxMgDl,
 
   nightStartHour: DEFAULT_NIGHT_WINDOW.startHour,
   nightEndHour: DEFAULT_NIGHT_WINDOW.endHour,
@@ -108,27 +111,23 @@ function sanitize(partial: Partial<GlucoseSettings>): GlucoseSettings {
     23,
   );
 
-  // Basic ordering check; if invalid, fall back to defaults.
-  const isOrdered = severeHypo < hypo && hypo < hyper && hyper < severeHyper;
+  const validRanges = isValidGlucoseRangeThresholds({
+    veryLowMaxMgDl: severeHypo,
+    targetMinMgDl: hypo,
+    targetMaxMgDl: hyper,
+    highMaxMgDl: severeHyper,
+  });
   const areMealHoursOrdered = breakfastStartHour < lunchStartHour && lunchStartHour < dinnerStartHour;
-  if (!isOrdered || !areMealHoursOrdered) {
-    return {
-      ...DEFAULT_SETTINGS,
-      nightStartHour,
-      nightEndHour,
-    };
-  }
-
   return {
-    severeHypo,
-    hypo,
-    hyper,
-    severeHyper,
+    severeHypo: validRanges ? severeHypo : DEFAULT_SETTINGS.severeHypo,
+    hypo: validRanges ? hypo : DEFAULT_SETTINGS.hypo,
+    hyper: validRanges ? hyper : DEFAULT_SETTINGS.hyper,
+    severeHyper: validRanges ? severeHyper : DEFAULT_SETTINGS.severeHyper,
     nightStartHour,
     nightEndHour,
-    breakfastStartHour,
-    lunchStartHour,
-    dinnerStartHour,
+    breakfastStartHour: areMealHoursOrdered ? breakfastStartHour : DEFAULT_SETTINGS.breakfastStartHour,
+    lunchStartHour: areMealHoursOrdered ? lunchStartHour : DEFAULT_SETTINGS.lunchStartHour,
+    dinnerStartHour: areMealHoursOrdered ? dinnerStartHour : DEFAULT_SETTINGS.dinnerStartHour,
   };
 }
 
@@ -136,6 +135,7 @@ function applyToGlobals(s: GlucoseSettings) {
   // Mutate exported config objects so existing imports see the latest values.
   cgmRange[CGM_STATUS_CODES.EXTREME_LOW] = s.severeHypo;
   cgmRange.TARGET.min = s.hypo;
+  cgmRange.TARGET.max = s.hyper;
   cgmRange[CGM_STATUS_CODES.VERY_HIGH] = s.hyper;
   cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] = s.severeHyper;
 
@@ -147,6 +147,7 @@ const GlucoseSettingsContext = createContext<GlucoseSettingsContextValue>({
   settings: DEFAULT_SETTINGS,
   isLoaded: false,
   setSetting: () => {},
+  saveRanges: async () => { throw new Error('Glucose settings are unavailable.'); },
   resetToDefaults: () => {},
 });
 
@@ -165,6 +166,17 @@ export const GlucoseSettingsProvider = ({
     authSession.getCurrentUserId()?.trim() || null,
   );
   const ownerUserIdRef = useRef(ownerUserId);
+  const ownerRevision = useRef(0);
+  const [ownerVersion, setOwnerVersion] = useState(0);
+  const settingsRef = useRef(settings);
+  const loadedRef = useRef(false);
+  const writeTail = useRef<Promise<void>>(Promise.resolve());
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(
     () =>
@@ -174,6 +186,10 @@ export const GlucoseSettingsProvider = ({
           return;
         }
         ownerUserIdRef.current = nextOwner;
+        ownerRevision.current += 1;
+        setOwnerVersion(ownerRevision.current);
+        settingsRef.current = DEFAULT_SETTINGS;
+        loadedRef.current = false;
         setSettings(DEFAULT_SETTINGS);
         applyToGlobals(DEFAULT_SETTINGS);
         setAndroidWidgetThresholds(DEFAULT_SETTINGS.hypo, DEFAULT_SETTINGS.hyper);
@@ -197,7 +213,7 @@ export const GlucoseSettingsProvider = ({
             await AsyncStorage.removeItem(STORAGE_KEY);
           }
         }
-        if (!isMounted || ownerUserIdRef.current !== ownerUserId) {
+        if (!isMounted || ownerUserIdRef.current !== ownerUserId || ownerRevision.current !== ownerVersion) {
           return;
         }
 
@@ -208,15 +224,17 @@ export const GlucoseSettingsProvider = ({
 
         const parsed = JSON.parse(stored) as Partial<GlucoseSettings>;
         const next = sanitize(parsed);
+        settingsRef.current = next;
         setSettings(next);
         applyToGlobals(next);
       } catch {
         // Best-effort: keep defaults.
-        if (isMounted && ownerUserIdRef.current === ownerUserId) {
+        if (isMounted && ownerUserIdRef.current === ownerUserId && ownerRevision.current === ownerVersion) {
           applyToGlobals(DEFAULT_SETTINGS);
         }
       } finally {
-        if (isMounted && ownerUserIdRef.current === ownerUserId) {
+        if (isMounted && ownerUserIdRef.current === ownerUserId && ownerRevision.current === ownerVersion) {
+          loadedRef.current = true;
           setIsLoaded(true);
         }
       }
@@ -227,51 +245,60 @@ export const GlucoseSettingsProvider = ({
     return () => {
       isMounted = false;
     };
-  }, [ownerUserId]);
+  }, [ownerUserId, ownerVersion]);
 
-  const persist = useCallback(async (
-    next: GlucoseSettings,
-    expectedOwnerUserId: string | null,
-  ) => {
-    try {
+  // One ordered, atomic write publishes the new ranges only after persistence.
+  // A stale editor cannot modify a newly selected account (including A -> B -> A).
+  const updateSettings = useCallback((
+    change: (current: GlucoseSettings) => GlucoseSettings,
+  ): Promise<void> => {
+    const expectedOwnerUserId = ownerUserId;
+    const expectedRevision = ownerVersion;
+    const assertCurrent = () => {
+      if (!mountedRef.current || !loadedRef.current || ownerUserIdRef.current !== expectedOwnerUserId ||
+          ownerRevision.current !== expectedRevision) {
+        throw new Error('Glucose settings changed. Open Settings again.');
+      }
+    };
+    const run = writeTail.current.then(async () => {
+      assertCurrent();
+      const next = change(settingsRef.current);
       await AsyncStorage.setItem(
         scopedStorageKey(expectedOwnerUserId),
         JSON.stringify(next),
       );
-    } catch {
-      // Best-effort persistence.
-    }
-  }, []);
+      assertCurrent();
+      settingsRef.current = next;
+      applyToGlobals(next);
+      setSettings(next);
+    });
+    writeTail.current = run.catch(() => {});
+    return run;
+  }, [ownerUserId, ownerVersion]);
 
   const setSetting = useCallback(
     <K extends keyof GlucoseSettings>(key: K, value: GlucoseSettings[K]) => {
-      const mutationOwner = ownerUserId;
-      if (ownerUserIdRef.current !== mutationOwner) {
-        return;
-      }
-      setSettings(prev => {
-        const candidate = {
-          ...prev,
-          [key]: value,
-        } as GlucoseSettings;
-        const next = sanitize(candidate);
-        applyToGlobals(next);
-        persist(next, mutationOwner);
-        return next;
-      });
+      updateSettings(prev => sanitize({...prev, [key]: value})).catch(() => {});
     },
-    [ownerUserId, persist],
+    [updateSettings],
   );
 
   const resetToDefaults = useCallback(() => {
-    const mutationOwner = ownerUserId;
-    if (ownerUserIdRef.current !== mutationOwner) {
-      return;
+    updateSettings(() => DEFAULT_SETTINGS).catch(() => {});
+  }, [updateSettings]);
+
+  const saveRanges = useCallback(async (thresholds: TrendsRangeThresholds) => {
+    if (!isValidGlucoseRangeThresholds(thresholds)) {
+      throw new Error('Glucose ranges must contain four increasing whole numbers.');
     }
-    setSettings(DEFAULT_SETTINGS);
-    applyToGlobals(DEFAULT_SETTINGS);
-    persist(DEFAULT_SETTINGS, mutationOwner);
-  }, [ownerUserId, persist]);
+    await updateSettings(current => ({
+      ...current,
+      severeHypo: thresholds.veryLowMaxMgDl,
+      hypo: thresholds.targetMinMgDl,
+      hyper: thresholds.targetMaxMgDl,
+      severeHyper: thresholds.highMaxMgDl,
+    }));
+  }, [updateSettings]);
 
   useEffect(() => {
     setAndroidWidgetThresholds(settings.hypo, settings.hyper);
@@ -282,9 +309,10 @@ export const GlucoseSettingsProvider = ({
       settings,
       isLoaded,
       setSetting,
+      saveRanges,
       resetToDefaults,
     }),
-    [settings, isLoaded, setSetting, resetToDefaults],
+    [settings, isLoaded, setSetting, saveRanges, resetToDefaults],
   );
 
   return (

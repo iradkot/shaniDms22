@@ -3,6 +3,7 @@ import {
   runAgpComparisonOrchestra,
 } from '../src/services/agpComparisonIntelligence';
 import {BgSample} from '../src/types/day_bgs.types';
+import {cgmRange, CGM_STATUS_CODES} from '../src/constants/PLAN_CONFIG';
 
 const range = {
   current: {
@@ -16,6 +17,60 @@ const range = {
 };
 
 describe('AGP comparison intelligence', () => {
+  it('uses edited target bounds in both periods, meal recovery and correction lows after module load', () => {
+    const previousLow = cgmRange.TARGET.min;
+    const previousHigh = cgmRange[CGM_STATUS_CODES.VERY_HIGH];
+    const startMs = +range.current.start;
+    const HOUR = 3_600_000;
+    const bg = (start: number) => [
+      ...[75, 80, 120, 160, 175, 190].map((value, index) =>
+        sample(start + 8 * HOUR + index * 5 * 60_000, value)),
+      sample(start + 12 * HOUR, 120),
+      sample(start + 15 * HOUR, 175),
+      sample(start + 18 * HOUR, 160),
+      sample(start + 21 * HOUR, 75),
+    ];
+    const input = {
+      currentRange: range.current,
+      previousRange: range.previous,
+      currentBgData: bg(startMs),
+      previousBgData: bg(+range.previous.start),
+      currentTreatments: [
+        {eventType: 'Carb Correction', created_at: new Date(startMs + 12 * HOUR).toISOString(), carbs: 20},
+        {eventType: 'Correction Bolus', created_at: new Date(startMs + 18 * HOUR).toISOString(), insulin: 1},
+      ],
+      previousTreatments: [],
+    };
+    try {
+      cgmRange.TARGET.min = 70;
+      cgmRange[CGM_STATUS_CODES.VERY_HIGH] = 200;
+      const initial = buildAgpComparisonEvidence(input);
+      expect(initial.segments.find(segment => segment.key === 'morning')!.current.tirPct).toBe(100);
+      expect(initial.meals.find(meal => meal.mealType === 'lunch')!.examples[0]!.returnedToTargetBy3h).toBe(true);
+      expect(initial.corrections.currentLowAfterCorrectionPct).toBe(0);
+
+      cgmRange.TARGET.min = 80;
+      cgmRange[CGM_STATUS_CODES.VERY_HIGH] = 160;
+      const updated = buildAgpComparisonEvidence(input);
+      const morning = updated.segments.find(segment => segment.key === 'morning')!;
+      expect(morning.current.tirPct).toBe(50);
+      expect(morning.previous.tirPct).toBe(50);
+      expect(morning.current.lowPct).toBeCloseTo(100 / 6);
+      expect(morning.current.highPct).toBeCloseTo(100 / 3);
+      expect(updated.meals.find(meal => meal.mealType === 'lunch')!.examples[0]!.returnedToTargetBy3h).toBe(false);
+      expect(updated.corrections.currentLowAfterCorrectionPct).toBe(100);
+      const lowMeal = buildAgpComparisonEvidence({
+        ...input,
+        currentBgData: input.currentBgData.map(reading =>
+          reading.date === startMs + 15 * HOUR ? {...reading, sgv: 75} : reading),
+      });
+      expect(lowMeal.meals.find(meal => meal.mealType === 'lunch')!.examples[0]!.returnedToTargetBy3h).toBe(false);
+    } finally {
+      cgmRange.TARGET.min = previousLow;
+      cgmRange[CGM_STATUS_CODES.VERY_HIGH] = previousHigh!;
+    }
+  });
+
   it.each(['current', 'previous'] as const)(
     'retains glucose patterns but withholds insulin drivers when %s bolus evidence is missing',
     async missing => {

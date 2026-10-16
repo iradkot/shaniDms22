@@ -176,12 +176,14 @@ object GlucoseWidgetUpdater {
     check(cleared) { "Widget health data removal must be retried." }
   }
 
-  fun setThresholds(context: Context, low: Int?, high: Int?) {
+  fun setThresholds(context: Context, low: Int?, high: Int?, refreshDaily: (Context) -> Unit = { GlucoseWidgetSync.refreshDailyIfNeeded(it) }) {
+    val previous = getRangeThresholds(context)
     val e = prefs(context).edit()
     if (low != null) e.putInt(KEY_LOW, low) else e.remove(KEY_LOW)
     if (high != null) e.putInt(KEY_HIGH, high) else e.remove(KEY_HIGH)
     e.apply()
     updateWidgets(context)
+    if (getRangeThresholds(context) != previous) refreshDaily(context)
   }
 
   fun getRangeThresholds(context: Context): Pair<Int, Int> {

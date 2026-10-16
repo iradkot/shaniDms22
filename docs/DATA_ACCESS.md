@@ -153,6 +153,20 @@ server response or installed build caused a particular patient's incident.
 
 ## Time, units and freshness
 
+Personal glucose ranges are edited together in Settings. The four boundaries
+define very low (`< veryLowMax`), low (`>= veryLowMax` and `< targetMin`),
+in range (`targetMin..targetMax`, inclusive), high (`> targetMax` and `<= highMax`),
+and very high (`> highMax`). New preferences default to 54/70/180/250 mg/dL;
+existing valid saved preferences are retained. Native preferences remain scoped
+to the signed-in account; browser preferences are scoped to account and workspace.
+They are local preferences, not pump targets or Nightscout configuration.
+
+Use the runtime's `TrendsRangeThresholds` for daily TIR, Trends, comparisons,
+calendars, event analysis, chart bands and AI evidence. Settings publishes all
+four values after a successful write, so dependent views recalculate together.
+The Android widget receives the target bounds and immediately requests a daily
+refresh when they change. Standardized GRI retains its fixed metric definition.
+
 - Domain timestamps are Unix **milliseconds**. Domain windows are `[startMs,
   endMs)`: inclusive start, exclusive end. Nightscout v1 `$lte` queries are
   inclusive; adapters request `endMs - 1` where the domain window is exclusive.

@@ -4,7 +4,8 @@ import Tooltip from './Tooltip';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {BgSample} from 'app/types/day_bgs.types';
 import {ThemeType} from 'app/types/theme';
-import {determineBgColorByGlucoseValue} from 'app/style/styling.utils';
+import {glucoseChartColor} from 'app/components/charts/chartPalette';
+import {useGlucoseChartThresholds} from 'app/components/charts/GlucoseChartThresholdsContext';
 import {addOpacity} from 'app/style/styling.utils';
 import {useTheme} from 'styled-components/native';
 import {GraphStyleContext} from 'app/components/charts/CgmGraph/contextStores/GraphStyleContext';
@@ -21,6 +22,7 @@ interface SgvTooltipProps {
 
 const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
   const theme = useTheme() as ThemeType;
+  const thresholds = useGlucoseChartThresholds();
   const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
   const tooltipWidth = 160;
@@ -48,7 +50,7 @@ const SgvTooltip: React.FC<SgvTooltipProps> = ({x, y, bgSample}) => {
     placement: 'top',
   });
 
-  const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
+  const bgColor = glucoseChartColor(bgSample.sgv, theme, thresholds);
 
   // More subtle shadow settings
   const shadowColor = addOpacity(theme.shadowColor, 0.35);

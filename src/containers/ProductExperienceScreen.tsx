@@ -100,7 +100,11 @@ const ProductExperienceScreen = ({
     pendingLegacyProfileCount,
     recoverLegacyProfiles,
   } = useNightscoutConfig();
-  const {settings: glucoseSettings} = useGlucoseSettings();
+  const {
+    settings: glucoseSettings,
+    isLoaded: glucoseSettingsLoaded,
+    saveRanges: saveGlucoseRanges,
+  } = useGlucoseSettings();
   const {
     settings: aiSettings,
     setSetting: setAiSetting,
@@ -628,6 +632,17 @@ const ProductExperienceScreen = ({
     }
     return {
       dataSource: createNativeSettingsDataSource({
+        ...(glucoseSettingsLoaded ? {
+          glucoseRanges: {
+            thresholds: {
+              veryLowMaxMgDl: glucoseSettings.severeHypo,
+              targetMinMgDl: glucoseSettings.hypo,
+              targetMaxMgDl: glucoseSettings.hyper,
+              highMaxMgDl: glucoseSettings.severeHyper,
+            },
+            save: saveGlucoseRanges,
+          },
+        } : {}),
         ...(NATIVE_RUNTIME_CONFIG.appInfo ? {appInfo: NATIVE_RUNTIME_CONFIG.appInfo} : {}),
         language,
         layout,
@@ -672,6 +687,9 @@ const ProductExperienceScreen = ({
     aiCredentialConfigured,
     aiSettings.enabled,
     firebaseUser,
+    glucoseSettings,
+    glucoseSettingsLoaded,
+    saveGlucoseRanges,
     journal.status,
     language,
     layout,

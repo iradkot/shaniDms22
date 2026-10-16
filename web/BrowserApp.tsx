@@ -83,6 +83,10 @@ import {
 } from '../src/modules/privacy';
 import {accountWorkspaceScopeId} from '../src/modules/privacy/localAccountCleanup';
 import {readCachedConnections} from './connectionStatus';
+import {
+  createBrowserGlucoseRanges,
+  type BrowserGlucoseRanges,
+} from '../src/platform/web/settings/browserGlucoseRanges';
 
 const ProductExperience = React.lazy(() =>
   import('../src/product/app/ProductExperience').then(module => ({
@@ -91,13 +95,6 @@ const ProductExperience = React.lazy(() =>
 );
 
 const LANGUAGE_STORAGE_KEY = 'shani.web.language.v1';
-
-const DEFAULT_THRESHOLDS = {
-  veryLowMaxMgDl: 54,
-  targetMinMgDl: 70,
-  targetMaxMgDl: 180,
-  highMaxMgDl: 250,
-} as const;
 
 type RuntimeGlobal = typeof globalThis & {
   __SHANI_WEB_CONFIG__?: {
@@ -172,6 +169,7 @@ const COPY = {
 
 interface BrowserResources {
   readonly keyValueStore: IndexedDbKeyValueStore;
+  readonly glucoseRanges: BrowserGlucoseRanges;
   readonly personalizationRepository: ReturnType<
     typeof createBrowserProductPersonalizationRepository
   >;
@@ -258,6 +256,11 @@ const BrowserProduct = (props: {
     authConnection,
   } = props;
   const {resources} = state;
+  const thresholds = useSyncExternalStore(
+    resources.glucoseRanges.subscribe,
+    resources.glucoseRanges.getSnapshot,
+    resources.glucoseRanges.getSnapshot,
+  );
   const alertRuleInterpreter = useMemo(
     () => ({
       availability: (!resources.aiEnabled
@@ -307,6 +310,7 @@ const BrowserProduct = (props: {
               resources.scope.nightscoutSourceId,
             locale,
             journal: state.workspace,
+            thresholds,
           }),
     [
       locale,
@@ -314,6 +318,7 @@ const BrowserProduct = (props: {
       resources.nightscoutClient,
       resources.scope.nightscoutSourceId,
       state.workspace,
+      thresholds,
     ],
   );
   const runtime = useMemo(
@@ -348,8 +353,10 @@ const BrowserProduct = (props: {
             ...(currentDataSource === undefined ? {} : {currentDataSource}),
             getScopeKey: resources.currentDataScopeKey,
             sourceId: resources.nightscout.sourceId,
+            thresholds,
+            getThresholds: resources.glucoseRanges.getSnapshot,
           }),
-    [currentDataSource, resources.currentDataScopeKey, resources.nightscout.sourceId, resources.nightscoutClient],
+    [currentDataSource, resources.currentDataScopeKey, resources.glucoseRanges, resources.nightscout.sourceId, resources.nightscoutClient, thresholds],
   );
   const aiRuntime = useBrowserAiAnalystRuntime({
     service: resources.aiService,
@@ -373,6 +380,10 @@ const BrowserProduct = (props: {
         personalization: state.personalization,
         savePersonalization,
         setLanguage: async language => applyLocale(language),
+        glucoseRanges: {
+          thresholds,
+          save: resources.glucoseRanges.save,
+        },
         ai: {
           enabled: resources.aiEnabled,
           credentialConfigured: resources.aiConfigured,
@@ -422,6 +433,8 @@ const BrowserProduct = (props: {
       resources.api,
       resources.nightscout,
       resources.preMealAssistance,
+      resources.glucoseRanges,
+      thresholds,
       preMealAssistance.settings,
       authConnection,
     ],
@@ -436,7 +449,7 @@ const BrowserProduct = (props: {
         : {
             trendsRuntime: {
               dataSource: dataSources.trends,
-              thresholds: DEFAULT_THRESHOLDS,
+              thresholds,
               therapyContext: {
                 dataSource: dataSources.therapyContext,
               },
@@ -455,23 +468,23 @@ const BrowserProduct = (props: {
             },
             dailyOverviewRuntime: {
               dataSource: dataSources.dailyOverview,
-              thresholds: DEFAULT_THRESHOLDS,
+              thresholds,
             },
             previousDaySummaryRuntime: {
               dataSource: dataSources.previousDaySummary,
-              thresholds: DEFAULT_THRESHOLDS,
+              thresholds,
             },
             similarEventsRuntime: {
               dataSource: dataSources.similarEvents,
               thresholds: {
-                lowBelowMgDl: DEFAULT_THRESHOLDS.targetMinMgDl,
-                highAboveMgDl: DEFAULT_THRESHOLDS.targetMaxMgDl,
+                lowBelowMgDl: thresholds.targetMinMgDl,
+                highAboveMgDl: thresholds.targetMaxMgDl,
               },
               timeZoneOffsetMinutes: -new Date().getTimezoneOffset(),
             },
             loopChangesRuntime: {
               dataSource: dataSources.loopChanges,
-              thresholds: DEFAULT_THRESHOLDS,
+              thresholds,
             },
           })}
       journalWorkspace={state.workspace}
@@ -810,6 +823,15 @@ export const BrowserApp = () => {
           createOpaqueBrowserId,
         );
       }
+      const glucoseRanges = createBrowserGlucoseRanges({
+        storage: keyValueStore,
+        scope,
+        isCurrentScope,
+      });
+      await glucoseRanges.initialize();
+      if (!isCurrentScope()) {
+        return;
+      }
       const remoteAdapter =
         signedIn && gateway
           ? createBrowserFirebaseJournalRemoteAdapter({gateway, auth})
@@ -959,6 +981,7 @@ export const BrowserApp = () => {
         personalization,
         resources: {
           keyValueStore,
+          glucoseRanges,
           personalizationRepository,
           personalizationScope,
           scope,

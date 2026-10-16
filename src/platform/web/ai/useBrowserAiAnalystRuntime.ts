@@ -296,6 +296,7 @@ export const useBrowserAiAnalystRuntime = (input: {
         setVisibleContext(requestVisibleContext);
         setProgress(input.locale === 'he' ? 'חושב…' : 'Thinking…');
       }
+      input.evidenceProvider?.assertCurrentSource?.();
       const answer = await input.service.chat(
         browserAiMessages(systemInstruction(input.locale, activeSpecialist), [
           ...(requestVisibleContext
@@ -310,6 +311,7 @@ export const useBrowserAiAnalystRuntime = (input: {
         ]),
         controller.signal,
       );
+      input.evidenceProvider?.assertCurrentSource?.();
       if (controller.signal.aborted || previousScope.current !== requestScope) {
         return;
       }

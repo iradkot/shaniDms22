@@ -13,6 +13,41 @@ const fresh = <T>(records: readonly T[]): BrowserNightscoutRange<T> => ({
 });
 
 describe('browser AI Nightscout evidence provider', () => {
+  it('uses personal ranges at every boundary in AI facts and rejects an outdated analysis', async () => {
+    const thresholds = {
+      veryLowMaxMgDl: 60,
+      targetMinMgDl: 80,
+      targetMaxMgDl: 140,
+      highMaxMgDl: 220,
+    };
+    let currentThresholds = thresholds;
+    const provider = createBrowserAiEvidenceProvider({
+      client: {
+        readEntries: jest.fn(async () => fresh(
+          [59, 60, 79, 80, 140, 141, 220, 221].map((sgv, index) => ({
+            date: NOW_MS - (index + 1) * 60_000,
+            sgv,
+          })),
+        )),
+        readRecordedTreatments: jest.fn(async () => fresh([])),
+        readDeviceStatuses: jest.fn(async () => fresh([])),
+      },
+      sourceId: 'source-personal',
+      thresholds,
+      getThresholds: () => currentThresholds,
+      now: () => NOW_MS,
+    });
+    const context = await provider.loadVisibleContext({
+      specialist: 'general-chat',
+      locale: 'en',
+      signal: new AbortController().signal,
+    });
+    expect(context).toContain('Personal glucose ranges (mg/dL): very low <60; low 60–<80; in range 80–140; high >140–220; very high >220.');
+    expect(context).toContain('Observed bands: <60 1, 60–<80 2, 80–140 2, >140–220 2, >220 1.');
+    currentThresholds = {...thresholds, targetMaxMgDl: 150};
+    expect(() => provider.assertCurrentSource!()).toThrow('Personal glucose ranges changed');
+  });
+
   it('loads the full requested month and exposes stale device timestamps and incomplete coverage', async () => {
     const readEntries = jest.fn().mockResolvedValue({
       ...fresh([{date: NOW_MS - 60_000, sgv: 110}]),

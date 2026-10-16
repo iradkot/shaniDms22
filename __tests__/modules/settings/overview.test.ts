@@ -10,6 +10,13 @@ describe('buildSettingsOverview', () => {
         ignoredSecret: 'build-secret',
       },
       language: 'en' as const,
+      glucoseRanges: {
+        veryLowMaxMgDl: 60,
+        targetMinMgDl: 80,
+        targetMaxMgDl: 160,
+        highMaxMgDl: 220,
+        ignoredSecret: 'range-secret',
+      },
       layout: 'tablet' as const,
       personalization: {
         questionnaireStatus: 'completed' as const,
@@ -47,7 +54,17 @@ describe('buildSettingsOverview', () => {
     const serialized = JSON.stringify(result);
 
     expect(result.layout.columns).toBe(3);
-    expect(result.appInfo).toEqual({versionName: '1.0.529-preview', buildNumber: '53568000'});
+    expect(result.glucoseRanges).toEqual({
+      veryLowMaxMgDl: 60,
+      targetMinMgDl: 80,
+      targetMaxMgDl: 160,
+      highMaxMgDl: 220,
+    });
+    expect(serialized).not.toContain('range-secret');
+    expect(result.appInfo).toEqual({
+      versionName: '1.0.529-preview',
+      buildNumber: '53568000',
+    });
     expect(serialized).not.toContain('build-secret');
     expect(result.nightscout).toEqual({
       status: 'connected',

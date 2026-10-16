@@ -25,9 +25,7 @@ import {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const EXPECTED_READINGS_PER_DAY = 288;
 const MIN_SEGMENT_SAMPLES = 6;
-const LOW_THRESHOLD = cgmRange.TARGET.min;
-const HIGH_THRESHOLD = cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number;
-const SEVERE_HIGH_THRESHOLD = cgmRange[CGM_STATUS_CODES.EXTREME_HIGH] as number;
+type TargetThresholds = {readonly low: number; readonly high: number};
 
 export const AGP_COMPARISON_WINDOWS: AgpTimeWindow[] = [
   {
@@ -102,6 +100,11 @@ export type BuildComparisonEvidenceParams = {
 export function buildAgpComparisonEvidence(
   params: BuildComparisonEvidenceParams,
 ): AgpComparisonEvidence {
+  // Settings may change after this module loads. Both periods use one snapshot.
+  const thresholds: TargetThresholds = {
+    low: cgmRange.TARGET.min,
+    high: cgmRange[CGM_STATUS_CODES.VERY_HIGH] as number,
+  };
   const current = buildPeriodEvidence(
     'current',
     params.currentRange,
@@ -114,7 +117,7 @@ export function buildAgpComparisonEvidence(
   );
 
   const segments = AGP_COMPARISON_WINDOWS.map(window =>
-    compareSegment(window, current.bgSamples, previous.bgSamples),
+    compareSegment(window, current.bgSamples, previous.bgSamples, thresholds),
   ).sort((a, b) => b.significanceScore - a.significanceScore);
 
   const nowMs = Date.now();
@@ -134,6 +137,7 @@ export function buildAgpComparisonEvidence(
   );
 
   const meals = buildMealComparisons({
+    thresholds,
     currentBgData: current.bgSamples,
     previousBgData: previous.bgSamples,
     currentTreatments: params.currentTreatments ?? [],
@@ -147,6 +151,7 @@ export function buildAgpComparisonEvidence(
   });
 
   const corrections = buildCorrectionComparison({
+    thresholds,
     currentBgData: current.bgSamples,
     previousBgData: previous.bgSamples,
     currentTreatments: params.currentTreatments ?? [],
@@ -207,6 +212,7 @@ function hasCompleteBolusEvidence(
 }
 
 type InsulinComparisonInputs = {
+  thresholds: TargetThresholds;
   currentRange: AgpPeriodEvidence['range'];
   previousRange: AgpPeriodEvidence['range'];
   currentObservedAtMs: number;
@@ -263,9 +269,10 @@ function compareSegment(
   window: AgpTimeWindow,
   currentSamples: BgSample[],
   previousSamples: BgSample[],
+  thresholds: TargetThresholds,
 ): AgpSegmentComparison {
-  const current = buildSegmentStats(window, currentSamples);
-  const previous = buildSegmentStats(window, previousSamples);
+  const current = buildSegmentStats(window, currentSamples, thresholds);
+  const previous = buildSegmentStats(window, previousSamples, thresholds);
   const deltas = {
     tirPct: diffNullable(current.tirPct, previous.tirPct),
     averageBg: diffNullable(current.averageBg, previous.averageBg),
@@ -292,6 +299,7 @@ function compareSegment(
 function buildSegmentStats(
   window: AgpTimeWindow,
   samples: BgSample[],
+  thresholds: TargetThresholds,
 ): AgpSegmentStats {
   const segmentSamples = samplesForWindow(
     samples,
@@ -326,11 +334,11 @@ function buildSegmentStats(
     ...window,
     sampleCount: values.length,
     tirPct: pct(
-      values.filter(v => v >= LOW_THRESHOLD && v <= HIGH_THRESHOLD).length,
+      values.filter(v => v >= thresholds.low && v <= thresholds.high).length,
       values.length,
     ),
-    lowPct: pct(values.filter(v => v < LOW_THRESHOLD).length, values.length),
-    highPct: pct(values.filter(v => v > HIGH_THRESHOLD).length, values.length),
+    lowPct: pct(values.filter(v => v < thresholds.low).length, values.length),
+    highPct: pct(values.filter(v => v > thresholds.high).length, values.length),
     averageBg: avg(values),
     medianBg: percentile(values, 50),
     p10,
@@ -355,6 +363,7 @@ function buildMealComparisons(
     params.currentRange,
     params.currentObservedAtMs,
     params.currentBolusEvidenceComplete,
+    params.thresholds,
   );
   const previousMeals = buildMealEvents(
     params.previousBgData,
@@ -362,6 +371,7 @@ function buildMealComparisons(
     params.previousRange,
     params.previousObservedAtMs,
     params.previousBolusEvidenceComplete,
+    params.thresholds,
   );
 
   return (['breakfast', 'lunch', 'dinner', 'snack'] as const).map(mealType => {
@@ -398,6 +408,7 @@ function buildMealEvents(
   range: AgpPeriodEvidence['range'],
   observedAtMs: number,
   bolusEvidenceComplete: boolean,
+  thresholds: TargetThresholds,
 ): AgpMealEvent[] {
   const carbItems = mapNightscoutTreatmentsToCarbFoodItems(treatments as any[]);
   const insulinEntries = mapNightscoutTreatmentsToInsulinDataEntries(
@@ -447,7 +458,8 @@ function buildMealEvents(
         riseMgdl: bgAtMeal != null && peakBg != null ? peakBg - bgAtMeal : null,
         twoHourBg,
         returnedToTargetBy3h:
-          threeHourBg == null ? null : threeHourBg <= HIGH_THRESHOLD,
+          threeHourBg == null ? null :
+            threeHourBg >= thresholds.low && threeHourBg <= thresholds.high,
       };
     })
     .filter(event => event.bgAtMeal != null || event.peakBg != null);
@@ -467,6 +479,7 @@ function buildCorrectionComparison(
         params.currentTreatments,
         params.currentRange,
         params.currentObservedAtMs,
+        params.thresholds,
       )
     : [];
   const previous = params.previousBolusEvidenceComplete
@@ -475,6 +488,7 @@ function buildCorrectionComparison(
         params.previousTreatments,
         params.previousRange,
         params.previousObservedAtMs,
+        params.thresholds,
       )
     : [];
 
@@ -495,6 +509,7 @@ function buildCorrectionEvents(
   treatments: unknown[],
   range: AgpPeriodEvidence['range'],
   observedAtMs: number,
+  thresholds: TargetThresholds,
 ) {
   const carbItems = mapNightscoutTreatmentsToCarbFoodItems(treatments as any[]);
   const insulinEntries = mapNightscoutTreatmentsToInsulinDataEntries(
@@ -525,7 +540,7 @@ function buildCorrectionEvents(
         ts: b.ts,
         amount: b.amount,
         drop3h: startBg != null && endBg != null ? startBg - endBg : null,
-        lowAfter: post.some(s => s.sgv < LOW_THRESHOLD),
+        lowAfter: post.some(s => s.sgv < thresholds.low),
       };
     });
 }
@@ -851,5 +866,3 @@ export function hasMeaningfulCorrectionSignal(
       ) >= 15)
   );
 }
-
-export {SEVERE_HIGH_THRESHOLD};

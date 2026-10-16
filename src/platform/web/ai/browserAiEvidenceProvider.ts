@@ -18,6 +18,8 @@ import {getLocalDayPeriod} from '../../../modules/dailyOverview';
 import type {CurrentDataSource, CurrentObservation, CurrentDataSnapshot} from '../../../modules/currentData';
 import {reobserveCurrentData, currentFactsExpireAtMs} from '../../../modules/currentData';
 import {createBrowserCurrentDataSource} from '../nightscout/browserCurrentDataSource';
+import {DEFAULT_GLUCOSE_RANGE_THRESHOLDS} from '../../../modules/settings/glucoseRanges';
+import {classifyTrendsRange, type TrendsRangeThresholds} from '../../../modules/trends';
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const MAX_RANGE_MS = 14 * DAY_MS;
@@ -154,6 +156,7 @@ const glucoseFacts = (
   startMs: number,
   endMs: number,
   locale: AiLocale,
+  thresholds: TrendsRangeThresholds,
 ): readonly string[] => {
   const sorted = [...entries].sort((left, right) => left.date - right.date);
   if (sorted.length === 0) {
@@ -169,11 +172,16 @@ const glucoseFacts = (
   }
   const mean =
     sorted.reduce((sum, entry) => sum + entry.sgv, 0) / sorted.length;
-  const low = sorted.filter(entry => entry.sgv < 70).length;
-  const inRange = sorted.filter(
-    entry => entry.sgv >= 70 && entry.sgv <= 180,
-  ).length;
-  const high = sorted.length - low - inRange;
+  const counts = {
+    veryLowPercent: 0,
+    lowPercent: 0,
+    targetPercent: 0,
+    highPercent: 0,
+    veryHighPercent: 0,
+  };
+  sorted.forEach(entry => {
+    counts[classifyTrendsRange(entry.sgv, thresholds)] += 1;
+  });
   const expected = Math.max(1, Math.round((endMs - startMs) / (5 * 60_000)));
   const coverage = Math.min(100, (sorted.length / expected) * 100);
   return [
@@ -191,7 +199,11 @@ const glucoseFacts = (
     }: ${formatNumber(mean)} mg/dL.`,
     `${
       locale === 'he' ? 'חלוקה' : 'Observed bands'
-    }: <70 ${low}, 70–180 ${inRange}, >180 ${high}.`,
+    }: <${thresholds.veryLowMaxMgDl} ${counts.veryLowPercent}, ` +
+      `${thresholds.veryLowMaxMgDl}–<${thresholds.targetMinMgDl} ${counts.lowPercent}, ` +
+      `${thresholds.targetMinMgDl}–${thresholds.targetMaxMgDl} ${counts.targetPercent}, ` +
+      `>${thresholds.targetMaxMgDl}–${thresholds.highMaxMgDl} ${counts.highPercent}, ` +
+      `>${thresholds.highMaxMgDl} ${counts.veryHighPercent}.`,
   ];
 };
 
@@ -200,17 +212,29 @@ export const createBrowserAiEvidenceProvider = (input: {
   readonly sourceId: string;
   readonly currentDataSource?: CurrentDataSource;
   readonly getScopeKey?: () => string;
+  readonly thresholds?: TrendsRangeThresholds;
+  readonly getThresholds?: () => TrendsRangeThresholds;
   readonly now?: () => number;
 }): BrowserAiEvidenceProvider => {
   if (!/^[A-Za-z0-9._-]{1,160}$/.test(input.sourceId)) {
     throw new Error('AI evidence source identity is invalid.');
   }
   const now = input.now ?? (() => Date.now());
+  const thresholds = {...(input.thresholds ?? DEFAULT_GLUCOSE_RANGE_THRESHOLDS)};
   const providerScopeKey = input.getScopeKey?.();
   const assertCurrentSource = (): void => {
     input.client.assertCurrentSource?.();
     if (providerScopeKey !== input.getScopeKey?.()) {
       throw new Error('AI evidence source changed during loading.');
+    }
+    const currentThresholds = input.getThresholds?.() ?? thresholds;
+    if (
+      currentThresholds.veryLowMaxMgDl !== thresholds.veryLowMaxMgDl ||
+      currentThresholds.targetMinMgDl !== thresholds.targetMinMgDl ||
+      currentThresholds.targetMaxMgDl !== thresholds.targetMaxMgDl ||
+      currentThresholds.highMaxMgDl !== thresholds.highMaxMgDl
+    ) {
+      throw new Error('Personal glucose ranges changed during analysis.');
     }
   };
   const currentDataSource = input.currentDataSource ?? createBrowserCurrentDataSource({
@@ -328,6 +352,12 @@ export const createBrowserAiEvidenceProvider = (input: {
           nowMs,
         ).toISOString()}.`,
         `${locale === 'he' ? 'מזהה מקור' : 'Source scope'}: ${input.sourceId}.`,
+        `${locale === 'he' ? 'טווחי הסוכר האישיים (mg/dL)' : 'Personal glucose ranges (mg/dL)'}: ` +
+          `${locale === 'he' ? 'נמוך מאוד' : 'very low'} <${thresholds.veryLowMaxMgDl}; ` +
+          `${locale === 'he' ? 'נמוך' : 'low'} ${thresholds.veryLowMaxMgDl}–<${thresholds.targetMinMgDl}; ` +
+          `${locale === 'he' ? 'בטווח' : 'in range'} ${thresholds.targetMinMgDl}–${thresholds.targetMaxMgDl}; ` +
+          `${locale === 'he' ? 'גבוה' : 'high'} >${thresholds.targetMaxMgDl}–${thresholds.highMaxMgDl}; ` +
+          `${locale === 'he' ? 'גבוה מאוד' : 'very high'} >${thresholds.highMaxMgDl}.`,
         ...currentFacts(currentAtCompletion, locale),
         `${locale === 'he' ? 'טווח' : 'Range'}: ${new Date(
           period.startMs,
@@ -341,7 +371,7 @@ export const createBrowserAiEvidenceProvider = (input: {
             : ''
         }`,
         ...(entries === undefined ? [locale === 'he' ? 'היסטוריית הסוכר בטווח הנבחר אינה זמינה.' : 'Glucose history for the selected period is unavailable.']
-          : glucoseFacts(historicalEntries, period.startMs, period.endMs, locale)),
+          : glucoseFacts(historicalEntries, period.startMs, period.endMs, locale, thresholds)),
         ...(entries?.freshness.kind === 'stale' ? [locale === 'he'
           ? 'היסטוריית הסוכר היא עותק שמור לאחר כשל באחזור; היא אינה קריאה נוכחית.'
           : 'Glucose history is a stale cached copy after a read failure; it is not a current observation.'] : []),

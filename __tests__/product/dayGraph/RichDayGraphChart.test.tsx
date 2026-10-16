@@ -2,7 +2,7 @@ import React from 'react';
 import {withTheme} from '../../mocks/withTheme';
 import {Modal, Pressable, StyleSheet, Text, View} from 'react-native';
 import renderer, {act} from 'react-test-renderer';
-import Svg, {Line, Path, Rect, Text as SvgText} from 'react-native-svg';
+import Svg, {Circle, Line, Path, Rect, Text as SvgText} from 'react-native-svg';
 import {applyThemeToSingleton, getThemeById} from 'app/style/theme';
 import type {ThemeType} from 'app/types/theme';
 import {buildDayGraph} from 'app/modules/dayGraph';
@@ -63,6 +63,65 @@ describe('Rich Day Graph presentation', () => {
     if (tree) {
       act(() => tree.unmount());
     }
+  });
+
+  it('updates the same readings, target shading and inspector when personal ranges change', () => {
+    const values = [59, 60, 79, 80, 160, 220, 221];
+    const readings = buildDayGraph({
+      period: {dayStartMs: 0, dayEndMs: 24 * HOUR},
+      expectedSampleIntervalMs: 5 * 60000,
+      glucoseSamples: values.map((valueMgDl, index) => ({
+        identity: {sourceId: 'fixture', recordId: `range-${index}`},
+        timestampMs: 8 * HOUR + index * 5 * 60000,
+        valueMgDl,
+      })),
+      timelineItems: [],
+    });
+    const initial = {
+      veryLowMaxMgDl: 50,
+      targetMinMgDl: 70,
+      targetMaxMgDl: 180,
+      highMaxMgDl: 250,
+    };
+    const edited = {
+      veryLowMaxMgDl: 60,
+      targetMinMgDl: 80,
+      targetMaxMgDl: 160,
+      highMaxMgDl: 220,
+    };
+    const view = (rangeThresholds: typeof initial) => withTheme(
+      <RichDayGraphChart locale="en" model={readings} rangeThresholds={rangeThresholds} />,
+    );
+    const sampleColors = () => tree.root.findAllByType(Circle)
+      .filter(circle => circle.props.fill !== 'none')
+      .map(circle => circle.props.fill);
+    const chartTheme = getThemeById('calmBlue');
+    act(() => { tree = renderer.create(view(initial)); });
+    const beforeColors = sampleColors();
+    const beforeBand = tree.root.findByProps({testID: 'cgm-target-range'}).props;
+    // Freeze a selected reading too: its color must still follow new thresholds.
+    press(tree, 'chart-inspector-toggle-details');
+    act(() => { tree.update(view(edited)); });
+    expect(sampleColors()).not.toEqual(beforeColors);
+    expect(sampleColors()).toEqual([
+      chartTheme.severeBelowRange,
+      chartTheme.belowRangeColor,
+      chartTheme.belowRangeColor,
+      chartTheme.inRangeColor,
+      chartTheme.inRangeColor,
+      chartTheme.aboveRangeColor,
+      chartTheme.severeAboveRange,
+    ]);
+    const afterBand = tree.root.findByProps({testID: 'cgm-target-range'}).props;
+    expect(afterBand.height).toBeLessThan(beforeBand.height);
+    expect(tree.root.findAllByProps({testID: 'cgm-target-boundary-80'})).not.toHaveLength(0);
+    expect(tree.root.findAllByProps({testID: 'cgm-target-boundary-160'})).not.toHaveLength(0);
+    expect(tree.root.findAllByProps({testID: 'cgm-target-boundary-180'})).toHaveLength(0);
+    const inspectorReadings = tree.root.findAllByType(Text)
+      .filter(node => node.props.children === '221 mg/dL');
+    expect(inspectorReadings.length).toBeGreaterThan(0);
+    inspectorReadings.forEach(node => expect(StyleSheet.flatten(node.props.style).color)
+      .toBe(chartTheme.severeAboveRange));
   });
 
   it('keeps the phone overview compact while selected point details expand independently', () => {

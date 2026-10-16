@@ -10,12 +10,13 @@ import {
 } from 'app/product/personalization';
 import {createNativeSettingsDataSource} from 'app/platform/native/settings';
 import type {ProductPersonalizationChange} from 'app/product/personalization';
-import {SettingsDataSourceError} from 'app/modules/settings';
+import {
+  DEFAULT_GLUCOSE_RANGE_THRESHOLDS,
+  SettingsDataSourceError,
+} from 'app/modules/settings';
 
 const createInput = (
-  overrides: Partial<
-    Parameters<typeof createNativeSettingsDataSource>[0]
-  > = {},
+  overrides: Partial<Parameters<typeof createNativeSettingsDataSource>[0]> = {},
 ): Parameters<typeof createNativeSettingsDataSource>[0] => ({
   language: 'en',
   layout: 'phone',
@@ -43,6 +44,64 @@ const createInput = (
 });
 
 describe('createNativeSettingsDataSource', () => {
+  it('persists all glucose boundaries together and retains the old range after failure', async () => {
+    const save = jest
+      .fn<Promise<void>, [typeof DEFAULT_GLUCOSE_RANGE_THRESHOLDS]>()
+      .mockRejectedValueOnce(new Error('storage unavailable'))
+      .mockResolvedValueOnce(undefined);
+    const dataSource = createNativeSettingsDataSource(
+      createInput({
+        glucoseRanges: {thresholds: DEFAULT_GLUCOSE_RANGE_THRESHOLDS, save},
+      }),
+    );
+    const thresholds = {
+      veryLowMaxMgDl: 60,
+      targetMinMgDl: 80,
+      targetMaxMgDl: 160,
+      highMaxMgDl: 220,
+    };
+    await expect(
+      dataSource.apply({kind: 'set-glucose-ranges', thresholds}),
+    ).rejects.toThrow('storage unavailable');
+    expect((await dataSource.load()).glucoseRanges).toEqual(
+      DEFAULT_GLUCOSE_RANGE_THRESHOLDS,
+    );
+    const result = await dataSource.apply({
+      kind: 'set-glucose-ranges',
+      thresholds,
+    });
+    expect(save).toHaveBeenLastCalledWith(thresholds);
+    expect(result.glucoseRanges).toEqual(thresholds);
+    expect((await dataSource.load()).glucoseRanges).toEqual(thresholds);
+  });
+
+  it('rejects invalid glucose boundaries before persistence and handles unsupported sources', async () => {
+    const save = jest.fn(async () => undefined);
+    const dataSource = createNativeSettingsDataSource(
+      createInput({
+        glucoseRanges: {thresholds: DEFAULT_GLUCOSE_RANGE_THRESHOLDS, save},
+      }),
+    );
+    await expect(
+      dataSource.apply({
+        kind: 'set-glucose-ranges',
+        thresholds: {...DEFAULT_GLUCOSE_RANGE_THRESHOLDS, targetMinMgDl: 300},
+      }),
+    ).rejects.toMatchObject({code: 'invalid-glucose-ranges'});
+    expect(save).not.toHaveBeenCalled();
+    expect((await dataSource.load()).glucoseRanges).toEqual(
+      DEFAULT_GLUCOSE_RANGE_THRESHOLDS,
+    );
+    const unavailable = createNativeSettingsDataSource(createInput());
+    expect((await unavailable.load()).glucoseRanges).toBeUndefined();
+    await expect(
+      unavailable.apply({
+        kind: 'set-glucose-ranges',
+        thresholds: DEFAULT_GLUCOSE_RANGE_THRESHOLDS,
+      }),
+    ).rejects.toMatchObject({code: 'glucose-ranges-unavailable'});
+  });
+
   it('updates only the active form-factor profile through existing personalization persistence', async () => {
     let personalization = createDefaultProductPersonalization();
     const savedChanges: ProductPersonalizationChange[] = [];
@@ -85,12 +144,12 @@ describe('createNativeSettingsDataSource', () => {
 
     expect(savedChanges).toHaveLength(1);
     expect(result.personalization.showCurrentSnapshot).toBe(true);
-    expect(selectLayoutProfile(personalization, 'tablet').showCurrentSnapshot).toBe(
-      true,
-    );
-    expect(selectLayoutProfile(personalization, 'phone').showCurrentSnapshot).toBe(
-      false,
-    );
+    expect(
+      selectLayoutProfile(personalization, 'tablet').showCurrentSnapshot,
+    ).toBe(true);
+    expect(
+      selectLayoutProfile(personalization, 'phone').showCurrentSnapshot,
+    ).toBe(false);
     expect(
       selectLayoutProfile(personalization, 'tablet').shell.shortcuts,
     ).toContainEqual(
@@ -205,7 +264,9 @@ describe('createNativeSettingsDataSource', () => {
 
   it('persists optional Chat and Updates shortcuts on the current Layout Profile', async () => {
     let personalization = createDefaultProductPersonalization();
-    const savePersonalization = async (change: ProductPersonalizationChange) => {
+    const savePersonalization = async (
+      change: ProductPersonalizationChange,
+    ) => {
       personalization = resolveProductPersonalizationChange(
         personalization,
         change,

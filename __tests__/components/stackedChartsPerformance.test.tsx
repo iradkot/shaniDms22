@@ -164,6 +164,11 @@ describe('Production stacked chart selection work', () => {
       expect(
         rectangles.mock.calls.length - initialRectCount,
       ).toBeLessThanOrEqual(120);
+      expect(
+        rectangles.mock.contexts
+          .slice(initialRectCount)
+          .filter(instance => instance.props.testID === 'cgm-target-range'),
+      ).toHaveLength(0);
       expect(glucose()).toHaveLength(288);
       expect(tree.root.findByType(HomeChartsTooltip).props).toMatchObject({
         activeInsulinU: 1.5,

@@ -549,6 +549,7 @@ export const DayGraphModuleView = ({
             <RichDayGraphChart
               locale={locale}
               model={model}
+              rangeThresholds={rangeThresholds}
               forecast={forecast.snapshot}
               forecastStatus={forecast.supported ? forecast.status : undefined}
               selectedTimestampMs={selectedTimestampMs}

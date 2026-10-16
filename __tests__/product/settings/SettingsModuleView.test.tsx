@@ -1,6 +1,6 @@
 import React from 'react';
 import {withTheme} from '../../mocks/withTheme';
-import {Pressable, Text} from 'react-native';
+import {Pressable, Text, TextInput} from 'react-native';
 import renderer, {act} from 'react-test-renderer';
 import type {
   SettingsCommand,
@@ -44,6 +44,37 @@ const textValues = (tree: renderer.ReactTestRenderer): string[] =>
     );
 
 describe('SettingsModuleView', () => {
+  it('exposes personal TIR boundaries and saves the complete range command', async () => {
+    const initial: SettingsOverview = {
+      ...overview,
+      glucoseRanges: {veryLowMaxMgDl: 54, targetMinMgDl: 70, targetMaxMgDl: 180, highMaxMgDl: 250},
+    };
+    const apply = jest.fn(async (command: SettingsCommand) =>
+      command.kind === 'set-glucose-ranges'
+        ? {...initial, glucoseRanges: command.thresholds}
+        : initial,
+    );
+    const dataSource = {load: async () => initial, apply};
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(withTheme(<SettingsModuleView dataSource={dataSource} locale="en" />));
+    });
+    act(() => {
+      tree!.root.findAllByProps({testID: 'settings-glucose-targetMaxMgDl'})
+        .find(node => node.type === TextInput)!.props.onChangeText('160');
+    });
+    await act(async () => {
+      await tree!.root.findAllByProps({testID: 'settings-glucose-save'})
+        .find(node => node.type === Pressable)!.props.onPress();
+    });
+    expect(apply).toHaveBeenCalledWith({
+      kind: 'set-glucose-ranges',
+      thresholds: {veryLowMaxMgDl: 54, targetMinMgDl: 70, targetMaxMgDl: 160, highMaxMgDl: 250},
+    });
+    expect(textValues(tree!)).toContain('≥ 70, ≤ 160 mg/dL');
+    act(() => tree!.unmount());
+  });
+
   it('loads a safe overview and offers focused navigation instead of one dense form', async () => {
     const apply = jest.fn(
       async (_command: SettingsCommand): Promise<SettingsOverview> => overview,

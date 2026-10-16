@@ -1,4 +1,8 @@
-import type {SettingsAppInfo, SettingsOverview, SettingsOverviewInput} from './types';
+import type {
+  SettingsAppInfo,
+  SettingsOverview,
+  SettingsOverviewInput,
+} from './types';
 
 const safeCount = (value: number): number =>
   Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
@@ -8,7 +12,9 @@ const optionalLabel = (value: string | undefined): string | undefined => {
   return normalized ? normalized.slice(0, 120) : undefined;
 };
 
-const appInfo = (input: SettingsAppInfo | undefined): SettingsAppInfo | undefined => {
+const appInfo = (
+  input: SettingsAppInfo | undefined,
+): SettingsAppInfo | undefined => {
   if (!input) {
     return undefined;
   }
@@ -20,7 +26,9 @@ const appInfo = (input: SettingsAppInfo | undefined): SettingsAppInfo | undefine
     ...(versionName ? {versionName} : {}),
     ...(buildNumber ? {buildNumber} : {}),
     ...(revision ? {revision} : {}),
-    ...(Number.isFinite(parsedDate) ? {builtAt: new Date(parsedDate).toISOString()} : {}),
+    ...(Number.isFinite(parsedDate)
+      ? {builtAt: new Date(parsedDate).toISOString()}
+      : {}),
   };
 };
 
@@ -39,6 +47,16 @@ export const buildSettingsOverview = (
   return {
     schemaVersion: 1,
     ...(version === undefined ? {} : {appInfo: version}),
+    ...(input.glucoseRanges === undefined
+      ? {}
+      : {
+          glucoseRanges: {
+            veryLowMaxMgDl: input.glucoseRanges.veryLowMaxMgDl,
+            targetMinMgDl: input.glucoseRanges.targetMinMgDl,
+            targetMaxMgDl: input.glucoseRanges.targetMaxMgDl,
+            highMaxMgDl: input.glucoseRanges.highMaxMgDl,
+          },
+        }),
     language: input.language,
     layout: {
       profile: input.layout,
@@ -59,9 +77,7 @@ export const buildSettingsOverview = (
     },
     nightscout: {
       status: input.nightscout.status,
-      ...(nightscoutLabel === undefined
-        ? {}
-        : {displayLabel: nightscoutLabel}),
+      ...(nightscoutLabel === undefined ? {} : {displayLabel: nightscoutLabel}),
       credentialConfigured: input.nightscout.credentialConfigured,
     },
     ai: {

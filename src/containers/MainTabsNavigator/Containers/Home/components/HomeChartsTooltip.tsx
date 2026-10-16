@@ -1,6 +1,7 @@
 import React, {useMemo} from 'react';
 import {CompactChartInspector} from './CompactChartInspector';
-import {getChartPalette} from 'app/components/charts/chartPalette';
+import {getChartPalette, glucoseChartColor} from 'app/components/charts/chartPalette';
+import {useGlucoseChartThresholds} from 'app/components/charts/GlucoseChartThresholdsContext';
 import styled, {useTheme} from 'styled-components/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -9,7 +10,6 @@ import {ThemeType} from 'app/types/theme';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
 import {
   addOpacity,
-  determineBgColorByGlucoseValue,
 } from 'app/style/styling.utils';
 import {InsulinDataEntry} from 'app/types/insulin.types';
 import {CarbEvent} from 'app/components/charts/CgmGraph/utils/carbsUtils';
@@ -77,6 +77,7 @@ const HomeChartsTooltip: React.FC<Props> = ({
   maxWidthPx,
 }) => {
   const theme = useTheme() as ThemeType;
+  const thresholds = useGlucoseChartThresholds();
 
   const {language: contextLanguage} = useAppLanguage();
   const language = locale ?? contextLanguage;
@@ -96,8 +97,8 @@ const HomeChartsTooltip: React.FC<Props> = ({
       return theme.textColor;
     }
     // CompactChartInspector also colors frozen details from the active theme.
-    return determineBgColorByGlucoseValue(bgSample.sgv, theme);
-  }, [bgSample, compact, theme]);
+    return glucoseChartColor(bgSample.sgv, theme, thresholds);
+  }, [bgSample, compact, theme, thresholds]);
 
   const bgTrendIcon = useMemo(() => {
     const dir = bgSample?.direction;

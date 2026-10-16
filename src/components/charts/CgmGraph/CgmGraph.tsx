@@ -5,6 +5,7 @@ import styled from 'styled-components/native';
 import XGridAndAxis from './components/XGridAndAxis';
 import YGridAndAxis from './components/YGridAndAxis';
 import CGMSamplesRenderer from './components/CGMSamplesRenderer';
+import {GlucoseTargetRange} from './components/GlucoseTargetRange';
 import {GlucoseForecastRenderer} from './components/GlucoseForecastRenderer';
 import GraphDateDisplay from './components/GraphDateDisplay';
 import FoodItemsRenderer from './components/Food/FoodItemsRenderer';
@@ -334,6 +335,7 @@ const CGMGraph: React.FC<CgmGraphProps> = ({
             {showDateLabels ? <GraphDateDisplay /> : null}
 
             <G clipPath="url(#cgmPlotClip)">
+              <GlucoseTargetRange />
               {forecast?.series.length ? <GlucoseForecastRenderer forecast={forecast} /> : null}
               <CGMSamplesRenderer
                 focusedSampleDateString={

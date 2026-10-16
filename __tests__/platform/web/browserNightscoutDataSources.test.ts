@@ -86,6 +86,23 @@ const sources = (client: ReturnType<typeof clientFixture>) =>
   });
 
 describe('createBrowserNightscoutDataSources Day Graph', () => {
+  it('uses the personal target for therapy-context evidence', async () => {
+    const source = createBrowserNightscoutDataSources({
+      client: clientFixture() as unknown as BrowserNightscoutClient,
+      sourceId: 'source-1',
+      locale: 'en',
+      journal,
+      thresholds: {
+        veryLowMaxMgDl: 60,
+        targetMinMgDl: 80,
+        targetMaxMgDl: 140,
+        highMaxMgDl: 220,
+      },
+    });
+    const snapshot = await source.therapyContext.loadTherapyContext({startMs: dayStartMs, endMs: dayEndMs});
+    expect(snapshot.evidence.targetRange).toEqual({minMgDl: 80, maxMgDl: 140});
+  });
+
   it('forecasts with cached minimal Loop facts without loading the factual day graph', async () => {
     const nowMs = Date.parse('2026-09-07T08:01:00Z');
     const latestMs = nowMs - 60_000;

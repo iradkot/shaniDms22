@@ -16,6 +16,7 @@ import {
 } from 'app/components/charts/chartPalette';
 import {addOpacity} from 'app/style/styling.utils';
 import type {ThemeType} from 'app/types/theme';
+import {useGlucoseChartThresholds} from 'app/components/charts/GlucoseChartThresholdsContext';
 
 type InspectorCell = {
   key: string;
@@ -39,6 +40,7 @@ type Props = Selection & {locale: 'en' | 'he'; collapsible: boolean};
  * uses a separate surface, so neither touch expiry nor layout can move it. */
 export function CompactChartInspector(props: Props) {
   const theme = useTheme();
+  const thresholds = useGlucoseChartThresholds();
   const palette = getChartPalette(theme);
   const styles = useMemo(() => createStyles(theme), [theme]);
   const he = props.locale === 'he';
@@ -48,7 +50,7 @@ export function CompactChartInspector(props: Props) {
     const bgColor =
       selection.bgValue === null
         ? palette.text
-        : glucoseChartColor(selection.bgValue, theme);
+        : glucoseChartColor(selection.bgValue, theme, thresholds);
     return (
       <>
         <Text style={[styles.time, {color: palette.text}]}>

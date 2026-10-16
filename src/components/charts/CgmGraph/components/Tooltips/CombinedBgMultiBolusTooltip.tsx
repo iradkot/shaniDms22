@@ -11,7 +11,8 @@ import {getClampedTooltipPosition} from 'app/components/charts/tooltipPosition';
 import {getSvgTooltipTextLayout} from 'app/components/charts/svgTooltipLayout';
 import SvgTooltipBox from 'app/components/charts/SvgTooltipBox';
 import {formatDateToLocaleTimeString} from 'app/utils/datetime.utils';
-import {determineBgColorByGlucoseValue} from 'app/style/styling.utils';
+import {glucoseChartColor} from 'app/components/charts/chartPalette';
+import {useGlucoseChartThresholds} from 'app/components/charts/GlucoseChartThresholdsContext';
 
 type Props = {
   x: number;
@@ -46,6 +47,7 @@ const CombinedBgMultiBolusTooltip: React.FC<Props> = ({
   carbEvents,
 }) => {
   const theme = useTheme() as ThemeType;
+  const thresholds = useGlucoseChartThresholds();
   const [{graphWidth, graphHeight}] = useContext(GraphStyleContext);
 
   const rows = useMemo(() => {
@@ -88,7 +90,7 @@ const CombinedBgMultiBolusTooltip: React.FC<Props> = ({
     placement: 'top',
   });
 
-  const bgColor = determineBgColorByGlucoseValue(bgSample.sgv, theme);
+  const bgColor = glucoseChartColor(bgSample.sgv, theme, thresholds);
 
   return (
     <Tooltip
