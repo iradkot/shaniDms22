@@ -179,15 +179,17 @@ iOS builds require macOS and Xcode. From macOS:
 yarn publish_testflight
 ```
 
-The GitHub workflow runs the same Fastlane `ios beta` lane. Keep certificates,
-profiles, App Store Connect keys, and passwords only in encrypted GitHub
-Secrets. The workflow intentionally does not fall back to repository Variables.
+The GitHub workflow runs the same Fastlane `ios beta` lane. Store new certificates,
+profiles, App Store Connect keys, and passwords in encrypted GitHub Secrets.
+Existing repository Variables with the same names remain supported, with Secrets
+taking precedence. The entry workflow passes both sources as masked secret inputs
+to the reusable build workflow; see `docs/FastlaneCI.md`.
 
 After adding or upgrading a native dependency, regenerate and commit
 `ios/Podfile.lock` on macOS. CI uses `pod install --deployment` so an unreviewed
 dependency resolution cannot silently change a signed build.
 
-Required CI Secrets:
+Required CI credentials (Secrets preferred, existing Variables supported):
 
 ```text
 APPLE_PROVISIONING_PROFILE
