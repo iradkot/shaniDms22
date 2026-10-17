@@ -1,0 +1,60 @@
+name: Refresh iOS Pods Lockfile
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      TOOLCHAINS: com.apple.dt.toolchain.XcodeDefault
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install JavaScript dependencies
+        run: yarn install --immutable
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: ios
+
+      - name: Resolve native dependencies from the current JavaScript lockfile
+        working-directory: ios
+        run: bundle exec pod update --repo-update
+
+      - name: Verify the refreshed lockfile installs without changes
+        working-directory: ios
+        run: bundle exec pod install --deployment
+
+      - name: Show lockfile changes for review
+        run: git diff -- ios/Podfile.lock
+
+      - name: Preserve refreshed lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-podfile-lock-${{ github.run_number }}
+          path: ios/Podfile.lock
+          if-no-files-found: error
+          retention-days: 14

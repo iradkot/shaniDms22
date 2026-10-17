@@ -52,7 +52,7 @@ jobs:
       APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
       APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_NOT_ENCODED_TO_64 }}
       SHANI_BACKEND_BASE_URL: ${{ vars.SHANI_BACKEND_BASE_URL }}
-      FIRESTORE_RULES_SCHEMA_VERSION: ${{ vars.FIRESTORE_RULES_SCHEMA_VERSION }}
+      FIRESTORE_RULES_SCHEMA_VERSION: ${{ vars.FIRESTORE_RULES_SCHEMA_VERSION || '0' }}
       SHANI_RELEASE_CHANNEL: production
     steps:
       - name: Checkout
@@ -138,7 +138,10 @@ jobs:
             exit 1
           fi
 
-          # Persist normalized key for later steps.
+          # Mask and export a single line for this step and later steps.
+          SELECTED_KEY="$(printf "%s" "${SELECTED_KEY}" | tr -d '[:space:]')"
+          echo "::add-mask::${SELECTED_KEY}"
+          export APP_STORE_CONNECT_PRIVATE_KEY="${SELECTED_KEY}"
           echo "APP_STORE_CONNECT_PRIVATE_KEY=${SELECTED_KEY}" >> "$GITHUB_ENV"
 
           echo "Generating JWT via fastlane/spaceship..."

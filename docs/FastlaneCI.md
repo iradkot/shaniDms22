@@ -68,14 +68,19 @@ Successful runs will appear under TestFlight builds in App Store Connect.
 ## Native dependency lock
 
 The macOS job uses `pod install --deployment`. Whenever a React Native package adds or changes an
-iOS pod, run this on a Mac and commit the resulting lockfile before triggering CI:
+iOS pod, refresh and commit the lockfile before triggering a beta build. Without a local Mac,
+run **Actions → Refresh iOS Pods Lockfile**, download its `ios-podfile-lock` artifact, review the
+changes, and commit the resulting `ios/Podfile.lock`. This maintenance workflow checks that the
+new lockfile installs in deployment mode. It does not sign or upload an app.
+
+On a Mac, the equivalent commands are:
 
 ```sh
 cd ios
 bundle install
-bundle exec pod install --repo-update
+bundle exec pod update --repo-update
 git add Podfile.lock shaniDms22.xcworkspace
 ```
 
-This rewrite adds native filesystem and Keychain packages, so `Podfile.lock` must be regenerated
-on macOS before the first signed archive of the rewrite.
+Review native dependency updates before committing them; the beta workflow keeps using the
+checked-in versions and fails if its lockfile is out of date.
