@@ -72,7 +72,7 @@ export type HomeWeeklyInsulinDay =
       readonly kind: 'ready';
       readonly insulinSummary: Extract<
         DailyInsulinSummary,
-        {quality: 'available'}
+        {quality: 'available' | 'partial'}
       >;
     }
   | {readonly period: TrendsPeriod; readonly kind: 'unavailable' | 'error'};
@@ -226,7 +226,10 @@ export const loadHomeWeeklyInsulinData = async (
           thresholds: DEFAULT_DAY_GRAPH_RANGE_THRESHOLDS,
         });
         days[index] =
-          insulinSummary.quality === 'available'
+          insulinSummary.quality !== 'unavailable' &&
+          (insulinSummary.basalUnits !== undefined ||
+            insulinSummary.bolusUnits !== undefined ||
+            insulinSummary.estimatedBasalUnits !== undefined)
             ? {period: day, kind: 'ready', insulinSummary}
             : {period: day, kind: 'unavailable'};
       } catch {

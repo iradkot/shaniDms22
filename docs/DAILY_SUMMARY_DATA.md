@@ -53,6 +53,14 @@ percentages do not establish that the same hours were observed. Mixed
 complete/estimated totals are labeled estimates.
 The weekly average requires all seven days for the basis being compared.
 
+Personal Home's weekly insulin chart shows the last seven completed local days.
+It preserves partial recorded summaries instead of discarding them as missing.
+Each day prefers a complete recorded total, then a valid estimated total, then
+the known recorded components. Estimated totals and partial recorded amounts
+are labeled on their columns. The day count includes days with a displayed
+amount, including an explicit zero; missing or failed days remain gaps.
+Partial recorded bars are not full daily totals or inputs to a weekly average.
+
 Reconstruction overlays completed delivered basal amounts before filling gaps
 from the profile, temp rates or suspension. Temp basal replaces scheduled basal,
 so the same interval is never counted twice. Unfinished/mutable doses contribute
