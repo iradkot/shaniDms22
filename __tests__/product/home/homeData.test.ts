@@ -5,7 +5,10 @@ import {
   loadHomeWeeklyInsulinData,
 } from 'app/product/home/homeData';
 import {getLocalDayPeriod, moveLocalDay} from 'app/modules/dailyOverview';
-import type {DailyOverviewSourceSnapshot} from 'app/modules/dailyOverview';
+import type {
+  DailyInsulinSourceSummary,
+  DailyOverviewSourceSnapshot,
+} from 'app/modules/dailyOverview';
 
 // Keep Node's test-only environment out of the shared native/Web type graph.
 declare const process: {readonly env: {readonly TZ?: string}};
@@ -186,6 +189,104 @@ describe('home dashboard data', () => {
     ]);
     expect(data.days[0]).toMatchObject({insulinSummary: {totalUnits: 17.7}});
     expect(data.days[2]).not.toHaveProperty('insulinSummary');
+  });
+
+  it('preserves seven days of insulin with partial recorded basal and valid full-day estimates', async () => {
+    const period = getHomeCompletedWeekPeriod(today.startMs);
+    const summaries = Array.from({length: 7}, (_, index) => ({
+      quality: 'partial' as const,
+      basalUnits: 1.8,
+      bolusUnits: 8 + index,
+      basalEvidence: 'recorded' as const,
+      basalCoveredMs: HOUR,
+      basalCoveragePercent: 100 / 24,
+      estimatedBasalUnits: 23.8,
+      estimatedTotalUnits: 31.8 + index,
+    }));
+    const loadDailyOverview = jest.fn(
+      async (day: {startMs: number; endMs: number}) => ({
+        glucoseSamples: [],
+        insulinSummary: summaries.find(
+          (_, index) => day.startMs === moveLocalDay(period.startMs, index),
+        )!,
+      }),
+    );
+
+    const data = await loadHomeWeeklyInsulinData({loadDailyOverview}, period);
+
+    expect(loadDailyOverview).toHaveBeenCalledTimes(7);
+    expect(data.days.filter(day => day.kind === 'ready')).toHaveLength(7);
+    expect(data.days).toMatchObject(
+      summaries.map((insulinSummary, index) => ({
+        period: getLocalDayPeriod(moveLocalDay(period.startMs, index)),
+        kind: 'ready',
+        insulinSummary,
+      })),
+    );
+  });
+
+  it('keeps recorded weekly components when full daily basal totals are unknown', async () => {
+    const period = getHomeCompletedWeekPeriod(today.startMs);
+    const insulinSummary = {
+      quality: 'partial' as const,
+      basalUnits: 1.8,
+      bolusUnits: 8.2,
+      basalEvidence: 'recorded' as const,
+      basalCoveredMs: HOUR,
+      basalCoveragePercent: 100 / 24,
+    };
+    const loadDailyOverview = jest.fn(async () => ({
+      glucoseSamples: [],
+      insulinSummary,
+    }));
+
+    const data = await loadHomeWeeklyInsulinData({loadDailyOverview}, period);
+
+    expect(data.days.filter(day => day.kind === 'ready')).toHaveLength(7);
+    for (const day of data.days) {
+      expect(day).toMatchObject({kind: 'ready', insulinSummary});
+      expect(day).not.toHaveProperty('insulinSummary.totalUnits');
+      expect(day).not.toHaveProperty('insulinSummary.estimatedTotalUnits');
+    }
+  });
+
+  it.each<{
+    summary: DailyInsulinSourceSummary;
+    expectedKind: 'ready' | 'unavailable';
+  }>([
+    {
+      summary: {quality: 'partial', basalCoveredMs: 0, basalCoveragePercent: 0},
+      expectedKind: 'unavailable',
+    },
+    {
+      summary: {
+        quality: 'partial',
+        bolusUnits: 0,
+        basalCoveredMs: 0,
+        basalCoveragePercent: 0,
+      },
+      expectedKind: 'ready',
+    },
+    {
+      summary: {quality: 'available', basalUnits: 0, bolusUnits: 0},
+      expectedKind: 'ready',
+    },
+  ])('distinguishes missing amounts from recorded zero: $summary', async ({
+    summary,
+    expectedKind,
+  }) => {
+    const data = await loadHomeWeeklyInsulinData(
+      {
+        loadDailyOverview: async () => ({
+          glucoseSamples: [],
+          insulinSummary: summary,
+        }),
+      },
+      getHomeCompletedWeekPeriod(today.startMs),
+    );
+    expect(data.days.map(day => day.kind)).toEqual(
+      Array.from({length: 7}, () => expectedKind),
+    );
   });
 
   it('stops queued weekly requests when the scope becomes obsolete', async () => {

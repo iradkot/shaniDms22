@@ -7,12 +7,14 @@ import {
   type DailyOverviewPeriod,
   type DailyInsulinSourceSummary,
   type DailyInsulinComparisonRequest,
+  type DailyInsulinSummary,
 } from 'app/modules/dailyOverview';
 import {
   PersonalHomeView,
   type PersonalHomeViewProps,
 } from 'app/product/home/PersonalHomeView';
 import {GlucoseMiniChart, HomeWidget} from 'app/product/home/HomeWidgets';
+import type {HomeWeeklyInsulinDay} from 'app/product/home/homeData';
 import {ReorderList} from 'app/product/ui/reorder';
 import {
   DEFAULT_HOME_PREFERENCES,
@@ -668,5 +670,175 @@ describe('Personal Home editor', () => {
     tree = undefined;
     expect(back).toBeUndefined();
     expect(onRegisterBack).toHaveBeenLastCalledWith(undefined);
+  });
+});
+
+describe('Home weekly insulin trend', () => {
+  let tree: renderer.ReactTestRenderer | undefined;
+  const firstDay = new Date(2026, 8, 1).getTime();
+  const onOpen = jest.fn();
+  const mountWeekly = async (
+    summaries: readonly (DailyInsulinSummary | 'error' | undefined)[],
+    locale: 'he' | 'en' = 'he',
+  ) => {
+    const days: HomeWeeklyInsulinDay[] = summaries.map((summary, index) => {
+      const period = {
+        startMs: firstDay + index * 86_400_000,
+        endMs: firstDay + (index + 1) * 86_400_000,
+      };
+      return !summary ||
+        summary === 'error' ||
+        summary.quality === 'unavailable'
+        ? {period, kind: summary === 'error' ? 'error' : 'unavailable'}
+        : {period, kind: 'ready', insulinSummary: summary};
+    });
+    await act(async () => {
+      tree = renderer.create(
+        <HomeWidget
+          id="weekly-insulin"
+          locale={locale}
+          nowMs={now()}
+          preferences={DEFAULT_HOME_PREFERENCES}
+          thresholds={thresholds}
+          today={{kind: 'loading'}}
+          weeklyGlucose={{kind: 'loading'}}
+          weeklyInsulin={{
+            kind: 'ready',
+            data: {
+              period: {startMs: firstDay, endMs: firstDay + 7 * 86_400_000},
+              days,
+            },
+            refreshing: false,
+            refreshFailed: false,
+          }}
+          chatReady
+          onOpen={onOpen}
+        />,
+      );
+    });
+  };
+  const day = (index: number) =>
+    tree!.root
+      .findAllByProps({
+        testID: `home-weekly-insulin-day-${firstDay + index * 86_400_000}`,
+      })
+      .find(node => node.type === Pressable)!;
+  const text = (node: renderer.ReactTestInstance = tree!.root) =>
+    node
+      .findAllByType(Text)
+      .map(item => item.props.children)
+      .flat(Infinity)
+      .join('');
+  const estimatedDay: DailyInsulinSummary = {
+    quality: 'partial',
+    basalUnits: 1.8,
+    bolusUnits: 2,
+    basalCoveredMs: 3_600_000,
+    basalCoveragePercent: 33,
+    estimatedBasalUnits: 3.8,
+    estimatedTotalUnits: 5.8,
+  };
+
+  afterEach(() => {
+    act(() => tree?.unmount());
+    tree = undefined;
+    onOpen.mockClear();
+  });
+
+  it.each(['he', 'en'] as const)(
+    'plots seven explicit full estimates with visible and accessible labels in %s',
+    async locale => {
+      await mountWeekly(
+        Array.from({length: 7}, () => estimatedDay),
+        locale,
+      );
+      for (let index = 0; index < 7; index++) {
+        expect(text(day(index))).toContain('5.8');
+        expect(text(day(index))).toContain(locale === 'he' ? 'משוער' : 'Est.');
+        expect(day(index).props.accessibilityLabel).toContain('5.8 U');
+        expect(day(index).props.accessibilityLabel).toContain(
+          locale === 'he' ? 'סה״כ משוער' : 'Estimated total',
+        );
+      }
+      expect(text()).toContain('7/7');
+      await act(async () => day(3).props.onPress());
+      expect(onOpen).toHaveBeenCalledWith(
+        'weekly-insulin',
+        firstDay + 3 * 86_400_000,
+      );
+    },
+  );
+
+  it('keeps recorded totals first, labels partial amounts, and counts a known zero', async () => {
+    await mountWeekly([
+      {
+        quality: 'available',
+        basalUnits: 8,
+        bolusUnits: 4,
+        totalUnits: 12,
+        estimatedBasalUnits: 10,
+        estimatedTotalUnits: 14,
+      },
+      estimatedDay,
+      {
+        quality: 'partial',
+        basalUnits: 1.8,
+        bolusUnits: 2,
+        basalCoveredMs: 3_600_000,
+        basalCoveragePercent: 33,
+      },
+      {
+        quality: 'partial',
+        bolusUnits: 0,
+        basalCoveredMs: 0,
+        basalCoveragePercent: 0,
+      },
+      {quality: 'partial', basalCoveredMs: 0, basalCoveragePercent: 0},
+      undefined,
+      'error',
+    ]);
+    expect(day(0).props.accessibilityLabel).toContain('12 U');
+    expect(day(0).props.accessibilityLabel).not.toContain('משוער');
+    expect(text(day(0))).not.toContain('14');
+    expect(day(1).props.accessibilityLabel).toContain('5.8 U');
+    expect(day(2).props.accessibilityLabel).toContain('3.8 U');
+    expect(day(2).props.accessibilityLabel).toContain('סכום חלקי מתועד');
+    expect(text(day(2))).toContain('חלקי');
+    expect(day(3).props.accessibilityLabel).toContain('0 U');
+    expect(day(3).props.accessibilityLabel).toContain('בולוס מתועד בלבד');
+    expect(text(day(3))).toContain('בולוס');
+    for (const index of [4, 5, 6]) {
+      expect(text(day(index))).toContain('—');
+      expect(day(index).props.accessibilityLabel).not.toContain('0 U');
+    }
+    expect(text()).toContain('4/7');
+  });
+
+  it('shows basal alone and rejects an inconsistent full estimate without forging a total', async () => {
+    await mountWeekly(
+      [
+        {
+          quality: 'partial',
+          basalUnits: 1.8,
+          basalCoveredMs: 3_600_000,
+          basalCoveragePercent: 33,
+        },
+        {...estimatedDay, estimatedTotalUnits: 99},
+        {quality: 'partial', basalCoveredMs: 0, basalCoveragePercent: 0},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ],
+      'en',
+    );
+    expect(day(0).props.accessibilityLabel).toContain('1.8 U');
+    expect(day(0).props.accessibilityLabel).toContain('Recorded basal only');
+    expect(text(day(0))).toContain('Basal');
+    expect(day(1).props.accessibilityLabel).toContain('3.8 U');
+    expect(day(1).props.accessibilityLabel).toContain('Recorded subtotal');
+    expect(text(day(1))).toContain('Partial');
+    expect(text()).not.toContain('99');
+    expect(text()).toContain('2/7');
   });
 });

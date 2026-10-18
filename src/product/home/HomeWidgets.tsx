@@ -7,12 +7,14 @@ import {
   RangeGraphic,
   formatDailyValue as format,
 } from '../dailyOverview/DailyOverviewCards';
+import {recordedInsulinDisplay} from '../dailyOverview/dailyOverviewPresentation';
 import type {HomeWidgetId, StoredHomePreferences} from '../personalization';
 import type {
   HomeLaneState,
   HomeTodayData,
   HomeWeeklyGlucoseData,
   HomeWeeklyInsulinData,
+  HomeWeeklyInsulinDay,
 } from './homeData';
 import {HOME_COPY} from './homeCopy';
 import {HomeDailyInsulin} from './HomeDailyInsulin';
@@ -226,22 +228,65 @@ export function GlucoseMiniChart({
   );
 }
 
+interface WeeklyBarDay {
+  readonly startMs: number;
+  readonly value?: number | undefined;
+  readonly basal?: number | undefined;
+  readonly partial?: boolean;
+  readonly insulinStatus?: 'estimated' | 'subtotal' | 'bolus' | 'basal';
+}
+
+function weeklyInsulinBar(day: HomeWeeklyInsulinDay): WeeklyBarDay {
+  const dateOnly = {startMs: day.period.startMs};
+  if (day.kind !== 'ready') {
+    return dateOnly;
+  }
+  const display = recordedInsulinDisplay(day.insulinSummary);
+  if (display.total !== undefined) {
+    return {...dateOnly, value: display.total, basal: display.basal};
+  }
+  if (display.estimatedTotal !== undefined) {
+    return {
+      ...dateOnly,
+      value: display.estimatedTotal,
+      basal: display.estimatedBasal,
+      insulinStatus: 'estimated',
+    };
+  }
+  if (display.subtotal !== undefined) {
+    return {
+      ...dateOnly,
+      value: display.subtotal,
+      basal: display.basal,
+      insulinStatus: 'subtotal',
+    };
+  }
+  if (display.bolus !== undefined) {
+    return {...dateOnly, value: display.bolus, insulinStatus: 'bolus'};
+  }
+  if (display.basal !== undefined) {
+    return {
+      ...dateOnly,
+      value: display.basal,
+      basal: display.basal,
+      insulinStatus: 'basal',
+    };
+  }
+  return dateOnly;
+}
+
 function WeeklyBars({
   days,
   locale,
   insulin = false,
   onOpenDay,
 }: {
-  days: readonly {
-    startMs: number;
-    value?: number | undefined;
-    basal?: number;
-    partial?: boolean;
-  }[];
+  days: readonly WeeklyBarDay[];
   locale: Locale;
   insulin?: boolean;
   onOpenDay?: ((dayStartMs: number) => void) | undefined;
 }) {
+  const c = HOME_COPY[locale];
   const max = Math.max(1, ...days.map(day => day.value ?? 0));
   return (
     <View
@@ -263,6 +308,10 @@ function WeeklyBars({
           accessibilityLabel={`${date(day.startMs, locale)}, ${
             day.value === undefined ? '—' : format(day.value)
           } ${insulin ? 'U' : 'mg/dL'}${
+            day.insulinStatus
+              ? `, ${c.insulinDayStatus[day.insulinStatus].accessible}`
+              : ''
+          }${
             day.partial
               ? locale === 'he'
                 ? ', כיסוי חלקי'
@@ -274,6 +323,13 @@ function WeeklyBars({
               ? '—'
               : format(Math.round(day.value * 10) / 10)}
           </Text>
+          {insulin ? (
+            <Text style={s.barStatus} numberOfLines={1}>
+              {day.insulinStatus
+                ? c.insulinDayStatus[day.insulinStatus].short
+                : ' '}
+            </Text>
+          ) : null}
           <View style={s.barTrack}>
             {day.value !== undefined ? (
               <View
@@ -384,54 +440,42 @@ export function HomeWidget({
   } else if (id === 'weekly-insulin') {
     body = (
       <Lane state={weeklyInsulin} locale={locale}>
-        {data => (
-          <>
-            <Text style={[s.note, rtl]}>
-              {date(data.period.startMs, locale)} –{' '}
-              {date(data.period.endMs - 1, locale)} · U
-            </Text>
-            <WeeklyBars
-              locale={locale}
-              insulin
-              onOpenDay={
-                onOpen && !preview
-                  ? dayStartMs => onOpen(id, dayStartMs)
-                  : undefined
-              }
-              days={data.days.map(day => ({
-                startMs: day.period.startMs,
-                ...(day.kind === 'ready' &&
-                day.insulinSummary.quality === 'available'
-                  ? {
-                      value: day.insulinSummary.totalUnits,
-                      basal: day.insulinSummary.basalUnits,
-                    }
-                  : {}),
-              }))}
-            />
-            <View style={[s.legend, locale === 'he' && s.reverse]}>
-              <Text style={s.basalLegend}>● {c.basal}</Text>
-              <Text style={s.bolusLegend}>● {c.bolus}</Text>
-            </View>
-            <Text style={[s.note, rtl]}>
-              {
-                data.days.filter(
-                  day =>
-                    day.kind === 'ready' &&
-                    day.insulinSummary.quality === 'available',
-                ).length
-              }
-              /7 {c.daysAvailable}. {c.insulinNote}
-            </Text>
-            {!preview && onOpen ? (
+        {data => {
+          const days = data.days.map(weeklyInsulinBar);
+          return (
+            <>
               <Text style={[s.note, rtl]}>
-                {locale === 'he'
-                  ? 'לחצו על יום לפתיחת הפירוט.'
-                  : 'Tap a day to open its details.'}
+                {date(data.period.startMs, locale)} –{' '}
+                {date(data.period.endMs - 1, locale)} · U
               </Text>
-            ) : null}
-          </>
-        )}
+              <WeeklyBars
+                locale={locale}
+                insulin
+                onOpenDay={
+                  onOpen && !preview
+                    ? dayStartMs => onOpen(id, dayStartMs)
+                    : undefined
+                }
+                days={days}
+              />
+              <View style={[s.legend, locale === 'he' && s.reverse]}>
+                <Text style={s.basalLegend}>● {c.basal}</Text>
+                <Text style={s.bolusLegend}>● {c.bolus}</Text>
+              </View>
+              <Text style={[s.note, rtl]}>
+                {days.filter(day => day.value !== undefined).length}
+                /7 {c.daysAvailable}. {c.insulinNote}
+              </Text>
+              {!preview && onOpen ? (
+                <Text style={[s.note, rtl]}>
+                  {locale === 'he'
+                    ? 'לחצו על יום לפתיחת הפירוט.'
+                    : 'Tap a day to open its details.'}
+                </Text>
+              ) : null}
+            </>
+          );
+        }}
       </Lane>
     );
   } else {
@@ -591,6 +635,7 @@ const s = StyleSheet.create({
   bars: {flexDirection: 'row', gap: 5, paddingTop: 8},
   barColumn: {flex: 1, minWidth: 0, gap: 5, alignItems: 'center'},
   barValue: {fontSize: 11, color: '#465D70', fontWeight: '600'},
+  barStatus: {fontSize: 10, lineHeight: 14, color: '#7560B1'},
   barTrack: {
     height: 90,
     width: '65%',

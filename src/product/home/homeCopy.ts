@@ -49,7 +49,13 @@ export const HOME_COPY = {
     daysAvailable: 'ימים עם נתונים',
     partial: 'עמודה בהירה: פחות מ־70% כיסוי. — מציין נתון חסר.',
     insulinNote:
-      'יום חסר אינו נספר כאפס. בזאל ובולוס מוצגים לפי הנתונים הזמינים.',
+      'משוער כולל בזאל משוער. חלקי מציין סכום מתועד בלבד. יום חסר אינו נספר כאפס.',
+    insulinDayStatus: {
+      estimated: {short: 'משוער', accessible: 'סה״כ משוער'},
+      subtotal: {short: 'חלקי', accessible: 'סכום חלקי מתועד'},
+      bolus: {short: 'בולוס', accessible: 'בולוס מתועד בלבד'},
+      basal: {short: 'בזאל', accessible: 'בזאל מתועד בלבד'},
+    },
     range: 'זמן בטווח',
     rangeNote: 'אחוז הקריאות בטווח היעד',
     open: 'פתיחת הפירוט',
@@ -126,7 +132,13 @@ export const HOME_COPY = {
     daysAvailable: 'days with data',
     partial: 'Lighter bars: below 70% coverage. — means missing data.',
     insulinNote:
-      'Missing days do not count as zero. Basal and bolus reflect available data.',
+      'Est. includes estimated basal. Partial means recorded subtotal only. Missing days do not count as zero.',
+    insulinDayStatus: {
+      estimated: {short: 'Est.', accessible: 'Estimated total'},
+      subtotal: {short: 'Partial', accessible: 'Recorded subtotal'},
+      bolus: {short: 'Bolus', accessible: 'Recorded bolus only'},
+      basal: {short: 'Basal', accessible: 'Recorded basal only'},
+    },
     range: 'Time in range',
     rangeNote: 'Percentage of readings in your target range',
     open: 'Open details',
