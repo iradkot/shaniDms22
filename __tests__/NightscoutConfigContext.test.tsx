@@ -1,5 +1,6 @@
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {sha1} from 'js-sha1';
 import renderer, {act} from 'react-test-renderer';
 
 import {
@@ -490,7 +491,7 @@ describe('NightscoutConfigContext', () => {
     },
   );
 
-  it('rejects master-secret onboarding without replacing a saved owned legacy profile', async () => {
+  it('connects with API_SECRET and a bare hostname while preserving saved profiles', async () => {
     const owner = 'legacy-owner';
     const profile = {
       id: 'owned_legacy',
@@ -515,15 +516,37 @@ describe('NightscoutConfigContext', () => {
         </NightscoutConfigProvider>,
       );
     });
-    await expect(
-      ctx!.addProfile({
-        urlInput: 'https://new.example',
-        secretInput: 'master-secret',
-      }),
-    ).rejects.toThrow('readable');
-    expect(mockTestNightscoutConnection).not.toHaveBeenCalled();
-    expect((await loadNightscoutProfiles(owner)).profiles).toEqual([profile]);
+    await act(async () => {
+      await ctx!.addProfile({
+        urlInput: ' new.example/ ',
+        secretInput: ' example-master-secret ',
+      });
+    });
+    expect(mockTestNightscoutConnection).toHaveBeenCalledWith({
+      baseUrl: 'https://new.example',
+      apiSecretSha1: sha1('example-master-secret'),
+    });
+    const stored = await loadNightscoutProfiles(owner);
+    expect(stored.profiles).toHaveLength(2);
+    expect(stored.profiles).toContainEqual(profile);
+    expect(ctx!.activeProfile?.apiSecretSha1).toBe(sha1('example-master-secret'));
     expect(ctx!.activeProfile?.authType).toBeUndefined();
+    const id = ctx!.activeProfile!.id;
+    await act(async () => {
+      await ctx!.updateProfile({profileId: id, urlInput: 'https://new.example/', secretInput: ''});
+    });
+    expect(ctx!.activeProfile?.apiSecretSha1).toBe(sha1('example-master-secret'));
+    await act(async () => {
+      await ctx!.updateProfile({profileId: id, urlInput: 'https://new.example', secretInput: 'admin-0123456789abcdef'});
+    });
+    expect(ctx!.activeProfile).toMatchObject({authType: 'access-token', accessToken: 'admin-0123456789abcdef', apiSecretSha1: ''});
+    await act(async () => {
+      await ctx!.updateProfile({profileId: id, urlInput: 'https://new.example', secretInput: 'b'.repeat(40)});
+    });
+    expect(ctx!.activeProfile?.apiSecretSha1).toBe('b'.repeat(40));
+    expect(ctx!.activeProfile?.accessToken).toBeUndefined();
+    expect(ctx!.activeProfile?.authType).toBeUndefined();
+    expect((await loadNightscoutProfiles(owner)).profiles[0]).toEqual(ctx!.activeProfile);
     act(() => tree!.unmount());
   });
 

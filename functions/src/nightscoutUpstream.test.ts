@@ -209,7 +209,7 @@ test('failed equality read never falls back to the truncated latest probe', asyn
   );
 });
 
-test('validates subject permissions and forwards the raw token for actual glucose access', async () => {
+test('accepts subject tokens using actual glucose access without requiring a role endpoint', async () => {
   const accessToken = 'shani-0123456789abcdef';
   const calls: URL[] = [];
   const upstream = new NightscoutUpstream(
@@ -217,9 +217,8 @@ test('validates subject permissions and forwards the raw token for actual glucos
     async (url, secret) => {
       calls.push(url);
       assert.equal(secret, accessToken);
-      return url.pathname.includes('/authorization/')
-        ? {permissionGroups: [['*:*:read']]}
-        : [{date: 1700000000000, sgv: 120}];
+      assert.equal(url.pathname, '/api/v1/entries/sgv.json');
+      return [{date: 1700000000000, sgv: 120}];
     },
   );
   await upstream.validateCredential({
@@ -227,38 +226,27 @@ test('validates subject permissions and forwards the raw token for actual glucos
     apiSecretSha1: '',
     accessToken,
   });
-  assert.equal(
-    calls[0]?.pathname,
-    `/api/v2/authorization/request/${accessToken}`,
-  );
-  assert.equal(calls[1]?.pathname, '/api/v1/entries/sgv.json');
-  assert.equal(calls[1]?.searchParams.has('token'), false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.pathname, '/api/v1/entries/sgv.json');
+  assert.equal(calls[0]?.searchParams.has('token'), false);
 });
 
-test('rejects default/custom write and admin permissions before any data read', async () => {
-  for (const grant of [
-    '*',
-    'api:treatments:create',
-    'admin:api:read',
-    'api:*:read,update',
-  ]) {
+test('checks glucose for master secrets too and rejects invalid data', async () => {
+  for (const data of [{status: 'ok'}, '<html>Login</html>', [{}], [{date: 1, sgv: 0}]]) {
     let calls = 0;
     const upstream = new NightscoutUpstream(
       async () => [{address: '8.8.8.8', family: 4}],
-      async () => {
+      async url => {
         calls += 1;
-        return {permissionGroups: [['*:*:read'], [grant]]};
+        assert.equal(url.pathname, '/api/v1/entries/sgv.json');
+        return data;
       },
     );
     await assert.rejects(
-      upstream.validateCredential({
-        ...credential,
-        apiSecretSha1: '',
-        accessToken: 'shani-0123456789abcdef',
-      }),
+      upstream.validateCredential(credential),
       (error: unknown) =>
         error instanceof NightscoutUpstreamError &&
-        error.code === 'nightscout_read_only_required',
+        error.code === 'invalid_nightscout_response',
     );
     assert.equal(calls, 1);
   }
@@ -289,9 +277,13 @@ test('does not fall back to public reads after a subject token has been revoked'
   assert.equal(calls, 1);
 });
 
-test('normalizes only clean HTTPS Nightscout base URLs', () => {
+test('accepts Nightscout hosts with or without HTTPS and preserves subpaths', () => {
   assert.equal(
     normalizeNightscoutBaseUrl('https://nightscout.example/base'),
+    'https://nightscout.example/base/',
+  );
+  assert.equal(
+    normalizeNightscoutBaseUrl(' nightscout.example/base/ '),
     'https://nightscout.example/base/',
   );
   for (const invalid of [
@@ -465,7 +457,7 @@ test('preserves and pins a validated public IPv6 DNS answer', async () => {
     },
     async (_url, _secret, address) => {
       pinnedAddress = address;
-      return {};
+      return [];
     },
   );
 

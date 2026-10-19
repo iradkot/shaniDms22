@@ -17,11 +17,11 @@ export type NightscoutProfile = {
   id: string;
   label: string;
   baseUrl: string;
-  /** Legacy master-secret SHA1, empty for a raw subject-token connection. */
+  /** API_SECRET SHA1, empty for a raw subject-token connection. */
   apiSecretSha1: string;
   /** Persistent subject token kept only in the device's secure credential store. */
   accessToken?: string;
-  /** Missing means a preserved legacy API_SECRET connection, never read-only. */
+  /** Missing means an API_SECRET connection. Both modes only read Nightscout. */
   authType?: 'access-token';
   createdAt: number;
 };
@@ -75,7 +75,7 @@ const isLocalNightscoutHost = (input: string): boolean => {
  * - Accepts `http://` or `https://`
  * - If scheme is missing, defaults to `https://`
  * - Trims trailing slashes
- * - Removes query/hash
+ * - Rejects query/hash and embedded credentials
  * - Preserves sub-path installs (e.g. `https://example.com/nightscout`)
  */
 export const normalizeNightscoutUrl = (raw: string): string | null => {
@@ -138,10 +138,10 @@ export const normalizeNightscoutUrl = (raw: string): string | null => {
 };
 
 /**
- * Legacy API_SECRET migration helper. Never use this for subject access tokens.
+ * Normalizes API_SECRET input. Never use this for subject access tokens.
  *
  * Users may paste either:
- * - the full master secret (example: `jvA4cWn9c7zxgTyZ`), or
+ * - the full master secret, or
  * - the already-hashed value (40 hex chars).
  */
 export const normalizeNightscoutApiSecretToSha1 = (

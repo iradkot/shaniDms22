@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -18,10 +18,7 @@ import {useNightscoutConfig} from 'app/contexts/NightscoutConfigContext';
 import {PRODUCT_EXPERIENCE_SCREEN} from 'app/constants/SCREEN_NAMES';
 import {useAppLanguage} from 'app/contexts/AppLanguageContext';
 import {t as tr} from 'app/i18n/translations';
-import {
-  normalizeNightscoutUrl,
-} from 'app/services/nightscoutProfiles';
-import {normalizeNightscoutAccessToken} from 'app/services/nightscoutTokenPermissions';
+import {normalizeNightscoutUrl} from 'app/services/nightscoutProfiles';
 import {NightscoutConnectionTestError} from 'app/services/nightscoutConnectionTest';
 
 /**
@@ -46,6 +43,7 @@ const NightscoutSetupScreen: React.FC = () => {
   const [urlInput, setUrlInput] = useState(editingProfile?.baseUrl ?? '');
   const [secretInput, setSecretInput] = useState('');
   const [showSecret, setShowSecret] = useState(false);
+  const secretInputRef = useRef<TextInput>(null);
   useEffect(() => {
     // Prefill after async profile load, but don't clobber user edits.
     if (editingProfile?.baseUrl && !urlInput.trim()) {
@@ -57,13 +55,33 @@ const NightscoutSetupScreen: React.FC = () => {
   const [testing, setTesting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const validateInputs = () => {
+    setError(null);
+    setSuccess(null);
+    if (!normalizeNightscoutUrl(urlInput)) {
+      setError(tr(language, 'nightscoutSetup.invalidUrl'));
+      return false;
+    }
+    if (!editingProfile && !secretInput.trim()) {
+      setError(tr(language, 'nightscoutSetup.invalidSecret'));
+      return false;
+    }
+    return true;
+  };
+
+  const connectionError = (failure: unknown, fallback: 'saveFailed' | 'testFailed') =>
+    tr(
+      language,
+      failure instanceof NightscoutConnectionTestError
+        ? `nightscoutSetup.connectionErrors.${failure.code}`
+        : `nightscoutSetup.${fallback}`,
+    );
+
   const onTestConnection = async () => {
-    if (saving || testing) {
+    if (saving || testing || !validateInputs()) {
       return;
     }
     setTesting(true);
-    setError(null);
-    setSuccess(null);
     try {
       const result = await testProfileConnection({
         ...(editingProfile ? {profileId: editingProfile.id} : {}),
@@ -79,37 +97,18 @@ const NightscoutSetupScreen: React.FC = () => {
         ),
       );
     } catch (failure) {
-      setError(
-        failure instanceof NightscoutConnectionTestError && failure.code === 'permissions'
-          ? tr(language, 'nightscoutSetup.permissionsError')
-          : failure instanceof Error
-          ? failure.message
-          : tr(language, 'nightscoutSetup.testFailed'),
-      );
+      setError(connectionError(failure, 'testFailed'));
     } finally {
       setTesting(false);
     }
   };
 
   const onSave = async () => {
-    if (saving || testing) {
+    if (saving || testing || !validateInputs()) {
       return;
     }
     setSaving(true);
-    setError(null);
-    setSuccess(null);
     try {
-      if (!normalizeNightscoutUrl(urlInput)) {
-        setError(tr(language, 'nightscoutSetup.invalidUrl'));
-        return;
-      }
-      if (
-        (!editingProfile || secretInput.trim().length > 0) &&
-        !normalizeNightscoutAccessToken(secretInput)
-      ) {
-        setError(tr(language, 'nightscoutSetup.invalidSecret'));
-        return;
-      }
       if (editingProfile) {
         await updateProfile({
           profileId: editingProfile.id,
@@ -132,8 +131,7 @@ const NightscoutSetupScreen: React.FC = () => {
         });
       }
     } catch (failure) {
-      setError(tr(language, failure instanceof NightscoutConnectionTestError && failure.code === 'permissions'
-        ? 'nightscoutSetup.permissionsError' : 'nightscoutSetup.saveFailed'));
+      setError(connectionError(failure, 'saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -177,24 +175,9 @@ const NightscoutSetupScreen: React.FC = () => {
             : tr(language, 'nightscoutSetup.connectTitle')}
         </Text>
         <Text style={[styles.intro, rtl && styles.rtlText]}>
-          {tr(language, 'nightscoutSetup.intro', {
-            example: 'shani-0123456789abcdef',
-          })}
+          {tr(language, 'nightscoutSetup.intro')}
         </Text>
       </View>
-
-      <View style={styles.readOnlyCard}>
-        <Text style={[styles.readOnlyText, rtl && styles.rtlText]}>
-          {tr(language, 'nightscoutSetup.readOnly')}
-        </Text>
-      </View>
-      {editingProfile && editingProfile.authType !== 'access-token' ? (
-        <View style={styles.readOnlyCard} testID="nightscout-legacy-reconnect">
-          <Text style={[styles.readOnlyText, rtl && styles.rtlText]}>
-            {tr(language, 'nightscoutSetup.legacyReconnect')}
-          </Text>
-        </View>
-      ) : null}
 
       <View style={styles.formCard}>
         <Text style={[styles.label, rtl && styles.rtlText]}>
@@ -203,10 +186,13 @@ const NightscoutSetupScreen: React.FC = () => {
         <TextInput
           autoCapitalize="none"
           autoCorrect={false}
+          blurOnSubmit={false}
           keyboardType="url"
           onChangeText={setUrlInput}
+          onSubmitEditing={() => secretInputRef.current?.focus()}
           placeholder={tr(language, 'nightscoutSetup.urlPlaceholder')}
           placeholderTextColor="#8292A1"
+          returnKeyType="next"
           style={[styles.input, rtl && styles.rtlInput]}
           testID="nightscout-url-input"
           value={urlInput}
@@ -220,6 +206,7 @@ const NightscoutSetupScreen: React.FC = () => {
             autoCapitalize="none"
             autoCorrect={false}
             onChangeText={setSecretInput}
+            onSubmitEditing={onSave}
             placeholder={
               editingProfile
                 ? tr(language, 'nightscoutSetup.secretPlaceholderKeep')
@@ -227,6 +214,8 @@ const NightscoutSetupScreen: React.FC = () => {
             }
             placeholderTextColor="#8292A1"
             keyboardType={showSecret ? 'visible-password' : 'default'}
+            ref={secretInputRef}
+            returnKeyType="done"
             secureTextEntry={!showSecret}
             style={[styles.secretInput, rtl && styles.rtlInput]}
             testID="nightscout-secret-input"
@@ -269,26 +258,6 @@ const NightscoutSetupScreen: React.FC = () => {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{disabled: saving || testing, busy: testing}}
-          disabled={saving || testing}
-          onPress={onTestConnection}
-          style={({pressed}) => [
-            styles.testButton,
-            (saving || testing) && styles.disabled,
-            pressed && !saving && !testing && styles.pressed,
-          ]}
-          testID="nightscout-test-connection">
-          {testing ? (
-            <ActivityIndicator color={styles.testButtonText.color} />
-          ) : (
-            <Text style={styles.testButtonText}>
-              {tr(language, 'nightscoutSetup.testConnection')}
-            </Text>
-          )}
-        </Pressable>
-
-        <Pressable
-          accessibilityRole="button"
           accessibilityState={{disabled: saving || testing, busy: saving}}
           disabled={saving || testing}
           onPress={onSave}
@@ -306,7 +275,30 @@ const NightscoutSetupScreen: React.FC = () => {
             </Text>
           )}
         </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{disabled: saving || testing, busy: testing}}
+          disabled={saving || testing}
+          onPress={onTestConnection}
+          style={({pressed}) => [
+            styles.testButton,
+            (saving || testing) && styles.disabled,
+            pressed && !saving && !testing && styles.pressed,
+          ]}
+          testID="nightscout-test-connection">
+          {testing ? (
+            <ActivityIndicator color={styles.testButtonText.color} />
+          ) : (
+            <Text style={styles.testButtonText}>
+              {tr(language, 'nightscoutSetup.testConnection')}
+            </Text>
+          )}
+        </Pressable>
       </View>
+      <Text style={[styles.readOnlyText, rtl && styles.rtlText]}>
+        {tr(language, 'nightscoutSetup.readOnly')}
+      </Text>
     </ScrollView>
   );
 };
@@ -366,15 +358,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'center',
   },
-  readOnlyCard: {
-    marginTop: 22,
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#B9DDF4',
-    backgroundColor: '#EAF6FF',
-  },
-  readOnlyText: {color: '#285978', fontSize: 14, lineHeight: 21},
+  readOnlyText: {color: '#52677B', fontSize: 13, lineHeight: 20, marginTop: 14},
   formCard: {
     marginTop: 16,
     padding: 20,
@@ -414,11 +398,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 50,
-    marginTop: 22,
+    marginTop: 8,
     paddingHorizontal: 18,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#1769AA',
   },
   testButtonText: {color: '#1769AA', fontSize: 16, fontWeight: '700'},
   saveButton: {

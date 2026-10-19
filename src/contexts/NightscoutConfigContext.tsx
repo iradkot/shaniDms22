@@ -13,6 +13,7 @@ import {
   countRecoverableLegacyNightscoutProfiles,
   labelFromNightscoutBaseUrl,
   loadNightscoutProfiles,
+  normalizeNightscoutApiSecretToSha1,
   normalizeNightscoutUrl,
   persistNightscoutProfiles,
   recoverLegacyNightscoutProfiles,
@@ -300,9 +301,11 @@ export const NightscoutConfigProvider = ({
       const accessToken = secretTrimmed
         ? normalizeNightscoutAccessToken(secretTrimmed)
         : existingProfile?.accessToken;
-      const apiSecretSha1 = secretTrimmed ? '' : existingProfile?.apiSecretSha1 ?? '';
-      if (!accessToken && (!apiSecretSha1 || normalizedUrl !== existingProfile?.baseUrl)) {
-        throw new Error('Enter a Nightscout access token with only the readable role. Do not enter the master API_SECRET.');
+      const apiSecretSha1 = secretTrimmed
+        ? accessToken ? '' : normalizeNightscoutApiSecretToSha1(secretTrimmed) ?? ''
+        : existingProfile?.apiSecretSha1 ?? '';
+      if (!accessToken && !apiSecretSha1) {
+        throw new Error('Enter your Nightscout token or API_SECRET.');
       }
       return {normalizedUrl, apiSecretSha1, ...(accessToken ? {accessToken} : {})};
     },
@@ -451,16 +454,22 @@ export const NightscoutConfigProvider = ({
           const label =
             p.label === prevLabelDerived ? nextLabelDerived : p.label;
 
-          return {
+          const nextProfile: NightscoutProfile = {
             ...p,
             baseUrl: normalizedUrl,
             label,
-            ...(secretTrimmed ? {
-              apiSecretSha1: '',
-              accessToken: credential.accessToken,
-              authType: 'access-token' as const,
-            } : {}),
           };
+          if (secretTrimmed) {
+            nextProfile.apiSecretSha1 = credential.apiSecretSha1;
+            if (credential.accessToken) {
+              nextProfile.accessToken = credential.accessToken;
+              nextProfile.authType = 'access-token';
+            } else {
+              delete nextProfile.accessToken;
+              delete nextProfile.authType;
+            }
+          }
+          return nextProfile;
         });
 
         profilesRef.current = nextProfiles;

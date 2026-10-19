@@ -302,7 +302,7 @@ export const decodeNightscoutCredentialRequest = (
   }
   if (
     typeof input.apiKey !== 'string' ||
-    input.apiKey.trim().length < 8 ||
+    input.apiKey.trim().length === 0 ||
     input.apiKey.length > 4_096
   ) {
     throw new ApiContractError(

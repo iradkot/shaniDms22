@@ -749,7 +749,6 @@ export class BrowserNightscoutClient {
           version: 1,
           url: input.url,
           apiKey: input.apiKey,
-          authType: 'access-token',
         },
       }),
     );

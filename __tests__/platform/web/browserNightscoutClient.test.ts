@@ -489,7 +489,7 @@ describe('BrowserNightscoutClient', () => {
     ).rejects.toThrow('Workspace identity');
   });
 
-  it('consumes the server-provided opaque source identity after provision', async () => {
+  it.each(['shani-0123456789abcdef', 'master-secret'])('provisions %s without forcing a credential type', async apiKey => {
     const requestJson = jest.fn().mockResolvedValueOnce({
       version: 1,
       configured: true,
@@ -501,8 +501,8 @@ describe('BrowserNightscoutClient', () => {
       BrowserNightscoutClient.provision(
         {requestJson},
         {
-          url: 'https://nightscout.example',
-          apiKey: 'shani-0123456789abcdef',
+          url: 'nightscout.example',
+          apiKey,
         },
       ),
     ).resolves.toEqual({
@@ -517,9 +517,8 @@ describe('BrowserNightscoutClient', () => {
         method: 'POST',
         body: {
           version: 1,
-          url: 'https://nightscout.example',
-          apiKey: 'shani-0123456789abcdef',
-          authType: 'access-token',
+          url: 'nightscout.example',
+          apiKey,
         },
       },
     );

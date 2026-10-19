@@ -57,12 +57,21 @@ describe('browser AI connection panel', () => {
     act(() => {
       const inputs = tree.root.findAllByType('input');
       inputs[0]!.props.onChange({
-        target: {value: 'https://nightscout.example.test'},
+        target: {value: 'nightscout.example.test'},
       });
       inputs[1]!.props.onChange({target: {value: 'nightscout-test-secret'}});
       inputs[2]!.props.onChange({target: {value: 'sk-draft-test'}});
     });
     await act(async () => button('Connect and verify').props.onClick());
+    expect(requestJson).toHaveBeenCalledWith('/v1/vault/nightscout/provision', {
+      method: 'POST',
+      body: {
+        version: 1,
+        url: 'nightscout.example.test',
+        apiKey: 'nightscout-test-secret',
+      },
+    });
+    expect(JSON.stringify(tree.toJSON())).not.toContain('only the readable');
     expect(tree.root.findAllByType('input')[2]!.props.value).toBe(
       'sk-draft-test',
     );

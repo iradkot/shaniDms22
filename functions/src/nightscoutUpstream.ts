@@ -4,7 +4,6 @@ import {isIP} from 'node:net';
 
 import type {NightscoutRangeKind, NightscoutRangeRequest} from './contracts';
 import type {NightscoutCredential} from './nightscoutVault';
-import {hasReadOnlyNightscoutPermissions} from './nightscoutTokenPermissions';
 
 export class NightscoutUpstreamError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
@@ -160,7 +159,10 @@ export const isPublicIpAddress = (address: string): boolean => {
 export const normalizeNightscoutBaseUrl = (raw: string): string => {
   let value: URL;
   try {
-    value = new URL(raw.trim());
+    const trimmed = raw.trim();
+    value = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`);
   } catch {
     throw new NightscoutUpstreamError(
       400,
@@ -427,47 +429,26 @@ export class NightscoutUpstream {
   }
 
   async validateCredential(credential: NightscoutCredential): Promise<void> {
-    if (credential.accessToken) {
-      const authorization = await this.request(
-        credential,
-        apiUrl(
-          credential.url,
-          `api/v2/authorization/request/${encodeURIComponent(
-            credential.accessToken,
-          )}`,
-        ),
-      );
-      if (!hasReadOnlyNightscoutPermissions(authorization)) {
-        throw new NightscoutUpstreamError(
-          403,
-          'nightscout_read_only_required',
-          'Use a Nightscout subject token with only readable permissions',
-        );
-      }
-      const entriesUrl = apiUrl(credential.url, 'api/v1/entries/sgv.json');
-      entriesUrl.searchParams.set('count', '1');
-      const entries = await this.request(credential, entriesUrl);
-      if (
-        !Array.isArray(entries) ||
-        entries.some(
-          entry =>
-            typeof entry !== 'object' ||
-            entry === null ||
-            !Number.isFinite(Number((entry as Record<string, unknown>).date)) ||
-            !Number.isFinite(Number((entry as Record<string, unknown>).sgv)) ||
-            Number((entry as Record<string, unknown>).sgv) <= 0,
-        )
-      ) {
-        throw new NightscoutUpstreamError(
-          502,
-          'invalid_nightscout_response',
-          'Nightscout returned invalid glucose entries',
-        );
-      }
-    } else {
-      await this.request(
-        credential,
-        apiUrl(credential.url, 'api/v1/status.json'),
+    // Check the read the app actually needs. Extra write/admin permissions do
+    // not prevent connecting, and older sites need no authorization endpoint.
+    const entriesUrl = apiUrl(credential.url, 'api/v1/entries/sgv.json');
+    entriesUrl.searchParams.set('count', '1');
+    const entries = await this.request(credential, entriesUrl);
+    if (
+      !Array.isArray(entries) ||
+      entries.some(
+        entry =>
+          typeof entry !== 'object' ||
+          entry === null ||
+          !Number.isFinite(Number((entry as Record<string, unknown>).date)) ||
+          !Number.isFinite(Number((entry as Record<string, unknown>).sgv)) ||
+          Number((entry as Record<string, unknown>).sgv) <= 0,
+      )
+    ) {
+      throw new NightscoutUpstreamError(
+        502,
+        'invalid_nightscout_response',
+        'Nightscout returned invalid glucose entries',
       );
     }
   }

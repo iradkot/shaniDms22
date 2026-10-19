@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import test from 'node:test';
 import {PRIVACY_POLICY_VERSION, type AccountPrivacyRepository} from './accountPrivacy';
 
@@ -473,7 +474,7 @@ test('rejects oversized meal images before the provider call', async () => {
   assert.deepEqual(setup.upstream.imageCalls, []);
 });
 
-test('validates and stores a raw read-only Nightscout subject token', async () => {
+test('validates and stores a raw Nightscout subject token', async () => {
   const setup = dependencies();
   const response = new CapturedResponse();
   const rawSecret = 'shani-0123456789abcdef';
@@ -503,28 +504,36 @@ test('validates and stores a raw read-only Nightscout subject token', async () =
   assert.equal(JSON.stringify(response.body).includes(rawSecret), false);
 });
 
-test('rejects new master-secret onboarding and preserves the existing vault value', async () => {
+test('accepts master secrets and hashes with automatic detection and bare hostnames', async () => {
   const setup = dependencies();
   const saved = {url: 'https://nightscout.example/', apiSecretSha1: 'a'.repeat(40)};
   await setup.nightscoutVault.put('user-1', saved);
   for (const body of [
-    {version: 1, url: saved.url, apiKey: 'master-secret'},
+    {version: 1, url: 'nightscout.example', apiKey: 'master-secret'},
+    {version: 1, url: saved.url, apiKey: 'short'},
+    {version: 1, url: saved.url, apiKey: 'master-secret', authType: 'access-token'},
     {version: 1, url: saved.url, apiKey: 'b'.repeat(40), authType: 'legacy-api-secret'},
     {version: 1, url: 'https://other.example/', apiKey: saved.apiSecretSha1, authType: 'legacy-api-secret'},
   ]) {
     const response = new CapturedResponse();
     await setup.handler(request('/v1/vault/nightscout/provision', body), response);
-    assert.equal((response.body as {code: string}).code, 'nightscout_read_only_required');
-    assert.deepEqual(await setup.nightscoutVault.get('user-1'), saved);
+    assert.equal(response.statusCode, 200);
+    const stored = await setup.nightscoutVault.get('user-1');
+    assert.equal(stored?.url, body.url === 'nightscout.example' ? saved.url : body.url);
+    assert.equal(stored?.apiSecretSha1, /^[a-f0-9]{40}$/i.test(body.apiKey)
+      ? body.apiKey
+      : createHash('sha1').update(body.apiKey).digest('hex'));
+    assert.equal(stored?.accessToken, undefined);
+    assert.equal(JSON.stringify(response.body).includes(body.apiKey), false);
   }
-  assert.equal(setup.nightscoutCalls.validate.length, 0);
+  assert.equal(setup.nightscoutCalls.validate.length, 5);
 });
 
-test('does not replace an owned credential when the supplied subject token is revoked or writable', async () => {
+test('does not replace an owned credential when Nightscout rejects access', async () => {
   const setup = dependencies();
   const saved = {url: 'https://nightscout.example/', apiSecretSha1: 'a'.repeat(40)};
   await setup.nightscoutVault.put('user-1', saved);
-  for (const code of ['nightscout_credential_rejected', 'nightscout_read_only_required']) {
+  for (const code of ['nightscout_credential_rejected', 'nightscout_forbidden']) {
     setup.nightscoutUpstream.validateCredential = async () => {
       throw new NightscoutUpstreamError(code === 'nightscout_credential_rejected' ? 401 : 403, code, 'The credential was rejected');
     };
@@ -536,7 +545,7 @@ test('does not replace an owned credential when the supplied subject token is re
   }
 });
 
-test('keeps explicitly re-provisioned owned legacy secrets distinct from read-only tokens', async () => {
+test('preserves explicitly re-provisioned API_SECRET hashes without hashing again', async () => {
   const setup = dependencies();
   const saved = {url: 'https://nightscout.example/', apiSecretSha1: 'a'.repeat(40)};
   await setup.nightscoutVault.put('user-1', saved);

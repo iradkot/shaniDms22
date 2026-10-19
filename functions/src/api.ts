@@ -416,19 +416,12 @@ export const createShaniApiHandler = (dependencies: ShaniApiDependencies) => {
         requireMethod(request, 'POST');
         const input = decodeNightscoutCredentialRequest(request.body);
         const url = normalizeNightscoutBaseUrl(input.url);
-        const accessToken = normalizeNightscoutAccessToken(input.apiKey);
-        if (input.authType === 'access-token' && accessToken === null) {
-          throw new ApiContractError(400, 'nightscout_read_only_required', 'Enter a Nightscout subject token with only readable permissions');
-        }
-        const credential = input.authType === 'access-token'
-          ? {url, apiSecretSha1: '', accessToken: accessToken!}
+        const accessToken = input.authType === 'legacy-api-secret'
+          ? null
+          : normalizeNightscoutAccessToken(input.apiKey);
+        const credential = accessToken
+          ? {url, apiSecretSha1: '', accessToken}
           : {url, apiSecretSha1: normalizeNightscoutApiSecret(input.apiKey)};
-        if (input.authType === 'legacy-api-secret') {
-          const saved = await dependencies.nightscoutVault.get(identity.uid);
-          if (!saved || saved.accessToken || saved.url !== url || saved.apiSecretSha1 !== credential.apiSecretSha1) {
-            throw new ApiContractError(409, 'nightscout_read_only_required', 'Reconnect using a Nightscout subject token with only readable permissions');
-          }
-        }
         await dependencies.nightscoutUpstream.validateCredential(credential);
         await dependencies.nightscoutVault.put(identity.uid, credential);
         response.status(200).json({

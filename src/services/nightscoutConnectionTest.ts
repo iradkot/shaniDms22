@@ -1,14 +1,12 @@
 import axios from 'axios';
 import {getNightscoutRequestAuthentication} from '../api/nightscoutAuthentication';
 import {decodeNightscoutGlucose} from '../api/nightscoutGlucose';
-import {hasReadOnlyNightscoutPermissions, normalizeNightscoutAccessToken} from './nightscoutTokenPermissions';
 
 export type NightscoutConnectionTestResult = {
   ok: true;
   entriesCount: number;
   latestEntryDate?: number;
   authMethod: 'query' | 'header';
-  readOnlyVerified?: true;
 };
 
 export type NightscoutConnectionTestErrorCode =
@@ -23,7 +21,7 @@ export type NightscoutConnectionTestErrorCode =
 const errorMessages: Record<NightscoutConnectionTestErrorCode, string> = {
   authentication:
     'Nightscout rejected the credential. Please check it and try again.',
-  permissions: 'Use a Nightscout access token with only the readable role. Write or admin permissions are not accepted.',
+  permissions: 'This credential cannot read Nightscout data. Check its permissions and try again.',
   'not-found':
     'Could not find the Nightscout API. Please check the site address.',
   timeout:
@@ -106,23 +104,6 @@ export const testNightscoutConnection = async (params: {
     params.accessToken,
   );
   try {
-    if (params.accessToken) {
-      const token = normalizeNightscoutAccessToken(params.accessToken);
-      if (!token) {
-        throw new NightscoutConnectionTestError('authentication');
-      }
-      const authorization = await axios.get(
-        `/api/v2/authorization/request/${encodeURIComponent(token)}`,
-        {
-          baseURL: params.baseUrl.replace(/\/+$/, ''),
-          timeout: 12000,
-          headers: {Accept: 'application/json'},
-        },
-      );
-      if (!hasReadOnlyNightscoutPermissions(authorization.data)) {
-        throw new NightscoutConnectionTestError('permissions');
-      }
-    }
     // Axios appends this path to baseURL, including a Nightscout sub-directory.
     // Use the exact authentication mode used for subsequent glucose requests.
     // Request SGV entries specifically; a newer calibration or fingerstick
@@ -137,7 +118,7 @@ export const testNightscoutConnection = async (params: {
       response.data,
       'api-secret' in authentication.headers ? 'header' : 'query',
     );
-    return params.accessToken ? {...result, readOnlyVerified: true} : result;
+    return result;
   } catch (failure) {
     throw classifyFailure(failure);
   }

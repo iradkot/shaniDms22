@@ -44,7 +44,7 @@ describe('Nightscout connection controls', () => {
     act(() => tree?.unmount());
   });
 
-  it('marks a preserved master-secret connection for token reconnection', () => {
+  it('keeps a saved API secret usable without a forced replacement warning', () => {
     act(() => {
       tree = renderer.create(
         content(
@@ -54,9 +54,9 @@ describe('Nightscout connection controls', () => {
       );
     });
     expect(
-      tree.root.findByProps({testID: 'settings-nightscout-legacy-reconnect'})
-        .props.children,
-    ).toContain('סוד הראשי');
+      tree.root.findAllByProps({testID: 'settings-nightscout-legacy-reconnect'}),
+    ).toHaveLength(0);
+    expect(button(tree, 'settings-test-nightscout').props.disabled).toBe(false);
     act(() =>
       tree.update(
         content(

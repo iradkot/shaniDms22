@@ -5,7 +5,7 @@ import {normalizeNightscoutAccessToken} from './nightscoutTokenPermissions';
 
 export interface NightscoutCredential {
   readonly url: string;
-  /** Legacy master-secret SHA1; empty when a raw subject accessToken is present. */
+  /** API_SECRET SHA1; empty when a raw subject accessToken is present. */
   readonly apiSecretSha1: string;
   readonly accessToken?: string;
 }

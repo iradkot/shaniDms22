@@ -1,5 +1,7 @@
 # Pilot implementation handoff — 2026-10-03
 
+Historical report: the credential restrictions described below were replaced on 2026-10-19. Current onboarding accepts subject tokens with any working permissions or API_SECRET. See [current Nightscout connection behavior](NIGHTSCOUT_READ_ONLY_PILOT.md).
+
 The code changes for the four requested workstreams are implemented. The first preview's verification and delivery are recorded below. The later main integration and independent deletion review also passed local verification; the original APKs do not include those later fixes. Provider-side credential rotation and physical/live-data acceptance remain incomplete. This handoff does not establish readiness to distribute to people with type 1 diabetes. No backend, rules, IAM, Hosting, or store deployment was performed.
 
 The candidate is a restricted internal Android preview. It uses the Android debug certificate, even though it runs in release mode. It is not a Google Play release. Keep the cloud rules schema at **0** until the matching backend, schema **2** rules, and service-account permissions have been deployed and verified.
