@@ -1,6 +1,8 @@
 # Glucose forecasts
 
-ShaniDms shows experimental, read-only forecasts on the live Day Graph and Android home-screen widgets. Forecasts do not change insulin delivery. Source research and upstream payload details are in [glucose-forecast-sources.md](research/glucose-forecast-sources.md).
+The live Day Graph shows recent predictions published by the connected Loop instance through Nightscout. Pilot and production releases display only this imported Loop curve, with its actual target times. Forecasts do not change insulin delivery or measured glucose statistics. Source research and upstream payload details are in [glucose-forecast-sources.md](research/glucose-forecast-sources.md).
+
+The four-source experimental engine below, personal context, historical accuracy estimates, shaded ranges and Android forecast widgets are available only in explicitly selected development builds.
 
 ## Forecast sources
 
@@ -36,7 +38,9 @@ These are observed historical results, not a probability that the next reading w
 
 ## Loading, scope, and freshness
 
-The [shared loader](../src/modules/glucoseForecast/loader.ts) keeps history in its source-scoped instance:
+In pilot and production, the [recorded Loop loader](../src/modules/glucoseForecast/recordedLoop.ts) reads only 30 minutes of glucose and 15 minutes of device status. It preserves the published prediction's clock and values, displays future points up to 30 minutes ahead, and rejects stale readings or responses from a previous source. It performs no history warming, personal modeling or accuracy estimation. Missing Loop predictions produce an explicit unavailable state.
+
+In development, the [experimental loader](../src/modules/glucoseForecast/loader.ts) keeps history in its source-scoped instance:
 
 1. Read the latest two hours of glucose and device status.
 2. Load up to 28 days of glucose in four seven-day requests, with two requests in flight. Partial history remains usable; its span does not imply complete coverage.
@@ -47,7 +51,7 @@ A failed current glucose read rejects the forecast refresh. Failed current devic
 
 ## Android behavior
 
-The app publishes the same forecast snapshot to Android. Native storage checks the active Nightscout account. Personal and Combined predictions depend on an app-generated snapshot and expire when its source data ages or a different glucose cycle arrives; Android does not retrain the personal model independently.
+In development builds, the app publishes the same forecast snapshot to Android. Native storage checks the active Nightscout account. Personal and Combined predictions depend on an app-generated snapshot and expire when its source data ages or a different glucose cycle arrives; Android does not retrain the personal model independently. Pilot and production continue to hide widget forecasts; the imported Loop display is limited to the Day Graph.
 
 The native background path can refresh Nightscout AR2 and imported Loop predictions. Stale or mismatched snapshots are hidden. Widget summaries use the actual target time and remaining minutes rather than relabeling an old point as 30 minutes from now.
 

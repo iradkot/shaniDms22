@@ -6,3 +6,4 @@ export {
 } from './nightscout';
 export {buildGlucoseForecast} from './forecast';
 export {createGlucoseForecastLoader} from './loader';
+export {createDayGraphForecastLoader, createRecordedLoopForecastLoader, forecastForDisplay} from './recordedLoop';

@@ -25,7 +25,8 @@ depend on React, authentication, storage or a running Android application.
 | Intentionally modeled insulin analysis | `calculateModeledInsulinContextMetrics` / `getModeledInsulinRangeMetrics` in `src/services/insulin/insulinRangeMetrics.ts` | Explicit schedule/treatment estimate; deprecated generic names remain only for compatibility |
 | Long-range glucose analysis, AGP, descriptive statistics | `src/modules/trends` | Shared sample validation, thresholds and descriptive metrics |
 | Daily elapsed-time CGM coverage and TIR | `buildElapsedGlucoseSummary` in `src/modules/trends` | Duration-weighted readings with cadence cap and no gap fill; general Trends stays sample-based |
-| Forecasts | `createGlucoseForecastLoader` in `src/modules/glucoseForecast` | Existing forecast source and quality rules; do not extrapolate inside a component |
+| Day Graph forecasts | `createDayGraphForecastLoader` in `src/modules/glucoseForecast` | Uses `createRecordedLoopForecastLoader` for recent published Loop predictions in pilot/production; no local extrapolation or historical training |
+| Experimental forecasts | `createGlucoseForecastLoader` in `src/modules/glucoseForecast` | Development-only models, history and quality rules; do not extrapolate inside a component |
 | Android launcher background summary | `WidgetDailySummary.kt` and `GlucoseWidgetInsulinData.kt` | Native adapter is required while JavaScript is suspended; shared fixtures define parity |
 
 ## Recorded insulin is different from a schedule model

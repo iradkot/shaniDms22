@@ -103,7 +103,8 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
     expect(snapshot.evidence.targetRange).toEqual({minMgDl: 80, maxMgDl: 140});
   });
 
-  it('forecasts with cached minimal Loop facts without loading the factual day graph', async () => {
+  it.each(['development', 'pilot', 'production'])('forecasts with minimal Loop facts in %s without loading the factual day graph', async channel => {
+    globalThis.__SHANI_RELEASE_CHANNEL__ = channel;
     const nowMs = Date.parse('2026-09-07T08:01:00Z');
     const latestMs = nowMs - 60_000;
     const glucose = Array.from({length: 7}, (_, index) => ({
@@ -149,6 +150,11 @@ describe('createBrowserNightscoutDataSources Day Graph', () => {
       now: () => nowMs,
     });
     const snapshot = await source.dayGraph.loadGlucoseForecast!();
+    if (channel !== 'development') {
+      expect(snapshot.series.map(series => series.id)).toEqual(['loop']);
+      expect(client.readEntries).toHaveBeenCalledTimes(1);
+      expect(client.readDeviceStatuses).toHaveBeenCalledTimes(1);
+    }
     expect(
       snapshot.series.find(series => series.id === 'loop')?.points,
     ).toEqual(

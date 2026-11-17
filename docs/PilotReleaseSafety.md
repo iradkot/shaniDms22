@@ -2,6 +2,8 @@
 
 The default release exposes measured Nightscout data, journals, charts and retrospective analysis. It does not expose AI advice for now or an impending meal, or any experimental future glucose curves. Retrospective AI is still not clinically validated and must not be used to make treatment or dosing decisions.
 
+The day graph also displays a current prediction already published by Loop through Nightscout, labeled as a Loop forecast. It shows up to 30 minutes ahead, including across midnight. This display does not generate a new prediction or mix predicted values into measured glucose statistics.
+
 ## Build declaration
 
 `SHANI_RELEASE_CHANNEL` accepts `pilot`, `production` or `development`. The build tooling substitutes the immutable `__SHANI_RELEASE_CHANNEL__` constant in JavaScript. Android also receives `BuildConfig.SHANI_EXPERIMENTAL_FEATURES_ENABLED`. Omission defaults to `pilot`. Unknown settings are rejected by the build tooling; an absent or unknown JavaScript constant still fails closed.
@@ -15,7 +17,7 @@ Web builds stamp the same compiled channel into `.shani-release.json`. The deplo
 - The shared recommendation runtime rejects current and meal requests before reading evidence or transmitting to an AI provider. Deep links, legacy missions, retries, resumed sessions and feedback revisions use that boundary.
 - The recommendation orchestrator independently rejects those requests. Allowed weekly, monthly and focused analyses use retrospective-only instructions, including for follow-up messages, and retain the existing treatment/dose output check.
 - Saved current/meal transcripts and legacy transcripts without explicit retrospective request metadata are hidden. Retained legacy engine messages and meal-image actions are hidden too. The older Home current recommendation path cannot generate, save or show its previous answers.
-- The forecast loader rejects direct calls before Nightscout reads, cache returns and publication. History warming and in-flight completion recheck the policy. Chart hooks stop forecast loading and polling. Chart and card renderers independently strip retained forecast props.
+- The experimental forecast loader rejects direct calls before Nightscout reads, cache returns and publication. History warming and in-flight completion recheck the policy. The day graph uses a separate recent-data loader for published Loop predictions in restricted builds. Chart and card renderers filter out experimental sources, including retained props. Fresh glucose, upload, Loop and prediction timestamps are required; stale forecasts and responses from a previous source are discarded.
 - Legacy Loop prediction headers and Android projection payloads omit future values. Measured glucose, trends, IOB/COB and recorded history remain available.
 - Android background generation, forecast writes and widget reads enforce the native build flag. Reading or writing widget state in a restricted build removes retained experimental forecast/projection preferences, including after an upgrade before foreground JavaScript starts. The forecast row and curve legend are hidden.
 

@@ -45,8 +45,10 @@ const render = (element: React.ReactNode) => {
   });
   return tree!;
 };
+const textContent = (node: renderer.ReactTestInstance | string): string =>
+  typeof node === 'string' ? node : node.children.map(textContent).join('');
 const labels = (tree: renderer.ReactTestRenderer) =>
-  tree.root.findAllByType(Text).map(node => node.props.children);
+  tree.root.findAllByType(Text).map(textContent);
 
 describe('Mobile insulin lane presentation', () => {
   beforeEach(() => {
@@ -131,8 +133,27 @@ describe('Mobile insulin lane presentation', () => {
     const legend = tree.root.findByProps({testID: 'lane.scales'});
     expect(StyleSheet.flatten(legend.props.style).flexWrap).toBe('nowrap');
     expect(tree.root.findByType(Svg).props.height).toBeGreaterThanOrEqual(75);
+    expect(labels(tree)).toEqual(
+      expect.arrayContaining(['בזאל', 'IOB', 'COB', '0.8 U/hr']),
+    );
+    expect(labels(tree).filter(value => value === 'סולם')).toHaveLength(3);
     expect(labels(tree)).toContain('-0.5 U');
     expect(labels(tree)).toContain('20 g');
+    for (const kind of ['basal', 'iob', 'cob']) {
+      expect(
+        tree.root.findByProps({testID: `lane.swatch-${kind}`}),
+      ).toBeDefined();
+      expect(
+        StyleSheet.flatten(
+          tree.root.findByProps({testID: `lane.scale-${kind}`}).props.style,
+        ).writingDirection,
+      ).toBe('ltr');
+    }
+    const selectedIob = tree.root.findByProps({testID: 'lane.value-iob'});
+    expect(StyleSheet.flatten(selectedIob.props.style)).toMatchObject({
+      textAlign: 'center',
+      writingDirection: 'ltr',
+    });
     const scaleLabel = tree.root
       .findAllByType(Text)
       .find(
@@ -150,6 +171,57 @@ describe('Mobile insulin lane presentation', () => {
     ).toHaveLength(1);
     act(() => tree.unmount());
   });
+
+  it('gives narrow overlay scale labels room to wrap without reducing the plot', () => {
+    const overlay = (width: number) => (
+      <MixedMiniChart
+        {...props}
+        width={width}
+        compact
+        height={140}
+        locale="he"
+        bgSamples={[sample(0, {iob: -0.5, cob: 20})]}
+      />
+    );
+    const tree = render(overlay(320));
+    const originalPlotHeight = tree.root.findByType(Svg).props.height;
+    act(() =>
+      tree.update(<ThemeProvider theme={theme}>{overlay(220)}</ThemeProvider>),
+    );
+    expect(tree.root.findByType(Svg).props.height).toBe(originalPlotHeight);
+    const lane = tree.root
+      .findAllByProps({testID: 'lane'})
+      .find(node => typeof node.type !== 'function')!;
+    expect(StyleSheet.flatten(lane.props.style).height).toBeGreaterThan(140);
+    expect(labels(tree).filter(value => value === 'סולם')).toHaveLength(2);
+    act(() => tree.unmount());
+  });
+
+  it.each(['unavailable', 'missing-selection'] as const)(
+    'keeps the units visible when compact overlay readings are %s',
+    scenario => {
+      const tree = render(
+        <MixedMiniChart
+          {...props}
+          compact
+          locale="he"
+          cursorTimeMs={20 * 60_000}
+          {...(scenario === 'unavailable'
+            ? {
+                dataAvailability: {
+                  profile: 'unavailable',
+                  deviceStatus: 'unavailable',
+                } as const,
+              }
+            : {loadSamples: [{timestampMs: 0, iob: 2, cob: 30}]})}
+        />,
+      );
+      expect(labels(tree)).toEqual(
+        expect.arrayContaining(['— U/hr', '— U', '— g']),
+      );
+      act(() => tree.unmount());
+    },
+  );
 
   it('grows compact text space for large fonts without shrinking the data plot', () => {
     const dimensions = Dimensions.get('window');

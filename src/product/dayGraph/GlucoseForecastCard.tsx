@@ -2,6 +2,7 @@ import React, {useMemo} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {useTheme} from 'styled-components/native';
 import type {GlucoseForecastSnapshot} from '../../modules/glucoseForecast';
+import {forecastForDisplay} from '../../modules/glucoseForecast';
 import type {ThemeType} from '../../types/theme';
 import {addOpacity} from '../../style/styling.utils';
 import {getReleaseSafetyPolicy} from '../../modules/releaseSafety/policy';
@@ -23,7 +24,7 @@ const FEATURE_LABELS: Readonly<Record<string, readonly [string, string]>> = {
 
 export const GlucoseForecastCard = ({
   locale,
-  snapshot,
+  snapshot: suppliedSnapshot,
   status,
 }: {
   readonly locale: 'en' | 'he';
@@ -32,7 +33,8 @@ export const GlucoseForecastCard = ({
 }) => {
   const theme = useTheme() as ThemeType;
   const styles = useMemo(() => createStyles(theme), [theme]);
-  if (!getReleaseSafetyPolicy().experimentalGlucoseForecasts) {return null;}
+  const experimental = getReleaseSafetyPolicy().experimentalGlucoseForecasts;
+  const snapshot = forecastForDisplay(suppliedSnapshot);
   const he = locale === 'he';
   const textStyle = [styles.text, he && styles.rtl];
   const series = snapshot?.series ?? [];
@@ -43,6 +45,46 @@ export const GlucoseForecastCard = ({
     : status === 'stale' || snapshot?.unavailableReason === 'stale-glucose'
     ? he ? 'התחזית הוסתרה: נדרשות קריאות סוכר עדכניות.' : 'Forecast hidden: recent glucose readings are needed.'
     : he ? 'עדיין אין מספיק קריאות לתחזית.' : 'There are not enough readings for a forecast yet.';
+  if (!experimental) {
+    const loop = series.find(item => item.id === 'loop');
+    const points = loop?.points ?? [];
+    const middle = points.reduce<(typeof points)[number] | undefined>((closest, point) =>
+      !closest || Math.abs(point.ts - snapshot!.generatedAtMs - 15 * 60_000) <
+        Math.abs(closest.ts - snapshot!.generatedAtMs - 15 * 60_000) ? point : closest,
+    undefined);
+    const selected = [...new Map([points[0], middle, points[points.length - 1]]
+      .flatMap(point => point ? [[point.ts, point] as const] : [])).values()];
+    const loopColor = forecastAppearance('loop', theme.dark).color;
+    return (
+      <View style={styles.card} testID="glucose-forecast-card">
+        <View style={[styles.header, he && styles.reverse]}>
+          <Text style={[styles.title, he && styles.rtl]}>{he ? 'הסוכר הקרוב' : 'Upcoming glucose'}</Text>
+          <Text style={[styles.badge, {color: loopColor}]}>Loop · mg/dL</Text>
+        </View>
+        {selected.length ? (
+          <>
+            <View style={styles.row} testID="glucose-forecast-summary-loop">
+              {selected.map(point => (
+                <View key={point.ts} style={styles.recordedValue}>
+                  <Text style={styles.detail}>{new Date(point.ts).toLocaleTimeString(
+                    he ? 'he-IL' : 'en-GB', {hour: '2-digit', minute: '2-digit'},
+                  )}</Text>
+                  <Text style={[styles.recordedNumber, {color: loopColor}]}>{Math.round(point.sgv)}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={[styles.detail, he && styles.rtl]}>
+              {he ? 'תחזית שפורסמה ב־Loop · עד 30 דקות קדימה' : 'Prediction published by Loop · up to 30 minutes ahead'}
+            </Text>
+          </>
+        ) : (
+          <Text style={textStyle}>{status === 'ready'
+            ? he ? 'לא התקבלה תחזית Loop עדכנית.' : 'No recent Loop prediction was received.'
+            : emptyText}</Text>
+        )}
+      </View>
+    );
+  }
   return (
     <View style={styles.card} testID="glucose-forecast-card">
       <View style={[styles.header, he && styles.reverse]}>
@@ -151,6 +193,8 @@ const createStyles = (theme: ThemeType) => StyleSheet.create({
   title: {fontSize: 16, fontWeight: '700', color: theme.textColor},
   badge: {fontSize: 11, color: theme.textColor, opacity: 0.7},
   row: {flexDirection: 'row', alignItems: 'center', gap: 4},
+  recordedValue: {flex: 1, alignItems: 'center', gap: 4, paddingVertical: 5},
+  recordedNumber: {fontSize: 22, fontWeight: '700', fontVariant: ['tabular-nums']},
   source: {width: '34%', fontSize: 12, fontWeight: '600', color: theme.textColor},
   value: {flex: 1, textAlign: 'center', fontSize: 14, color: theme.textColor, fontVariant: ['tabular-nums']},
   muted: {fontSize: 11, opacity: 0.65},

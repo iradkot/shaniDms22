@@ -42,7 +42,7 @@ import {
   type BrowserCurrentDataClient,
 } from './browserCurrentDataSource';
 import {
-  createGlucoseForecastLoader,
+  createDayGraphForecastLoader,
   type ForecastContextEvent,
 } from '../../../modules/glucoseForecast';
 
@@ -238,7 +238,7 @@ export const createBrowserNightscoutDataSources = (input: {
       return (await loadGlucoseSnapshot(period)).samples;
     },
   };
-  const loadGlucoseForecast = createGlucoseForecastLoader({
+  const loadGlucoseForecast = createDayGraphForecastLoader({
     getScopeKey: () => {
       input.client.assertCurrentSource?.();
       return input.sourceId;

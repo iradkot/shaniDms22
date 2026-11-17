@@ -50,27 +50,35 @@ describe('live glucose forecast presentation', () => {
     }
   });
 
-  it('does not load, poll or expose a supplied retained forecast in a pilot build', async () => {
+  it('loads and renders published Loop forecasts in a pilot build while hiding experimental sources', async () => {
     globalThis.__SHANI_RELEASE_CHANNEL__ = 'pilot';
-    const load = jest.fn(async () => fixture());
+    const mixed = {...fixture(), series: [
+      {...fixture().series[0]!, id: 'loop' as const, label: 'Loop'},
+      ...fixture().series,
+    ]};
+    const load = jest.fn(async () => mixed);
     await act(async () => {tree = renderer.create(<Probe source={sourceFor(load)} />);});
-    expect(latest.supported).toBe(false);
-    expect(latest.snapshot).toBeUndefined();
+    expect(latest.supported).toBe(true);
+    expect(latest.snapshot?.series.map(series => series.id)).toEqual(['loop']);
     await act(async () => latest.refresh());
-    expect(load).not.toHaveBeenCalled();
-    expect(visibleGlucoseForecast(fixture(), NOW)).toBeUndefined();
+    expect(load).toHaveBeenCalled();
+    expect(visibleGlucoseForecast(fixture(), NOW)?.series).toEqual([]);
     const model = buildDayGraph({
       period: {dayStartMs: 0, dayEndMs: DAY}, expectedSampleIntervalMs: 5 * MINUTE,
       glucoseSamples: [{identity: {sourceId: 'patient', recordId: 'reading'}, timestampMs: NOW, valueMgDl: 120}],
       timelineItems: [],
     });
-    await act(async () => {tree!.update(withTheme(<RichDayGraphChart locale="en" model={model} forecast={fixture()} forecastStatus="ready" />));});
-    expect(tree!.root.findAllByProps({testID: 'glucose-forecast-card'})).toHaveLength(0);
-    expect(tree!.root.findAllByProps({testID: 'glucose-forecast-layer'})).toHaveLength(0);
-    expect(tree!.root.findAllByProps({testID: 'day-graph-show-forecast'})).toHaveLength(0);
+    await act(async () => {tree!.update(withTheme(<RichDayGraphChart locale="en" model={model} forecast={mixed} forecastStatus="ready" />));});
+    expect(tree!.root.findAllByProps({testID: 'glucose-forecast-card'}).length).toBeGreaterThan(0);
+    expect(tree!.root.findAllByProps({testID: 'glucose-forecast-line-loop'}).length).toBeGreaterThan(0);
+    expect(tree!.root.findAllByProps({testID: 'glucose-forecast-line-personalized'})).toHaveLength(0);
+    expect(tree!.root.findAllByProps({testID: 'day-graph-show-forecast'}).length).toBeGreaterThan(0);
     const chart = tree!.root.findByType(StackedHomeCharts).props;
-    expect(chart.forecast).toBeUndefined();
+    expect(chart.forecast.series.map((series: {id: string}) => series.id)).toEqual(['loop']);
+    expect(+chart.xDomain[1]).toBeGreaterThan(DAY);
     expect(chart.bgSamples).toHaveLength(1);
+    expect(texts(tree!)).not.toContain('similar situations');
+    expect(texts(tree!)).not.toContain('Personal accuracy');
   });
 
   it('hides stale glucose and removes a stale prediction source independently', () => {

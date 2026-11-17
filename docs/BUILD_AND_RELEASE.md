@@ -77,6 +77,17 @@ remote setting cannot turn the experiments on. Android also gates forecast
 storage and background/native widget rendering in the binary. Production
 signing rejects the development channel.
 
+The day graph can display the next 30 minutes of a current prediction already
+published by Loop through Nightscout in every channel. This uses recent glucose
+and device status only; it does not run the experimental prediction models or
+load their historical training data. Stale predictions are hidden, and the
+forecast stays separate from measured readings and daily statistics.
+
+Check the pilot display with `scripts/check-glucose-forecast-preview.cjs`
+against a pilot Vite preview. For the development-only models, start Vite with
+`SHANI_RELEASE_CHANNEL=development` and run the check with
+`FORECAST_PREVIEW_EXPERIMENTAL=1`.
+
 After `yarn verify:all`, build an internal pilot preview with:
 
 ```powershell

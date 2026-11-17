@@ -36,7 +36,8 @@ const journal = {
 };
 
 describe('createNativeDayGraphDataSource', () => {
-  it('loads an independent forecast from glucose and original Loop device-status records', async () => {
+  it.each(['development', 'pilot', 'production'])('loads an independent forecast from original Loop records in %s', async channel => {
+    globalThis.__SHANI_RELEASE_CHANNEL__ = channel;
     const nowMs = Date.parse('2026-09-07T08:01:00Z');
     const latestMs = nowMs - 60_000;
     const records = Array.from({length: 7}, (_, index) => ({
@@ -69,13 +70,15 @@ describe('createNativeDayGraphDataSource', () => {
       fetchDeviceStatusRecords,
     });
     const snapshot = await source.loadGlucoseForecast!();
-    expect(snapshot.series.map(series => series.id)).toEqual(
-      expect.arrayContaining(['nightscout', 'loop']),
-    );
+    expect(snapshot.series.map(series => series.id)).toEqual(channel === 'development'
+      ? expect.arrayContaining(['nightscout', 'loop']) : ['loop']);
     expect(snapshot.series.find(series => series.id === 'loop')?.points)
       .toEqual(expect.arrayContaining([expect.objectContaining({ts: latestMs + 300_000, sgv: 128})]));
     expect(snapshot.context).toMatchObject({iobUnits: -0.25, cobGrams: 12});
     expect(loadInsulinContext).not.toHaveBeenCalled();
+    if (channel !== 'development') {
+      expect(fetchDeviceStatusRecords).toHaveBeenCalledTimes(1);
+    }
     expect(fetchDeviceStatusRecords.mock.calls.every(([start, end]) =>
       end.getTime() - start.getTime() <= 2 * 60 * 60 * 1000,
     )).toBe(true);

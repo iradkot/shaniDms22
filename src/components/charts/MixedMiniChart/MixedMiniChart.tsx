@@ -4,6 +4,7 @@ import Svg, {G, Line, Text as SvgText} from 'react-native-svg';
 import {useTheme} from 'styled-components/native';
 import type {BasalProfile, InsulinDataEntry} from 'app/types/insulin.types';
 import type {ThemeType} from 'app/types/theme';
+import {addOpacity} from 'app/style/styling.utils';
 import {getChartPalette} from '../chartPalette';
 import {
   buildMiniBasalSegments,
@@ -32,6 +33,7 @@ const COPY = {
   en: {
     title: 'Insulin and active carbs',
     basal: 'Basal · U/hr',
+    basalShort: 'Basal',
     iob: 'Active insulin · U',
     cob: 'Active carbs · g',
     scales: 'Each series has its own scale. Compare timing, not line heights.',
@@ -48,6 +50,7 @@ const COPY = {
   he: {
     title: 'אינסולין ופחמימות פעילות',
     basal: 'בזאל · U/hr',
+    basalShort: 'בזאל',
     iob: 'אינסולין פעיל · U',
     cob: 'פחמימות פעילות · g',
     scales: 'לכל סדרה סולם משלה. משווים את הזמנים, לא את גובה הקווים.',
@@ -120,21 +123,24 @@ const MixedMiniChart: React.FC<Props> = props => {
     {
       key: 'basal',
       title: copy.basal,
-      shortTitle: copy.basal,
+      shortTitle: copy.basalShort,
+      unit: 'U/hr',
       symbol: '┏━',
       hasData: basal.length > 0,
     },
     {
       key: 'iob',
       title: copy.iob,
-      shortTitle: '━ IOB · U',
+      shortTitle: 'IOB',
+      unit: 'U',
       symbol: '━',
       hasData: iob.length > 0,
     },
     {
       key: 'cob',
       title: copy.cob,
-      shortTitle: '┄ COB · g',
+      shortTitle: 'COB',
+      unit: 'g',
       symbol: '┄┄',
       hasData: cob.length > 0,
     },
@@ -158,10 +164,13 @@ const MixedMiniChart: React.FC<Props> = props => {
   const compactTextHeight = Math.ceil(
     styles.compactValue.lineHeight * fontScale * compactTextLines,
   );
+  const compactScaleHeight = Math.ceil(
+    styles.compactValue.lineHeight *
+      fontScale *
+      (width < 300 || wrapCompactText ? 2 : 1),
+  );
   const legendHeight =
-    compactTextHeight * 2 +
-    Math.ceil(styles.compactValue.lineHeight * fontScale) +
-    theme.spacing.xs * 2;
+    compactTextHeight * 2 + compactScaleHeight + theme.spacing.xs * 2;
   const compactHeight = Math.max(128, height) + legendHeight - baseLegendHeight;
   const svgHeight = compact
     ? compactHeight - legendHeight
@@ -244,9 +253,9 @@ const MixedMiniChart: React.FC<Props> = props => {
     ? loadPoints.cob.find(point => point.x === selectedLoad.date)?.y
     : undefined;
   const readout = {
-    basal: selectedBasal ? `${formatMiniValue(selectedBasal.rate)} U/hr` : '—',
-    iob: selectedIob == null ? '—' : `${formatMiniValue(selectedIob)} U`,
-    cob: selectedCob == null ? '—' : `${formatMiniValue(selectedCob)} g`,
+    basal: selectedBasal ? formatMiniValue(selectedBasal.rate) : '—',
+    iob: selectedIob == null ? '—' : formatMiniValue(selectedIob),
+    cob: selectedCob == null ? '—' : formatMiniValue(selectedCob),
   };
   return (
     <View
@@ -271,51 +280,120 @@ const MixedMiniChart: React.FC<Props> = props => {
         {series.map(item => (
           <View
             key={item.key}
-            style={[styles.scaleCard, compact && styles.compactScaleCard]}>
-            <Text
-              style={[
-                styles.seriesTitle,
-                compact ? {minHeight: compactTextHeight} : undefined,
-                {color: palette[item.key]},
-                rtl && styles.rtl,
-              ]}
-              accessibilityLabel={item.title}
-              {...(compact && !wrapCompactText ? {numberOfLines: 1} : {})}>
-              {compact ? item.shortTitle : `${item.symbol} ${item.title}`}
-            </Text>
+            testID={testID ? `${testID}.metric-${item.key}` : undefined}
+            style={[
+              styles.scaleCard,
+              compact && styles.compactScaleCard,
+              compact && {backgroundColor: addOpacity(palette[item.key], 0.08)},
+            ]}>
+            {compact ? (
+              <View
+                style={[
+                  styles.compactTitleRow,
+                  {minHeight: compactTextHeight},
+                ]}>
+                <View
+                  testID={testID ? `${testID}.swatch-${item.key}` : undefined}
+                  accessible={false}
+                  style={styles.swatch}>
+                  {Array.from(
+                    {
+                      length:
+                        item.key === 'iob' ? 1 : item.key === 'basal' ? 2 : 3,
+                    },
+                    (_, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.swatchMark,
+                          {backgroundColor: palette[item.key]},
+                        ]}
+                      />
+                    ),
+                  )}
+                </View>
+                <Text
+                  style={[
+                    styles.seriesTitle,
+                    styles.compactTitle,
+                    {color: palette[item.key]},
+                  ]}
+                  accessibilityLabel={item.title}>
+                  {item.shortTitle}
+                </Text>
+              </View>
+            ) : (
+              <Text
+                style={[
+                  styles.seriesTitle,
+                  {color: palette[item.key]},
+                  rtl && styles.rtl,
+                ]}
+                accessibilityLabel={item.title}>
+                {`${item.symbol} ${item.title}`}
+              </Text>
+            )}
             {compact ? (
               <Text
+                testID={testID ? `${testID}.value-${item.key}` : undefined}
                 style={[
                   styles.compactValue,
                   {color: palette[item.key], minHeight: compactTextHeight},
                 ]}
                 {...(!wrapCompactText ? {numberOfLines: 1} : {})}>
                 {readout[item.key]}
+                <Text style={styles.compactUnit}>{` ${item.unit}`}</Text>
               </Text>
             ) : null}
-            <Text
-              style={[
-                styles.scale,
-                rtl && styles.rtl,
-                compact && styles.compactScale,
-              ]}
-              {...(compact && !wrapCompactText ? {numberOfLines: 1} : {})}>
-              {item.hasData
-                ? `${compact ? '' : `${copy.range}: `}${axes[item.key].domain
+            {compact && item.hasData ? (
+              <View
+                style={[
+                  styles.compactScaleRow,
+                  rtl && styles.rowReverse,
+                  {minHeight: compactScaleHeight},
+                ]}>
+                <Text
+                  style={[
+                    styles.scale,
+                    styles.compactScaleCaption,
+                    rtl && styles.rtl,
+                  ]}>
+                  {copy.range}
+                </Text>
+                <Text
+                  testID={testID ? `${testID}.scale-${item.key}` : undefined}
+                  style={[styles.scale, styles.compactScale]}
+                  accessibilityLabel={`${copy.range}: ${axes[item.key].domain
                     .map(formatMiniValue)
-                    .join(' – ')}`
-                : compact
-                ? sourceStatuses[item.key] === 'unavailable'
-                  ? copy.unavailableShort
-                  : sourceStatuses[item.key] === 'stale'
-                  ? copy.staleShort
-                  : copy.noDataShort
-                : emptyMiniChartText(
-                    locale,
-                    sourceStatuses[item.key],
-                    copy.noData,
-                  )}
-            </Text>
+                    .join(' – ')}`}>
+                  {axes[item.key].domain.map(formatMiniValue).join(' – ')}
+                </Text>
+              </View>
+            ) : (
+              <Text
+                style={[
+                  styles.scale,
+                  rtl && styles.rtl,
+                  compact && styles.compactScale,
+                ]}
+                {...(compact && !wrapCompactText ? {numberOfLines: 1} : {})}>
+                {item.hasData
+                  ? `${compact ? '' : `${copy.range}: `}${axes[item.key].domain
+                      .map(formatMiniValue)
+                      .join(' – ')}`
+                  : compact
+                  ? sourceStatuses[item.key] === 'unavailable'
+                    ? copy.unavailableShort
+                    : sourceStatuses[item.key] === 'stale'
+                    ? copy.staleShort
+                    : copy.noDataShort
+                  : emptyMiniChartText(
+                      locale,
+                      sourceStatuses[item.key],
+                      copy.noData,
+                    )}
+              </Text>
+            )}
           </View>
         ))}
       </View>
@@ -429,10 +507,8 @@ const createStyles = (theme: ThemeType) =>
     shell: {backgroundColor: theme.white, paddingVertical: theme.spacing.sm},
     compactShell: {paddingVertical: 0},
     compactLegend: {
-      borderTopWidth: 1,
-      borderTopColor: theme.borderColor,
       flexWrap: 'nowrap',
-      gap: 0,
+      gap: theme.spacing.xs,
       paddingHorizontal: theme.spacing.xs,
       paddingVertical: theme.spacing.xs,
     },
@@ -442,7 +518,27 @@ const createStyles = (theme: ThemeType) =>
       minWidth: 0,
       padding: 0,
       paddingHorizontal: theme.spacing.xs,
-      backgroundColor: 'transparent',
+      borderRadius: theme.borderRadius / 2,
+    },
+    compactTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing.xs,
+    },
+    compactTitle: {textAlign: 'center', writingDirection: 'ltr', flexShrink: 1},
+    swatch: {width: 14, flexDirection: 'row', gap: 2, flexShrink: 0},
+    swatchMark: {height: 2, borderRadius: 1, flex: 1},
+    compactScaleRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      alignContent: 'center',
+      justifyContent: 'center',
+      columnGap: theme.spacing.xs,
+    },
+    compactScaleCaption: {
+      color: getChartPalette(theme).mutedText,
     },
     compactValue: {
       fontFamily: theme.fontFamily,
@@ -452,8 +548,17 @@ const createStyles = (theme: ThemeType) =>
       ),
       fontWeight: '700',
       writingDirection: 'ltr',
+      textAlign: 'center',
     },
-    compactScale: {writingDirection: 'ltr'},
+    compactUnit: {
+      fontSize: theme.typography.size.xs,
+      fontWeight: '500',
+    },
+    compactScale: {
+      writingDirection: 'ltr',
+      textAlign: 'center',
+      color: getChartPalette(theme).mutedText,
+    },
     title: {
       color: theme.textColor,
       fontFamily: theme.fontFamily,

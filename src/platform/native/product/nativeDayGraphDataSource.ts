@@ -24,7 +24,7 @@ import {
   getNightscoutConfigurationRevision,
 } from '../../../api/shaniNightscoutInstances';
 import {
-  createGlucoseForecastLoader,
+  createDayGraphForecastLoader,
   type ForecastContextEvent,
 } from '../../../modules/glucoseForecast';
 import {publishAndroidGlucoseForecast} from '../../../services/androidGlucoseLiveSurface';
@@ -533,7 +533,7 @@ export const createNativeDayGraphDataSource = (
     }
     return fetchBgDataForDateRangeWithMetadata(start, end);
   };
-  const loadGlucoseForecast = createGlucoseForecastLoader({
+  const loadGlucoseForecast = createDayGraphForecastLoader({
     getScopeKey: () => `${sourceId}:${getNightscoutConfigurationRevision()}`,
     now,
     readGlucose: async (startMs, endMs) => {
